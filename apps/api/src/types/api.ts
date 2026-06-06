@@ -1,4 +1,4 @@
-import type { Agent, AgentResponse, Memory, Report, Task, TaskMode, TaskStatus } from "@prisma/client";
+import type { Agent, AgentResponse, Memory, ProviderBalanceSnapshot, Report, Task, TaskMode, TaskStatus } from "@prisma/client";
 
 export type PublicUser = {
   id: string;
@@ -40,6 +40,12 @@ export type ListReportsResponse = {
 export type ListMemoriesResponse = {
   memories: Memory[];
 };
+
+export type ProviderBalanceSnapshotDto = Omit<ProviderBalanceSnapshot, "raw"> & {
+  status?: "OK" | "PROVIDER_API_ERROR";
+};
+
+export type TreasuryReconciliationStatus = "NO_BALANCE_SNAPSHOT" | "OK" | "ESTIMATE_ONLY" | "PROVIDER_API_ERROR";
 
 export type TaskStatusDto = TaskStatus;
 export type TaskModeDto = TaskMode;

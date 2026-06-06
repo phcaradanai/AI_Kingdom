@@ -29,6 +29,7 @@ import type {
   ProjectOverviewDto,
   ProjectPayload,
   PricingWarningsDto,
+  ProviderBalanceSnapshotDto,
   SecretaryBriefDto,
   CouncilSessionDto,
   MemoryDto,
@@ -284,6 +285,8 @@ export const api = {
   treasuryByProvider: () => apiRequest<{ providers: TreasuryProviderDto[] }>("/treasury/providers"),
   treasuryReports: (days = 30) => apiRequest<{ daily: TreasuryDailyDto[] }>(`/treasury/reports?days=${days}`),
   treasuryPricingWarnings: () => apiRequest<PricingWarningsDto>("/treasury/pricing-warnings"),
+  providerBalances: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances"),
+  syncDeepSeekBalance: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances/deepseek/sync", { method: "POST" }),
   modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
   createModelPricing: (payload: ModelPricingPayload) =>
     apiRequest<{ record: ModelPricingDto }>("/model-pricing", { method: "POST", body: JSON.stringify(payload) }),

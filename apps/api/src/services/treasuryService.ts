@@ -1,6 +1,12 @@
 import { prisma } from "../db/prisma.js";
 import { getSettingValue } from "./settingsService.js";
 import { getModelPricing } from "./modelPricingService.js";
+import {
+  getDeepSeekBalanceDelta,
+  getLatestDeepSeekBalanceErrorSnapshot,
+  getLatestDeepSeekBalanceSnapshot,
+  listLatestProviderBalanceSnapshots
+} from "./providerBalanceService.js";
 
 function startOfToday(): Date {
   const d = new Date();
@@ -16,42 +22,56 @@ function startOfMonth(): Date {
 }
 
 export async function getTreasuryOverview() {
-  const [todayAgg, monthAgg, dailyLimitStr, monthlyLimitStr] = await Promise.all([
-    prisma.usageRecord.aggregate({
-      _sum: { estimatedCostUSD: true, totalTokens: true },
-      _count: { id: true },
-      where: { createdAt: { gte: startOfToday() } }
-    }),
-    prisma.usageRecord.aggregate({
-      _sum: { estimatedCostUSD: true, totalTokens: true },
-      _count: { id: true },
-      where: { createdAt: { gte: startOfMonth() } }
-    }),
-    getSettingValue("DAILY_BUDGET_LIMIT_USD", ""),
-    getSettingValue("MONTHLY_BUDGET_LIMIT_USD", "")
-  ]);
+  const todayAgg = await prisma.usageRecord.aggregate({
+    _sum: { estimatedCostUSD: true, totalTokens: true },
+    _count: { id: true },
+    where: { createdAt: { gte: startOfToday() } }
+  });
+  const monthAgg = await prisma.usageRecord.aggregate({
+    _sum: { estimatedCostUSD: true, totalTokens: true },
+    _count: { id: true },
+    where: { createdAt: { gte: startOfMonth() } }
+  });
+  const deepseekTodayAgg = await prisma.usageRecord.aggregate({
+    _sum: { estimatedCostUSD: true },
+    where: { provider: "deepseek", createdAt: { gte: startOfToday() } }
+  });
+  const deepseekMonthAgg = await prisma.usageRecord.aggregate({
+    _sum: { estimatedCostUSD: true },
+    where: { provider: "deepseek", createdAt: { gte: startOfMonth() } }
+  });
+  const dailyLimitStr = await getSettingValue("DAILY_BUDGET_LIMIT_USD", "");
+  const monthlyLimitStr = await getSettingValue("MONTHLY_BUDGET_LIMIT_USD", "");
 
-  const [taskCount, sessionCount, allTimeAgg] = await Promise.all([
-    prisma.usageRecord.findMany({
-      where: { taskId: { not: null } },
-      select: { taskId: true },
-      distinct: ["taskId"]
-    }),
-    prisma.usageRecord.findMany({
-      where: { councilSessionId: { not: null } },
-      select: { councilSessionId: true },
-      distinct: ["councilSessionId"]
-    }),
-    prisma.usageRecord.aggregate({
-      _sum: { estimatedCostUSD: true, totalTokens: true },
-      _count: { id: true }
-    })
-  ]);
+  const taskCount = await prisma.usageRecord.findMany({
+    where: { taskId: { not: null } },
+    select: { taskId: true },
+    distinct: ["taskId"]
+  });
+  const sessionCount = await prisma.usageRecord.findMany({
+    where: { councilSessionId: { not: null } },
+    select: { councilSessionId: true },
+    distinct: ["councilSessionId"]
+  });
+  const allTimeAgg = await prisma.usageRecord.aggregate({
+    _sum: { estimatedCostUSD: true, totalTokens: true },
+    _count: { id: true }
+  });
+  const latestProviderBalances = await listLatestProviderBalanceSnapshots();
+  const latestDeepSeekBalance = await getLatestDeepSeekBalanceSnapshot();
+  const latestDeepSeekBalanceError = await getLatestDeepSeekBalanceErrorSnapshot();
 
   const costToday = todayAgg._sum.estimatedCostUSD ?? 0;
   const costThisMonth = monthAgg._sum.estimatedCostUSD ?? 0;
   const dailyLimit = dailyLimitStr !== "" ? parseFloat(dailyLimitStr) : null;
   const monthlyLimit = monthlyLimitStr !== "" ? parseFloat(monthlyLimitStr) : null;
+  const balanceDelta = await getDeepSeekBalanceDelta(latestDeepSeekBalance);
+  const latestErrorIsCurrent = latestDeepSeekBalanceError && (!latestDeepSeekBalance || latestDeepSeekBalanceError.fetchedAt > latestDeepSeekBalance.fetchedAt);
+  const reconciliationStatus = latestErrorIsCurrent
+    ? "PROVIDER_API_ERROR"
+    : latestDeepSeekBalance
+      ? latestDeepSeekBalance.isAvailable ? "OK" : "ESTIMATE_ONLY"
+      : "NO_BALANCE_SNAPSHOT";
 
   return {
     costToday,
@@ -63,6 +83,13 @@ export async function getTreasuryOverview() {
     totalCallsAllTime: allTimeAgg._count.id,
     totalTasksTracked: taskCount.length,
     totalSessionsTracked: sessionCount.length,
+    latestProviderBalances,
+    deepseekEstimatedSpendToday: deepseekTodayAgg._sum.estimatedCostUSD ?? 0,
+    deepseekEstimatedSpendThisMonth: deepseekMonthAgg._sum.estimatedCostUSD ?? 0,
+    latestDeepSeekBalance,
+    balanceLastFetchedAt: latestDeepSeekBalance?.fetchedAt ?? latestDeepSeekBalanceError?.fetchedAt ?? null,
+    reconciliationStatus,
+    balanceDelta,
     budgetStatus: {
       dailyLimit,
       monthlyLimit,

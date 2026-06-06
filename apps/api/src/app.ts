@@ -18,6 +18,7 @@ import implementationReportsRouter from "./routes/implementationReports.js";
 import mattersRouter from "./routes/matters.js";
 import modelPricingRouter from "./routes/modelPricing.js";
 import noticesRouter from "./routes/notices.js";
+import providerBalancesRouter from "./routes/providerBalances.js";
 import providersRouter from "./routes/providers.js";
 import projectInboxRouter from "./routes/projectInbox.js";
 import projectRoutingRouter from "./routes/projectRouting.js";
@@ -76,6 +77,7 @@ export function createApp() {
   app.use("/api/reports", requireAuth, methodPermission("reports"), reportsRouter);
   app.use("/api/settings", requireAuth, requireRole("KING"), settingsRouter);
   app.use("/api/providers", requireAuth, requireRole("KING"), providersRouter);
+  app.use("/api/provider-balances", requireAuth, requireRole("KING"), providerBalancesRouter);
   app.use("/api/projects", requireAuth, projectsRouter);
   app.use("/api/project-routing", requireAuth, projectRoutingRouter);
   app.use("/api/project-inbox", requireAuth, projectInboxRouter);

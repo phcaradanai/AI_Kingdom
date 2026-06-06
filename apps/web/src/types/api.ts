@@ -333,6 +333,31 @@ export type TreasuryBudgetStatus = {
   monthlyWarning: boolean;
 };
 
+export type ProviderBalanceSnapshotDto = {
+  id: string;
+  providerType: string;
+  providerId: string | null;
+  isAvailable: boolean;
+  currency: string;
+  totalBalance: number;
+  grantedBalance: number;
+  toppedUpBalance: number;
+  fetchedAt: string;
+  createdAt: string;
+  status?: "OK" | "PROVIDER_API_ERROR";
+};
+
+export type TreasuryReconciliationStatus = "NO_BALANCE_SNAPSHOT" | "OK" | "ESTIMATE_ONLY" | "PROVIDER_API_ERROR";
+
+export type ProviderBalanceDeltaDto = {
+  currency: string;
+  previousTotalBalance: number;
+  latestTotalBalance: number;
+  balanceDelta: number;
+  previousFetchedAt: string;
+  latestFetchedAt: string;
+};
+
 export type TreasuryOverviewDto = {
   costToday: number;
   costThisMonth: number;
@@ -343,6 +368,13 @@ export type TreasuryOverviewDto = {
   totalCallsAllTime: number;
   totalTasksTracked: number;
   totalSessionsTracked: number;
+  latestProviderBalances: ProviderBalanceSnapshotDto[];
+  deepseekEstimatedSpendToday: number;
+  deepseekEstimatedSpendThisMonth: number;
+  latestDeepSeekBalance: ProviderBalanceSnapshotDto | null;
+  balanceLastFetchedAt: string | null;
+  reconciliationStatus: TreasuryReconciliationStatus;
+  balanceDelta: ProviderBalanceDeltaDto | null;
   budgetStatus: TreasuryBudgetStatus;
 };
 

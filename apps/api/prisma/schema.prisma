@@ -621,6 +621,24 @@ model TreasuryLedger {
   createdAt   DateTime   @default(now())
 }
 
+model ProviderBalanceSnapshot {
+  id              String   @id @default(cuid())
+  providerType    String
+  providerId      String?
+  isAvailable     Boolean
+  currency        String
+  totalBalance    Float
+  grantedBalance  Float
+  toppedUpBalance Float
+  raw             Json?
+  fetchedAt       DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  @@index([providerType])
+  @@index([providerId])
+  @@index([fetchedAt])
+}
+
 model Budget {
   id           String   @id @default(cuid())
   name         String   @unique

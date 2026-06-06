@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Plus, Save, Trash2, X } from "lucide-react";
+import { Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,6 +30,11 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
+function formatBalance(amount: number, currency: string): string {
+  if (currency === "USD") return `$${amount.toFixed(2)}`;
+  return `${currency} ${amount.toFixed(2)}`;
+}
+
 function StatCard({ label, value, sub, warn }: { label: string; value: string; sub?: string; warn?: boolean }) {
   return (
     <Card className={cn("p-5", warn && "border-yellow-500/60 bg-yellow-500/5")}>
@@ -39,6 +44,134 @@ function StatCard({ label, value, sub, warn }: { label: string; value: string; s
       <div className="mt-1 text-sm font-medium text-foreground">{label}</div>
       {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
     </Card>
+  );
+}
+
+function ProviderBalanceSection({
+  overview,
+  onSync,
+  syncing,
+  syncError
+}: {
+  overview: TreasuryOverviewDto;
+  onSync: () => Promise<void>;
+  syncing: boolean;
+  syncError: string | null;
+}) {
+  const balances = overview.latestProviderBalances.filter((item) => item.providerType === "deepseek" && item.currency !== "UNKNOWN");
+  const balance = overview.latestDeepSeekBalance;
+  const providerError = overview.reconciliationStatus === "PROVIDER_API_ERROR";
+
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Provider Balance</h2>
+        <Button variant="outline" onClick={() => void onSync()} disabled={syncing}>
+          <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
+          {syncing ? "Syncing" : "Sync DeepSeek Balance"}
+        </Button>
+      </div>
+      <Card className="p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="text-sm font-semibold text-foreground">DeepSeek</div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {balances.length > 0
+                ? balances.some((item) => item.isAvailable) ? "Balance available for API calls" : "Balance unavailable for API calls"
+                : "No provider balance snapshot yet"}
+            </div>
+            {syncError && (
+              <div className="mt-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+                {syncError}
+              </div>
+            )}
+            {!syncError && providerError && (
+              <div className="mt-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+                DeepSeek balance API was unavailable during the last sync attempt.
+              </div>
+            )}
+          </div>
+
+          {balances.length > 0 ? (
+            <div className="w-full overflow-x-auto lg:max-w-2xl">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium">Currency</th>
+                    <th className="pb-2 pr-4 font-medium">Availability</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Total</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Granted</th>
+                    <th className="pb-2 text-right font-medium">Topped-up</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {balances.map((item) => (
+                    <tr key={item.id} className="border-b border-border/40 last:border-0">
+                      <td className="py-2.5 pr-4 font-mono text-xs font-semibold">{item.currency}</td>
+                      <td className="py-2.5 pr-4 text-xs">{item.isAvailable ? "Available" : "Unavailable"}</td>
+                      <td className="py-2.5 pr-4 text-right font-mono text-xs">{formatBalance(item.totalBalance, item.currency)}</td>
+                      <td className="py-2.5 pr-4 text-right font-mono text-xs">{formatBalance(item.grantedBalance, item.currency)}</td>
+                      <td className="py-2.5 text-right font-mono text-xs">{formatBalance(item.toppedUpBalance, item.currency)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="w-full rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground lg:max-w-md">
+              Sync DeepSeek balance to create the first backend snapshot.
+            </div>
+          )}
+        </div>
+        <div className="mt-4 text-xs text-muted-foreground">
+          Last synced: {overview.balanceLastFetchedAt ? formatDate(overview.balanceLastFetchedAt) : "Never"}
+        </div>
+      </Card>
+    </section>
+  );
+}
+
+function ReconciliationSection({ overview }: { overview: TreasuryOverviewDto }) {
+  const balance = overview.latestDeepSeekBalance;
+  const delta = overview.balanceDelta;
+
+  return (
+    <section>
+      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Reconciliation</h2>
+      <Card className="p-5">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div>
+            <div className="text-xs text-muted-foreground">Estimated DeepSeek spend today</div>
+            <div className="mt-1 font-mono text-lg font-semibold">{formatCost(overview.deepseekEstimatedSpendToday)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Estimated DeepSeek spend this month</div>
+            <div className="mt-1 font-mono text-lg font-semibold">{formatCost(overview.deepseekEstimatedSpendThisMonth)}</div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">DeepSeek latest balance</div>
+            <div className="mt-1 font-mono text-lg font-semibold">
+              {balance ? formatBalance(balance.totalBalance, balance.currency) : "No snapshot"}
+            </div>
+          </div>
+          <div>
+            <div className="text-xs text-muted-foreground">Reconciliation status</div>
+            <div className="mt-1 text-sm font-semibold">{overview.reconciliationStatus.replaceAll("_", " ")}</div>
+          </div>
+        </div>
+        {delta && (
+          <div className="mt-4 rounded-md border border-border/70 bg-muted/20 px-4 py-3 text-sm">
+            <span className="font-medium">Observed provider balance decrease:</span>{" "}
+            <span className="font-mono">{formatBalance(delta.balanceDelta, delta.currency)}</span>
+            <span className="text-muted-foreground"> approximate, based on the last two snapshots.</span>
+          </div>
+        )}
+        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+          Estimated spend is calculated from AI Kingdom token usage. Provider balance is the actual account balance from DeepSeek.
+          They may differ due to external usage, cache pricing, rounding, or delayed billing.
+        </p>
+      </Card>
+    </section>
   );
 }
 
@@ -396,6 +529,8 @@ export function TreasuryPage() {
   const [records, setRecords] = useState<UsageRecordDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [syncingBalance, setSyncingBalance] = useState(false);
+  const [balanceSyncError, setBalanceSyncError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -422,6 +557,22 @@ export function TreasuryPage() {
     }
     void load();
   }, []);
+
+  async function syncDeepSeekBalance() {
+    setSyncingBalance(true);
+    setBalanceSyncError(null);
+    try {
+      await api.syncDeepSeekBalance();
+      const ov = await api.treasuryOverview();
+      setOverview(ov);
+    } catch (err) {
+      setBalanceSyncError(err instanceof Error ? err.message : "DeepSeek balance sync failed");
+      const ov = await api.treasuryOverview().catch(() => null);
+      if (ov) setOverview(ov);
+    } finally {
+      setSyncingBalance(false);
+    }
+  }
 
   return (
     <>
@@ -476,6 +627,15 @@ export function TreasuryPage() {
               />
             </div>
           </section>
+
+          <ProviderBalanceSection
+            overview={overview}
+            onSync={syncDeepSeekBalance}
+            syncing={syncingBalance}
+            syncError={balanceSyncError}
+          />
+
+          <ReconciliationSection overview={overview} />
 
           {/* Budget Status */}
           {(overview.budgetStatus.dailyLimit !== null || overview.budgetStatus.monthlyLimit !== null) && (
