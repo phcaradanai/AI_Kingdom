@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
+import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -220,8 +221,13 @@ function AgentTable({ agents }: { agents: TreasuryAgentDto[] }) {
           {agents.map((a) => (
             <tr key={a.agentId ?? "unknown"} className="border-b border-border/40 last:border-0">
               <td className="py-2.5 pr-4">
-                <div className="font-medium">{a.agent?.name ?? "Unknown"}</div>
-                <div className="text-xs text-muted-foreground">{a.agent?.title ?? a.agentId ?? "—"}</div>
+                <div className="flex items-center gap-3">
+                  <AgentPortrait agent={a.agent} size="sm" status="IDLE" />
+                  <div>
+                    <div className="font-medium">{a.agent?.name ?? "Unknown"}</div>
+                    <div className="text-xs text-muted-foreground">{a.agent?.title ?? a.agentId ?? "—"}</div>
+                  </div>
+                </div>
               </td>
               <td className="py-2.5 pr-4 text-right tabular-nums">{a.callCount}</td>
               <td className="py-2.5 pr-4 text-right tabular-nums">{formatTokens(a.totalTokens)}</td>
@@ -337,7 +343,10 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
             <tr key={r.id} className="border-b border-border/40 last:border-0">
               <td className="py-2 pr-4 text-xs text-muted-foreground">{formatDate(r.createdAt)}</td>
               <td className="py-2 pr-4">
-                <span className="text-xs">{r.agent?.name ?? "—"}</span>
+                <div className="flex items-center gap-2">
+                  <AgentPortrait agent={r.agent} size="sm" status="COMPLETED" className="h-9 w-9" />
+                  <span className="text-xs">{r.agent?.name ?? "—"}</span>
+                </div>
               </td>
               <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{r.model}</td>
               <td className="py-2 pr-4 text-right tabular-nums text-xs">{formatTokens(r.totalTokens)}</td>

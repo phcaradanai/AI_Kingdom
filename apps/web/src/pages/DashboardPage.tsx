@@ -1,6 +1,7 @@
 import { AlertTriangle, Archive, CheckCircle2, ClipboardList, FolderKanban, Inbox, Landmark, Scroll, ScrollText, Shield, Vault, ArrowRight, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { TaskCard } from "@/components/TaskCard";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,29 @@ export function DashboardPage() {
           />
         ))}
       </div>
+
+      {agents.length > 0 && (
+        <SectionCard
+          title="Royal Council"
+          icon={Shield}
+          action={<Link to="/agents" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Manage Agents</Link>}
+        >
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            {agents.slice(0, 5).map((agent) => (
+              <div key={agent.id} className="rounded-xl border border-primary/20 bg-muted/20 p-3">
+                <div className="flex items-center gap-3">
+                  <AgentPortrait agent={agent} size="md" status="IDLE" />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">{agent.name}</div>
+                    <div className="truncate text-xs text-muted-foreground">{agent.title}</div>
+                    <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-primary/70">Idle</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
 
       {/* Royal Secretary Brief */}
       {brief && (

@@ -1,5 +1,6 @@
 import { FormEvent, useState } from "react";
 import { Shield } from "lucide-react";
+import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -85,14 +86,19 @@ export function AgentsPage() {
           {agents.map((agent) => (
             <Card key={agent.id} className={cn("transition", selected?.id === agent.id && "border-primary/60 bg-primary/10")}>
               <button className="w-full text-left" onClick={() => selectAgent(agent)}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-display text-xl">{agent.title}</h2>
-                    <p className="mt-1 text-sm text-muted-foreground">{agent.name} · priority {agent.priority}</p>
+                <div className="flex items-start gap-4">
+                  <AgentPortrait agent={agent} size="md" status={agent.isActive ? "IDLE" : "COMPLETED"} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h2 className="font-display text-xl">{agent.title}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">{agent.name} · priority {agent.priority}</p>
+                      </div>
+                      <Shield className={cn("h-5 w-5 shrink-0", agent.isActive ? "text-primary" : "text-muted-foreground")} />
+                    </div>
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{agent.description || agent.specialty}</p>
                   </div>
-                  <Shield className={cn("h-5 w-5", agent.isActive ? "text-primary" : "text-muted-foreground")} />
                 </div>
-                <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted-foreground">{agent.description || agent.specialty}</p>
               </button>
               <div className="mt-4 flex justify-between gap-2">
                 <Button variant="outline" onClick={() => void toggleActive(agent)} disabled={agent.slug === "grand-vizier"}>
@@ -105,7 +111,15 @@ export function AgentsPage() {
         </div>
 
         <Card>
-          <h2 className="font-display text-2xl">{selected ? `Edit ${selected.title}` : "Create Agent"}</h2>
+          <div className="flex flex-col gap-4 border-b border-border/50 pb-5 sm:flex-row sm:items-center">
+            <AgentPortrait agent={selected ?? draft} size="xl" status={selected?.isActive === false ? "COMPLETED" : "IDLE"} />
+            <div>
+              <h2 className="font-display text-2xl">{selected ? `Edit ${selected.title}` : "Create Agent"}</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+                {selected ? selected.specialty : "Portrait preview uses known agent names or title fallbacks. Custom agents use initials until an asset is added."}
+              </p>
+            </div>
+          </div>
           <form className="mt-5 space-y-4" onSubmit={onSubmit}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="agent-name" label="Agent Name" required>
