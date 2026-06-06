@@ -286,7 +286,7 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
     type: dbProvider.type,
     baseUrl: dbProvider.baseUrl ?? envProvider?.baseUrl ?? null,
     defaultModel: dbProvider.defaultModel || envProvider?.defaultModel || "",
-    isActive: dbProvider.isActive && (dbProvider.type === "mock" || hasCredentials || ["anthropic", "gemini", "local"].includes(dbProvider.type) === false),
+    isActive: dbProvider.type === "mock" ? true : (dbProvider.isActive && (hasCredentials || ["anthropic", "gemini", "local"].includes(dbProvider.type) === false)),
     priority: dbProvider.priority,
     supportsChat: capabilities.supportsChat,
     supportsTools: capabilities.supportsTools,
