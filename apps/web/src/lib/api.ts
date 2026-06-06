@@ -1,7 +1,19 @@
 import type {
   AgentDto,
   AgentPayload,
+  AuditListResponse,
+  AuditLogDto,
   AuthResponse,
+  KingdomCharterDto,
+  KingdomVisionDto,
+  MatterCategory,
+  MatterDto,
+  MatterPriority,
+  MatterStatus,
+  NoticeDto,
+  NoticeSeverity,
+  NoticeStatus,
+  SecretaryBriefDto,
   CouncilSessionDto,
   MemoryDto,
   MemoryPayload,
@@ -156,7 +168,64 @@ export const api = {
   treasuryUsage: (limit = 100) => apiRequest<{ records: UsageRecordDto[] }>(`/treasury/usage?limit=${limit}`),
   treasuryByAgent: () => apiRequest<{ agents: TreasuryAgentDto[] }>("/treasury/agents"),
   treasuryByProvider: () => apiRequest<{ providers: TreasuryProviderDto[] }>("/treasury/providers"),
-  treasuryReports: (days = 30) => apiRequest<{ daily: TreasuryDailyDto[] }>(`/treasury/reports?days=${days}`)
+  treasuryReports: (days = 30) => apiRequest<{ daily: TreasuryDailyDto[] }>(`/treasury/reports?days=${days}`),
+  auditLogs: (params?: { page?: number; limit?: number; action?: string; resourceType?: string; userId?: string; startDate?: string; endDate?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.action) search.set("action", params.action);
+    if (params?.resourceType) search.set("resourceType", params.resourceType);
+    if (params?.userId) search.set("userId", params.userId);
+    if (params?.startDate) search.set("startDate", params.startDate);
+    if (params?.endDate) search.set("endDate", params.endDate);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<AuditListResponse>(`/audit${suffix}`);
+  },
+  auditLog: (id: string) => apiRequest<{ log: AuditLogDto }>(`/audit/${id}`),
+  auditSearch: (q: string, params?: { page?: number; limit?: number }) => {
+    const search = new URLSearchParams({ q });
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.limit) search.set("limit", String(params.limit));
+    return apiRequest<AuditListResponse>(`/audit/search?${search.toString()}`);
+  },
+  secretaryBrief: () => apiRequest<SecretaryBriefDto>("/secretary/brief"),
+  notices: (params?: { severity?: NoticeSeverity; status?: NoticeStatus; page?: number; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.severity) search.set("severity", params.severity);
+    if (params?.status) search.set("status", params.status);
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.limit) search.set("limit", String(params.limit));
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ notices: NoticeDto[]; total: number; page: number; limit: number }>(`/notices${suffix}`);
+  },
+  notice: (id: string) => apiRequest<{ notice: NoticeDto }>(`/notices/${id}`),
+  createNotice: (payload: { title: string; content: string; severity?: NoticeSeverity; sourceType?: string; sourceId?: string }) =>
+    apiRequest<{ notice: NoticeDto }>("/notices", { method: "POST", body: JSON.stringify(payload) }),
+  updateNotice: (id: string, payload: Partial<{ status: NoticeStatus; title: string; content: string; severity: NoticeSeverity }>) =>
+    apiRequest<{ notice: NoticeDto }>(`/notices/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteNotice: (id: string) => apiRequest<void>(`/notices/${id}`, { method: "DELETE" }),
+  matters: (params?: { status?: MatterStatus; priority?: MatterPriority; category?: MatterCategory; page?: number; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.priority) search.set("priority", params.priority);
+    if (params?.category) search.set("category", params.category);
+    if (params?.page) search.set("page", String(params.page));
+    if (params?.limit) search.set("limit", String(params.limit));
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ matters: MatterDto[]; total: number; page: number; limit: number }>(`/matters${suffix}`);
+  },
+  matter: (id: string) => apiRequest<{ matter: MatterDto }>(`/matters/${id}`),
+  createMatter: (payload: { title: string; description: string; priority?: MatterPriority; category?: MatterCategory; sourceType?: string; sourceId?: string }) =>
+    apiRequest<{ matter: MatterDto }>("/matters", { method: "POST", body: JSON.stringify(payload) }),
+  updateMatter: (id: string, payload: Partial<{ status: MatterStatus; priority: MatterPriority; category: MatterCategory; title: string; description: string; assignedAgentId: string | null }>) =>
+    apiRequest<{ matter: MatterDto }>(`/matters/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteMatter: (id: string) => apiRequest<void>(`/matters/${id}`, { method: "DELETE" }),
+  charter: () => apiRequest<{ charter: KingdomCharterDto }>("/charter"),
+  updateCharter: (payload: { mission?: string; content?: string }) =>
+    apiRequest<{ charter: KingdomCharterDto }>("/charter", { method: "PATCH", body: JSON.stringify(payload) }),
+  vision: () => apiRequest<{ vision: KingdomVisionDto }>("/vision"),
+  updateVision: (payload: { content?: string }) =>
+    apiRequest<{ vision: KingdomVisionDto }>("/vision", { method: "PATCH", body: JSON.stringify(payload) })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

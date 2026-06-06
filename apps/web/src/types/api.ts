@@ -236,3 +236,95 @@ export type TreasuryDailyDto = {
   totalTokens: number;
   callCount: number;
 };
+
+export type AuditLogDto = {
+  id: string;
+  action: string;
+  resourceType: string;
+  resourceId: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  user: { id: string; email: string; displayName: string; role: string } | null;
+};
+
+export type AuditListResponse = {
+  logs: AuditLogDto[];
+  total: number;
+  page: number;
+  limit: number;
+};
+
+export type NoticeSeverity = "INFO" | "WARNING" | "CRITICAL";
+export type NoticeStatus = "UNREAD" | "READ" | "ARCHIVED";
+export type MatterStatus = "DETECTED" | "INVESTIGATING" | "COUNCIL_REVIEW" | "AWAITING_ROYAL_DECISION" | "APPROVED" | "REJECTED" | "EXECUTING" | "COMPLETED";
+export type MatterPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type MatterCategory = "TREASURY" | "SECURITY" | "REVENUE" | "SYSTEM" | "RESEARCH" | "PRODUCT" | "GENERAL";
+
+export type NoticeDto = {
+  id: string;
+  title: string;
+  content: string;
+  severity: NoticeSeverity;
+  status: NoticeStatus;
+  sourceType: string | null;
+  sourceId: string | null;
+  createdByAgentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MatterDto = {
+  id: string;
+  title: string;
+  description: string;
+  status: MatterStatus;
+  priority: MatterPriority;
+  category: MatterCategory;
+  sourceType: string | null;
+  sourceId: string | null;
+  assignedAgentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RecommendedAction = {
+  action: string;
+  severity: "info" | "warning" | "critical";
+  href?: string;
+};
+
+export type SecretaryBriefDto = {
+  kingdomStatus: {
+    unreadNotices: number;
+    criticalNotices: number;
+    openMatters: number;
+    criticalMatters: number;
+    awaitingRoyalDecision: number;
+    failedTasks: number;
+    budgetWarning: boolean;
+  };
+  urgentNotices: NoticeDto[];
+  openMatters: MatterDto[];
+  awaitingRoyalDecision: MatterDto[];
+  recommendedActions: RecommendedAction[];
+  charter: { mission: string } | null;
+  vision: { content: string } | null;
+};
+
+export type KingdomCharterDto = {
+  id: string;
+  version: string;
+  mission: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KingdomVisionDto = {
+  id: string;
+  version: string;
+  content: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};

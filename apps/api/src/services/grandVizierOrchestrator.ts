@@ -3,6 +3,7 @@ import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProvider } from "../ai/providerFactory.js";
 import { calculateCostUSD } from "../pricing/providerPricing.js";
 import { prisma } from "../db/prisma.js";
+import { getKingdomContext } from "./kingdomComplianceService.js";
 import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./memoryService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting, getSettingValue } from "./settingsService.js";
@@ -68,6 +69,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const defaultMaxTokens = await getNumberSetting("AI_MAX_TOKENS", 700);
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
+    const kingdomContext = await getKingdomContext();
     const relevantMemories = await findRelevantMemories(userId, task.command, 5);
     const kingdomMemoryContext = formatMemoryContext(relevantMemories);
     const fallbackNotices: string[] = [];
@@ -85,6 +87,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         model: agent.defaultModel ?? defaultModel,
         temperature: agent.temperature ?? undefined,
         maxTokens: agent.maxTokens ?? defaultMaxTokens,
+        kingdomContext: kingdomContext || undefined,
         kingdomMemoryContext,
         previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
       });
@@ -142,6 +145,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       model: grandVizier.defaultModel ?? defaultModel,
       temperature: grandVizier.temperature ?? undefined,
       maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
+      kingdomContext: kingdomContext || undefined,
       kingdomMemoryContext,
       previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
     });

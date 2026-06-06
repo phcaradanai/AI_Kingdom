@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_SETTINGS } from "../src/services/settingsService.js";
+import { seedKingdomDocuments } from "../src/services/charterService.js";
 
 const prisma = new PrismaClient();
 
@@ -112,6 +113,8 @@ async function main() {
       create: setting
     });
   }
+
+  await seedKingdomDocuments();
 }
 
 main()

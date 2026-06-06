@@ -75,12 +75,15 @@ export class OpenAIProvider implements AIProvider {
 
 function buildSystemPrompt(input: GenerateAgentResponseInput): string {
   return [
+    input.kingdomContext ? input.kingdomContext : "",
     input.systemPrompt,
     `Royal role: ${input.agentRole}`,
     `Skills: ${input.agentSkills.join(", ") || "general royal counsel"}`,
     `Response style: ${input.responseStyle || "concise, structured, practical"}`,
     "Do not browse the web, call tools, or invent external research. Respond only with counsel for the provided decree."
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 function buildUserPrompt(input: GenerateAgentResponseInput): string {

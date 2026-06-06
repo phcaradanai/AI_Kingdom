@@ -4,6 +4,11 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AgentsPage } from "@/pages/AgentsPage";
+import { AuditPage } from "@/pages/AuditPage";
+import { CharterPage } from "@/pages/CharterPage";
+import { MattersPage } from "@/pages/MattersPage";
+import { NoticesPage } from "@/pages/NoticesPage";
+import { VisionPage } from "@/pages/VisionPage";
 import { CouncilPage } from "@/pages/CouncilPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -38,6 +43,11 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/treasury" element={<TreasuryPage />} />
+          <Route path="/audit" element={<AuditPage />} />
+          <Route path="/charter" element={<CharterPage />} />
+          <Route path="/vision" element={<VisionPage />} />
+          <Route path="/notices" element={<NoticesPage />} />
+          <Route path="/matters" element={<MattersPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/security" element={<SecurityPage />} />
         </Route>

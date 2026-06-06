@@ -15,16 +15,19 @@ Process entry is `apps/api/src/server.ts`; it calls `createApp()` from `src/app.
 
 Primary services:
 
-- `grandVizierOrchestrator.ts`: selects active agents by task mode, injects memory context, calls the AI provider once per selected agent plus the final Grand Vizier synthesis, saves council responses, creates one `UsageRecord` per AI call (including the synthesis pass), creates a `TreasuryLedger` COST entry per completed session, and triggers memory extraction and report generation.
+- `grandVizierOrchestrator.ts`: selects active agents by task mode, loads Kingdom Charter + Vision context via `kingdomComplianceService`, injects both kingdom context and memory context into every agent call, calls the AI provider once per selected agent plus the final Grand Vizier synthesis, saves council responses, creates one `UsageRecord` per AI call (including the synthesis pass), creates a `TreasuryLedger` COST entry per completed session, and triggers memory extraction and report generation.
 - `memoryService.ts`: keyword/tag relevance, context formatting, deterministic extraction, duplicate and secret checks.
 - `reportService.ts`: generated Royal Report creation and duplicate prevention.
 - `settingsService.ts`: default settings and runtime setting lookup.
 - `treasuryService.ts`: aggregates `UsageRecord` rows into overview, per-agent, per-provider/model, and daily-bucket breakdowns; reads budget limits from settings to produce warning flags.
-- `auditService.ts`: audit log writes for security-sensitive actions.
+- `charterService.ts`: reads/writes `KingdomCharter` and `KingdomVision` records; seeds from `docs/KINGDOM_CHARTER.md` and `docs/KINGDOM_VISION.md` if no DB records exist; `formatKingdomContext` produces the injection string.
+- `royalSecretaryService.ts`: `Notice` and `Matter` CRUD with dedup logic; `inspectKingdomStatus` aggregates live kingdom health counts; `generateDailyBrief` returns status, urgent notices, open matters, awaiting-decision matters, `recommendedActions` list, and charter/vision context for the dashboard.
+- `kingdomComplianceService.ts`: `getKingdomContext()` loads charter + vision, auto-seeds from files if missing, never throws; returns empty string on failure so the orchestrator always proceeds.
+- `auditService.ts`: audit log writes for security-sensitive actions; read functions (`listAuditLogs`, `getAuditLogEntry`, `searchAuditLogs`) with filter/pagination support; `sanitizeMetadata` strips keys containing "password", "token", "apikey", "secret", "credential", "authorization", or "bearer" recursively before any response.
 
 ## Data Model
 
-Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, and `Budget`.
+Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, `Budget`, `KingdomCharter`, `KingdomVision`, `Notice`, and `Matter`.
 
 Tasks belong to users and may produce council sessions and reports. Council sessions store selected agent IDs, provider/model metadata, fallback notices, consulted memory IDs, auto-saved memory IDs, agent responses, and final summary. Reports and memories retain source task/session references when generated from council output.
 
@@ -34,7 +37,7 @@ Tasks belong to users and may produce council sessions and reports. Council sess
 
 Authentication uses bcrypt password hashes, 15-minute JWT access tokens, and server-stored refresh token sessions. Logout revokes the active refresh token record; protected access checks both JWT validity and session state.
 
-RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/middleware/rbac.ts`. `/api/agents`, `/api/settings`, and `/api/users` require `KING`. Core resource routes (`/api/tasks`, `/api/council`, `/api/reports`, `/api/memory`) apply per-method role checks: `KING` has full access; `CROWN_PRINCE` has tasks/council/reports/memory; `MINISTER` has tasks/reports; `SCRIBE` has read-only tasks/council/reports/memory. Frontend navigation mirrors these roles but is not the security boundary.
+RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/middleware/rbac.ts`. `/api/agents`, `/api/settings`, `/api/users`, `/api/treasury`, and `/api/audit` require `KING`. Core resource routes (`/api/tasks`, `/api/council`, `/api/reports`, `/api/memory`) apply per-method role checks: `KING` has full access; `CROWN_PRINCE` has tasks/council/reports/memory; `MINISTER` has tasks/reports; `SCRIBE` has read-only tasks/council/reports/memory. Frontend navigation mirrors these roles but is not the security boundary.
 
 ## AI Provider Flow
 

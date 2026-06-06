@@ -1,45 +1,26 @@
 # Next Task
 
-## M11: Audit Log UI + Operational Oversight
+## M13: Royal Secretary Intelligence
 
-Goal: make the M9 audit foundation visible and useful to the King without adding new authentication providers or background infrastructure.
+Goal: give the Secretary the ability to generate AI-assisted briefings and connect kingdom signals to actionable notices and matters automatically.
 
 ## Scope
 
-1. Add Audit Log API endpoints:
-   - `GET /api/audit`
-   - `GET /api/audit/:id`
-   - `GET /api/audit/search?q=`
-   - Filters for `action`, `resourceType`, `userId`, and date range.
+1. **Secretary AI Briefing**: `POST /api/secretary/brief/generate` — runs an AI council call (using the existing orchestrator infrastructure) to produce a written analysis of the current kingdom status. Stores result as a `Report` with category `GENERAL`. KING only.
 
-2. Protect audit access:
-   - `KING` can read all audit logs.
-   - Other roles cannot access audit logs.
-   - Do not expose password hashes, refresh token hashes, JWTs, API keys, or secrets in audit responses.
+2. **Signal-to-Notice Wiring**: After every completed council session, the orchestrator checks for warning signals (budget warning, failed tasks threshold) and auto-creates `Notice` records via `royalSecretaryService.createNotice`. No new background workers — runs inline in the orchestrator.
 
-3. Add `/audit` frontend page:
-   - King-only navigation item.
-   - Search and filters.
-   - Table/list of audit events.
-   - Detail panel with timestamp, actor, action, resource, and safe metadata.
+3. **Matter Escalation**: When a `Notice` is marked CRITICAL by the King, the system offers (via API) to auto-elevate it to an `AWAITING_ROYAL_DECISION` matter.
 
-4. Improve operational visibility:
-   - Show API and database health in `/security` or `/settings`.
-   - Surface current auth role and session status clearly.
+4. **Notice Count Badge**: Add an unread notice count to the nav sidebar (fetched alongside the secretary brief).
 
-5. Tests:
-   - King can list audit logs.
-   - Non-King access is denied.
-   - Audit search/filter works.
-   - Sensitive token/hash fields are never returned.
+5. **Tests**: signal-to-notice wiring, matter escalation from notice, briefing generation, badge count.
 
-6. Documentation:
-   - Update PROJECT_STATUS.md, ARCHITECTURE.md, NEXT_TASK.md, and AGENTS.md if behavior or contributor guidance changes.
+6. **Documentation**: Update PROJECT_STATUS.md, ARCHITECTURE.md, NEXT_TASK.md.
 
 ## Constraints
 
-- Do not add SSO, OAuth, MFA, or password reset.
-- Do not add background workers.
-- Do not add external monitoring vendors.
-- Do not expose secrets or token hashes.
-- Keep the feature staging-friendly and PostgreSQL-backed.
+- No autonomous background workers.
+- No ministry hierarchy.
+- No external monitoring vendors.
+- All wiring must be inline in existing flows (orchestrator, API handlers).

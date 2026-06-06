@@ -8,7 +8,12 @@ import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { requirePermission, requireRole } from "./middleware/rbac.js";
 import agentsRouter from "./routes/agents.js";
+import auditRouter from "./routes/audit.js";
 import authRouter from "./routes/auth.js";
+import charterRouter from "./routes/charter.js";
+import mattersRouter from "./routes/matters.js";
+import noticesRouter from "./routes/notices.js";
+import secretaryRouter from "./routes/secretary.js";
 import councilRouter from "./routes/council.js";
 import memoriesRouter from "./routes/memories.js";
 import reportsRouter from "./routes/reports.js";
@@ -63,6 +68,11 @@ export function createApp() {
   app.use("/api/memory", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/memories", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/treasury", requireAuth, requireRole("KING"), treasuryRouter);
+  app.use("/api/audit", requireAuth, requireRole("KING"), auditRouter);
+  app.use("/api/secretary", requireAuth, secretaryRouter);
+  app.use("/api/notices", requireAuth, noticesRouter);
+  app.use("/api/matters", requireAuth, mattersRouter);
+  app.use("/api", requireAuth, charterRouter);
   app.use(errorHandler);
 
   return app;

@@ -80,6 +80,73 @@ enum LedgerType {
   ADJUSTMENT
 }
 
+enum NoticeSeverity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum NoticeStatus {
+  UNREAD
+  READ
+  ARCHIVED
+}
+
+enum MatterStatus {
+  DETECTED
+  INVESTIGATING
+  COUNCIL_REVIEW
+  AWAITING_ROYAL_DECISION
+  APPROVED
+  REJECTED
+  EXECUTING
+  COMPLETED
+}
+
+enum MatterPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum MatterCategory {
+  TREASURY
+  SECURITY
+  REVENUE
+  SYSTEM
+  RESEARCH
+  PRODUCT
+  GENERAL
+}
+
+model Notice {
+  id               String         @id @default(cuid())
+  title            String
+  content          String
+  severity         NoticeSeverity @default(INFO)
+  status           NoticeStatus   @default(UNREAD)
+  sourceType       String?
+  sourceId         String?
+  createdByAgentId String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
+model Matter {
+  id               String         @id @default(cuid())
+  title            String
+  description      String
+  status           MatterStatus   @default(DETECTED)
+  priority         MatterPriority @default(MEDIUM)
+  category         MatterCategory @default(GENERAL)
+  sourceType       String?
+  sourceId         String?
+  assignedAgentId  String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+}
+
 model User {
   id            String         @id @default(cuid())
   email         String         @unique
@@ -267,4 +334,22 @@ model Memory {
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @default(now()) @updatedAt
   user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+model KingdomCharter {
+  id        String   @id @default(cuid())
+  version   String   @default("1.0.0")
+  mission   String
+  content   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KingdomVision {
+  id        String   @id @default(cuid())
+  version   String   @default("2026")
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

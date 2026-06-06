@@ -1,4 +1,4 @@
-import { Coins, Crown, Landmark, LogOut, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault } from "lucide-react";
+import { Bell, BookOpen, ClipboardList, Coins, Crown, Eye, Landmark, LogOut, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault } from "lucide-react";
 import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -9,12 +9,17 @@ import type { UserRole } from "@/types/api";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-  { to: "/throne-room", label: "Throne Room", icon: Landmark, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
+  { to: "/charter", label: "Charter", icon: BookOpen, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/vision", label: "Vision", icon: Eye, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/notices", label: "Notices", icon: Bell, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/matters", label: "Matters", icon: Landmark, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/throne-room", label: "Throne Room", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
   { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
   { to: "/agents", label: "Agents", icon: Shield, roles: ["KING"] },
   { to: "/reports", label: "Reports", icon: ScrollText, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
   { to: "/memory", label: "Memory", icon: Vault, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
   { to: "/treasury", label: "Treasury", icon: Coins, roles: ["KING"] },
+  { to: "/audit", label: "Audit Log", icon: ClipboardList, roles: ["KING"] },
   { to: "/users", label: "Users", icon: Users, roles: ["KING"] },
   { to: "/settings", label: "Settings", icon: Settings, roles: ["KING"] },
   { to: "/profile", label: "Profile", icon: UserCircle, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
