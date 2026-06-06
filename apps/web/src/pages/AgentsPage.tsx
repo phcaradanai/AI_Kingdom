@@ -20,7 +20,10 @@ const blankAgent: AgentPayload = {
   responseStyle: "concise, structured, practical",
   isActive: true,
   priority: 100,
+  preferredProviderId: null,
   defaultModel: "",
+  fallbackProviderIds: [],
+  costPreference: null,
   temperature: null,
   maxTokens: null
 };
@@ -30,6 +33,7 @@ export function AgentsPage() {
   const createAgent = useKingdomStore((state) => state.createAgent);
   const updateAgent = useKingdomStore((state) => state.updateAgent);
   const deleteAgent = useKingdomStore((state) => state.deleteAgent);
+  const providers = useKingdomStore((state) => state.providers);
   const [selected, setSelected] = useState<AgentDto | null>(agents[0] ?? null);
   const [draft, setDraft] = useState<AgentPayload>(selected ? toPayload(selected) : blankAgent);
   const [error, setError] = useState<string | null>(null);
@@ -110,6 +114,19 @@ export function AgentsPage() {
             <Textarea className="min-h-44" value={draft.systemPrompt} onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })} placeholder="System prompt" />
             <Textarea value={draft.responseStyle} onChange={(e) => setDraft({ ...draft, responseStyle: e.target.value })} placeholder="Response style" />
             <Input value={draft.skills.join(", ")} onChange={(e) => setDraft({ ...draft, skills: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Skills, comma separated" />
+            <div className="grid gap-3 sm:grid-cols-3">
+              <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.preferredProviderId ?? ""} onChange={(e) => setDraft({ ...draft, preferredProviderId: e.target.value || null })}>
+                <option value="">Routing policy</option>
+                {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+              </select>
+              <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.costPreference ?? ""} onChange={(e) => setDraft({ ...draft, costPreference: (e.target.value || null) as AgentPayload["costPreference"] })}>
+                <option value="">Cost policy</option>
+                <option value="LOW">Low</option>
+                <option value="BALANCED">Balanced</option>
+                <option value="QUALITY">Quality</option>
+              </select>
+              <Input value={draft.fallbackProviderIds?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, fallbackProviderIds: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Fallback providers" />
+            </div>
             <div className="grid gap-3 sm:grid-cols-4">
               <Input type="number" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) })} placeholder="Priority" />
               <Input value={draft.defaultModel ?? ""} onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })} placeholder="Default model" />
@@ -137,7 +154,10 @@ function toPayload(agent: AgentDto): AgentPayload {
     responseStyle: agent.responseStyle,
     isActive: agent.isActive,
     priority: agent.priority,
+    preferredProviderId: agent.preferredProviderId,
     defaultModel: agent.defaultModel,
+    fallbackProviderIds: agent.fallbackProviderIds,
+    costPreference: agent.costPreference,
     temperature: agent.temperature,
     maxTokens: agent.maxTokens
   };
@@ -146,7 +166,10 @@ function toPayload(agent: AgentDto): AgentPayload {
 function cleanPayload(payload: AgentPayload): AgentPayload {
   return {
     ...payload,
+    preferredProviderId: payload.preferredProviderId || null,
     defaultModel: payload.defaultModel || null,
+    fallbackProviderIds: payload.fallbackProviderIds ?? [],
+    costPreference: payload.costPreference ?? null,
     temperature: payload.temperature ?? null,
     maxTokens: payload.maxTokens ?? null
   };

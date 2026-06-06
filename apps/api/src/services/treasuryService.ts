@@ -99,7 +99,7 @@ export async function getTreasuryByAgent() {
 
 export async function getTreasuryByProvider() {
   const groups = await prisma.usageRecord.groupBy({
-    by: ["provider", "model"],
+    by: ["provider", "providerId", "model"],
     _sum: { estimatedCostUSD: true, totalTokens: true, promptTokens: true, completionTokens: true },
     _count: { id: true },
     orderBy: { _sum: { estimatedCostUSD: "desc" } }
@@ -107,6 +107,7 @@ export async function getTreasuryByProvider() {
 
   return groups.map((g) => ({
     provider: g.provider,
+    providerId: g.providerId,
     model: g.model,
     totalCostUSD: g._sum.estimatedCostUSD ?? 0,
     totalTokens: g._sum.totalTokens ?? 0,

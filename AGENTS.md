@@ -12,7 +12,7 @@ npm workspaces monorepo: `apps/api` (Express + Prisma) and `apps/web` (React + V
 - `npm run typecheck`: TypeScript checks for all workspaces.
 - `npm run test`: API test suite (Node built-in runner + `tsx`).
 - `npm run db:migrate`: apply migrations and generate Prisma Client (dev only).
-- `npm run db:seed`: reset seeded King account, agents, and settings.
+- `npm run db:seed`: reset seeded King account, internal agents, external agent registry metadata, provider registry metadata, and settings.
 
 ## Coding Style
 
@@ -24,7 +24,9 @@ Tests use Node's built-in runner through `tsx`. Tests must not require a real Op
 
 ## Security & Configuration
 
-Keep `JWT_SECRET`, `OPENAI_API_KEY`, and database credentials server-side only. Do not expose API keys through settings APIs or frontend code. Use `prisma migrate deploy` for staging/production; never use `prisma migrate dev` on deployed databases.
+Keep `JWT_SECRET`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and database credentials server-side only. Do not expose API keys through settings/providers APIs or frontend code. Use `prisma migrate deploy` for staging/production; never use `prisma migrate dev` on deployed databases.
+
+External agent work orders are manual handoff artifacts only. Do not add backend command execution, filesystem access, or proprietary external-agent API calls without a future milestone and explicit approval.
 
 ## Commits and PRs
 

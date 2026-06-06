@@ -89,6 +89,14 @@ test("settings API never returns API keys and Grand Vizier cannot be deleted", a
     assert.equal(settings.status, 200);
     assert.equal(settingsBody.settings.some((setting: { key: string }) => setting.key.includes("API_KEY")), false);
 
+    const providers = await fetch(`${baseUrl}/api/providers`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const providersBody = await providers.json();
+    assert.equal(providers.status, 200);
+    assert.equal(JSON.stringify(providersBody).includes("API_KEY"), false);
+    assert.equal(JSON.stringify(providersBody).includes("apiKey"), false);
+
     const deletion = await fetch(`${baseUrl}/api/agents/${grandVizier.id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` }

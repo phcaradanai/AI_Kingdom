@@ -3,7 +3,8 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 
 export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: SettingsCategory; description: string }> = [
-  { key: "AI_PROVIDER", value: env.AI_PROVIDER, category: "AI", description: "AI provider used for council responses: mock or openai." },
+  { key: "AI_PROVIDER", value: env.AI_PROVIDER, category: "AI", description: "Legacy default provider hint. Routing policy can override this per task or agent." },
+  { key: "AI_COST_MODE", value: env.AI_COST_MODE, category: "AI", description: "Provider routing cost preference: low, balanced, or quality." },
   { key: "OPENAI_MODEL", value: env.OPENAI_MODEL, category: "AI", description: "Default OpenAI-compatible model for agents without overrides." },
   { key: "AI_TIMEOUT_MS", value: String(env.AI_TIMEOUT_MS), category: "AI", description: "Request timeout for AI calls in milliseconds." },
   { key: "AI_MAX_TOKENS", value: String(env.AI_MAX_TOKENS), category: "AI", description: "Default maximum output tokens for AI calls." },

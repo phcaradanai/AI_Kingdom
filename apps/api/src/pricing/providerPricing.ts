@@ -13,7 +13,10 @@ const PRICING_TABLE: Record<string, ModelPricing> = {
   "openai:gpt-3.5-turbo": { inputPerMillion: 0.5, outputPerMillion: 1.5 },
   "openai:gpt-4o-2024-11-20": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
   "openai:gpt-4o-2024-08-06": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
-  "openai:gpt-4o-mini-2024-07-18": { inputPerMillion: 0.15, outputPerMillion: 0.6 }
+  "openai:gpt-4o-mini-2024-07-18": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
+  "openrouter:openai/gpt-4o-mini": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
+  "deepseek:deepseek-chat": { inputPerMillion: 0.27, outputPerMillion: 1.1 },
+  "deepseek:deepseek-coder": { inputPerMillion: 0.27, outputPerMillion: 1.1 }
 };
 
 export function getPricing(provider: string, model: string): ModelPricing {

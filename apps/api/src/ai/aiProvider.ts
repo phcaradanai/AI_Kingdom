@@ -27,7 +27,17 @@ export type AgentResponseResult = {
   usage: TokenUsage;
 };
 
-export type AIProviderName = "mock" | "openai";
+export type KnownAIProviderType =
+  | "mock"
+  | "openai-compatible"
+  | "openai"
+  | "openrouter"
+  | "deepseek"
+  | "anthropic"
+  | "gemini"
+  | "local";
+
+export type AIProviderName = string;
 
 export interface AIProvider {
   name: AIProviderName;

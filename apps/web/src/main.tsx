@@ -6,14 +6,17 @@ import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AgentsPage } from "@/pages/AgentsPage";
 import { AuditPage } from "@/pages/AuditPage";
 import { CharterPage } from "@/pages/CharterPage";
+import { ExternalAgentsPage } from "@/pages/ExternalAgentsPage";
 import { MattersPage } from "@/pages/MattersPage";
 import { NoticesPage } from "@/pages/NoticesPage";
 import { VisionPage } from "@/pages/VisionPage";
+import { WorkOrdersPage } from "@/pages/WorkOrdersPage";
 import { CouncilPage } from "@/pages/CouncilPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
 import { MemoryPage } from "@/pages/MemoryPage";
 import { ProfilePage } from "@/pages/ProfilePage";
+import { ProvidersPage } from "@/pages/ProvidersPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { SecurityPage } from "@/pages/SecurityPage";
 import { SettingsPage } from "@/pages/SettingsPage";
@@ -38,10 +41,13 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/throne-room" element={<ThroneRoomPage />} />
           <Route path="/council" element={<CouncilPage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/external-agents" element={<ExternalAgentsPage />} />
+          <Route path="/work-orders" element={<WorkOrdersPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/memory" element={<MemoryPage />} />
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/providers" element={<ProvidersPage />} />
           <Route path="/treasury" element={<TreasuryPage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/charter" element={<CharterPage />} />

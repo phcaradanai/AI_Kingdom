@@ -1,12 +1,14 @@
 import type { Agent, Task, TaskMode } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
-import { createAIProvider } from "../ai/providerFactory.js";
+import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { calculateCostUSD } from "../pricing/providerPricing.js";
 import { prisma } from "../db/prisma.js";
+import type { AIProviderConfig } from "./aiProviderRegistry.js";
+import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getKingdomContext } from "./kingdomComplianceService.js";
 import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./memoryService.js";
 import { generateRoyalReport } from "./reportService.js";
-import { getBooleanSetting, getNumberSetting, getSettingValue } from "./settingsService.js";
+import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 
 const AGENTS_BY_MODE: Record<TaskMode, string[]> = {
   ASK: ["grand-vizier", "royal-architect"],
@@ -63,9 +65,6 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
   });
 
   try {
-    const providerName = await getSettingValue("AI_PROVIDER", "mock");
-    const provider = createAIProvider(providerName === "openai" ? "openai" : "mock");
-    const defaultModel = await getSettingValue("OPENAI_MODEL", provider.model);
     const defaultMaxTokens = await getNumberSetting("AI_MAX_TOKENS", 700);
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
@@ -74,9 +73,13 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const kingdomMemoryContext = formatMemoryContext(relevantMemories);
     const fallbackNotices: string[] = [];
     const generatedResponses: Array<{ agent: Agent; response: string }> = [];
+    const usedProviders: string[] = [];
+    const usedModels: string[] = [];
 
     for (const agent of selectedAgents) {
-      const generated = await generateWithFallback(provider, {
+      const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
+      const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders, agent.defaultModel);
+      const generated = await generateWithFallback(providerCalls, {
         command: task.command,
         mode: task.mode,
         agentName: agent.name,
@@ -84,7 +87,6 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         agentSkills: agent.skills,
         systemPrompt: agent.systemPrompt || agent.prompt,
         responseStyle: agent.responseStyle,
-        model: agent.defaultModel ?? defaultModel,
         temperature: agent.temperature ?? undefined,
         maxTokens: agent.maxTokens ?? defaultMaxTokens,
         kingdomContext: kingdomContext || undefined,
@@ -95,6 +97,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       if (generated.fallbackNotice) {
         fallbackNotices.push(generated.fallbackNotice);
       }
+      usedProviders.push(generated.providerName);
+      usedModels.push(generated.modelUsed);
 
       await prisma.agentResponse.create({
         data: {
@@ -117,6 +121,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           councilSessionId: session.id,
           agentId: agent.id,
           provider: generated.providerName,
+          providerId: generated.providerId ?? generated.providerName,
           model: generated.modelUsed,
           promptTokens: generated.usage.promptTokens,
           completionTokens: generated.usage.completionTokens,
@@ -134,7 +139,9 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     if (!grandVizier) {
       throw new Error("Grand Vizier is not available");
     }
-    const generatedSummary = await generateWithFallback(provider, {
+    const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
+    const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders, grandVizier.defaultModel);
+    const generatedSummary = await generateWithFallback(summaryProviderCalls, {
       command: task.command,
       mode: task.mode,
       agentName: grandVizier.name,
@@ -142,7 +149,6 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       agentSkills: grandVizier.skills,
       systemPrompt: `${grandVizier.systemPrompt || grandVizier.prompt}\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.`,
       responseStyle: grandVizier.responseStyle,
-      model: grandVizier.defaultModel ?? defaultModel,
       temperature: grandVizier.temperature ?? undefined,
       maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
       kingdomContext: kingdomContext || undefined,
@@ -153,6 +159,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     if (generatedSummary.fallbackNotice) {
       fallbackNotices.push(generatedSummary.fallbackNotice);
     }
+    usedProviders.push(generatedSummary.providerName);
+    usedModels.push(generatedSummary.modelUsed);
 
     const summaryCostUSD = calculateCostUSD(
       generatedSummary.providerName,
@@ -166,6 +174,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         councilSessionId: session.id,
         agentId: grandVizier.id,
         provider: generatedSummary.providerName,
+        providerId: generatedSummary.providerId ?? generatedSummary.providerName,
         model: generatedSummary.modelUsed,
         promptTokens: generatedSummary.usage.promptTokens,
         completionTokens: generatedSummary.usage.completionTokens,
@@ -183,8 +192,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       data: {
         status: "COMPLETED",
         finalSummary,
-        providerName: provider.name,
-        modelUsed: [...new Set(selectedAgents.map((agent) => agent.defaultModel ?? defaultModel))].join(", "),
+        providerName: [...new Set(usedProviders)].join(", "),
+        modelUsed: [...new Set(usedModels)].join(", "),
         fallbackNotice: fallbackNotices.length > 0 ? [...new Set(fallbackNotices)].join("\n") : null,
         consultedMemoryIds: relevantMemories.map((memory) => memory.id)
       },
@@ -262,6 +271,22 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     });
     throw error;
   }
+}
+
+function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fallbackProviders: AIProviderConfig[], agentModel?: string | null) {
+  const configs = [primary, ...fallbackProviders];
+  return configs
+    .map((provider, index) => {
+      try {
+        return {
+          provider: createAIProviderFromConfig(provider),
+          model: index === 0 ? primaryModel : agentModel ?? provider.defaultModel
+        };
+      } catch {
+        return null;
+      }
+    })
+    .filter((call): call is NonNullable<typeof call> => Boolean(call));
 }
 
 function orderSelectedAgents(mode: TaskMode, agents: Agent[]): Agent[] {

@@ -19,39 +19,46 @@ Primary services:
 - `memoryService.ts`: keyword/tag relevance, context formatting, deterministic extraction, duplicate and secret checks.
 - `reportService.ts`: generated Royal Report creation and duplicate prevention.
 - `settingsService.ts`: default settings and runtime setting lookup.
+- `aiProviderRegistry.ts`: env-first public provider registry, provider capability/cost metadata, and DB-backed provider overrides. Credentials are never stored in API responses.
+- `aiProviderRouter.ts`: selects provider/model/fallback chain from agent override, task mode, cost mode, required capabilities, and active provider metadata.
 - `treasuryService.ts`: aggregates `UsageRecord` rows into overview, per-agent, per-provider/model, and daily-bucket breakdowns; reads budget limits from settings to produce warning flags.
 - `charterService.ts`: reads/writes `KingdomCharter` and `KingdomVision` records; seeds from `docs/KINGDOM_CHARTER.md` and `docs/KINGDOM_VISION.md` if no DB records exist; `formatKingdomContext` produces the injection string.
 - `royalSecretaryService.ts`: `Notice` and `Matter` CRUD with dedup logic; `inspectKingdomStatus` aggregates live kingdom health counts; `generateDailyBrief` returns status, urgent notices, open matters, awaiting-decision matters, `recommendedActions` list, and charter/vision context for the dashboard.
 - `kingdomComplianceService.ts`: `getKingdomContext()` loads charter + vision, auto-seeds from files if missing, never throws; returns empty string on failure so the orchestrator always proceeds.
 - `auditService.ts`: audit log writes for security-sensitive actions; read functions (`listAuditLogs`, `getAuditLogEntry`, `searchAuditLogs`) with filter/pagination support; `sanitizeMetadata` strips keys containing "password", "token", "apikey", "secret", "credential", "authorization", or "bearer" recursively before any response.
+- `externalAgentWorkOrderService.ts`: external executor bridge. Seeds manual handoff targets, generates work orders from tasks/matters, builds copy-paste prompts with charter/vision/project context, records implementation reports, creates handoff briefs, captures decision memories, and creates completion report summaries.
 
 ## Data Model
 
-Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, `Budget`, `KingdomCharter`, `KingdomVision`, `Notice`, and `Matter`.
+Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `AIProvider`, `AIProviderRoute`, `ExternalAgent`, `WorkOrder`, `WorkSession`, `ImplementationReport`, `HandoffBrief`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, `Budget`, `KingdomCharter`, `KingdomVision`, `Notice`, and `Matter`.
 
 Tasks belong to users and may produce council sessions and reports. Council sessions store selected agent IDs, provider/model metadata, fallback notices, consulted memory IDs, auto-saved memory IDs, agent responses, and final summary. Reports and memories retain source task/session references when generated from council output.
 
-`UsageRecord` captures one row per AI call: provider, model, token counts (prompt/completion/total), and estimated USD cost calculated from a static pricing table in `src/pricing/providerPricing.ts`. Records link to the originating task, council session, and agent. The Grand Vizier generates two records per session (specialist call + synthesis pass). `TreasuryLedger` captures one COST entry per completed session. The `Budget` model exists in the schema but budget limits are currently read from `Setting` keys (`DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`).
+External agents are execution workers, not internal council members. `WorkOrder` is the source-of-truth package; `WorkSession` records a manual execution attempt; `ImplementationReport` captures what the external app agent did; `HandoffBrief` packages the current state for another executor. Backend code never runs shell commands for these models and never calls Claude Code/Codex/Cline APIs.
+
+`UsageRecord` captures one row per AI call: provider, providerId, model, token counts (prompt/completion/total), and estimated USD cost calculated from a static pricing table in `src/pricing/providerPricing.ts`. Records link to the originating task, council session, and agent. The Grand Vizier generates two records per session (specialist call + synthesis pass). `TreasuryLedger` captures one COST entry per completed session. The `Budget` model exists in the schema but budget limits are currently read from `Setting` keys (`DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`).
 
 ## Auth and Authorization
 
 Authentication uses bcrypt password hashes, 15-minute JWT access tokens, and server-stored refresh token sessions. Logout revokes the active refresh token record; protected access checks both JWT validity and session state.
 
-RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/middleware/rbac.ts`. `/api/agents`, `/api/settings`, `/api/users`, `/api/treasury`, and `/api/audit` require `KING`. Core resource routes (`/api/tasks`, `/api/council`, `/api/reports`, `/api/memory`) apply per-method role checks: `KING` has full access; `CROWN_PRINCE` has tasks/council/reports/memory; `MINISTER` has tasks/reports; `SCRIBE` has read-only tasks/council/reports/memory. Frontend navigation mirrors these roles but is not the security boundary.
+RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/middleware/rbac.ts`. `/api/agents`, `/api/settings`, `/api/providers`, `/api/users`, `/api/treasury`, and `/api/audit` require `KING`. External agent writes are KING-only; work order writes and handoff generation are KING/CROWN_PRINCE; implementation report submission is KING/CROWN_PRINCE/MINISTER; SCRIBE is read-only. Core resource routes (`/api/tasks`, `/api/council`, `/api/reports`, `/api/memory`) apply per-method role checks: `KING` has full access; `CROWN_PRINCE` has tasks/council/reports/memory; `MINISTER` has tasks/reports; `SCRIBE` has read-only tasks/council/reports/memory. Frontend navigation mirrors these roles but is not the security boundary.
 
 ## AI Provider Flow
 
-The provider abstraction is defined by `GenerateAgentResponseInput` and `AIProvider`. `mock` is the local default. `openai` uses an OpenAI-compatible chat completions endpoint configured by environment and settings. `generateWithFallback` handles provider failures by returning deterministic mock counsel and recording fallback notices on sessions.
+The provider abstraction is defined by `GenerateAgentResponseInput` and `AIProvider`. `mock` is the local default. `openAICompatibleProvider.ts` implements reusable Chat Completions calls for OpenAI, OpenRouter, DeepSeek, and future OpenAI-compatible APIs. `generateWithFallback` accepts a provider chain, records attempted providers, and returns usage from the provider that actually succeeded.
 
-`AIProvider.generateAgentResponse` returns `AgentResponseResult` — both the text response and a `TokenUsage` struct (promptTokens, completionTokens, totalTokens). `OpenAIProvider` reads usage from the API response body. `MockAIProvider` estimates tokens from string length (`Math.ceil(text.length / 4)`). `generateWithFallback` propagates usage from whichever provider ran (primary or mock fallback).
+`aiProviderRouter.ts` resolves provider choice by agent override, task mode policy, cost mode (`AI_COST_MODE=low|balanced|quality`), required capabilities, and fallback chain. The default fallback chain is `deepseek -> openrouter -> openai -> mock`. Fallback notices are stored on `CouncilSession.fallbackNotice`.
+
+`AIProvider.generateAgentResponse` returns `AgentResponseResult` — both the text response and a `TokenUsage` struct (promptTokens, completionTokens, totalTokens). OpenAI-compatible providers read usage from the API response body. `MockAIProvider` estimates tokens from string length (`Math.ceil(text.length / 4)`). `generateWithFallback` propagates usage from whichever provider ran.
 
 Pricing is calculated in `src/pricing/providerPricing.ts` using a static table keyed by `"provider:model"`. Unknown models default to $0 with a console warning (never a thrown error). `estimatedCostLocal` always equals `estimatedCostUSD`; no FX conversion is performed.
 
-Agent records contain prompts, skills, response style, priority, and optional model/temperature/max-token overrides. The Grand Vizier is required and cannot be deactivated or deleted through the API.
+Agent records contain prompts, skills, response style, priority, and optional provider/model/fallback/cost/temperature/max-token overrides. The Grand Vizier is required and cannot be deactivated or deleted through the API.
 
 ## Frontend Layout
 
-Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders the dark kingdom dashboard shell, role-aware navigation, role badge, and sign-out. `authStore` stores the current user, access token, and refresh token. `kingdomStore` loads permitted kingdom data and provides actions for tasks, council processing, reports, memories, agents, and settings.
+Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders the dark kingdom dashboard shell, role-aware navigation, role badge, and sign-out. `authStore` stores the current user, access token, and refresh token. `kingdomStore` loads permitted kingdom data and provides actions for tasks, council processing, reports, memories, agents, providers, and settings. `/external-agents` manages manual executor targets; `/work-orders` handles prompt generation, implementation report submission, and handoff copying.
 
 ## Deployment
 

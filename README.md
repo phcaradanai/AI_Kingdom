@@ -10,7 +10,7 @@ A production-minded MVP for a fictional digital kingdom where the user acts as K
 - Node.js + Express + TypeScript
 - PostgreSQL + Prisma
 - JWT email/password auth
-- OpenAI-compatible provider abstraction
+- Provider-agnostic AI registry with OpenAI-compatible routing
 
 ## Setup
 
@@ -33,28 +33,47 @@ king@aikingdom.local
 password123
 ```
 
-## AI Provider
+## AI Provider Registry and Routing
 
-The app defaults to the mock provider so local development works without an API key:
+The app defaults to the mock provider so local development works without an API key. Provider metadata is stored in the `AIProvider` registry, while credentials stay server-side in environment variables.
 
 ```env
 AI_PROVIDER=mock
+AI_COST_MODE=balanced
 AI_TIMEOUT_MS=20000
 AI_MAX_TOKENS=700
 ```
 
-To enable an OpenAI-compatible provider:
+Supported runtime providers today:
+
+- `mock`
+- `openai`
+- `openrouter`
+- `deepseek`
+- `openai-compatible`
+
+Anthropic, Gemini, and local/Ollama provider metadata is prepared for future runtime support.
+
+Server-side credential env vars:
 
 ```env
-AI_PROVIDER=openai
-OPENAI_BASE_URL=https://api.openai.com/v1
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
-AI_TIMEOUT_MS=20000
-AI_MAX_TOKENS=700
+OPENROUTER_API_KEY=...
+DEEPSEEK_API_KEY=...
+ANTHROPIC_API_KEY=...
+GEMINI_API_KEY=...
 ```
 
-If the OpenAI-compatible provider fails, times out, or returns an empty response, the orchestrator falls back to deterministic mock counsel and stores a fallback notice on the council session.
+Routing order:
+
+1. Agent override: `preferredProviderId`, `defaultModel`, `fallbackProviderIds`, and `costPreference`.
+2. Task mode policy: ASK, PLAN, RESEARCH, and BUILD prefer different provider chains.
+3. Cost mode: `AI_COST_MODE=low|balanced|quality`.
+4. Fallback chain: default `deepseek -> openrouter -> openai -> mock`.
+
+If a selected provider fails, times out, or returns an empty response, the orchestrator tries the next provider in the fallback chain. The council session stores a fallback notice such as `deepseek failed: timeout. Fallback used: openrouter.`
+
+Use `/providers` or the provider status list in `/settings` to activate/deactivate providers, set default models, priority, and cost tier. API keys are never editable or visible in the frontend.
 
 ## Auth, Roles, and Security
 
@@ -86,11 +105,11 @@ Audit logs are written for login, logout, user creation/deactivation, settings c
 5. Send the decree to the Grand Vizier.
 6. Review council responses, memory usage, auto-saved memories, and the final Grand Vizier summary.
 
-M4 routes council responses through an AI provider abstraction. The mock provider remains the default; the OpenAI-compatible provider can be enabled with `.env`.
+M12.5 routes council responses through the provider registry. The mock provider remains the default; OpenAI, OpenRouter, DeepSeek, and generic OpenAI-compatible endpoints can be enabled with server-side env vars.
 
 ## Royal Treasury
 
-Every AI call records a `UsageRecord` with token counts and an estimated USD cost. The `/treasury` page (KING only) shows:
+Every AI call records a `UsageRecord` with provider, providerId, model, token counts, and an estimated USD cost. The `/treasury` page (KING only) shows:
 
 - Spend today / this month / all time and token totals
 - Cost and call count broken down by agent
@@ -115,8 +134,11 @@ Cost is estimated from a static table in `apps/api/src/pricing/providerPricing.t
 | openai | gpt-4-turbo | $10.00 | $30.00 |
 | openai | gpt-4 | $30.00 | $60.00 |
 | openai | gpt-3.5-turbo | $0.50 | $1.50 |
+| openrouter | openai/gpt-4o-mini | $0.15 | $0.60 |
+| deepseek | deepseek-chat | $0.27 | $1.10 |
+| deepseek | deepseek-coder | $0.27 | $1.10 |
 
-Unknown models default to $0.00 with a server-side warning. Token counts for the mock provider are estimated from string length (`Math.ceil(chars / 4)`). Token counts for the OpenAI provider come directly from the API response.
+Unknown models default to $0.00 with a server-side warning. Token counts for the mock provider are estimated from string length (`Math.ceil(chars / 4)`). Token counts for OpenAI-compatible providers come directly from the API response when provided.
 
 ## Manual Verification
 
@@ -184,6 +206,52 @@ After a council session completes, the backend generates one Royal Report from t
 
 Use `/reports` to search, filter by category or importance, inspect source task/session links, edit report metadata/content, or delete an incorrect report. Use `/council` to review Council Records and confirm each completed session links back to its generated report.
 
+## External Agent Bridge
+
+M13 adds manual handoff support for external app agents such as Claude Code, Codex, Cline, Kilo, Antigravity, Hermes, OpenCode, and custom executors. These agents are execution workers only. AI Kingdom remains the source of truth for objective, scope, constraints, acceptance criteria, and status.
+
+Lifecycle:
+
+1. Matter or Task
+2. Work Order
+3. Work Session
+4. Implementation Report
+5. Handoff Brief
+6. Memory / Report / Next Task update
+
+Use `/external-agents` to view seeded manual handoff targets. Kings can create, edit, activate, or deactivate records. Seeded targets include Claude Code, Codex, Cline, Kilo, Antigravity, and Hermes. All M13 execution modes are manual copy-paste; the backend does not call external agent APIs.
+
+Use `/work-orders` to:
+
+- Create a work order manually
+- Generate a work order from a task ID or matter ID
+- Assign an external agent
+- Generate a copy-paste prompt
+- Submit an implementation report
+- Generate and copy a handoff brief
+
+Generated prompts include Kingdom Charter, Kingdom Vision, project status, architecture summary, objective, scope, constraints, acceptance criteria, validation commands, and safety rules. They also instruct external agents:
+
+- Do not delete unrelated files.
+- Do not rewrite architecture without approval.
+- Do not expose secrets.
+- Run validation commands if possible.
+- Report failures honestly.
+
+Required final response format for external agents:
+
+1. Summary
+2. Files changed
+3. Commands run
+4. Tests run
+5. Test result
+6. Decisions made
+7. Issues found
+8. Remaining work
+9. Recommended next step
+
+Implementation reports can create concise decision memories when decisions are provided. Huge raw outputs and secrets are not saved as memories. Completing a work order creates a Royal Report summary when the work order has a user owner.
+
 ## Useful Commands
 
 ```bash
@@ -224,8 +292,8 @@ Required Coolify env vars:
 - `APP_PUBLIC_URL`
 - `CORS_ALLOWED_ORIGINS`
 - `VITE_API_BASE_URL`
-- `AI_PROVIDER`, `OPENAI_MODEL`, `AI_TIMEOUT_MS`, `AI_MAX_TOKENS`
-- `OPENAI_API_KEY` only when `AI_PROVIDER=openai`
+- `AI_PROVIDER`, `AI_COST_MODE`, `AI_TIMEOUT_MS`, `AI_MAX_TOKENS`
+- `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` only when those providers are used
 
 Do not expose the PostgreSQL port publicly. In Coolify, attach a persistent volume to the `postgres-data` volume. Configure frontend and backend domains separately, enable HTTPS in Coolify, and set `CORS_ALLOWED_ORIGINS` to the exact frontend HTTPS origin.
 
@@ -287,7 +355,9 @@ Use `/agents` to create, edit, activate, deactivate, or soft-delete royal agents
 - `name`, `title`, `role`, `specialty`, and `description`
 - `systemPrompt`, `skills`, and `responseStyle`
 - `priority`
-- optional `defaultModel`, `temperature`, and `maxTokens`
+- optional `preferredProviderId`, `defaultModel`, `fallbackProviderIds`, `costPreference`, `temperature`, and `maxTokens`
+
+If an agent has no provider override, the routing policy selects a provider from task mode and cost mode. To add a new OpenAI-compatible provider, add its public registry metadata in `apps/api/src/services/aiProviderRegistry.ts`, create a runtime config in `apps/api/src/ai/providerFactory.ts`, keep its credentials in env, and add pricing in `apps/api/src/pricing/providerPricing.ts` if known.
 
 The Grand Vizier is required for orchestration and cannot be deleted or deactivated from the API. Other agents are soft-deleted by setting `isActive=false`.
 
@@ -295,7 +365,8 @@ The Grand Vizier is required for orchestration and cannot be deleted or deactiva
 
 Use `/settings` to edit safe runtime settings:
 
-- `AI_PROVIDER`: `mock` or `openai`
+- `AI_PROVIDER`: legacy default provider hint (`mock`, `openai-compatible`, `openai`, `openrouter`, or `deepseek`)
+- `AI_COST_MODE`: `low`, `balanced`, or `quality`
 - `OPENAI_MODEL`
 - `AI_TIMEOUT_MS`
 - `AI_MAX_TOKENS`
@@ -306,7 +377,7 @@ Use `/settings` to edit safe runtime settings:
 
 Settings affect orchestration immediately. `AUTO_SAVE_MEMORY=false` skips auto memory extraction. `AUTO_GENERATE_REPORTS=false` skips Royal Report generation. `AUTO_PROCESS_TASKS=true` processes newly submitted decrees immediately.
 
-Do not configure API keys in the UI. `OPENAI_API_KEY` remains server-only in `.env` and is never returned by the settings API.
+Do not configure API keys in the UI. Provider API keys remain server-only in `.env` and are never returned by the settings or providers APIs.
 
 To reset seeded agents and default settings:
 

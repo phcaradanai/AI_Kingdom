@@ -11,8 +11,12 @@ import agentsRouter from "./routes/agents.js";
 import auditRouter from "./routes/audit.js";
 import authRouter from "./routes/auth.js";
 import charterRouter from "./routes/charter.js";
+import externalAgentsRouter from "./routes/externalAgents.js";
+import handoffBriefsRouter from "./routes/handoffBriefs.js";
+import implementationReportsRouter from "./routes/implementationReports.js";
 import mattersRouter from "./routes/matters.js";
 import noticesRouter from "./routes/notices.js";
+import providersRouter from "./routes/providers.js";
 import secretaryRouter from "./routes/secretary.js";
 import councilRouter from "./routes/council.js";
 import memoriesRouter from "./routes/memories.js";
@@ -21,6 +25,8 @@ import settingsRouter from "./routes/settings.js";
 import tasksRouter from "./routes/tasks.js";
 import treasuryRouter from "./routes/treasury.js";
 import usersRouter from "./routes/users.js";
+import workOrdersRouter from "./routes/workOrders.js";
+import workSessionsRouter from "./routes/workSessions.js";
 
 export function createApp() {
   const app = express();
@@ -64,6 +70,12 @@ export function createApp() {
   app.use("/api/council", requireAuth, methodPermission("council"), councilRouter);
   app.use("/api/reports", requireAuth, methodPermission("reports"), reportsRouter);
   app.use("/api/settings", requireAuth, requireRole("KING"), settingsRouter);
+  app.use("/api/providers", requireAuth, requireRole("KING"), providersRouter);
+  app.use("/api/external-agents", requireAuth, externalAgentsRouter);
+  app.use("/api/work-orders", requireAuth, workOrdersRouter);
+  app.use("/api/work-sessions", requireAuth, workSessionsRouter);
+  app.use("/api/implementation-reports", requireAuth, implementationReportsRouter);
+  app.use("/api/handoff-briefs", requireAuth, handoffBriefsRouter);
   app.use("/api/users", requireAuth, requireRole("KING"), usersRouter);
   app.use("/api/memory", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/memories", requireAuth, methodPermission("memory"), memoriesRouter);

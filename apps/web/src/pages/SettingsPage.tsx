@@ -11,6 +11,7 @@ const behaviorKeys = ["AUTO_PROCESS_TASKS", "AUTO_SAVE_MEMORY", "AUTO_GENERATE_R
 
 export function SettingsPage() {
   const settings = useKingdomStore((state) => state.settings);
+  const providers = useKingdomStore((state) => state.providers);
   const updateSetting = useKingdomStore((state) => state.updateSetting);
   const groups = {
     AI: settings.filter((setting) => setting.category === "AI"),
@@ -31,7 +32,36 @@ export function SettingsPage() {
         description="Tune AI provider defaults and system behavior. API keys remain server-only in `.env`."
       />
       <div className="grid gap-4 xl:grid-cols-2">
-        <SettingsCard icon={<KeyRound className="h-5 w-5 text-primary" />} title="AI Settings" settings={groups.AI} onUpdate={update} />
+        <div className="space-y-4">
+          <SettingsCard icon={<KeyRound className="h-5 w-5 text-primary" />} title="AI Settings" settings={groups.AI} onUpdate={update} />
+          <Card>
+            <ServerCog className="h-5 w-5 text-primary" />
+            <h2 className="mt-4 font-display text-xl">Provider Status</h2>
+            <div className="mt-4 space-y-3">
+              {providers.map((provider) => (
+                <div key={provider.id} className="rounded-md border border-border bg-muted/30 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold">{provider.name}</div>
+                      <div className="mt-1 font-mono text-xs text-muted-foreground">{provider.defaultModel}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 text-xs">
+                      <span className="rounded-full border border-border px-2 py-1">{provider.isActive ? "active" : "inactive"}</span>
+                      <span className="rounded-full border border-border px-2 py-1">{provider.costTier}</span>
+                      <span className="rounded-full border border-border px-2 py-1">{provider.hasCredentials ? "env" : "no env"}</span>
+                    </div>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    {provider.supportsChat ? <span>chat</span> : null}
+                    {provider.supportsTools ? <span>tools</span> : null}
+                    {provider.supportsVision ? <span>vision</span> : null}
+                    {provider.supportsJsonMode ? <span>json</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
         <SettingsCard icon={<SlidersHorizontal className="h-5 w-5 text-primary" />} title="System Behavior" settings={groups.SYSTEM} onUpdate={update} />
         <Card>
           <ServerCog className="h-5 w-5 text-primary" />
@@ -55,7 +85,7 @@ export function SettingsPage() {
           <KeyRound className="h-5 w-5 text-primary" />
           <h2 className="mt-4 font-display text-xl">Security</h2>
           <p className="mt-4 text-sm leading-6 text-muted-foreground">
-            `OPENAI_API_KEY` is never returned by the settings API. Configure secrets only in the server `.env`.
+            API keys are never returned by the settings or providers APIs. Configure secrets only in the server `.env`.
           </p>
         </Card>
       </div>
@@ -94,7 +124,16 @@ function SettingRow({ setting, onUpdate }: { setting: SettingDto; onUpdate: (key
         ) : setting.key === "AI_PROVIDER" ? (
           <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
             <option value="mock">mock</option>
+            <option value="openai-compatible">openai-compatible</option>
             <option value="openai">openai</option>
+            <option value="openrouter">openrouter</option>
+            <option value="deepseek">deepseek</option>
+          </select>
+        ) : setting.key === "AI_COST_MODE" ? (
+          <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
+            <option value="low">low</option>
+            <option value="balanced">balanced</option>
+            <option value="quality">quality</option>
           </select>
         ) : setting.key === "DEFAULT_TASK_MODE" ? (
           <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>

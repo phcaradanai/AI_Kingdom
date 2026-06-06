@@ -18,7 +18,10 @@ const agentSchema = z.object({
   responseStyle: z.string().trim().max(1000).default("concise, structured, practical"),
   isActive: z.boolean().default(true),
   priority: z.coerce.number().int().min(1).max(1000).default(100),
+  preferredProviderId: z.string().trim().max(120).optional().nullable(),
   defaultModel: z.string().trim().max(120).optional().nullable(),
+  fallbackProviderIds: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+  costPreference: z.enum(["LOW", "BALANCED", "QUALITY"]).optional().nullable(),
   temperature: z.coerce.number().min(0).max(2).optional().nullable(),
   maxTokens: z.coerce.number().int().min(64).max(8000).optional().nullable()
 });
@@ -94,6 +97,7 @@ router.patch("/:id", async (req, res, next) => {
       data: {
         ...payload,
         ...(payload.systemPrompt ? { prompt: payload.prompt ?? payload.systemPrompt } : {}),
+        ...(payload.fallbackProviderIds ? { fallbackProviderIds: uniqueLower(payload.fallbackProviderIds) } : {}),
         ...(payload.skills ? { skills: uniqueLower(payload.skills) } : {})
       }
     });

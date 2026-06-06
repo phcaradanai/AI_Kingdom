@@ -1,26 +1,26 @@
 # Next Task
 
-## M13: Royal Secretary Intelligence
+## M14: External Agent Automation Readiness
 
-Goal: give the Secretary the ability to generate AI-assisted briefings and connect kingdom signals to actionable notices and matters automatically.
+Goal: prepare the M13 External Agent Bridge for future automation while keeping manual copy-paste mode safe as the default.
 
 ## Scope
 
-1. **Secretary AI Briefing**: `POST /api/secretary/brief/generate` — runs an AI council call (using the existing orchestrator infrastructure) to produce a written analysis of the current kingdom status. Stores result as a `Report` with category `GENERAL`. KING only.
+1. **Work Order Review Queue**: add KING/CROWN_PRINCE review actions for implementation reports and handoff briefs.
 
-2. **Signal-to-Notice Wiring**: After every completed council session, the orchestrator checks for warning signals (budget warning, failed tasks threshold) and auto-creates `Notice` records via `royalSecretaryService.createNotice`. No new background workers — runs inline in the orchestrator.
+2. **External Agent Templates**: add reusable prompt templates per external agent type.
 
-3. **Matter Escalation**: When a `Notice` is marked CRITICAL by the King, the system offers (via API) to auto-elevate it to an `AWAITING_ROYAL_DECISION` matter.
+3. **Safer Report Parsing**: parse external agent final responses into `ImplementationReport` drafts without executing anything.
 
-4. **Notice Count Badge**: Add an unread notice count to the nav sidebar (fetched alongside the secretary brief).
+4. **Secretary Signals**: create notices when work orders are stuck in `IN_PROGRESS` or `NEEDS_REVIEW`.
 
-5. **Tests**: signal-to-notice wiring, matter escalation from notice, briefing generation, badge count.
+5. **Tests**: review queue permissions, template rendering, parser redaction, stale work-order notices.
 
 6. **Documentation**: Update PROJECT_STATUS.md, ARCHITECTURE.md, NEXT_TASK.md.
 
 ## Constraints
 
-- No autonomous background workers.
-- No ministry hierarchy.
-- No external monitoring vendors.
-- All wiring must be inline in existing flows (orchestrator, API handlers).
+- No autonomous external agent execution.
+- No backend shell command execution.
+- No Claude Code/Codex/Cline API calls.
+- Keep AI Kingdom as source of truth; external agents remain executors.

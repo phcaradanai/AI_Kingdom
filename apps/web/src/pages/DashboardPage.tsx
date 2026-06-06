@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Landmark, Scroll, ScrollText, Shield, Vault } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ClipboardList, Landmark, Scroll, ScrollText, Shield, Vault } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { SecretaryBriefDto } from "@/types/api";
+import type { HandoffBriefDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
 
 const SEVERITY_COLORS = {
   critical: "text-red-400 bg-red-500/10 border-red-500/30",
@@ -37,9 +37,17 @@ export function DashboardPage() {
   const user = useAuthStore((state) => state.user);
   const canCommand = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
   const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
+  const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
+  const [handoffBriefs, setHandoffBriefs] = useState<HandoffBriefDto[]>([]);
 
   useEffect(() => {
     api.secretaryBrief().then(setBrief).catch(() => undefined);
+    Promise.all([api.workOrders(), api.handoffBriefs()])
+      .then(([orders, handoffs]) => {
+        setWorkOrders(orders.workOrders);
+        setHandoffBriefs(handoffs.handoffBriefs);
+      })
+      .catch(() => undefined);
   }, []);
 
   const stats = [
@@ -173,6 +181,36 @@ export function DashboardPage() {
           )}
         </div>
       )}
+
+      <Card className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg">External Work</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Manual handoff work orders and latest execution transfer notes.</p>
+          </div>
+          <Link to="/work-orders">
+            <Button variant="outline">
+              <ClipboardList className="h-4 w-4" />
+              Create Work Order
+            </Button>
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <StatusPill value={workOrders.filter((order) => ["DRAFT", "READY"].includes(order.status)).length} label="Open Work Orders" />
+          <StatusPill value={workOrders.filter((order) => order.status === "IN_PROGRESS").length} label="In Progress" />
+          <StatusPill value={workOrders.filter((order) => order.status === "NEEDS_REVIEW").length} label="Needs Review" warn />
+        </div>
+        {handoffBriefs[0] ? (
+          <div className="mt-4 rounded-md border border-border bg-muted/30 p-3 text-sm">
+            <div className="font-medium">{handoffBriefs[0].title}</div>
+            <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{handoffBriefs[0].handoffPrompt}</div>
+          </div>
+        ) : null}
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to="/work-orders"><Button variant="outline">Generate from latest Matter</Button></Link>
+          <Link to="/work-orders"><Button variant="outline">Generate Handoff Brief</Button></Link>
+        </div>
+      </Card>
 
       {/* Recent decrees */}
       <div className="mt-6 grid gap-4 xl:grid-cols-2">

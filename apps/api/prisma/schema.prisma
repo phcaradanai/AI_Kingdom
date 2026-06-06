@@ -120,6 +120,62 @@ enum MatterCategory {
   GENERAL
 }
 
+enum ExternalAgentType {
+  CLAUDE_CODE
+  CODEX
+  CLINE
+  KILO
+  ANTIGRAVITY
+  HERMES
+  OPENCODE
+  CUSTOM
+}
+
+enum ExternalAgentExecutionMode {
+  MANUAL_COPY_PASTE
+  CLI_MANUAL
+  API
+  FUTURE_AUTOMATED
+}
+
+enum ExternalAgentSafetyLevel {
+  LOW_RISK
+  MEDIUM_RISK
+  HIGH_RISK
+}
+
+enum WorkOrderStatus {
+  DRAFT
+  READY
+  IN_PROGRESS
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum WorkOrderPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum WorkSessionStatus {
+  STARTED
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  INTERRUPTED
+}
+
+enum ImplementationTestResult {
+  NOT_RUN
+  PASSED
+  FAILED
+  PARTIAL
+}
+
 model Notice {
   id               String         @id @default(cuid())
   title            String
@@ -162,6 +218,7 @@ model User {
   memories      Memory[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
+  workOrders    WorkOrder[]
 }
 
 model RefreshToken {
@@ -199,13 +256,151 @@ model Agent {
   responseStyle String      @default("")
   isActive    Boolean         @default(true)
   priority    Int             @default(100)
+  preferredProviderId String?
   defaultModel String?
+  fallbackProviderIds String[] @default([])
+  costPreference String?
   temperature Float?
   maxTokens   Int?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   responses    AgentResponse[]
   usageRecords UsageRecord[]
+}
+
+model ExternalAgent {
+  id                    String                     @id @default(cuid())
+  name                  String
+  type                  ExternalAgentType
+  roleTitle             String
+  description           String                     @default("")
+  capabilities          String[]                   @default([])
+  executionMode         ExternalAgentExecutionMode @default(MANUAL_COPY_PASTE)
+  isActive              Boolean                    @default(true)
+  safetyLevel           ExternalAgentSafetyLevel   @default(MEDIUM_RISK)
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  workOrders            WorkOrder[]
+  workSessions          WorkSession[]
+  implementationReports ImplementationReport[]
+}
+
+model WorkOrder {
+  id                      String                 @id @default(cuid())
+  title                   String
+  objective               String
+  context                 String                 @default("")
+  instructions            String                 @default("")
+  constraints             String                 @default("")
+  acceptanceCriteria      String[]               @default([])
+  validationCommands      String[]               @default([])
+  targetProject           String?
+  targetRepository        String?
+  sourceType              String?
+  sourceId                String?
+  assignedExternalAgentId String?
+  status                  WorkOrderStatus        @default(DRAFT)
+  priority                WorkOrderPriority      @default(MEDIUM)
+  createdByUserId         String?
+  createdByAgentId        String?
+  createdAt               DateTime               @default(now())
+  updatedAt               DateTime               @updatedAt
+  assignedExternalAgent   ExternalAgent?         @relation(fields: [assignedExternalAgentId], references: [id], onDelete: SetNull)
+  createdByUser           User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  workSessions            WorkSession[]
+  implementationReports   ImplementationReport[]
+  handoffBriefs           HandoffBrief[]
+}
+
+model WorkSession {
+  id              String            @id @default(cuid())
+  workOrderId     String
+  externalAgentId String?
+  sessionLabel    String
+  status          WorkSessionStatus @default(STARTED)
+  inputPrompt     String
+  outputSummary   String?
+  startedAt       DateTime          @default(now())
+  completedAt     DateTime?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  workOrder       WorkOrder         @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  externalAgent   ExternalAgent?    @relation(fields: [externalAgentId], references: [id], onDelete: SetNull)
+  reports         ImplementationReport[]
+  handoffBriefs   HandoffBrief[]
+}
+
+model ImplementationReport {
+  id                    String                   @id @default(cuid())
+  workOrderId           String
+  workSessionId         String?
+  externalAgentId       String?
+  summary               String
+  filesChanged          String[]                 @default([])
+  commandsRun           String[]                 @default([])
+  testsRun              String[]                 @default([])
+  testResult            ImplementationTestResult @default(NOT_RUN)
+  errors                String[]                 @default([])
+  decisionsMade         String[]                 @default([])
+  remainingWork         String[]                 @default([])
+  nextRecommendedAction String?
+  rawOutput             String?
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  workOrder             WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  workSession           WorkSession?             @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
+  externalAgent         ExternalAgent?           @relation(fields: [externalAgentId], references: [id], onDelete: SetNull)
+}
+
+model HandoffBrief {
+  id                     String       @id @default(cuid())
+  workOrderId            String
+  fromWorkSessionId      String?
+  title                  String
+  currentStatus          String
+  completedWork          String[]     @default([])
+  decisionsMade          String[]     @default([])
+  filesChanged           String[]     @default([])
+  knownIssues            String[]     @default([])
+  nextSteps              String[]     @default([])
+  constraints            String[]     @default([])
+  suggestedNextAgentType String?
+  handoffPrompt          String
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  workOrder              WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  fromWorkSession        WorkSession? @relation(fields: [fromWorkSessionId], references: [id], onDelete: SetNull)
+}
+
+model AIProvider {
+  id           String   @id
+  name         String
+  type         String
+  baseUrl      String?
+  defaultModel String
+  isActive     Boolean  @default(true)
+  priority     Int      @default(100)
+  costTier     String   @default("MEDIUM")
+  capabilities Json
+  config       Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  routes       AIProviderRoute[] @relation("PreferredProvider")
+}
+
+model AIProviderRoute {
+  id                   String   @id @default(cuid())
+  name                 String
+  taskMode             TaskMode?
+  agentId              String?
+  preferredProviderId  String?
+  preferredModel       String?
+  fallbackProviderIds  String[] @default([])
+  costMode             String?
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  preferredProvider    AIProvider? @relation("PreferredProvider", fields: [preferredProviderId], references: [id], onDelete: SetNull)
 }
 
 model Setting {
@@ -268,6 +463,7 @@ model UsageRecord {
   councilSessionId   String?
   agentId            String?
   provider           String
+  providerId         String?
   model              String
   promptTokens       Int
   completionTokens   Int

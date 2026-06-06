@@ -32,7 +32,10 @@ export type AgentDto = {
   responseStyle: string;
   isActive: boolean;
   priority: number;
+  preferredProviderId: string | null;
   defaultModel: string | null;
+  fallbackProviderIds: string[];
+  costPreference: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature: number | null;
   maxTokens: number | null;
   createdAt: string;
@@ -51,7 +54,10 @@ export type AgentPayload = {
   responseStyle: string;
   isActive: boolean;
   priority: number;
+  preferredProviderId?: string | null;
   defaultModel?: string | null;
+  fallbackProviderIds?: string[];
+  costPreference?: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature?: number | null;
   maxTokens?: number | null;
 };
@@ -64,6 +70,30 @@ export type SettingDto = {
   value: string;
   category: SettingCategory;
   description: string | null;
+  updatedAt: string;
+};
+
+export type AIProviderDto = {
+  id: string;
+  name: string;
+  type: string;
+  baseUrl: string | null;
+  defaultModel: string;
+  isActive: boolean;
+  priority: number;
+  supportsChat: boolean;
+  supportsTools: boolean;
+  supportsVision: boolean;
+  supportsJsonMode: boolean;
+  costTier: "FREE" | "LOW" | "MEDIUM" | "HIGH" | "PREMIUM";
+  capabilities: {
+    supportsChat: boolean;
+    supportsTools?: boolean;
+    supportsVision?: boolean;
+    supportsJsonMode?: boolean;
+  };
+  hasCredentials: boolean;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -179,6 +209,7 @@ export type UsageRecordDto = {
   councilSessionId: string | null;
   agentId: string | null;
   provider: string;
+  providerId: string | null;
   model: string;
   promptTokens: number;
   completionTokens: number;
@@ -222,6 +253,7 @@ export type TreasuryAgentDto = {
 
 export type TreasuryProviderDto = {
   provider: string;
+  providerId: string | null;
   model: string;
   totalCostUSD: number;
   totalTokens: number;
@@ -309,6 +341,142 @@ export type SecretaryBriefDto = {
   recommendedActions: RecommendedAction[];
   charter: { mission: string } | null;
   vision: { content: string } | null;
+};
+
+export type ExternalAgentType = "CLAUDE_CODE" | "CODEX" | "CLINE" | "KILO" | "ANTIGRAVITY" | "HERMES" | "OPENCODE" | "CUSTOM";
+export type ExternalAgentExecutionMode = "MANUAL_COPY_PASTE" | "CLI_MANUAL" | "API" | "FUTURE_AUTOMATED";
+export type ExternalAgentSafetyLevel = "LOW_RISK" | "MEDIUM_RISK" | "HIGH_RISK";
+export type WorkOrderStatus = "DRAFT" | "READY" | "IN_PROGRESS" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED";
+export type WorkOrderPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type WorkSessionStatus = "STARTED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "INTERRUPTED";
+export type ImplementationTestResult = "NOT_RUN" | "PASSED" | "FAILED" | "PARTIAL";
+
+export type ExternalAgentDto = {
+  id: string;
+  name: string;
+  type: ExternalAgentType;
+  roleTitle: string;
+  description: string;
+  capabilities: string[];
+  executionMode: ExternalAgentExecutionMode;
+  isActive: boolean;
+  safetyLevel: ExternalAgentSafetyLevel;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ExternalAgentPayload = Omit<ExternalAgentDto, "id" | "createdAt" | "updatedAt">;
+
+export type WorkSessionDto = {
+  id: string;
+  workOrderId: string;
+  externalAgentId: string | null;
+  sessionLabel: string;
+  status: WorkSessionStatus;
+  inputPrompt: string;
+  outputSummary: string | null;
+  startedAt: string;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  externalAgent?: ExternalAgentDto | null;
+};
+
+export type ImplementationReportDto = {
+  id: string;
+  workOrderId: string;
+  workSessionId: string | null;
+  externalAgentId: string | null;
+  summary: string;
+  filesChanged: string[];
+  commandsRun: string[];
+  testsRun: string[];
+  testResult: ImplementationTestResult;
+  errors: string[];
+  decisionsMade: string[];
+  remainingWork: string[];
+  nextRecommendedAction: string | null;
+  rawOutput: string | null;
+  createdAt: string;
+  updatedAt: string;
+  externalAgent?: ExternalAgentDto | null;
+};
+
+export type HandoffBriefDto = {
+  id: string;
+  workOrderId: string;
+  fromWorkSessionId: string | null;
+  title: string;
+  currentStatus: string;
+  completedWork: string[];
+  decisionsMade: string[];
+  filesChanged: string[];
+  knownIssues: string[];
+  nextSteps: string[];
+  constraints: string[];
+  suggestedNextAgentType: string | null;
+  handoffPrompt: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkOrderDto = {
+  id: string;
+  title: string;
+  objective: string;
+  context: string;
+  instructions: string;
+  constraints: string;
+  acceptanceCriteria: string[];
+  validationCommands: string[];
+  targetProject: string | null;
+  targetRepository: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  assignedExternalAgentId: string | null;
+  status: WorkOrderStatus;
+  priority: WorkOrderPriority;
+  createdByUserId: string | null;
+  createdByAgentId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  assignedExternalAgent?: ExternalAgentDto | null;
+  workSessions?: WorkSessionDto[];
+  implementationReports?: ImplementationReportDto[];
+  handoffBriefs?: HandoffBriefDto[];
+};
+
+export type WorkOrderPayload = {
+  title: string;
+  objective: string;
+  context?: string;
+  instructions?: string;
+  constraints?: string;
+  acceptanceCriteria?: string[];
+  validationCommands?: string[];
+  targetProject?: string | null;
+  targetRepository?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  assignedExternalAgentId?: string | null;
+  status?: WorkOrderStatus;
+  priority?: WorkOrderPriority;
+};
+
+export type ImplementationReportPayload = {
+  workOrderId: string;
+  workSessionId?: string | null;
+  externalAgentId?: string | null;
+  summary: string;
+  filesChanged?: string[];
+  commandsRun?: string[];
+  testsRun?: string[];
+  testResult?: ImplementationTestResult;
+  errors?: string[];
+  decisionsMade?: string[];
+  remainingWork?: string[];
+  nextRecommendedAction?: string | null;
+  rawOutput?: string | null;
 };
 
 export type KingdomCharterDto = {

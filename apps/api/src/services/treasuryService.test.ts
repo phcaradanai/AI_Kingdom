@@ -60,6 +60,7 @@ async function createUsageFixture(suffix: string) {
       councilSessionId: session.id,
       agentId: agent.id,
       provider: "mock",
+      providerId: "mock",
       model: "deterministic-mock-v1",
       promptTokens: 100,
       completionTokens: 50,
@@ -140,6 +141,7 @@ test("treasury by provider aggregates per model", async () => {
     const providers = await getTreasuryByProvider();
     const mockEntry = providers.find((p) => p.provider === "mock" && p.model === "deterministic-mock-v1");
     assert.ok(mockEntry, "mock provider should appear in provider breakdown");
+    assert.equal(mockEntry.providerId, "mock");
     assert.ok(mockEntry.callCount >= 1);
   } finally {
     await prisma.usageRecord.deleteMany({ where: { councilSessionId: session.id } });

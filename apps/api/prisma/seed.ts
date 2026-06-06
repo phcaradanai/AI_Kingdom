@@ -2,6 +2,8 @@ import bcrypt from "bcryptjs";
 import { PrismaClient } from "@prisma/client";
 import { DEFAULT_SETTINGS } from "../src/services/settingsService.js";
 import { seedKingdomDocuments } from "../src/services/charterService.js";
+import { ensureDefaultAIProviders } from "../src/services/aiProviderRegistry.js";
+import { ensureDefaultExternalAgents } from "../src/services/externalAgentWorkOrderService.js";
 
 const prisma = new PrismaClient();
 
@@ -113,6 +115,9 @@ async function main() {
       create: setting
     });
   }
+
+  await ensureDefaultAIProviders();
+  await ensureDefaultExternalAgents();
 
   await seedKingdomDocuments();
 }

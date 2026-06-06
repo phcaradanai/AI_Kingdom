@@ -3,6 +3,7 @@ import { api } from "@/lib/api";
 import type {
   AgentDto,
   AgentPayload,
+  AIProviderDto,
   CouncilSessionDto,
   MemoryDto,
   MemoryPayload,
@@ -21,6 +22,7 @@ type KingdomState = {
   reports: ReportDto[];
   memories: MemoryDto[];
   settings: SettingDto[];
+  providers: AIProviderDto[];
   isLoading: boolean;
   isProcessing: boolean;
   error: string | null;
@@ -39,6 +41,7 @@ type KingdomState = {
   updateAgent: (id: string, payload: Partial<AgentPayload>) => Promise<AgentDto>;
   deleteAgent: (id: string) => Promise<void>;
   updateSetting: (key: string, value: string) => Promise<SettingDto>;
+  updateProvider: (id: string, payload: Partial<Pick<AIProviderDto, "isActive" | "defaultModel" | "priority" | "costTier">>) => Promise<AIProviderDto>;
 };
 
 export const useKingdomStore = create<KingdomState>((set, get) => ({
@@ -48,6 +51,7 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
   reports: [],
   memories: [],
   settings: [],
+  providers: [],
   isLoading: false,
   isProcessing: false,
   error: null,
@@ -55,13 +59,14 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const role = getStoredRole();
-      const [agents, tasks, councilSessions, reports, memories, settings] = await Promise.all([
+      const [agents, tasks, councilSessions, reports, memories, settings, providers] = await Promise.all([
         role === "KING" ? api.agents() : Promise.resolve({ agents: get().agents }),
         canRead(role, "tasks") ? api.tasks() : Promise.resolve({ tasks: [] }),
         canRead(role, "council") ? api.councilSessions() : Promise.resolve({ sessions: [] }),
         canRead(role, "reports") ? api.reports() : Promise.resolve({ reports: [] }),
         canRead(role, "memory") ? api.memories() : Promise.resolve({ memories: [] }),
-        role === "KING" ? api.settings() : Promise.resolve({ settings: get().settings })
+        role === "KING" ? api.settings() : Promise.resolve({ settings: get().settings }),
+        role === "KING" ? api.providers() : Promise.resolve({ providers: get().providers })
       ]);
       set({
         agents: agents.agents,
@@ -70,6 +75,7 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
         reports: reports.reports,
         memories: memories.memories,
         settings: settings.settings,
+        providers: providers.providers,
         isLoading: false
       });
     } catch (error) {
@@ -173,6 +179,11 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
     const response = await api.updateSetting(key, value);
     set({ settings: get().settings.map((setting) => (setting.key === key ? response.setting : setting)) });
     return response.setting;
+  },
+  updateProvider: async (id, payload) => {
+    const response = await api.updateProvider(id, payload);
+    set({ providers: get().providers.map((provider) => (provider.id === id ? response.provider : provider)) });
+    return response.provider;
   }
 }));
 

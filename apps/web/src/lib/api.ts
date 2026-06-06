@@ -1,9 +1,15 @@
 import type {
   AgentDto,
   AgentPayload,
+  AIProviderDto,
   AuditListResponse,
   AuditLogDto,
   AuthResponse,
+  ExternalAgentDto,
+  ExternalAgentPayload,
+  HandoffBriefDto,
+  ImplementationReportDto,
+  ImplementationReportPayload,
   KingdomCharterDto,
   KingdomVisionDto,
   MatterCategory,
@@ -28,7 +34,10 @@ import type {
   TreasuryAgentDto,
   TreasuryProviderDto,
   TreasuryDailyDto,
-  UsageRecordDto
+  UsageRecordDto,
+  WorkOrderDto,
+  WorkOrderPayload,
+  WorkSessionDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -101,6 +110,45 @@ export const api = {
   deleteAgent: async (id: string) => {
     await apiRequest<{ agent: AgentDto }>(`/agents/${id}`, { method: "DELETE" });
   },
+  providers: () => apiRequest<{ providers: AIProviderDto[] }>("/providers"),
+  updateProvider: (id: string, payload: Partial<Pick<AIProviderDto, "isActive" | "defaultModel" | "priority" | "costTier">>) =>
+    apiRequest<{ provider: AIProviderDto }>(`/providers/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
+  createExternalAgent: (payload: ExternalAgentPayload) =>
+    apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),
+  updateExternalAgent: (id: string, payload: Partial<ExternalAgentPayload>) =>
+    apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteExternalAgent: (id: string) => apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "DELETE" }),
+  workOrders: (params?: { status?: string; priority?: string; externalAgentId?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.priority) search.set("priority", params.priority);
+    if (params?.externalAgentId) search.set("externalAgentId", params.externalAgentId);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ workOrders: WorkOrderDto[] }>(`/work-orders${suffix}`);
+  },
+  workOrder: (id: string) => apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}`),
+  createWorkOrder: (payload: WorkOrderPayload) =>
+    apiRequest<{ workOrder: WorkOrderDto }>("/work-orders", { method: "POST", body: JSON.stringify(payload) }),
+  updateWorkOrder: (id: string, payload: Partial<WorkOrderPayload>) =>
+    apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteWorkOrder: (id: string) => apiRequest<void>(`/work-orders/${id}`, { method: "DELETE" }),
+  workOrderFromTask: (taskId: string) => apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/from-task/${taskId}`, { method: "POST" }),
+  workOrderFromMatter: (matterId: string) => apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/from-matter/${matterId}`, { method: "POST" }),
+  buildWorkOrderPrompt: (id: string, externalAgentId: string) =>
+    apiRequest<{ prompt: string }>(`/work-orders/${id}/build-prompt/${externalAgentId}`, { method: "POST" }),
+  createHandoffBrief: (id: string) => apiRequest<{ handoffBrief: HandoffBriefDto }>(`/work-orders/${id}/handoff`, { method: "POST" }),
+  workSessions: () => apiRequest<{ workSessions: WorkSessionDto[] }>("/work-sessions"),
+  createWorkSession: (payload: { workOrderId: string; externalAgentId?: string | null; sessionLabel: string; inputPrompt: string }) =>
+    apiRequest<{ workSession: WorkSessionDto }>("/work-sessions", { method: "POST", body: JSON.stringify(payload) }),
+  implementationReports: () => apiRequest<{ implementationReports: ImplementationReportDto[] }>("/implementation-reports"),
+  createImplementationReport: (payload: ImplementationReportPayload) =>
+    apiRequest<{ implementationReport: ImplementationReportDto }>("/implementation-reports", { method: "POST", body: JSON.stringify(payload) }),
+  handoffBriefs: () => apiRequest<{ handoffBriefs: HandoffBriefDto[] }>("/handoff-briefs"),
+  handoffBrief: (id: string) => apiRequest<{ handoffBrief: HandoffBriefDto }>(`/handoff-briefs/${id}`),
   settings: () => apiRequest<{ settings: SettingDto[] }>("/settings"),
   updateSetting: (key: string, value: string) =>
     apiRequest<{ setting: SettingDto }>(`/settings/${key}`, {
