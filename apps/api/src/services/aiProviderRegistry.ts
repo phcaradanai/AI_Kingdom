@@ -286,6 +286,7 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
     type: dbProvider.type,
     baseUrl: dbProvider.baseUrl ?? envProvider?.baseUrl ?? null,
     defaultModel: dbProvider.defaultModel || envProvider?.defaultModel || "",
+    // BUGFIX: Mock provider should remain active for local/demo mode, even if DB state was dirtied.
     isActive: dbProvider.type === "mock" ? true : (dbProvider.isActive && (hasCredentials || ["anthropic", "gemini", "local"].includes(dbProvider.type) === false)),
     priority: dbProvider.priority,
     supportsChat: capabilities.supportsChat,

@@ -219,7 +219,7 @@ export function DashboardPage() {
           icon={FolderKanban}
           action={
             <Link to="/projects">
-              <Button variant="outline" className="h-8 text-xs">Create Project</Button>
+              <Button variant="outline" className="h-8 text-xs">Open Projects</Button>
             </Link>
           }
         >
@@ -256,7 +256,7 @@ export function DashboardPage() {
           icon={ClipboardList}
           action={
             <Link to="/work-orders">
-              <Button variant="outline" className="h-8 text-xs">Create Order</Button>
+              <Button variant="outline" className="h-8 text-xs">Open Work Orders</Button>
             </Link>
           }
         >
@@ -276,8 +276,8 @@ export function DashboardPage() {
           )}
 
           <div className="flex flex-wrap gap-3">
-            <Link to="/work-orders"><Button variant="secondary" className="h-9">Generate from Matter</Button></Link>
-            <Link to="/work-orders"><Button variant="secondary" className="h-9">Generate Brief</Button></Link>
+            <Link to="/work-orders"><Button variant="secondary" className="h-9">Review Work Orders</Button></Link>
+            <Link to="/work-orders"><Button variant="secondary" className="h-9">Review Handoffs</Button></Link>
           </div>
         </SectionCard>
       </div>

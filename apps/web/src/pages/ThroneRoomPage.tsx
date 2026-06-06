@@ -87,13 +87,16 @@ export function ThroneRoomPage() {
           </div>
           
           <div className="mt-6 relative">
+            <label htmlFor="royal-command" className="mb-2 block text-sm font-semibold uppercase tracking-widest text-primary">Royal Decree</label>
             <Textarea
+              id="royal-command"
               className="min-h-[200px] resize-y rounded-xl border-primary/20 bg-background/50 p-5 text-base shadow-inner focus:border-primary/50 focus:ring-primary/20"
               value={command}
               onChange={(event) => setCommand(event.target.value)}
               placeholder="State the royal decree. Example: Plan a six-week launch roadmap for the AI Kingdom MVP..."
             />
-            <div className="absolute right-4 bottom-4 opacity-10 pointer-events-none">
+            <p className="mt-2 text-xs text-muted-foreground">The decree will be evaluated by the Grand Vizier and the appropriate council members.</p>
+            <div className="absolute right-4 bottom-10 opacity-10 pointer-events-none">
                <ScrollText className="h-20 w-20" />
             </div>
           </div>
