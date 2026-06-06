@@ -1,11 +1,13 @@
-import { AlertTriangle, CheckCircle2, Landmark, ScrollText, Shield, Vault } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Landmark, Scroll, ScrollText, Shield, Vault } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { TaskCard } from "@/components/TaskCard";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
+import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { SecretaryBriefDto } from "@/types/api";
 
@@ -32,6 +34,8 @@ function StatusPill({ value, label, warn }: { value: number; label: string; warn
 
 export function DashboardPage() {
   const { agents, tasks, reports, memories } = useKingdomStore();
+  const user = useAuthStore((state) => state.user);
+  const canCommand = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
   const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
 
   useEffect(() => {
@@ -52,6 +56,24 @@ export function DashboardPage() {
         title="The Kingdom at a glance"
         description="Monitor agents, council deliberations, generated reports, and institutional memory from one command center."
       />
+
+      {/* Issue Royal Decree CTA */}
+      {canCommand && (
+        <div className="mb-6">
+          <Link to="/throne-room">
+            <div className="group flex items-center gap-4 rounded-xl border border-primary/40 bg-primary/8 px-6 py-4 transition hover:border-primary/70 hover:bg-primary/15">
+              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-primary/40 bg-primary/15 transition group-hover:bg-primary/25">
+                <Scroll className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1">
+                <div className="font-display text-base text-primary">Issue Royal Decree</div>
+                <div className="mt-0.5 text-xs text-muted-foreground">Open the Throne Room and command the royal council</div>
+              </div>
+              <div className="shrink-0 text-xs font-semibold text-primary opacity-60 group-hover:opacity-100">→</div>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* Quick stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
