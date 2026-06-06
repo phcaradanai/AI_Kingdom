@@ -1,0 +1,270 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TaskStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum TaskMode {
+  ASK
+  PLAN
+  RESEARCH
+  BUILD
+}
+
+enum CouncilSessionStatus {
+  PENDING
+  RUNNING
+  COMPLETED
+  FAILED
+}
+
+enum MemoryType {
+  DECISION
+  FACT
+  PREFERENCE
+  CONSTRAINT
+  PROJECT_NOTE
+  LESSON
+}
+
+enum MemoryImportance {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ReportCategory {
+  STRATEGY
+  RESEARCH
+  ARCHITECTURE
+  FINANCE
+  GENERAL
+  OTHER
+}
+
+enum ReportImportance {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum SettingsCategory {
+  AI
+  UI
+  SECURITY
+  SYSTEM
+}
+
+enum UserRole {
+  KING
+  CROWN_PRINCE
+  MINISTER
+  SCRIBE
+}
+
+enum LedgerType {
+  COST
+  CREDIT
+  ADJUSTMENT
+}
+
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  passwordHash  String
+  displayName   String         @map("name")
+  role          UserRole       @default(KING)
+  isActive      Boolean        @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  tasks         Task[]
+  reports       Report[]
+  memories      Memory[]
+  refreshTokens RefreshToken[]
+  auditLogs     AuditLog[]
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id           String   @id @default(cuid())
+  userId       String?
+  action       String
+  resourceType String
+  resourceId   String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  user         User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model Agent {
+  id          String          @id @default(cuid())
+  slug        String          @unique
+  name        String
+  title       String
+  role        String
+  specialty   String
+  prompt      String
+  description String       @default("")
+  systemPrompt String       @default("")
+  skills      String[]      @default([])
+  responseStyle String      @default("")
+  isActive    Boolean         @default(true)
+  priority    Int             @default(100)
+  defaultModel String?
+  temperature Float?
+  maxTokens   Int?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  responses    AgentResponse[]
+  usageRecords UsageRecord[]
+}
+
+model Setting {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  value       String
+  category    SettingsCategory
+  description String?
+  updatedAt   DateTime         @default(now()) @updatedAt
+}
+
+model Task {
+  id            String          @id @default(cuid())
+  createdBy     String          @map("userId")
+  title         String
+  command       String
+  mode          TaskMode        @default(ASK)
+  status        TaskStatus      @default(PENDING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  user          User            @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  sessions      CouncilSession[]
+  reports       Report[]
+  usageRecords  UsageRecord[]
+}
+
+model CouncilSession {
+  id                 String               @id @default(cuid())
+  taskId             String
+  status             CouncilSessionStatus @default(PENDING)
+  selectedAgentIds   String[]
+  finalSummary       String?
+  providerName       String?
+  modelUsed          String?
+  fallbackNotice     String?
+  consultedMemoryIds String[]             @default([])
+  autoSavedMemoryIds String[]             @default([])
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  task               Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  responses          AgentResponse[]
+  reports            Report[]
+  usageRecords       UsageRecord[]
+}
+
+model AgentResponse {
+  id        String         @id @default(cuid())
+  sessionId String
+  agentId   String
+  role      String
+  response  String
+  createdAt DateTime       @default(now())
+  session   CouncilSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  agent     Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
+}
+
+model UsageRecord {
+  id                 String          @id @default(cuid())
+  taskId             String?
+  councilSessionId   String?
+  agentId            String?
+  provider           String
+  model              String
+  promptTokens       Int
+  completionTokens   Int
+  totalTokens        Int
+  estimatedCostUSD   Float
+  estimatedCostLocal Float
+  currency           String          @default("USD")
+  createdAt          DateTime        @default(now())
+  task               Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  councilSession     CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
+  agent              Agent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
+}
+
+model TreasuryLedger {
+  id          String     @id @default(cuid())
+  type        LedgerType
+  source      String
+  description String
+  amount      Float
+  currency    String     @default("USD")
+  createdAt   DateTime   @default(now())
+}
+
+model Budget {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  monthlyLimit Float?
+  dailyLimit   Float?
+  currency     String   @default("USD")
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Report {
+  id                     String           @id @default(cuid())
+  title                  String
+  summary                String
+  content                String           @default("")
+  sourceTaskId           String?          @map("taskId")
+  sourceCouncilSessionId String?
+  category               ReportCategory   @default(GENERAL)
+  importance             ReportImportance @default(MEDIUM)
+  tags                   String[]         @default([])
+  createdBy              String           @map("userId")
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @default(now()) @updatedAt
+  task                   Task?            @relation(fields: [sourceTaskId], references: [id], onDelete: SetNull)
+  councilSession         CouncilSession?  @relation(fields: [sourceCouncilSessionId], references: [id], onDelete: SetNull)
+  user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
+
+model Memory {
+  id                     String           @id @default(cuid())
+  type                   MemoryType       @default(PROJECT_NOTE)
+  title                  String
+  content                String
+  source                 String           @default("manual")
+  sourceTaskId           String?
+  sourceCouncilSessionId String?
+  tags                   String[]         @default([])
+  importance             MemoryImportance @default(MEDIUM)
+  createdBy              String           @map("userId")
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @default(now()) @updatedAt
+  user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+}
