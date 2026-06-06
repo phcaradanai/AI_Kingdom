@@ -10,6 +10,8 @@ import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./m
 import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { buildUsageAttribution } from "./usageAttributionService.js";
+import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
 
 const AGENTS_BY_MODE: Record<TaskMode, string[]> = {
   ASK: ["grand-vizier", "royal-architect"],
@@ -82,67 +84,116 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const usedModels: string[] = [];
 
     for (const agent of selectedAgents) {
-      const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
-      const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders, agent.defaultModel);
-      const generated = await generateWithFallback(providerCalls, {
-        command: task.command,
-        mode: task.mode,
-        agentName: agent.name,
-        agentRole: agent.title,
-        agentSkills: agent.skills,
-        systemPrompt: agent.systemPrompt || agent.prompt,
-        responseStyle: agent.responseStyle,
-        temperature: agent.temperature ?? undefined,
-        maxTokens: agent.maxTokens ?? defaultMaxTokens,
-        kingdomContext: kingdomContext || undefined,
-        projectContext,
-        kingdomMemoryContext,
-        previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
-      });
-
-      if (generated.fallbackNotice) {
-        fallbackNotices.push(generated.fallbackNotice);
-      }
-      usedProviders.push(generated.providerName);
-      usedModels.push(generated.modelUsed);
-
-      await prisma.agentResponse.create({
-        data: {
-          sessionId: session.id,
+      let activityId: string | null = null;
+      try {
+        const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
+        const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders, agent.defaultModel);
+        const activity = await startAgentActivity({
           agentId: agent.id,
-          role: agent.title,
-          response: generated.response
-        }
-      });
-
-      const agentCost = await calculateCostUSDFromRegistry(
-        generated.providerName,
-        generated.modelUsed,
-        generated.usage
-      );
-      await prisma.usageRecord.create({
-        data: {
+          projectId: task.projectId,
           taskId: task.id,
           councilSessionId: session.id,
-          agentId: agent.id,
-          provider: generated.providerName,
-          providerId: generated.providerId ?? generated.providerName,
-          model: generated.modelUsed,
-          promptTokens: generated.usage.promptTokens,
-          completionTokens: generated.usage.completionTokens,
-          totalTokens: generated.usage.totalTokens,
-          inputCacheHitTokens: generated.usage.inputCacheHitTokens ?? null,
-          inputCacheMissTokens: generated.usage.inputCacheMissTokens ?? null,
-          estimatedCostUSD: agentCost.costUSD,
-          estimatedCostLocal: agentCost.costUSD,
-          currency: "USD",
-          pricingSource: agentCost.source,
-          pricingStatus: agentCost.pricingStatus,
-          pricingNotes: agentCost.pricingNotes ?? null
-        }
-      });
+          status: "THINKING",
+          activityType: "AGENT_RESPONSE",
+          title: `${agent.title} counsel`,
+          detail: task.title,
+          providerId: route.provider.id,
+          providerName: route.provider.name,
+          model: route.model,
+          operation: "council_agent_response",
+          metadata: { taskMode: task.mode }
+        });
+        activityId = activity.id;
 
-      generatedResponses.push({ agent, response: generated.response });
+        const generated = await generateWithFallback(providerCalls, {
+          command: task.command,
+          mode: task.mode,
+          agentName: agent.name,
+          agentRole: agent.title,
+          agentSkills: agent.skills,
+          systemPrompt: agent.systemPrompt || agent.prompt,
+          responseStyle: agent.responseStyle,
+          temperature: agent.temperature ?? undefined,
+          maxTokens: agent.maxTokens ?? defaultMaxTokens,
+          kingdomContext: kingdomContext || undefined,
+          projectContext,
+          kingdomMemoryContext,
+          previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
+        });
+
+        await updateAgentActivity(activityId, {
+          status: "RESPONDING",
+          providerId: generated.providerId ?? generated.providerName,
+          providerName: generated.providerName,
+          model: generated.modelUsed
+        });
+
+        if (generated.fallbackNotice) {
+          fallbackNotices.push(generated.fallbackNotice);
+        }
+        usedProviders.push(generated.providerName);
+        usedModels.push(generated.modelUsed);
+
+        const agentResponse = await prisma.agentResponse.create({
+          data: {
+            sessionId: session.id,
+            agentId: agent.id,
+            role: agent.title,
+            response: generated.response
+          }
+        });
+
+        const agentCost = await calculateCostUSDFromRegistry(
+          generated.providerName,
+          generated.modelUsed,
+          generated.usage
+        );
+        await prisma.usageRecord.create({
+          data: {
+            taskId: task.id,
+            councilSessionId: session.id,
+            agentId: agent.id,
+            provider: generated.providerName,
+            providerId: generated.providerId ?? generated.providerName,
+            model: generated.modelUsed,
+            promptTokens: generated.usage.promptTokens,
+            completionTokens: generated.usage.completionTokens,
+            totalTokens: generated.usage.totalTokens,
+            inputCacheHitTokens: generated.usage.inputCacheHitTokens ?? null,
+            inputCacheMissTokens: generated.usage.inputCacheMissTokens ?? null,
+            estimatedCostUSD: agentCost.costUSD,
+            estimatedCostLocal: agentCost.costUSD,
+            currency: "USD",
+            pricingSource: agentCost.source,
+            pricingStatus: agentCost.pricingStatus,
+            pricingNotes: agentCost.pricingNotes ?? null,
+            ...buildUsageAttribution({
+              projectId: task.projectId,
+              purpose: "Council agent response",
+              sourceType: "AGENT_RESPONSE",
+              sourceId: agentResponse.id,
+              operation: "council_agent_response",
+              requestLabel: `${agent.title} response for ${task.title}`,
+              prompt: task.command,
+              response: generated.response,
+              metadata: { taskMode: task.mode, agentSlug: agent.slug, pricingStatus: agentCost.pricingStatus }
+            })
+          }
+        });
+
+        await completeAgentActivity(activityId, {
+          tokensUsed: generated.usage.totalTokens,
+          estimatedCostUSD: agentCost.costUSD,
+          providerId: generated.providerId ?? generated.providerName,
+          providerName: generated.providerName,
+          model: generated.modelUsed
+        });
+
+        generatedResponses.push({ agent, response: generated.response });
+      } catch (error) {
+        if (activityId) await failAgentActivity(activityId, error).catch(() => undefined);
+        throw error;
+      }
     }
 
     const grandVizier = selectedAgents.find((agent) => agent.slug === "grand-vizier") ?? selectedAgents[0];
@@ -151,21 +202,42 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
     const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders, grandVizier.defaultModel);
-    const generatedSummary = await generateWithFallback(summaryProviderCalls, {
-      command: task.command,
-      mode: task.mode,
-      agentName: grandVizier.name,
-      agentRole: grandVizier.title,
-      agentSkills: grandVizier.skills,
-      systemPrompt: `${grandVizier.systemPrompt || grandVizier.prompt}\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.`,
-      responseStyle: grandVizier.responseStyle,
-      temperature: grandVizier.temperature ?? undefined,
-      maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
-      kingdomContext: kingdomContext || undefined,
-      projectContext,
-      kingdomMemoryContext,
-      previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
+    const summaryActivity = await startAgentActivity({
+      agentId: grandVizier.id,
+      projectId: task.projectId,
+      taskId: task.id,
+      councilSessionId: session.id,
+      status: "SUMMARIZING",
+      activityType: "FINAL_COUNSEL",
+      title: "Grand Vizier synthesis",
+      detail: task.title,
+      providerId: summaryRoute.provider.id,
+      providerName: summaryRoute.provider.name,
+      model: summaryRoute.model,
+      operation: "final_counsel",
+      metadata: { taskMode: task.mode }
     });
+    let generatedSummary: Awaited<ReturnType<typeof generateWithFallback>>;
+    try {
+      generatedSummary = await generateWithFallback(summaryProviderCalls, {
+        command: task.command,
+        mode: task.mode,
+        agentName: grandVizier.name,
+        agentRole: grandVizier.title,
+        agentSkills: grandVizier.skills,
+        systemPrompt: `${grandVizier.systemPrompt || grandVizier.prompt}\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.`,
+        responseStyle: grandVizier.responseStyle,
+        temperature: grandVizier.temperature ?? undefined,
+        maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
+        kingdomContext: kingdomContext || undefined,
+        projectContext,
+        kingdomMemoryContext,
+        previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
+      });
+    } catch (error) {
+      await failAgentActivity(summaryActivity.id, error).catch(() => undefined);
+      throw error;
+    }
 
     if (generatedSummary.fallbackNotice) {
       fallbackNotices.push(generatedSummary.fallbackNotice);
@@ -196,8 +268,27 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         currency: "USD",
         pricingSource: summaryCost.source,
         pricingStatus: summaryCost.pricingStatus,
-        pricingNotes: summaryCost.pricingNotes ?? null
+        pricingNotes: summaryCost.pricingNotes ?? null,
+        ...buildUsageAttribution({
+          projectId: task.projectId,
+          purpose: "Final council synthesis",
+          sourceType: "FINAL_COUNSEL",
+          sourceId: session.id,
+          operation: "final_counsel",
+          requestLabel: `Grand Vizier synthesis for ${task.title}`,
+          prompt: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n"),
+          response: generatedSummary.response,
+          metadata: { taskMode: task.mode, agentSlug: grandVizier.slug, pricingStatus: summaryCost.pricingStatus }
+        })
       }
+    });
+
+    await completeAgentActivity(summaryActivity.id, {
+      tokensUsed: generatedSummary.usage.totalTokens,
+      estimatedCostUSD: summaryCost.costUSD,
+      providerId: generatedSummary.providerId ?? generatedSummary.providerName,
+      providerName: generatedSummary.providerName,
+      model: generatedSummary.modelUsed
     });
 
     const finalSummary = generatedSummary.response;

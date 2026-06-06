@@ -311,6 +311,7 @@ model Agent {
   updatedAt    DateTime        @updatedAt
   responses    AgentResponse[]
   usageRecords UsageRecord[]
+  activities   AgentActivity[]
 }
 
 model ExternalAgent {
@@ -353,6 +354,8 @@ model Project {
   councilSessions   CouncilSession[]
   reports           Report[]
   memories          Memory[]
+  usageRecords      UsageRecord[]
+  agentActivities   AgentActivity[]
   workOrders        WorkOrder[]
   implementationReports ImplementationReport[]
   handoffBriefs     HandoffBrief[]
@@ -550,6 +553,7 @@ model Task {
   sessions      CouncilSession[]
   reports       Report[]
   usageRecords  UsageRecord[]
+  agentActivities AgentActivity[]
 }
 
 model CouncilSession {
@@ -571,6 +575,7 @@ model CouncilSession {
   responses          AgentResponse[]
   reports            Report[]
   usageRecords       UsageRecord[]
+  agentActivities     AgentActivity[]
 }
 
 model AgentResponse {
@@ -586,6 +591,7 @@ model AgentResponse {
 
 model UsageRecord {
   id                   String          @id @default(cuid())
+  projectId            String?
   taskId               String?
   councilSessionId     String?
   agentId              String?
@@ -605,10 +611,61 @@ model UsageRecord {
   pricingSource        String?
   pricingStatus        String?
   pricingNotes         String?
+  purpose              String?
+  sourceType           String?
+  sourceId             String?
+  operation            String?
+  requestLabel         String?
+  promptPreview        String?
+  responsePreview      String?
+  metadata             Json?
   createdAt            DateTime        @default(now())
+  project              Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   task                 Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
   councilSession       CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
   agent                Agent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([sourceType])
+  @@index([sourceId])
+  @@index([purpose])
+}
+
+model AgentActivity {
+  id               String   @id @default(cuid())
+  agentId          String
+  projectId        String?
+  taskId           String?
+  councilSessionId String?
+  status           String
+  activityType     String
+  title            String
+  detail           String?
+  providerId       String?
+  providerName     String?
+  model            String?
+  operation        String?
+  tokensUsed       Int      @default(0)
+  estimatedCostUSD Float    @default(0)
+  startedAt        DateTime @default(now())
+  endedAt          DateTime?
+  heartbeatAt      DateTime @default(now())
+  errorMessage     String?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  project          Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task             Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  councilSession   CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
+
+  @@index([agentId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([councilSessionId])
+  @@index([status])
+  @@index([heartbeatAt])
+  @@index([endedAt])
 }
 
 model TreasuryLedger {

@@ -7,6 +7,7 @@ import { prisma } from "./db/prisma.js";
 import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { requirePermission, requireRole } from "./middleware/rbac.js";
+import agentActivitiesRouter from "./routes/agentActivities.js";
 import agentsRouter from "./routes/agents.js";
 import artifactsRouter from "./routes/artifacts.js";
 import auditRouter from "./routes/audit.js";
@@ -71,6 +72,7 @@ export function createApp() {
   });
 
   app.use("/api/auth", authRouter);
+  app.use("/api/agent-activities", requireAuth, agentActivitiesRouter);
   app.use("/api/agents", requireAuth, requireRole("KING"), agentsRouter);
   app.use("/api/tasks", requireAuth, methodPermission("tasks"), tasksRouter);
   app.use("/api/council", requireAuth, methodPermission("council"), councilRouter);
