@@ -24,7 +24,7 @@ Tests use Node's built-in runner through `tsx`. Tests must not require a real Op
 
 ## Security & Configuration
 
-Keep `JWT_SECRET`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and database credentials server-side only. Do not expose API keys through settings/providers APIs or frontend code. Use `prisma migrate deploy` for staging/production; never use `prisma migrate dev` on deployed databases.
+Keep `JWT_SECRET`, `OPENAI_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, and database credentials server-side only. Do not expose API keys through settings/providers APIs or frontend code. Custom AI providers must reference their API keys by environment variable name (e.g. `MY_CUSTOM_API_KEY`), rather than storing the literal secret. Use `prisma migrate deploy` for staging/production; never use `prisma migrate dev` on deployed databases.
 
 External agent work orders are manual handoff artifacts only. Do not add backend command execution, filesystem access, or proprietary external-agent API calls without a future milestone and explicit approval.
 

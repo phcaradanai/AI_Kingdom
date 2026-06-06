@@ -42,6 +42,8 @@ type KingdomState = {
   deleteAgent: (id: string) => Promise<void>;
   updateSetting: (key: string, value: string) => Promise<SettingDto>;
   updateProvider: (id: string, payload: Partial<Pick<AIProviderDto, "isActive" | "defaultModel" | "priority" | "costTier">>) => Promise<AIProviderDto>;
+  createProvider: (payload: Parameters<typeof api.createProvider>[0]) => Promise<AIProviderDto>;
+  deleteProvider: (id: string) => Promise<void>;
 };
 
 export const useKingdomStore = create<KingdomState>((set, get) => ({
@@ -184,6 +186,15 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
     const response = await api.updateProvider(id, payload);
     set({ providers: get().providers.map((provider) => (provider.id === id ? response.provider : provider)) });
     return response.provider;
+  },
+  createProvider: async (payload) => {
+    const response = await api.createProvider(payload);
+    set({ providers: [...get().providers, response.provider].sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name)) });
+    return response.provider;
+  },
+  deleteProvider: async (id) => {
+    await api.deleteProvider(id);
+    set({ providers: get().providers.filter((provider) => provider.id !== id) });
   }
 }));
 

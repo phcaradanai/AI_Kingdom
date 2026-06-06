@@ -123,6 +123,14 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(payload)
     }),
+  createProvider: (payload: { name: string; type: string; baseUrl?: string; defaultModel?: string; priority: number; costTier: string; capabilities: { supportsChat: boolean; supportsTools?: boolean; supportsVision?: boolean; supportsJsonMode?: boolean }; credentialEnvKey?: string }) =>
+    apiRequest<{ provider: AIProviderDto }>("/providers", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  deleteProvider: async (id: string) => {
+    await apiRequest<void>(`/providers/${id}`, { method: "DELETE" });
+  },
   externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
   createExternalAgent: (payload: ExternalAgentPayload) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),

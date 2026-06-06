@@ -19,7 +19,7 @@ Primary services:
 - `memoryService.ts`: keyword/tag relevance, context formatting, deterministic extraction, duplicate and secret checks.
 - `reportService.ts`: generated Royal Report creation and duplicate prevention.
 - `settingsService.ts`: default settings and runtime setting lookup.
-- `aiProviderRegistry.ts`: env-first public provider registry, provider capability/cost metadata, and DB-backed provider overrides. Credentials are never stored in API responses.
+- `aiProviderRegistry.ts`: env-first public provider registry, provider capability/cost metadata, DB-backed provider overrides, and custom provider credential handling. Credentials are securely referenced by their environment variable names (e.g., `CUSTOM_API_KEY`) and never stored as literal secrets in the database or returned in API responses.
 - `aiProviderRouter.ts`: selects provider/model/fallback chain from agent override, task mode, cost mode, required capabilities, and active provider metadata.
 - `treasuryService.ts`: aggregates `UsageRecord` rows into overview, per-agent, per-provider/model, and daily-bucket breakdowns; reads budget limits from settings to produce warning flags.
 - `charterService.ts`: reads/writes `KingdomCharter` and `KingdomVision` records; seeds from `docs/KINGDOM_CHARTER.md` and `docs/KINGDOM_VISION.md` if no DB records exist; `formatKingdomContext` produces the injection string.

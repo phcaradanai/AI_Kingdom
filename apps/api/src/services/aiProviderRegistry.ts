@@ -223,6 +223,49 @@ export async function getAIProvider(providerId: string): Promise<AIProviderConfi
   return providers.find((provider) => provider.id === providerId) ?? null;
 }
 
+export async function createAIProvider(payload: {
+  id: string;
+  name: string;
+  type: string;
+  baseUrl?: string | null;
+  defaultModel: string;
+  isActive: boolean;
+  priority: number;
+  costTier: AICostTier;
+  capabilities: AIProviderCapabilities;
+  credentialEnvKey?: string;
+}) {
+  const { id, name, type, baseUrl, defaultModel, isActive, priority, costTier, capabilities, credentialEnvKey } = payload;
+  
+  const config: Record<string, unknown> = {};
+  if (credentialEnvKey) {
+    config.credentialEnvKey = credentialEnvKey;
+  }
+
+  const provider = await prisma.aIProvider.create({
+    data: {
+      id,
+      name,
+      type,
+      baseUrl,
+      defaultModel,
+      isActive,
+      priority,
+      costTier,
+      capabilities: capabilities as Prisma.InputJsonObject,
+      config: config as Prisma.InputJsonObject
+    }
+  });
+
+  return provider;
+}
+
+export async function deleteAIProvider(id: string) {
+  await prisma.aIProvider.delete({
+    where: { id }
+  });
+}
+
 export function publicProviderConfig(provider: AIProviderConfig): Record<string, unknown> {
   return {
     hasCredentials: provider.hasCredentials,
@@ -233,7 +276,10 @@ export function publicProviderConfig(provider: AIProviderConfig): Record<string,
 
 function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderConfig): AIProviderConfig {
   const capabilities = normalizeCapabilities(dbProvider.capabilities);
-  const hasCredentials = envProvider?.hasCredentials ?? dbProvider.type === "mock";
+  const config = typeof dbProvider.config === "object" && dbProvider.config !== null ? (dbProvider.config as Record<string, unknown>) : null;
+  const credentialEnvKey = config?.credentialEnvKey as string | undefined;
+  const hasCredentials = envProvider?.hasCredentials ?? (dbProvider.type === "mock" || (credentialEnvKey ? Boolean(process.env[credentialEnvKey]) : false));
+  
   return {
     id: dbProvider.id,
     name: dbProvider.name,
@@ -248,7 +294,7 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
     supportsJsonMode: capabilities.supportsJsonMode,
     costTier: normalizeCostTier(dbProvider.costTier),
     capabilities,
-    config: typeof dbProvider.config === "object" && dbProvider.config !== null ? (dbProvider.config as Record<string, unknown>) : null,
+    config,
     hasCredentials,
     createdAt: dbProvider.createdAt,
     updatedAt: dbProvider.updatedAt
