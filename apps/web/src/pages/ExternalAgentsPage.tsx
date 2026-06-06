@@ -123,13 +123,16 @@ export function ExternalAgentsPage() {
             <select disabled={!isKing} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.executionMode} onChange={(e) => setDraft({ ...draft, executionMode: e.target.value as ExternalAgentPayload["executionMode"] })}>
               {["MANUAL_COPY_PASTE", "CLI_MANUAL", "API", "FUTURE_AUTOMATED"].map((mode) => <option key={mode} value={mode}>{mode}</option>)}
             </select>
-            {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
-            {isKing ? (
-              <Button>
-                <Save className="h-4 w-4" />
-                {selected ? "Save External Agent" : "Create External Agent"}
-              </Button>
-            ) : null}
+            <div className="flex flex-wrap items-center justify-between">
+              {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
+              {isKing ? (
+                <Button>
+                  <Save className="h-4 w-4" />
+                  {selected ? "Save External Agent" : "Create External Agent"}
+                </Button>
+              ) : null}
+            </div>
+
           </form>
         </Card>
       </div>
