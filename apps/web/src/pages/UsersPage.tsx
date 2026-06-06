@@ -3,6 +3,7 @@ import { UserPlus, Users } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
@@ -75,16 +76,24 @@ export function UsersPage() {
           <UserPlus className="h-5 w-5 text-primary" />
           <h2 className="mt-4 font-display text-xl">Create User</h2>
           <form className="mt-4 space-y-3" onSubmit={createUser}>
-            <Input required type="email" placeholder="email@kingdom.local" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
-            <Input required placeholder="Display name" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
-            <Input required type="password" placeholder="Strong password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
-            <select className="h-11 w-full rounded-md border border-border bg-input px-3 text-sm" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as UserRole })}>
-              {roles.map((role) => (
-                <option key={role} value={role}>
-                  {role.replace("_", " ")}
-                </option>
-              ))}
-            </select>
+            <FormField id="user-email" label="Email" required>
+              <Input id="user-email" required type="email" placeholder="user@kingdom.local" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
+            </FormField>
+            <FormField id="user-display-name" label="Display Name" required>
+              <Input id="user-display-name" required placeholder="e.g. Royal Secretary" value={form.displayName} onChange={(event) => setForm({ ...form, displayName: event.target.value })} />
+            </FormField>
+            <FormField id="user-password" label="Password" required>
+              <Input id="user-password" required type="password" placeholder="Strong password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} />
+            </FormField>
+            <FormField id="user-role" label="Role">
+              <select id="user-role" className="h-11 w-full rounded-md border border-border bg-input px-3 text-sm" value={form.role} onChange={(event) => setForm({ ...form, role: event.target.value as UserRole })}>
+                {roles.map((role) => (
+                  <option key={role} value={role}>
+                    {role.replace("_", " ")}
+                  </option>
+                ))}
+              </select>
+            </FormField>
             {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
             <Button className="w-full" disabled={isLoading}>
               Create Account

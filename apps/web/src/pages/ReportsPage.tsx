@@ -2,7 +2,9 @@ import { FormEvent, useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
+import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
@@ -128,18 +130,30 @@ function ReportDetail({ report, editing, onEdit, onCancel, onSave, onDelete }: {
     return (
       <Card>
         <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void onSave(draft); }}>
-          <Input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-          <Textarea className="min-h-24" value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} />
-          <Textarea className="min-h-72" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} />
+          <FormField id="report-title" label="Title" required>
+            <Input id="report-title" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
+          </FormField>
+          <FormField id="report-summary" label="Summary">
+            <Textarea id="report-summary" className="min-h-24" value={draft.summary} onChange={(event) => setDraft({ ...draft, summary: event.target.value })} />
+          </FormField>
+          <FormField id="report-content" label="Content">
+            <Textarea id="report-content" className="min-h-72" value={draft.content} onChange={(event) => setDraft({ ...draft, content: event.target.value })} />
+          </FormField>
           <div className="grid gap-3 sm:grid-cols-2">
-            <select className="h-11 rounded-md border border-border bg-input px-3 text-sm" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ReportCategory })}>
-              {categories.map((category) => <option key={category} value={category}>{category}</option>)}
-            </select>
-            <select className="h-11 rounded-md border border-border bg-input px-3 text-sm" value={draft.importance} onChange={(event) => setDraft({ ...draft, importance: event.target.value as ReportImportance })}>
-              {importanceLevels.map((level) => <option key={level} value={level}>{level}</option>)}
-            </select>
+            <FormField id="report-category" label="Category">
+              <select id="report-category" className="h-11 w-full rounded-md border border-border bg-input px-3 text-sm" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as ReportCategory })}>
+                {categories.map((category) => <option key={category} value={category}>{category}</option>)}
+              </select>
+            </FormField>
+            <FormField id="report-importance" label="Importance">
+              <select id="report-importance" className="h-11 w-full rounded-md border border-border bg-input px-3 text-sm" value={draft.importance} onChange={(event) => setDraft({ ...draft, importance: event.target.value as ReportImportance })}>
+                {importanceLevels.map((level) => <option key={level} value={level}>{level}</option>)}
+              </select>
+            </FormField>
           </div>
-          <Input value={draft.tags.join(", ")} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) })} />
+          <FormField id="report-tags" label="Tags" description="Comma-separated.">
+            <Input id="report-tags" value={draft.tags.join(", ")} onChange={(event) => setDraft({ ...draft, tags: event.target.value.split(",").map((tag) => tag.trim()).filter(Boolean) })} />
+          </FormField>
           <div className="flex gap-2">
             <Button>Save Report</Button>
             <Button type="button" variant="outline" onClick={onCancel}>Cancel</Button>
@@ -165,7 +179,7 @@ function ReportDetail({ report, editing, onEdit, onCancel, onSave, onDelete }: {
 
       <section className="mt-6 rounded-lg border border-primary/30 bg-primary/10 p-4">
         <div className="text-sm font-semibold text-primary">Final Counsel</div>
-        <p className="mt-3 text-sm leading-6">{report.summary}</p>
+        <MarkdownDocument content={report.summary} className="mt-3 max-w-none" />
       </section>
 
       {report.task ? (
@@ -184,7 +198,9 @@ function ReportDetail({ report, editing, onEdit, onCancel, onSave, onDelete }: {
         </section>
       ) : null}
 
-      <pre className="mt-5 whitespace-pre-wrap rounded-lg border border-border bg-background/40 p-4 text-sm leading-6 text-foreground">{report.content}</pre>
+      <div className="mt-5 rounded-lg border border-border bg-background/40 p-4">
+        <MarkdownDocument content={report.content} className="max-w-none" />
+      </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
         {report.tags.map((tag) => <Badge key={tag} label={tag} />)}

@@ -4,12 +4,15 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type { ProjectDto, ProjectPayload, ProjectPriority, ProjectStatus } from "@/types/api";
+
+const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
 const statuses: ProjectStatus[] = ["ACTIVE", "PAUSED", "COMPLETED", "ARCHIVED"];
 const priorities: ProjectPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -83,19 +86,25 @@ export function ProjectsPage() {
           <Card>
             <h2 className="font-display text-lg">Search</h2>
             <div className="mt-4 grid gap-3">
-              <div className="flex gap-2">
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Project, alias, keyword" />
-                <Button variant="outline" onClick={() => void load()}><Search className="h-4 w-4" /></Button>
-              </div>
+              <FormField id="proj-search" label="Search">
+                <div className="flex gap-2">
+                  <Input id="proj-search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Project, alias, keyword" />
+                  <Button type="button" variant="outline" onClick={() => void load()}><Search className="h-4 w-4" /></Button>
+                </div>
+              </FormField>
               <div className="grid gap-3 sm:grid-cols-2">
-                <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
-                  <option value="">All statuses</option>
-                  {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
-                <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={priority} onChange={(e) => setPriority(e.target.value)}>
-                  <option value="">All priorities</option>
-                  {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
-                </select>
+                <FormField id="proj-status-filter" label="Status">
+                  <select id="proj-status-filter" className={selectCls} value={status} onChange={(e) => setStatus(e.target.value)}>
+                    <option value="">All statuses</option>
+                    {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </FormField>
+                <FormField id="proj-priority-filter" label="Priority">
+                  <select id="proj-priority-filter" className={selectCls} value={priority} onChange={(e) => setPriority(e.target.value)}>
+                    <option value="">All priorities</option>
+                    {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
+                  </select>
+                </FormField>
               </div>
             </div>
           </Card>
@@ -126,22 +135,52 @@ export function ProjectsPage() {
           <h2 className="font-display text-2xl">{selected ? selected.name : "Project Detail"}</h2>
           <form className="mt-5 space-y-4" onSubmit={submit}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Input disabled={!canEdit} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name" />
-              <Input disabled={!canEdit} value={draft.codename ?? ""} onChange={(e) => setDraft({ ...draft, codename: e.target.value })} placeholder="Codename" />
-              <select disabled={!canEdit} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as ProjectStatus })}>
-                {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
-              <select disabled={!canEdit} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as ProjectPriority })}>
-                {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
-              </select>
+              <FormField id="proj-name" label="Name" required>
+                <Input id="proj-name" disabled={!canEdit} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="AI Kingdom" />
+              </FormField>
+              <FormField id="proj-codename" label="Codename">
+                <Input id="proj-codename" disabled={!canEdit} value={draft.codename ?? ""} onChange={(e) => setDraft({ ...draft, codename: e.target.value })} placeholder="KINGDOM" />
+              </FormField>
+              <FormField id="proj-status" label="Status">
+                <select id="proj-status" disabled={!canEdit} className={selectCls} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as ProjectStatus })}>
+                  {statuses.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </FormField>
+              <FormField id="proj-priority" label="Priority">
+                <select id="proj-priority" disabled={!canEdit} className={selectCls} value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as ProjectPriority })}>
+                  {priorities.map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </FormField>
             </div>
-            <Textarea disabled={!canEdit} value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Description" />
-            <Input disabled={!canEdit} value={draft.activeMilestone ?? ""} onChange={(e) => setDraft({ ...draft, activeMilestone: e.target.value })} placeholder="Active milestone" />
-            <Input disabled={!canEdit} value={draft.repositoryUrl ?? ""} onChange={(e) => setDraft({ ...draft, repositoryUrl: e.target.value })} placeholder="Repository URL" />
-            <Input disabled={!canEdit} value={draft.localPath ?? ""} onChange={(e) => setDraft({ ...draft, localPath: e.target.value })} placeholder="Local path" />
-            <Textarea disabled={!canEdit} value={draft.goals?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, goals: lines(e.target.value) })} placeholder="Goals, one per line" />
-            <Input disabled={!canEdit} value={draft.keywords?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, keywords: csv(e.target.value) })} placeholder="Routing keywords" />
-            <Input disabled={!canEdit} value={draft.aliases?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, aliases: csv(e.target.value) })} placeholder="Aliases" />
+
+            <FormField id="proj-description" label="Description">
+              <Textarea id="proj-description" disabled={!canEdit} value={draft.description ?? ""} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Brief description of the project's purpose and scope." />
+            </FormField>
+
+            <FormField id="proj-milestone" label="Active Milestone">
+              <Input id="proj-milestone" disabled={!canEdit} value={draft.activeMilestone ?? ""} onChange={(e) => setDraft({ ...draft, activeMilestone: e.target.value })} placeholder="M15 — Model Pricing Registry" />
+            </FormField>
+
+            <FormField id="proj-repo" label="Repository URL">
+              <Input id="proj-repo" disabled={!canEdit} value={draft.repositoryUrl ?? ""} onChange={(e) => setDraft({ ...draft, repositoryUrl: e.target.value })} placeholder="https://github.com/org/repo" />
+            </FormField>
+
+            <FormField id="proj-local-path" label="Local Path" description="Local machine path for human reference only. The backend will not execute shell commands.">
+              <Input id="proj-local-path" disabled={!canEdit} value={draft.localPath ?? ""} onChange={(e) => setDraft({ ...draft, localPath: e.target.value })} placeholder="/Users/you/projects/repo" />
+            </FormField>
+
+            <FormField id="proj-goals" label="Goals" description="One goal per line.">
+              <Textarea id="proj-goals" disabled={!canEdit} value={draft.goals?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, goals: lines(e.target.value) })} placeholder="Ship the MVP&#10;Reach 100 active users" />
+            </FormField>
+
+            <FormField id="proj-keywords" label="Keywords" description="Used by Royal Secretary project routing. One per line.">
+              <Input id="proj-keywords" disabled={!canEdit} value={draft.keywords?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, keywords: csv(e.target.value) })} placeholder="api, authentication, dashboard" />
+            </FormField>
+
+            <FormField id="proj-aliases" label="Aliases" description="Alternative names for this project. One per line.">
+              <Input id="proj-aliases" disabled={!canEdit} value={draft.aliases?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, aliases: csv(e.target.value) })} placeholder="kingdom, aikingdom" />
+            </FormField>
+
             {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
             {canEdit ? <Button><Save className="h-4 w-4" />Save Project</Button> : null}
           </form>

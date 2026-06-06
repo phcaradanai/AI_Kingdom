@@ -122,12 +122,14 @@ export function ProvidersPage() {
                 </select>
               </div>
               <div>
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">Base URL <span className="font-normal">(Optional)</span></label>
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">Base URL</label>
+                <p className="text-[11px] text-muted-foreground/80 mb-1.5">Only needed for OpenAI-compatible or custom endpoints.</p>
                 <Input value={addDraft.baseUrl} onChange={(e) => setAddDraft({ ...addDraft, baseUrl: e.target.value })} placeholder="https://api.openai.com/v1" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">Default Model</label>
-                <Input required={addDraft.type !== "mock"} value={addDraft.defaultModel} onChange={(e) => setAddDraft({ ...addDraft, defaultModel: e.target.value })} placeholder="e.g. gpt-4" />
+                <p className="text-[11px] text-muted-foreground/80 mb-1.5">Example: deepseek-chat, openai/gpt-4o-mini.</p>
+                <Input required={addDraft.type !== "mock"} value={addDraft.defaultModel} onChange={(e) => setAddDraft({ ...addDraft, defaultModel: e.target.value })} placeholder="e.g. gpt-4o-mini" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">Routing Priority <span className="font-normal">(Lower numbers preferred first)</span></label>
@@ -140,8 +142,9 @@ export function ProvidersPage() {
                 </select>
               </div>
               <div className="md:col-span-2">
-                <label className="text-xs font-semibold text-muted-foreground block mb-1">Credential Environment Key <span className="font-normal">(Name of the server environment variable that stores this provider API key)</span></label>
-                <Input value={addDraft.credentialEnvKey} onChange={(e) => setAddDraft({ ...addDraft, credentialEnvKey: e.target.value })} placeholder="e.g. CUSTOM_API_KEY" />
+                <label className="text-xs font-semibold text-muted-foreground block mb-1">Credential Environment Key</label>
+                <p className="text-[11px] text-muted-foreground/80 mb-1.5">Name of the backend .env variable, for example DEEPSEEK_API_KEY. Do not paste the actual key.</p>
+                <Input value={addDraft.credentialEnvKey} onChange={(e) => setAddDraft({ ...addDraft, credentialEnvKey: e.target.value })} placeholder="e.g. DEEPSEEK_API_KEY" />
               </div>
               <div className="md:col-span-2 flex flex-wrap items-center gap-6 text-sm mt-2">
                 <label className="flex items-center gap-2 cursor-pointer"><input type="checkbox" className="rounded border-input text-primary" checked={addDraft.capabilities.supportsChat} onChange={(e) => setAddDraft({...addDraft, capabilities: {...addDraft.capabilities, supportsChat: e.target.checked}})} /> Chat</label>

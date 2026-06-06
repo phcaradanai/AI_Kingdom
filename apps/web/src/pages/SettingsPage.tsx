@@ -109,12 +109,17 @@ function SettingsCard({ icon, title, settings, onUpdate }: { icon: ReactNode; ti
 
 function SettingRow({ setting, onUpdate }: { setting: SettingDto; onUpdate: (key: string, value: string) => Promise<void> }) {
   const isToggle = behaviorKeys.includes(setting.key);
+  const inputId = `setting-${setting.key}`;
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-3">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <div className="text-sm font-semibold">{setting.key}</div>
+          {isToggle ? (
+            <div className="text-sm font-semibold">{setting.key}</div>
+          ) : (
+            <label htmlFor={inputId} className="block text-sm font-semibold">{setting.key}</label>
+          )}
           {setting.description ? <div className="mt-1 text-xs text-muted-foreground">{setting.description}</div> : null}
         </div>
         {isToggle ? (
@@ -122,7 +127,7 @@ function SettingRow({ setting, onUpdate }: { setting: SettingDto; onUpdate: (key
             {setting.value === "true" ? "Enabled" : "Disabled"}
           </Button>
         ) : setting.key === "AI_PROVIDER" ? (
-          <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
+          <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
             <option value="mock">mock</option>
             <option value="openai-compatible">openai-compatible</option>
             <option value="openai">openai</option>
@@ -130,17 +135,17 @@ function SettingRow({ setting, onUpdate }: { setting: SettingDto; onUpdate: (key
             <option value="deepseek">deepseek</option>
           </select>
         ) : setting.key === "AI_COST_MODE" ? (
-          <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
+          <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
             <option value="low">low</option>
             <option value="balanced">balanced</option>
             <option value="quality">quality</option>
           </select>
         ) : setting.key === "DEFAULT_TASK_MODE" ? (
-          <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
+          <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
             {["ASK", "PLAN", "RESEARCH", "BUILD"].map((mode) => <option key={mode} value={mode}>{mode}</option>)}
           </select>
         ) : (
-          <Input className="sm:w-56" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)} />
+          <Input id={inputId} className="sm:w-56" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)} />
         )}
       </div>
     </div>

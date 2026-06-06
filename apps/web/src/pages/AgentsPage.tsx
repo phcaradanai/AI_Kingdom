@@ -3,11 +3,14 @@ import { Shield } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { AgentDto, AgentPayload } from "@/types/api";
+
+const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
 const blankAgent: AgentPayload = {
   name: "",
@@ -105,34 +108,71 @@ export function AgentsPage() {
           <h2 className="font-display text-2xl">{selected ? `Edit ${selected.title}` : "Create Agent"}</h2>
           <form className="mt-5 space-y-4" onSubmit={onSubmit}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Input value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="Name" />
-              <Input value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Title" />
-              <Input value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} placeholder="Role" />
-              <Input value={draft.specialty} onChange={(e) => setDraft({ ...draft, specialty: e.target.value })} placeholder="Specialty" />
+              <FormField id="agent-name" label="Agent Name" required>
+                <Input id="agent-name" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="grand-vizier" />
+              </FormField>
+              <FormField id="agent-title" label="Title">
+                <Input id="agent-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Grand Vizier" />
+              </FormField>
+              <FormField id="agent-role" label="Role">
+                <Input id="agent-role" value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })} placeholder="Strategic Orchestrator" />
+              </FormField>
+              <FormField id="agent-specialty" label="Specialty">
+                <Input id="agent-specialty" value={draft.specialty} onChange={(e) => setDraft({ ...draft, specialty: e.target.value })} placeholder="Royal synthesis and decision-making" />
+              </FormField>
             </div>
-            <Textarea value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Description" />
-            <Textarea className="min-h-44" value={draft.systemPrompt} onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })} placeholder="System prompt" />
-            <Textarea value={draft.responseStyle} onChange={(e) => setDraft({ ...draft, responseStyle: e.target.value })} placeholder="Response style" />
-            <Input value={draft.skills.join(", ")} onChange={(e) => setDraft({ ...draft, skills: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Skills, comma separated" />
+
+            <FormField id="agent-description" label="Description">
+              <Textarea id="agent-description" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Describe what this agent does and when it's consulted." />
+            </FormField>
+
+            <FormField id="agent-system-prompt" label="System Prompt">
+              <Textarea id="agent-system-prompt" className="min-h-44" value={draft.systemPrompt} onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })} placeholder="You are a royal advisor…" />
+            </FormField>
+
+            <FormField id="agent-response-style" label="Response Style">
+              <Textarea id="agent-response-style" value={draft.responseStyle} onChange={(e) => setDraft({ ...draft, responseStyle: e.target.value })} placeholder="concise, structured, practical" />
+            </FormField>
+
+            <FormField id="agent-skills" label="Skills">
+              <Input id="agent-skills" value={draft.skills.join(", ")} onChange={(e) => setDraft({ ...draft, skills: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Comma-separated: planning, risk analysis, strategy" />
+            </FormField>
+
             <div className="grid gap-3 sm:grid-cols-3">
-              <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.preferredProviderId ?? ""} onChange={(e) => setDraft({ ...draft, preferredProviderId: e.target.value || null })}>
-                <option value="">Routing policy</option>
-                {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
-              </select>
-              <select className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.costPreference ?? ""} onChange={(e) => setDraft({ ...draft, costPreference: (e.target.value || null) as AgentPayload["costPreference"] })}>
-                <option value="">Cost policy</option>
-                <option value="LOW">Low</option>
-                <option value="BALANCED">Balanced</option>
-                <option value="QUALITY">Quality</option>
-              </select>
-              <Input value={draft.fallbackProviderIds?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, fallbackProviderIds: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Fallback providers" />
+              <FormField id="agent-provider" label="Preferred Provider" description="Optional. Leave blank to use routing policy.">
+                <select id="agent-provider" className={selectCls} value={draft.preferredProviderId ?? ""} onChange={(e) => setDraft({ ...draft, preferredProviderId: e.target.value || null })}>
+                  <option value="">Routing policy (auto)</option>
+                  {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+                </select>
+              </FormField>
+              <FormField id="agent-cost-policy" label="Cost Policy">
+                <select id="agent-cost-policy" className={selectCls} value={draft.costPreference ?? ""} onChange={(e) => setDraft({ ...draft, costPreference: (e.target.value || null) as AgentPayload["costPreference"] })}>
+                  <option value="">Inherit global setting</option>
+                  <option value="LOW">Low</option>
+                  <option value="BALANCED">Balanced</option>
+                  <option value="QUALITY">Quality</option>
+                </select>
+              </FormField>
+              <FormField id="agent-fallback" label="Routing Policy">
+                <Input id="agent-fallback" value={draft.fallbackProviderIds?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, fallbackProviderIds: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Fallback provider IDs" />
+              </FormField>
             </div>
+
             <div className="grid gap-3 sm:grid-cols-4">
-              <Input type="number" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) })} placeholder="Priority" />
-              <Input value={draft.defaultModel ?? ""} onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })} placeholder="Default model" />
-              <Input type="number" step="0.1" value={draft.temperature ?? ""} onChange={(e) => setDraft({ ...draft, temperature: e.target.value ? Number(e.target.value) : null })} placeholder="Temperature" />
-              <Input type="number" value={draft.maxTokens ?? ""} onChange={(e) => setDraft({ ...draft, maxTokens: e.target.value ? Number(e.target.value) : null })} placeholder="Max tokens" />
+              <FormField id="agent-priority" label="Priority">
+                <Input id="agent-priority" type="number" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) })} placeholder="100" />
+              </FormField>
+              <FormField id="agent-model" label="Default Model" description="Optional model override for this agent.">
+                <Input id="agent-model" value={draft.defaultModel ?? ""} onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })} placeholder="gpt-4o-mini" />
+              </FormField>
+              <FormField id="agent-temperature" label="Temperature" description="Lower = more deterministic, higher = more creative.">
+                <Input id="agent-temperature" type="number" step="0.1" min="0" max="2" value={draft.temperature ?? ""} onChange={(e) => setDraft({ ...draft, temperature: e.target.value ? Number(e.target.value) : null })} placeholder="0.7" />
+              </FormField>
+              <FormField id="agent-max-tokens" label="Max Tokens" description="Maximum response length for this agent.">
+                <Input id="agent-max-tokens" type="number" value={draft.maxTokens ?? ""} onChange={(e) => setDraft({ ...draft, maxTokens: e.target.value ? Number(e.target.value) : null })} placeholder="700" />
+              </FormField>
             </div>
+
             {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
             <Button>{selected ? "Save Agent" : "Create Agent"}</Button>
           </form>
