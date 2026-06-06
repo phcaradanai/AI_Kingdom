@@ -21,6 +21,9 @@ export type TokenUsage = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  // Cache-aware fields — populated only when the provider returns cache details
+  inputCacheHitTokens?: number | null;
+  inputCacheMissTokens?: number | null;
 };
 
 export type AgentResponseResult = {

@@ -1,13 +1,25 @@
 import { env } from "../config/env.js";
 import type { AgentResponseResult, AIProvider, GenerateAgentResponseInput } from "./aiProvider.js";
 
+type ChatCompletionUsage = {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  // DeepSeek cache fields
+  prompt_cache_hit_tokens?: number;
+  prompt_cache_miss_tokens?: number;
+  // Alternative naming used by some OpenAI-compatible providers
+  input_cache_hit_tokens?: number;
+  input_cache_miss_tokens?: number;
+  // OpenAI-style nested details
+  prompt_tokens_details?: {
+    cached_tokens?: number;
+  };
+};
+
 type ChatCompletionResponse = {
   choices?: Array<{ message?: { content?: string } }>;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
+  usage?: ChatCompletionUsage;
 };
 
 export type OpenAICompatibleProviderOptions = {
@@ -83,9 +95,27 @@ export class OpenAICompatibleProvider implements AIProvider {
       const completionTokens = payload.usage?.completion_tokens ?? 0;
       const totalTokens = payload.usage?.total_tokens ?? promptTokens + completionTokens;
 
+      // Extract cache token breakdown defensively across naming conventions
+      const u = payload.usage;
+      let inputCacheHitTokens: number | null = null;
+      let inputCacheMissTokens: number | null = null;
+
+      if (u) {
+        if (u.prompt_cache_hit_tokens !== undefined) {
+          inputCacheHitTokens = u.prompt_cache_hit_tokens;
+          inputCacheMissTokens = u.prompt_cache_miss_tokens ?? (promptTokens - inputCacheHitTokens);
+        } else if (u.input_cache_hit_tokens !== undefined) {
+          inputCacheHitTokens = u.input_cache_hit_tokens;
+          inputCacheMissTokens = u.input_cache_miss_tokens ?? (promptTokens - inputCacheHitTokens);
+        } else if (u.prompt_tokens_details?.cached_tokens !== undefined) {
+          inputCacheHitTokens = u.prompt_tokens_details.cached_tokens;
+          inputCacheMissTokens = promptTokens - inputCacheHitTokens;
+        }
+      }
+
       return {
         response: content,
-        usage: { promptTokens, completionTokens, totalTokens }
+        usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens }
       };
     } finally {
       clearTimeout(timeout);

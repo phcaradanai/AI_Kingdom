@@ -10,10 +10,22 @@ const pricingSchema = z.object({
   providerType: z.string().trim().min(1).max(80),
   model: z.string().trim().min(1).max(200),
   displayName: z.string().trim().max(200).optional().nullable(),
-  inputPerMillion: z.number().min(0),
+  canonicalModel: z.string().trim().max(200).optional().nullable(),
+  inputPerMillion: z.number().min(0).optional().nullable(),
   outputPerMillion: z.number().min(0),
+  inputCacheHitPerMillion: z.number().min(0).optional().nullable(),
+  inputCacheMissPerMillion: z.number().min(0).optional().nullable(),
   currency: z.string().trim().max(10).default("USD"),
   notes: z.string().trim().max(500).optional().nullable(),
+  isAlias: z.boolean().optional().default(false),
+  aliasOf: z.string().trim().max(200).optional().nullable(),
+  isDeprecated: z.boolean().optional().default(false),
+  deprecationDate: z.string().datetime().optional().nullable().transform((v) => (v ? new Date(v) : null)),
+  concurrencyLimit: z.number().int().positive().optional().nullable(),
+  supportsThinking: z.boolean().optional().default(false),
+  defaultThinkingEnabled: z.boolean().optional().default(false),
+  supportedReasoningEfforts: z.array(z.string()).optional().default([]),
+  unsupportedThinkingParams: z.array(z.string()).optional().default([]),
   isActive: z.boolean().default(true)
 });
 

@@ -10,6 +10,9 @@ export type PricingResult = {
 };
 
 // USD per 1M tokens — keyed as "provider:model"
+// For DeepSeek entries, inputPerMillion is the cache-MISS rate (conservative fallback).
+// Cache-aware pricing lives in the DB (AIModelPricing.inputCacheHitPerMillion /
+// inputCacheMissPerMillion). The static table is a safety net only.
 const PRICING_TABLE: Record<string, ModelPricing> = {
   "mock:deterministic-mock-v1": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
   "openai:gpt-4o": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
@@ -21,19 +24,22 @@ const PRICING_TABLE: Record<string, ModelPricing> = {
   "openai:gpt-4o-2024-08-06": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
   "openai:gpt-4o-mini-2024-07-18": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
   "openrouter:openai/gpt-4o-mini": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
-  // DeepSeek — prices as of 2025-06 (cache-miss rates; cache-hit is ~10x cheaper)
-  "deepseek:deepseek-chat": { inputPerMillion: 0.27, outputPerMillion: 1.1 },
-  "deepseek:deepseek-coder": { inputPerMillion: 0.27, outputPerMillion: 1.1 },
-  "deepseek:deepseek-v4-pro": { inputPerMillion: 0.27, outputPerMillion: 1.1 },
-  "deepseek:deepseek-reasoner": { inputPerMillion: 0.55, outputPerMillion: 2.19 }
+  // DeepSeek V4 — cache-miss rates (conservative; cache-aware calc uses DB records)
+  // deepseek-v4-flash: cache hit $0.0028/M, cache miss $0.14/M, output $0.28/M
+  // deepseek-v4-pro:   cache hit $0.003625/M, cache miss $0.435/M, output $0.87/M
+  // deepseek-chat and deepseek-reasoner are compatibility aliases for deepseek-v4-flash.
+  "deepseek:deepseek-v4-flash": { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  "deepseek:deepseek-v4-pro": { inputPerMillion: 0.435, outputPerMillion: 0.87 },
+  "deepseek:deepseek-chat": { inputPerMillion: 0.14, outputPerMillion: 0.28 },
+  "deepseek:deepseek-reasoner": { inputPerMillion: 0.14, outputPerMillion: 0.28 }
 };
 
 // Fuzzy alias rules for deepseek — applied when exact key is not found.
 // Order matters: most specific substring first.
 const DEEPSEEK_ALIASES: Array<{ substring: string; canonical: string }> = [
   { substring: "v4-pro", canonical: "deepseek:deepseek-v4-pro" },
+  { substring: "v4-flash", canonical: "deepseek:deepseek-v4-flash" },
   { substring: "reasoner", canonical: "deepseek:deepseek-reasoner" },
-  { substring: "coder", canonical: "deepseek:deepseek-coder" },
   { substring: "chat", canonical: "deepseek:deepseek-chat" }
 ];
 

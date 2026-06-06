@@ -314,8 +314,13 @@ export type UsageRecordDto = {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  inputCacheHitTokens?: number | null;
+  inputCacheMissTokens?: number | null;
   estimatedCostUSD: number;
   currency: string;
+  pricingSource?: string | null;
+  pricingStatus?: string | null;
+  pricingNotes?: string | null;
   createdAt: string;
   agent?: { name: string; title: string; slug: string } | null;
   task?: { id: string; title: string; mode: string } | null;
@@ -590,11 +595,23 @@ export type ModelPricingDto = {
   providerType: string;
   model: string;
   displayName: string | null;
-  inputPerMillion: number;
+  canonicalModel: string | null;
+  inputPerMillion: number | null;
   outputPerMillion: number;
+  inputCacheHitPerMillion: number | null;
+  inputCacheMissPerMillion: number | null;
   currency: string;
   source: string;
   notes: string | null;
+  isAlias: boolean;
+  aliasOf: string | null;
+  isDeprecated: boolean;
+  deprecationDate: string | null;
+  concurrencyLimit: number | null;
+  supportsThinking: boolean;
+  defaultThinkingEnabled: boolean;
+  supportedReasoningEfforts: string[];
+  unsupportedThinkingParams: string[];
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -604,16 +621,26 @@ export type ModelPricingPayload = {
   providerType: string;
   model: string;
   displayName?: string | null;
-  inputPerMillion: number;
+  canonicalModel?: string | null;
+  inputPerMillion?: number | null;
   outputPerMillion: number;
+  inputCacheHitPerMillion?: number | null;
+  inputCacheMissPerMillion?: number | null;
   currency?: string;
   notes?: string | null;
+  isAlias?: boolean;
+  aliasOf?: string | null;
+  isDeprecated?: boolean;
+  concurrencyLimit?: number | null;
+  supportsThinking?: boolean;
   isActive?: boolean;
 };
 
 export type PricingWarningsDto = {
   unknownPricingUsageCount: number;
   unknownModels: Array<{ provider: string; model: string; count: number }>;
+  estimatedPricingUsageCount: number;
+  estimatedModels: Array<{ provider: string; model: string; count: number; note?: string }>;
 };
 
 export type KingdomCharterDto = {

@@ -585,23 +585,30 @@ model AgentResponse {
 }
 
 model UsageRecord {
-  id                 String          @id @default(cuid())
-  taskId             String?
-  councilSessionId   String?
-  agentId            String?
-  provider           String
-  providerId         String?
-  model              String
-  promptTokens       Int
-  completionTokens   Int
-  totalTokens        Int
-  estimatedCostUSD   Float
-  estimatedCostLocal Float
-  currency           String          @default("USD")
-  createdAt          DateTime        @default(now())
-  task               Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
-  councilSession     CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
-  agent              Agent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  id                   String          @id @default(cuid())
+  taskId               String?
+  councilSessionId     String?
+  agentId              String?
+  provider             String
+  providerId           String?
+  model                String
+  promptTokens         Int
+  completionTokens     Int
+  totalTokens          Int
+  // Cache-aware token breakdown (null = provider did not return cache details)
+  inputCacheHitTokens  Int?
+  inputCacheMissTokens Int?
+  estimatedCostUSD     Float
+  estimatedCostLocal   Float
+  currency             String          @default("USD")
+  // Pricing quality metadata
+  pricingSource        String?
+  pricingStatus        String?
+  pricingNotes         String?
+  createdAt            DateTime        @default(now())
+  task                 Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  councilSession       CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
+  agent                Agent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
 }
 
 model TreasuryLedger {
@@ -664,21 +671,38 @@ model Memory {
 }
 
 model AIModelPricing {
-  id               String   @id @default(cuid())
-  providerType     String
-  model            String
-  displayName      String?
-  inputPerMillion  Float
-  outputPerMillion Float
-  currency         String   @default("USD")
-  source           String   @default("manual")
-  notes            String?
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id                        String    @id @default(cuid())
+  providerType              String
+  model                     String
+  displayName               String?
+  canonicalModel            String?
+  // Legacy simple pricing (used when cache-aware fields are absent)
+  inputPerMillion           Float?
+  outputPerMillion          Float
+  // Cache-aware pricing
+  inputCacheHitPerMillion   Float?
+  inputCacheMissPerMillion  Float?
+  currency                  String    @default("USD")
+  source                    String    @default("manual")
+  notes                     String?
+  // Alias / deprecation metadata
+  isAlias                   Boolean   @default(false)
+  aliasOf                   String?
+  isDeprecated              Boolean   @default(false)
+  deprecationDate           DateTime?
+  // Concurrency and thinking metadata (informational only — not enforced by backend)
+  concurrencyLimit          Int?
+  supportsThinking          Boolean   @default(false)
+  defaultThinkingEnabled    Boolean   @default(false)
+  supportedReasoningEfforts String[]  @default([])
+  unsupportedThinkingParams String[]  @default([])
+  isActive                  Boolean   @default(true)
+  createdAt                 DateTime  @default(now())
+  updatedAt                 DateTime  @updatedAt
 
   @@unique([providerType, model])
   @@index([providerType])
+  @@index([canonicalModel])
 }
 
 model KingdomCharter {

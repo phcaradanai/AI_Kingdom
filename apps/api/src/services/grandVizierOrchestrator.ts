@@ -2,7 +2,7 @@ import type { Agent, Task, TaskMode } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { prisma } from "../db/prisma.js";
-import { calculateCostFromRegistry } from "./modelPricingService.js";
+import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import type { AIProviderConfig } from "./aiProviderRegistry.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getKingdomContext } from "./kingdomComplianceService.js";
@@ -115,11 +115,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         }
       });
 
-      const { costUSD: agentCostUSD } = await calculateCostFromRegistry(
+      const agentCost = await calculateCostUSDFromRegistry(
         generated.providerName,
         generated.modelUsed,
-        generated.usage.promptTokens,
-        generated.usage.completionTokens
+        generated.usage
       );
       await prisma.usageRecord.create({
         data: {
@@ -132,9 +131,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           promptTokens: generated.usage.promptTokens,
           completionTokens: generated.usage.completionTokens,
           totalTokens: generated.usage.totalTokens,
-          estimatedCostUSD: agentCostUSD,
-          estimatedCostLocal: agentCostUSD,
-          currency: "USD"
+          inputCacheHitTokens: generated.usage.inputCacheHitTokens ?? null,
+          inputCacheMissTokens: generated.usage.inputCacheMissTokens ?? null,
+          estimatedCostUSD: agentCost.costUSD,
+          estimatedCostLocal: agentCost.costUSD,
+          currency: "USD",
+          pricingSource: agentCost.source,
+          pricingStatus: agentCost.pricingStatus,
+          pricingNotes: agentCost.pricingNotes ?? null
         }
       });
 
@@ -169,11 +173,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     usedProviders.push(generatedSummary.providerName);
     usedModels.push(generatedSummary.modelUsed);
 
-    const { costUSD: summaryCostUSD } = await calculateCostFromRegistry(
+    const summaryCost = await calculateCostUSDFromRegistry(
       generatedSummary.providerName,
       generatedSummary.modelUsed,
-      generatedSummary.usage.promptTokens,
-      generatedSummary.usage.completionTokens
+      generatedSummary.usage
     );
     await prisma.usageRecord.create({
       data: {
@@ -186,9 +189,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         promptTokens: generatedSummary.usage.promptTokens,
         completionTokens: generatedSummary.usage.completionTokens,
         totalTokens: generatedSummary.usage.totalTokens,
-        estimatedCostUSD: summaryCostUSD,
-        estimatedCostLocal: summaryCostUSD,
-        currency: "USD"
+        inputCacheHitTokens: generatedSummary.usage.inputCacheHitTokens ?? null,
+        inputCacheMissTokens: generatedSummary.usage.inputCacheMissTokens ?? null,
+        estimatedCostUSD: summaryCost.costUSD,
+        estimatedCostLocal: summaryCost.costUSD,
+        currency: "USD",
+        pricingSource: summaryCost.source,
+        pricingStatus: summaryCost.pricingStatus,
+        pricingNotes: summaryCost.pricingNotes ?? null
       }
     });
 

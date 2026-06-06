@@ -130,18 +130,38 @@ export async function getTreasuryUsage(limit = 100) {
 }
 
 export async function getPricingWarnings() {
-  const groups = await prisma.usageRecord.groupBy({
+  // UNKNOWN: no pricing found at all
+  const allGroups = await prisma.usageRecord.groupBy({
     by: ["provider", "model"],
     _count: { id: true }
   });
   const warnings = await Promise.all(
-    groups.map(async (g) => {
+    allGroups.map(async (g) => {
       const { pricingStatus } = await getModelPricing(g.provider, g.model);
       return pricingStatus === "UNKNOWN" ? { provider: g.provider, model: g.model, count: g._count.id } : null;
     })
   );
   const unknownModels = warnings.filter((w): w is NonNullable<typeof w> => w !== null);
-  return { unknownPricingUsageCount: unknownModels.reduce((sum, w) => sum + w.count, 0), unknownModels };
+
+  // ESTIMATED: records where the provider did not return cache details
+  const estimatedGroups = await prisma.usageRecord.groupBy({
+    by: ["provider", "model"],
+    where: { pricingStatus: "ESTIMATED" },
+    _count: { id: true }
+  });
+  const estimatedModels = estimatedGroups.map((g) => ({
+    provider: g.provider,
+    model: g.model,
+    count: g._count.id,
+    note: "Cache details unavailable; input cost estimated as cache miss."
+  }));
+
+  return {
+    unknownPricingUsageCount: unknownModels.reduce((sum, w) => sum + w.count, 0),
+    unknownModels,
+    estimatedPricingUsageCount: estimatedModels.reduce((sum, m) => sum + m.count, 0),
+    estimatedModels
+  };
 }
 
 export async function getTreasuryDailyReport(days = 30) {

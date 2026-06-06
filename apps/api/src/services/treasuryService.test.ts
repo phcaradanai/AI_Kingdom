@@ -104,14 +104,15 @@ test("calculateCostUSD returns zero for unknown model", () => {
 test("calculateCostUSD deepseek-chat cost > 0", () => {
   const cost = calculateCostUSD("deepseek", "deepseek-chat", 1_000_000, 1_000_000);
   assert.ok(cost > 0, "deepseek-chat should have non-zero cost");
-  // 1M input @ $0.27 + 1M output @ $1.10 = $1.37
-  assert.equal(cost, 1.37);
+  // deepseek-chat is now alias of V4 Flash: $0.14 input (miss) + $0.28 output = $0.42
+  assert.equal(cost, 0.42);
 });
 
 test("calculateCostUSD deepseek-v4-pro exact key cost > 0", () => {
   const cost = calculateCostUSD("deepseek", "deepseek-v4-pro", 1_000_000, 1_000_000);
   assert.ok(cost > 0, "deepseek-v4-pro should have non-zero cost");
-  assert.equal(cost, 1.37);
+  // V4 Pro static fallback: $0.435 cache-miss input + $0.87 output = $1.305
+  assert.equal(cost, 1.305);
 });
 
 test("calculateCostUSD deepseek-v4-pro via alias (partial model name) cost > 0", () => {
@@ -123,8 +124,8 @@ test("calculateCostUSD deepseek-v4-pro via alias (partial model name) cost > 0",
 test("calculateCostUSD deepseek-reasoner cost > 0", () => {
   const cost = calculateCostUSD("deepseek", "deepseek-reasoner", 1_000_000, 1_000_000);
   assert.ok(cost > 0, "deepseek-reasoner should have non-zero cost");
-  // 1M input @ $0.55 + 1M output @ $2.19 = $2.74
-  assert.equal(cost, 2.74);
+  // deepseek-reasoner is now alias of V4 Flash: $0.14 input (miss) + $0.28 output = $0.42
+  assert.equal(cost, 0.42);
 });
 
 test("calculateCostDetailed returns pricingStatus known for exact match", () => {

@@ -167,6 +167,22 @@ function DailyChart({ daily }: { daily: TreasuryDailyDto[] }) {
   );
 }
 
+function PricingStatusBadge({ status, notes }: { status?: string | null; notes?: string | null }) {
+  if (!status || status === "KNOWN") return null;
+  if (status === "ESTIMATED") {
+    return (
+      <span title={notes ?? "Cache details unavailable; input estimated as cache miss."} className="ml-1 rounded px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 cursor-help">
+        Est
+      </span>
+    );
+  }
+  return (
+    <span className="ml-1 rounded px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-destructive/20 text-destructive border border-destructive/30">
+      Unknown
+    </span>
+  );
+}
+
 function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
   if (records.length === 0)
     return <p className="py-8 text-center text-sm text-muted-foreground">No usage records yet.</p>;
@@ -192,7 +208,10 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
               </td>
               <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{r.model}</td>
               <td className="py-2 pr-4 text-right tabular-nums text-xs">{formatTokens(r.totalTokens)}</td>
-              <td className="py-2 text-right font-mono tabular-nums text-xs">{formatCost(r.estimatedCostUSD)}</td>
+              <td className="py-2 text-right font-mono tabular-nums text-xs">
+                {formatCost(r.estimatedCostUSD)}
+                <PricingStatusBadge status={r.pricingStatus} notes={r.pricingNotes} />
+              </td>
             </tr>
           ))}
         </tbody>
@@ -201,7 +220,7 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
   );
 }
 
-const blankPricing: ModelPricingPayload = { providerType: "", model: "", displayName: "", inputPerMillion: 0, outputPerMillion: 0, notes: "" };
+const blankPricing: ModelPricingPayload = { providerType: "", model: "", displayName: "", outputPerMillion: 0, notes: "" };
 
 function ModelPricingSection() {
   const [records, setRecords] = useState<ModelPricingDto[]>([]);
@@ -253,10 +272,17 @@ function ModelPricingSection() {
       </div>
 
       {warnings && warnings.unknownModels.length > 0 && (
-        <div className="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
-          <span className="font-semibold">⚠ Unknown pricing detected: </span>
+        <div className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <span className="font-semibold">⚠ Unknown pricing: </span>
           {warnings.unknownModels.map((m) => `${m.provider}:${m.model} (${m.count} calls)`).join(", ")}
-          . Add pricing records below to track costs accurately.
+          . Add pricing records below.
+        </div>
+      )}
+      {warnings && warnings.estimatedModels.length > 0 && (
+        <div className="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
+          <span className="font-semibold">~ Estimated cost ({warnings.estimatedPricingUsageCount} records): </span>
+          {warnings.estimatedModels.map((m) => `${m.provider}:${m.model} (${m.count})`).join(", ")}
+          . DeepSeek cache details unavailable; input estimated at cache-miss rate.
         </div>
       )}
 
@@ -265,11 +291,13 @@ function ModelPricingSection() {
           <form className="space-y-3" onSubmit={createRecord}>
             <div className="grid gap-3 sm:grid-cols-2">
               <Input required placeholder="Provider type (e.g. deepseek)" value={newDraft.providerType} onChange={(e) => setNewDraft({ ...newDraft, providerType: e.target.value })} />
-              <Input required placeholder="Model (e.g. deepseek-v4-pro)" value={newDraft.model} onChange={(e) => setNewDraft({ ...newDraft, model: e.target.value })} />
+              <Input required placeholder="Model (e.g. deepseek-v4-flash)" value={newDraft.model} onChange={(e) => setNewDraft({ ...newDraft, model: e.target.value })} />
               <Input placeholder="Display name" value={newDraft.displayName ?? ""} onChange={(e) => setNewDraft({ ...newDraft, displayName: e.target.value })} />
               <Input placeholder="Notes" value={newDraft.notes ?? ""} onChange={(e) => setNewDraft({ ...newDraft, notes: e.target.value })} />
-              <Input required type="number" min="0" step="0.0001" placeholder="Input $/M tokens" value={newDraft.inputPerMillion} onChange={(e) => setNewDraft({ ...newDraft, inputPerMillion: parseFloat(e.target.value) || 0 })} />
+              <Input type="number" min="0" step="0.000001" placeholder="Cache-hit input $/M (optional)" value={newDraft.inputCacheHitPerMillion ?? ""} onChange={(e) => setNewDraft({ ...newDraft, inputCacheHitPerMillion: e.target.value ? parseFloat(e.target.value) : null })} />
+              <Input type="number" min="0" step="0.000001" placeholder="Cache-miss input $/M (or simple input $/M)" value={newDraft.inputCacheMissPerMillion ?? ""} onChange={(e) => setNewDraft({ ...newDraft, inputCacheMissPerMillion: e.target.value ? parseFloat(e.target.value) : null })} />
               <Input required type="number" min="0" step="0.0001" placeholder="Output $/M tokens" value={newDraft.outputPerMillion} onChange={(e) => setNewDraft({ ...newDraft, outputPerMillion: parseFloat(e.target.value) || 0 })} />
+              <Input type="number" min="0" step="0.000001" placeholder="Legacy input $/M (simple pricing)" value={newDraft.inputPerMillion ?? ""} onChange={(e) => setNewDraft({ ...newDraft, inputPerMillion: e.target.value ? parseFloat(e.target.value) : null })} />
             </div>
             {savingError && <div className="text-sm text-red-400">{savingError}</div>}
             <div className="flex gap-2">
@@ -285,10 +313,11 @@ function ModelPricingSection() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Provider / Model</th>
-                <th className="pb-2 pr-4 text-right font-medium">Input $/M</th>
-                <th className="pb-2 pr-4 text-right font-medium">Output $/M</th>
-                <th className="pb-2 pr-4 font-medium">Source</th>
+                <th className="pb-2 pr-3 font-medium">Provider / Model</th>
+                <th className="pb-2 pr-3 text-right font-medium">Hit $/M</th>
+                <th className="pb-2 pr-3 text-right font-medium">Miss $/M</th>
+                <th className="pb-2 pr-3 text-right font-medium">Out $/M</th>
+                <th className="pb-2 pr-3 font-medium">Source</th>
                 <th className="pb-2 font-medium">Notes</th>
                 <th className="pb-2" />
               </tr>
@@ -296,21 +325,38 @@ function ModelPricingSection() {
             <tbody>
               {records.map((r) => {
                 const isEditing = editingId === r.id;
-                const draft = drafts[r.id] ?? { inputPerMillion: r.inputPerMillion, outputPerMillion: r.outputPerMillion, notes: r.notes };
+                const draft = drafts[r.id] ?? { inputCacheHitPerMillion: r.inputCacheHitPerMillion, inputCacheMissPerMillion: r.inputCacheMissPerMillion, outputPerMillion: r.outputPerMillion, notes: r.notes };
+                const hitPrice = r.inputCacheHitPerMillion ?? r.inputPerMillion;
+                const missPrice = r.inputCacheMissPerMillion ?? r.inputPerMillion;
                 return (
                   <tr key={r.id} className={cn("border-b border-border/40 last:border-0", !r.isActive && "opacity-40")}>
-                    <td className="py-2.5 pr-4">
-                      <div className="font-medium">{r.displayName ?? r.model}</div>
+                    <td className="py-2.5 pr-3">
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className="font-medium">{r.displayName ?? r.model}</span>
+                        {r.isAlias && <span className="rounded bg-muted/60 px-1 py-0.5 text-[10px] text-muted-foreground border border-border/50">alias</span>}
+                        {r.isDeprecated && <span className="rounded bg-yellow-500/20 px-1 py-0.5 text-[10px] text-yellow-400 border border-yellow-500/30">deprecated</span>}
+                        {r.supportsThinking && <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary border border-primary/20">thinking</span>}
+                      </div>
                       <div className="text-xs text-muted-foreground">{r.providerType}:{r.model}</div>
+                      {r.concurrencyLimit && <div className="text-[10px] text-muted-foreground/60">{r.concurrencyLimit} concurrent</div>}
                     </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">
-                      {isEditing ? <Input type="number" min="0" step="0.0001" className="h-7 w-24 text-right text-xs" value={draft.inputPerMillion ?? 0} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, inputPerMillion: parseFloat(e.target.value) || 0 } })} /> : `$${r.inputPerMillion}`}
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-xs">
+                      {isEditing
+                        ? <Input type="number" min="0" step="0.000001" className="h-7 w-24 text-right text-xs" value={draft.inputCacheHitPerMillion ?? ""} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, inputCacheHitPerMillion: e.target.value ? parseFloat(e.target.value) : null } })} />
+                        : hitPrice != null ? `$${hitPrice}` : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="py-2.5 pr-4 text-right tabular-nums">
-                      {isEditing ? <Input type="number" min="0" step="0.0001" className="h-7 w-24 text-right text-xs" value={draft.outputPerMillion ?? 0} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, outputPerMillion: parseFloat(e.target.value) || 0 } })} /> : `$${r.outputPerMillion}`}
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-xs">
+                      {isEditing
+                        ? <Input type="number" min="0" step="0.000001" className="h-7 w-24 text-right text-xs" value={draft.inputCacheMissPerMillion ?? ""} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, inputCacheMissPerMillion: e.target.value ? parseFloat(e.target.value) : null } })} />
+                        : missPrice != null ? `$${missPrice}` : <span className="text-muted-foreground">—</span>}
                     </td>
-                    <td className="py-2.5 pr-4 text-xs text-muted-foreground">{r.source}</td>
-                    <td className="py-2.5 pr-4 text-xs text-muted-foreground">
+                    <td className="py-2.5 pr-3 text-right tabular-nums text-xs">
+                      {isEditing
+                        ? <Input type="number" min="0" step="0.0001" className="h-7 w-24 text-right text-xs" value={draft.outputPerMillion ?? 0} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, outputPerMillion: parseFloat(e.target.value) || 0 } })} />
+                        : `$${r.outputPerMillion}`}
+                    </td>
+                    <td className="py-2.5 pr-3 text-xs text-muted-foreground">{r.source}</td>
+                    <td className="py-2.5 pr-3 text-xs text-muted-foreground max-w-[160px] truncate" title={r.notes ?? undefined}>
                       {isEditing ? <Input className="h-7 text-xs" value={draft.notes ?? ""} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, notes: e.target.value } })} /> : (r.notes ?? "—")}
                     </td>
                     <td className="py-2.5">
@@ -322,7 +368,7 @@ function ModelPricingSection() {
                           </>
                         ) : (
                           <>
-                            <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setEditingId(r.id); setDrafts({ ...drafts, [r.id]: { inputPerMillion: r.inputPerMillion, outputPerMillion: r.outputPerMillion, notes: r.notes } }); }}>Edit</Button>
+                            <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setEditingId(r.id); setDrafts({ ...drafts, [r.id]: { inputCacheHitPerMillion: r.inputCacheHitPerMillion, inputCacheMissPerMillion: r.inputCacheMissPerMillion, outputPerMillion: r.outputPerMillion, notes: r.notes } }); }}>Edit</Button>
                             {r.isActive && <Button variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={() => void deactivate(r.id)}><Trash2 className="h-3 w-3" /></Button>}
                           </>
                         )}
@@ -331,12 +377,12 @@ function ModelPricingSection() {
                   </tr>
                 );
               })}
-              {records.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">No pricing records yet.</td></tr>}
+              {records.length === 0 && <tr><td colSpan={7} className="py-8 text-center text-sm text-muted-foreground">No pricing records yet.</td></tr>}
             </tbody>
           </table>
         </div>
         {savingError && <div className="mt-2 text-sm text-red-400">{savingError}</div>}
-        <p className="mt-3 text-xs text-muted-foreground">Updated {formatDate(new Date().toISOString())} · Prices in USD per 1M tokens</p>
+        <p className="mt-3 text-xs text-muted-foreground">Prices in USD per 1M tokens · Hit = cache hit · Miss = cache miss · Out = output</p>
       </Card>
     </section>
   );
