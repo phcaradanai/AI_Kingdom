@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Textarea } from "@/components/ui/textarea";
+import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { TaskDto, TaskMode } from "@/types/api";
@@ -174,11 +175,7 @@ export function ThroneRoomPage() {
                   </div>
                 )}
               </div>
-              <div className="prose prose-sm prose-invert max-w-none text-foreground/90 leading-relaxed">
-                {latestSession.finalSummary.split('\n').map((para, i) => (
-                  <p key={i}>{para}</p>
-                ))}
-              </div>
+              <MarkdownDocument content={latestSession.finalSummary} className="max-w-none" />
               <div className="mt-6 flex flex-wrap gap-4 text-xs text-muted-foreground border-t border-border/50 pt-4">
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-primary/50"></div>

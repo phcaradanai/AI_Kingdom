@@ -8,7 +8,7 @@ interface MarkdownDocumentProps {
 
 export function MarkdownDocument({ content, className }: MarkdownDocumentProps) {
   return (
-    <div className={cn("text-sm leading-relaxed text-foreground/90 space-y-4", className)}>
+    <div className={cn("text-sm leading-relaxed text-foreground/90 space-y-4 break-words", className)}>
       <ReactMarkdown
         components={{
           h1: ({node, ...props}) => <h1 className="mt-8 mb-4 font-display text-3xl font-bold text-primary" {...props} />,

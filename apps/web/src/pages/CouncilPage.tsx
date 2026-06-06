@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { CouncilSessionDto } from "@/types/api";
@@ -179,11 +180,7 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
                <Sparkles className="h-5 w-5" />
                Grand Vizier's Synthesis
             </h3>
-            <div className="prose prose-sm prose-invert max-w-none text-foreground/90 leading-relaxed font-medium">
-              {session.finalSummary.split('\n').map((para, i) => (
-                <p key={i}>{para}</p>
-              ))}
-            </div>
+            <MarkdownDocument content={session.finalSummary} className="max-w-none" />
           </div>
         )}
 
@@ -203,11 +200,7 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
                     <div className="text-[10px] uppercase tracking-wider text-primary/70">{response.agent.specialty}</div>
                   </div>
                 </div>
-                <div className="prose prose-sm prose-invert max-w-none text-foreground/80 leading-relaxed text-xs">
-                  {response.response.split('\n').map((para, i) => (
-                    <p key={i}>{para}</p>
-                  ))}
-                </div>
+                <MarkdownDocument content={response.response} className="max-w-none text-xs" />
               </div>
             ))}
           </div>
