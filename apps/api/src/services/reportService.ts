@@ -47,6 +47,7 @@ export async function generateRoyalReport(input: {
       title: `Royal Report: ${task.title}`,
       summary: finalSummary,
       content,
+      projectId: task.projectId,
       sourceTaskId: task.id,
       sourceCouncilSessionId: input.session.id,
       category: categoryForTask(task),

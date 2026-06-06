@@ -3,12 +3,14 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { getTaskForUser } from "../services/orchestrator.js";
 import { processTaskWithGrandVizier } from "../services/grandVizierOrchestrator.js";
+import { routeProjectForSource } from "../services/projectRoutingService.js";
 import { getBooleanSetting } from "../services/settingsService.js";
 
 const router = Router();
 
 const commandSchema = z.object({
   title: z.string().trim().min(1).max(140).optional(),
+  projectId: z.string().trim().max(120).optional().nullable(),
   command: z.string().trim().min(1, "Royal command is required").max(4000),
   mode: z.enum(["ASK", "PLAN", "RESEARCH", "BUILD"], {
     required_error: "Mode is required",
@@ -30,11 +32,12 @@ router.post("/", async (req, res, next) => {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-    const { command, mode, title } = commandSchema.parse(req.body);
+    const { command, mode, title, projectId } = commandSchema.parse(req.body);
     const taskTitle = title ?? command.split(/\s+/).slice(0, 8).join(" ");
     const task = await prisma.task.create({
       data: {
         title: taskTitle,
+        projectId: projectId ?? undefined,
         command,
         mode,
         status: "PENDING",
@@ -51,6 +54,9 @@ router.post("/", async (req, res, next) => {
         reports: true
       }
     });
+    if (!projectId) {
+      await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id }).catch(() => undefined);
+    }
     if (await getBooleanSetting("AUTO_PROCESS_TASKS", false)) {
       const session = await processTaskWithGrandVizier(task.id, userId);
       const processedTask = await getTaskForUser(userId, task.id);
@@ -58,7 +64,8 @@ router.post("/", async (req, res, next) => {
       return;
     }
 
-    res.status(201).json({ task });
+    const routedTask = await getTaskForUser(userId, task.id);
+    res.status(201).json({ task: routedTask });
   } catch (error) {
     next(error);
   }

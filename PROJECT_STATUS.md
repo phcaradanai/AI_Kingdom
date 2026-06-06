@@ -2,7 +2,7 @@
 
 ## Current State
 
-AI Kingdom Web MVP is implemented through M13. The app supports authenticated role-based access, task intake, Grand Vizier council processing, provider-agnostic AI routing with fallback, external agent work orders and handoffs, persistent memory, generated reports, editable agents/settings/providers, staging-ready Docker deployment, Royal Treasury for cost tracking, Audit Log for operational oversight, and a Kingdom Charter + Vision constitutional layer that is injected into every council session.
+AI Kingdom Web MVP is implemented through M14. The app supports authenticated role-based access, task intake, Grand Vizier council processing, provider-agnostic AI routing with fallback, external agent work orders and handoffs, project-aware workspaces with Royal Secretary routing, persistent memory, generated reports, editable agents/settings/providers, staging-ready Docker deployment, Royal Treasury for cost tracking, Audit Log for operational oversight, and a Kingdom Charter + Vision constitutional layer that is injected into every council session.
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
@@ -23,6 +23,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 - M12: Royal Secretary Core. `Notice` (INFO/WARNING/CRITICAL severity, UNREAD/READ/ARCHIVED status) and `Matter` (8-state status, 4-priority, 7-category) Prisma models + migration. `royalSecretaryService.ts` with `createNotice` (24h title+severity dedup), `createMatter` (sourceType+sourceId dedup in non-terminal states), `inspectKingdomStatus`, `generateDailyBrief`. `GET /api/secretary/brief` (all authenticated). Full CRUD for `/api/notices` and `/api/matters` (read: all roles; create/delete: KING; update: KING+CROWN_PRINCE). Dashboard updated with Kingdom Status pills, Recommended Actions list, Urgent Notices panel, Awaiting Decision panel, and Prime Directive reminder. `/notices` and `/matters` frontend pages with filters, pagination, inline mark-read/archive, create form (KING), and detail panel. `KingdomCharter` and `KingdomVision` Prisma models migrated. Seed service loads `docs/KINGDOM_CHARTER.md` and `docs/KINGDOM_VISION.md` idempotently (never overwrites existing records). `charterService.ts` provides get/update/seed/format functions. `kingdomComplianceService.ts` loads kingdom context before every council session, auto-seeds from files if DB records are missing, and never throws. Context injected into every agent call (both specialist loop and Grand Vizier synthesis pass) via `GenerateAgentResponseInput.kingdomContext`. API: `GET /api/charter`, `GET /api/vision` (all authenticated); `PATCH /api/charter`, `PATCH /api/vision` (KING only). Frontend: `/charter` and `/vision` pages with section rendering and KING edit mode, visible to all authenticated roles.
 - M12.5: AI Provider Registry + Routing Policy. Added `AIProvider` and `AIProviderRoute` Prisma models, env-first provider registry, reusable OpenAI-compatible provider client, runtime support for mock/OpenAI/OpenRouter/DeepSeek/generic compatible providers, future metadata stubs for Anthropic/Gemini/local, agent-level provider/model/fallback/cost overrides, `AI_COST_MODE`, chained provider fallback, providerId usage tracking, `/api/providers` KING-only admin API, `/providers` admin page, and provider status in `/settings`. API keys remain server-only and are not returned by settings/providers APIs.
 - M13: External Agent Work Order + Handoff System. Added `ExternalAgent`, `WorkOrder`, `WorkSession`, `ImplementationReport`, and `HandoffBrief` Prisma models with manual copy-paste execution mode. Seeded Claude Code, Codex, Cline, Kilo, Antigravity, and Hermes as external executor targets. Added `externalAgentWorkOrderService.ts` for task/matter work-order generation, context-drift-resistant prompts, implementation reports, handoff briefs, decision memory capture, and completion report summaries. API: `/api/external-agents`, `/api/work-orders`, `/api/work-sessions`, `/api/implementation-reports`, `/api/handoff-briefs`. Frontend: `/external-agents`, `/work-orders`, dashboard External Work summary. M13 does not call external agent APIs or execute shell commands from the backend.
+- M14: Project Workspace + Royal Secretary Project Routing. Added `Project`, `ProjectRoutingCandidate`, `ProjectInboxItem`, and `Artifact` Prisma models plus optional `projectId` links on tasks, matters, notices, council sessions, reports, memories, work orders, implementation reports, and handoff briefs. Seeded AI Kingdom, Godot Tower Defense, Admin Dashboard Boilerplate, E-commerce Inventory Boilerplate, and Backend Go Services idempotently. Added `projectRoutingService.ts` for explainable keyword/alias/name/source-ancestry routing: confidence >=80 auto-assigns, 50-79 creates a suggested inbox item, and <50 creates a pending inbox item without assignment. Added compact project context injection for council processing and external-agent prompts. Added `/projects`, `/project-inbox`, and `/artifacts` pages plus Obsidian markdown export payloads.
 
 ## Current API Surface
 
@@ -31,6 +32,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 - Core resources: `/api/tasks`, `/api/council`, `/api/reports`, `/api/memory` (also aliased as `/api/memories`).
 - Admin resources (KING only): `/api/agents`, `/api/settings`, `/api/providers`, `/api/users`; external agent create/update/delete is KING-only.
 - External work resources: `/api/external-agents`, `/api/work-orders`, `/api/work-sessions`, `/api/implementation-reports`, `/api/handoff-briefs`. Reads are authenticated. Work-order create/update and handoff generation are KING/CROWN_PRINCE. Implementation reports can be submitted by KING/CROWN_PRINCE/MINISTER. SCRIBE is read-only.
+- Project workspace resources: `/api/projects`, `/api/project-routing`, `/api/project-inbox`, `/api/artifacts`, and `/api/projects/:id/export/obsidian`. Project reads are authenticated; create/update is KING/CROWN_PRINCE; delete/archive is KING-only. Project Inbox assignment is KING/CROWN_PRINCE. Artifacts can be created by KING/CROWN_PRINCE/MINISTER; SCRIBE is read-only.
 - Treasury resources (KING only): `/api/treasury/overview`, `/api/treasury/usage`, `/api/treasury/agents`, `/api/treasury/providers`, `/api/treasury/reports`.
 - Audit resources (KING only): `GET /api/audit`, `GET /api/audit/:id`, `GET /api/audit/search?q=`. Filters: `action`, `resourceType`, `userId`, `startDate`, `endDate`. Pagination: `page`, `limit`.
 - Kingdom Charter and Vision (all authenticated for reads, KING for writes): `GET /api/charter`, `PATCH /api/charter`, `GET /api/vision`, `PATCH /api/vision`.
@@ -42,7 +44,7 @@ RBAC is enforced server-side. `KING` has full access; `CROWN_PRINCE` can use tas
 
 ## Current Web Routes
 
-Implemented pages: `/login`, `/dashboard`, `/charter`, `/vision`, `/notices`, `/matters`, `/throne-room`, `/council`, `/agents`, `/external-agents`, `/work-orders`, `/providers`, `/reports`, `/memory`, `/settings`, `/treasury`, `/audit`, `/profile`, `/users`, and `/security`.
+Implemented pages: `/login`, `/dashboard`, `/charter`, `/vision`, `/notices`, `/matters`, `/projects`, `/projects/:id`, `/project-inbox`, `/artifacts`, `/throne-room`, `/council`, `/agents`, `/external-agents`, `/work-orders`, `/providers`, `/reports`, `/memory`, `/settings`, `/treasury`, `/audit`, `/profile`, `/users`, and `/security`.
 
 Navigation is role-aware. The frontend also handles access-token refresh and clears the session when refresh fails.
 
@@ -50,10 +52,9 @@ Navigation is role-aware. The frontend also handles access-token refresh and cle
 
 Most recent verification completed successfully:
 
-- `npm run db:migrate`
-- `npm run db:seed`
+- `npm run db:deploy`
 - `npm run typecheck` (both workspaces)
-- `npm run test --workspace @ai-kingdom/api` (`91/91` passing)
+- `npm run test` (`99/99` passing)
 - `npm run build` (both workspaces)
 
 Local smoke checks confirmed King login, treasury page rendering with agent/provider/model breakdowns, UsageRecord creation on task processing, budget warning banner activation, and no console errors.
@@ -65,6 +66,7 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
 - AI orchestration does not include tool calling, web search, background workers, or autonomous agents.
 - Anthropic, Gemini, and local/Ollama are registry stubs only; runtime clients are not implemented yet.
 - Memory search is keyword/tag based; no vector database is implemented.
+- Project routing is deterministic keyword/alias/name/source-ancestry matching only; no vector database or autonomous background router is implemented.
 - Staging is configured but production deployment and production observability are not yet complete.
 - `estimatedCostLocal` mirrors `estimatedCostUSD` (USD only; no FX conversion).
 - The Grand Vizier appears twice per session in the UsageRecord table (once as a specialist agent call, once for the final synthesis pass), so per-agent call counts reflect actual AI invocations, not council participation.

@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { DEFAULT_SETTINGS } from "../src/services/settingsService.js";
 import { ensureDefaultAIProviders } from "../src/services/aiProviderRegistry.js";
 import { ensureDefaultExternalAgents } from "../src/services/externalAgentWorkOrderService.js";
+import { ensureDefaultProjects } from "../src/services/projectService.js";
 
 const prisma = new PrismaClient();
 
@@ -102,6 +103,7 @@ async function main() {
 
   await ensureDefaultAIProviders();
   await ensureDefaultExternalAgents();
+  await ensureDefaultProjects();
 }
 
 main()

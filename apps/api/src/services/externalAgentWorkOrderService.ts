@@ -4,6 +4,8 @@ import type { ExternalAgent, ImplementationReport, WorkOrder, WorkSession } from
 import { prisma } from "../db/prisma.js";
 import { getCharter, getVision } from "./charterService.js";
 import { isSensitive } from "./memoryService.js";
+import { buildProjectContext } from "./projectContextService.js";
+import { createArtifact } from "./projectService.js";
 
 type WorkOrderWithRelations = WorkOrder & {
   assignedExternalAgent?: ExternalAgent | null;
@@ -132,7 +134,8 @@ export async function generateWorkOrderFromTask(taskId: string, userId?: string 
         "Validation commands are run or clearly reported as not run."
       ],
       validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
-      targetProject: "AI Kingdom",
+      projectId: task.projectId,
+      targetProject: task.projectId ? null : "AI Kingdom",
       sourceType: "TASK",
       sourceId: task.id,
       status: "READY",
@@ -171,7 +174,8 @@ export async function generateWorkOrderFromMatter(matterId: string, userId?: str
         "Validation commands are run or clearly reported as not run."
       ],
       validationCommands: ["npm run typecheck", "npm run test"],
-      targetProject: "AI Kingdom",
+      projectId: matter.projectId,
+      targetProject: matter.projectId ? null : "AI Kingdom",
       sourceType: "MATTER",
       sourceId: matter.id,
       status: "READY",
@@ -243,6 +247,7 @@ export async function preventContextDrift(workOrderId: string) {
   const projectStatus = readProjectDoc("PROJECT_STATUS.md");
   const architecture = readProjectDoc("ARCHITECTURE.md");
   const nextTask = readProjectDoc("NEXT_TASK.md");
+  const linkedProjectContext = workOrder.projectId ? await buildProjectContext(workOrder.projectId) : null;
 
   return {
     kingdomContext: [
@@ -250,13 +255,20 @@ export async function preventContextDrift(workOrderId: string) {
       `Kingdom Vision: ${summarize(vision?.content ?? "Build a durable AI Kingdom command center.")}`,
       `Current strategic goal: ${summarize(nextTask)}`
     ].join("\n"),
-    projectContext: [
-      "Relevant project name: AI Kingdom",
-      `Current milestone/status: ${summarize(projectStatus)}`,
-      `Architecture summary: ${summarize(architecture)}`,
-      `Decision constraints: ${defaultConstraints()}`,
-      `Remaining work: ${workOrder.context ? summarize(workOrder.context) : "Complete this work order and report outcomes."}`
-    ].join("\n")
+    projectContext: linkedProjectContext
+      ? [
+        linkedProjectContext,
+        `Architecture summary: ${summarize(architecture)}`,
+        `Decision constraints: ${defaultConstraints()}`,
+        `Remaining work: ${workOrder.context ? summarize(workOrder.context) : "Complete this work order and report outcomes."}`
+      ].join("\n")
+      : [
+        "No project assigned. Avoid project-specific assumptions.",
+        `Current milestone/status: ${summarize(projectStatus)}`,
+        `Architecture summary: ${summarize(architecture)}`,
+        `Decision constraints: ${defaultConstraints()}`,
+        `Remaining work: ${workOrder.context ? summarize(workOrder.context) : "Complete this work order and report outcomes."}`
+      ].join("\n")
   };
 }
 
@@ -293,9 +305,10 @@ export async function createHandoffBrief(workOrderId: string) {
     "Continue only within this handoff. Preserve AI Kingdom as the source of truth and report back in the required final response format."
   ].join("\n\n"));
 
-  return prisma.handoffBrief.create({
+  const handoffBrief = await prisma.handoffBrief.create({
     data: {
       workOrderId: workOrder.id,
+      projectId: workOrder.projectId,
       fromWorkSessionId: latestSession?.id,
       title: `Handoff: ${workOrder.title}`,
       currentStatus: String(workOrder.status),
@@ -309,6 +322,18 @@ export async function createHandoffBrief(workOrderId: string) {
       handoffPrompt
     }
   });
+
+  await createArtifact({
+    projectId: workOrder.projectId,
+    title: handoffBrief.title,
+    type: "HANDOFF_BRIEF",
+    content: handoffBrief.handoffPrompt,
+    sourceType: "HANDOFF_BRIEF",
+    sourceId: handoffBrief.id,
+    tags: ["handoff", "work-order"]
+  }).catch(() => undefined);
+
+  return handoffBrief;
 }
 
 export async function createImplementationReport(input: {
@@ -326,9 +351,13 @@ export async function createImplementationReport(input: {
   nextRecommendedAction?: string | null;
   rawOutput?: string | null;
 }) {
+  const workOrder = await prisma.workOrder.findUnique({ where: { id: input.workOrderId } });
+  if (!workOrder) throw notFound("Work order not found");
+
   const report = await prisma.implementationReport.create({
     data: {
       ...input,
+      projectId: workOrder.projectId,
       summary: redact(input.summary),
       filesChanged: input.filesChanged ?? [],
       commandsRun: input.commandsRun ?? [],
@@ -347,6 +376,15 @@ export async function createImplementationReport(input: {
     data: { status: "NEEDS_REVIEW" }
   });
   await createDecisionMemories(report);
+  await createArtifact({
+    projectId: workOrder.projectId,
+    title: `Implementation Report: ${workOrder.title}`,
+    type: "IMPLEMENTATION_REPORT",
+    content: report.summary,
+    sourceType: "IMPLEMENTATION_REPORT",
+    sourceId: report.id,
+    tags: ["implementation-report", "work-order"]
+  }).catch(() => undefined);
   return report;
 }
 
@@ -376,6 +414,7 @@ export async function createWorkOrderCompletionReport(workOrderId: string) {
       category: "GENERAL",
       importance: workOrder.priority === "CRITICAL" || workOrder.priority === "HIGH" ? "HIGH" : "MEDIUM",
       tags: ["work-order", workOrder.status.toLowerCase()],
+      projectId: workOrder.projectId,
       createdBy: workOrder.createdByUserId
     }
   });
@@ -406,6 +445,7 @@ async function createDecisionMemories(report: ImplementationReport) {
         source: "implementation-report",
         tags: ["work-order", "external-agent"],
         importance: workOrder.priority === "CRITICAL" ? "CRITICAL" : "HIGH",
+        projectId: workOrder.projectId,
         createdBy: workOrder.createdByUserId
       }
     });

@@ -9,6 +9,7 @@ const memorySchema = z.object({
   type: z.enum(["DECISION", "FACT", "PREFERENCE", "CONSTRAINT", "PROJECT_NOTE", "LESSON"]).default("PROJECT_NOTE"),
   title: z.string().trim().min(1, "Memory title is required").max(160),
   content: z.string().trim().min(1, "Memory content is required").max(1200),
+  projectId: z.string().optional().nullable(),
   sourceTaskId: z.string().optional().nullable(),
   sourceCouncilSessionId: z.string().optional().nullable(),
   tags: z.array(z.string().trim().min(1).max(32)).max(12).default([]),

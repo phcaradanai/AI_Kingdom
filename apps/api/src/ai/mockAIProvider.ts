@@ -7,15 +7,17 @@ export class MockAIProvider implements AIProvider {
   async generateAgentResponse(input: GenerateAgentResponseInput): Promise<AgentResponseResult> {
     const context = input.previousCouncilContext ? " Existing council context has been considered." : "";
     const memory = input.kingdomMemoryContext ? " Kingdom Memory Context was consulted." : "";
+    const project = input.projectContext ? " Project Context was consulted." : "";
     const charter = input.kingdomContext ? " Operating under Kingdom Charter and Vision." : "";
     const skills = input.agentSkills.length > 0 ? input.agentSkills.slice(0, 3).join(", ") : input.agentRole;
 
-    const response = `${input.agentRole} counsel from ${input.agentName}: for this ${input.mode} decree, apply ${skills}. ${mockGuidance(input.agentRole)}${charter}${memory}${context} Royal command: "${input.command}"`;
+    const response = `${input.agentRole} counsel from ${input.agentName}: for this ${input.mode} decree, apply ${skills}. ${mockGuidance(input.agentRole)}${charter}${project}${memory}${context} Royal command: "${input.command}"`;
 
     const promptText = [
       input.systemPrompt,
       input.command,
       input.kingdomContext ?? "",
+      input.projectContext ?? "",
       input.previousCouncilContext ?? "",
       input.kingdomMemoryContext ?? ""
     ].join(" ");

@@ -8,6 +8,7 @@ const reportSchema = z.object({
   title: z.string().trim().min(1, "Report title is required").max(180),
   summary: z.string().trim().min(1, "Report summary is required").max(2000),
   content: z.string().trim().min(1, "Report content is required").max(12000),
+  projectId: z.string().optional().nullable(),
   sourceTaskId: z.string().optional().nullable(),
   sourceCouncilSessionId: z.string().optional().nullable(),
   category: z.enum(["STRATEGY", "RESEARCH", "ARCHITECTURE", "FINANCE", "GENERAL", "OTHER"]).default("GENERAL"),

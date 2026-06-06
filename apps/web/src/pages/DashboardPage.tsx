@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ClipboardList, Landmark, Scroll, ScrollText, Shield, Vault } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, ClipboardList, FolderKanban, Inbox, Landmark, Scroll, ScrollText, Shield, Vault } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { HandoffBriefDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
+import type { HandoffBriefDto, ProjectDto, ProjectInboxItemDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
 
 const SEVERITY_COLORS = {
   critical: "text-red-400 bg-red-500/10 border-red-500/30",
@@ -39,13 +39,17 @@ export function DashboardPage() {
   const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
   const [handoffBriefs, setHandoffBriefs] = useState<HandoffBriefDto[]>([]);
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [projectInbox, setProjectInbox] = useState<ProjectInboxItemDto[]>([]);
 
   useEffect(() => {
     api.secretaryBrief().then(setBrief).catch(() => undefined);
-    Promise.all([api.workOrders(), api.handoffBriefs()])
-      .then(([orders, handoffs]) => {
+    Promise.all([api.workOrders(), api.handoffBriefs(), api.projects(), api.projectInbox({ status: "PENDING" })])
+      .then(([orders, handoffs, projectResponse, inboxResponse]) => {
         setWorkOrders(orders.workOrders);
         setHandoffBriefs(handoffs.handoffBriefs);
+        setProjects(projectResponse.projects);
+        setProjectInbox(inboxResponse.inboxItems);
       })
       .catch(() => undefined);
   }, []);
@@ -181,6 +185,38 @@ export function DashboardPage() {
           )}
         </div>
       )}
+
+      <Card className="mt-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg">Project Overview</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Workspace routing health and active kingdom initiatives.</p>
+          </div>
+          <Link to="/projects">
+            <Button variant="outline">
+              <FolderKanban className="h-4 w-4" />
+              Create Project
+            </Button>
+          </Link>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <StatusPill value={projects.filter((project) => project.status === "ACTIVE").length} label="Active Projects" />
+          <StatusPill value={projectInbox.length} label="Inbox Items" warn />
+          <StatusPill value={brief?.kingdomStatus.criticalMatters ?? 0} label="Critical Matters" warn />
+        </div>
+        <div className="mt-4 grid gap-3 xl:grid-cols-2">
+          {projects.slice(0, 3).map((project) => (
+            <Link key={project.id} to={`/projects/${project.id}`} className="rounded-md border border-border bg-muted/30 p-3 text-sm transition hover:border-primary/50">
+              <div className="font-medium">{project.name}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{project.activeMilestone || project.priority}</div>
+            </Link>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link to="/project-inbox"><Button variant="outline"><Inbox className="h-4 w-4" />Review Project Inbox</Button></Link>
+          <Link to="/artifacts"><Button variant="outline"><Archive className="h-4 w-4" />Create Artifact</Button></Link>
+        </div>
+      </Card>
 
       <Card className="mt-6">
         <div className="flex flex-wrap items-center justify-between gap-3">

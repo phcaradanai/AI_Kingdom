@@ -176,8 +176,49 @@ enum ImplementationTestResult {
   PARTIAL
 }
 
+enum ProjectStatus {
+  ACTIVE
+  PAUSED
+  COMPLETED
+  ARCHIVED
+}
+
+enum ProjectPriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ProjectRoutingStatus {
+  SUGGESTED
+  CONFIRMED
+  REJECTED
+  NEEDS_REVIEW
+}
+
+enum ProjectInboxStatus {
+  PENDING
+  ASSIGNED
+  DISMISSED
+}
+
+enum ArtifactType {
+  PROMPT
+  SPEC
+  DECISION
+  IMPLEMENTATION_REPORT
+  HANDOFF_BRIEF
+  ARCHITECTURE_NOTE
+  MARKET_RESEARCH
+  CODE_PLAN
+  ROYAL_DECREE
+  GENERAL_NOTE
+}
+
 model Notice {
   id               String         @id @default(cuid())
+  projectId        String?
   title            String
   content          String
   severity         NoticeSeverity @default(INFO)
@@ -187,10 +228,12 @@ model Notice {
   createdByAgentId String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
 }
 
 model Matter {
   id               String         @id @default(cuid())
+  projectId        String?
   title            String
   description      String
   status           MatterStatus   @default(DETECTED)
@@ -201,6 +244,7 @@ model Matter {
   assignedAgentId  String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
+  project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
 }
 
 model User {
@@ -219,6 +263,7 @@ model User {
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   workOrders    WorkOrder[]
+  ownedProjects Project[]
 }
 
 model RefreshToken {
@@ -285,8 +330,81 @@ model ExternalAgent {
   implementationReports ImplementationReport[]
 }
 
+model Project {
+  id                String          @id @default(cuid())
+  name              String          @unique
+  codename          String?
+  description       String          @default("")
+  status            ProjectStatus   @default(ACTIVE)
+  priority          ProjectPriority @default(MEDIUM)
+  goals             String[]        @default([])
+  keywords          String[]        @default([])
+  aliases           String[]        @default([])
+  repositoryUrl     String?
+  localPath         String?
+  activeMilestone   String?
+  ownerUserId       String?
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  owner             User?           @relation(fields: [ownerUserId], references: [id], onDelete: SetNull)
+  tasks             Task[]
+  matters           Matter[]
+  notices           Notice[]
+  councilSessions   CouncilSession[]
+  reports           Report[]
+  memories          Memory[]
+  workOrders        WorkOrder[]
+  implementationReports ImplementationReport[]
+  handoffBriefs     HandoffBrief[]
+  artifacts         Artifact[]
+  routingCandidates ProjectRoutingCandidate[]
+}
+
+model ProjectRoutingCandidate {
+  id                 String               @id @default(cuid())
+  sourceType         String
+  sourceId           String
+  suggestedProjectId String?
+  confidenceScore    Int
+  reason             String
+  status             ProjectRoutingStatus @default(SUGGESTED)
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
+  suggestedProject   Project?             @relation(fields: [suggestedProjectId], references: [id], onDelete: SetNull)
+}
+
+model ProjectInboxItem {
+  id                  String             @id @default(cuid())
+  sourceType          String
+  sourceId            String
+  title               String
+  summary             String
+  candidateProjectIds String[]           @default([])
+  status              ProjectInboxStatus @default(PENDING)
+  assignedProjectId   String?
+  confidenceScore     Int?
+  reason              String?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+model Artifact {
+  id         String       @id @default(cuid())
+  projectId  String?
+  title      String
+  type       ArtifactType @default(GENERAL_NOTE)
+  content    String
+  sourceType String?
+  sourceId   String?
+  tags       String[]     @default([])
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+  project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
+}
+
 model WorkOrder {
   id                      String                 @id @default(cuid())
+  projectId               String?
   title                   String
   objective               String
   context                 String                 @default("")
@@ -305,6 +423,7 @@ model WorkOrder {
   createdByAgentId        String?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
+  project                 Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
   assignedExternalAgent   ExternalAgent?         @relation(fields: [assignedExternalAgentId], references: [id], onDelete: SetNull)
   createdByUser           User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   workSessions            WorkSession[]
@@ -332,6 +451,7 @@ model WorkSession {
 
 model ImplementationReport {
   id                    String                   @id @default(cuid())
+  projectId             String?
   workOrderId           String
   workSessionId         String?
   externalAgentId       String?
@@ -347,6 +467,7 @@ model ImplementationReport {
   rawOutput             String?
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
+  project               Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
   workOrder             WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   workSession           WorkSession?             @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   externalAgent         ExternalAgent?           @relation(fields: [externalAgentId], references: [id], onDelete: SetNull)
@@ -354,6 +475,7 @@ model ImplementationReport {
 
 model HandoffBrief {
   id                     String       @id @default(cuid())
+  projectId              String?
   workOrderId            String
   fromWorkSessionId      String?
   title                  String
@@ -368,6 +490,7 @@ model HandoffBrief {
   handoffPrompt          String
   createdAt              DateTime     @default(now())
   updatedAt              DateTime     @updatedAt
+  project                Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
   workOrder              WorkOrder    @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   fromWorkSession        WorkSession? @relation(fields: [fromWorkSessionId], references: [id], onDelete: SetNull)
 }
@@ -414,6 +537,7 @@ model Setting {
 
 model Task {
   id            String          @id @default(cuid())
+  projectId     String?
   createdBy     String          @map("userId")
   title         String
   command       String
@@ -421,6 +545,7 @@ model Task {
   status        TaskStatus      @default(PENDING)
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+  project       Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   user          User            @relation(fields: [createdBy], references: [id], onDelete: Cascade)
   sessions      CouncilSession[]
   reports       Report[]
@@ -430,6 +555,7 @@ model Task {
 model CouncilSession {
   id                 String               @id @default(cuid())
   taskId             String
+  projectId          String?
   status             CouncilSessionStatus @default(PENDING)
   selectedAgentIds   String[]
   finalSummary       String?
@@ -440,6 +566,7 @@ model CouncilSession {
   autoSavedMemoryIds String[]             @default([])
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
+  project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
   task               Task                 @relation(fields: [taskId], references: [id], onDelete: Cascade)
   responses          AgentResponse[]
   reports            Report[]
@@ -500,6 +627,7 @@ model Budget {
 
 model Report {
   id                     String           @id @default(cuid())
+  projectId              String?
   title                  String
   summary                String
   content                String           @default("")
@@ -511,6 +639,7 @@ model Report {
   createdBy              String           @map("userId")
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @default(now()) @updatedAt
+  project                Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   task                   Task?            @relation(fields: [sourceTaskId], references: [id], onDelete: SetNull)
   councilSession         CouncilSession?  @relation(fields: [sourceCouncilSessionId], references: [id], onDelete: SetNull)
   user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
@@ -518,6 +647,7 @@ model Report {
 
 model Memory {
   id                     String           @id @default(cuid())
+  projectId              String?
   type                   MemoryType       @default(PROJECT_NOTE)
   title                  String
   content                String
@@ -529,6 +659,7 @@ model Memory {
   createdBy              String           @map("userId")
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @default(now()) @updatedAt
+  project                Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
 

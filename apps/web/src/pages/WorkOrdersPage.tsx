@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { ExternalAgentDto, ImplementationReportPayload, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { ExternalAgentDto, ImplementationReportPayload, ProjectDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const blankWorkOrder: WorkOrderPayload = {
   title: "",
@@ -43,6 +43,7 @@ export function WorkOrdersPage() {
   const canReport = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
   const [externalAgents, setExternalAgents] = useState<ExternalAgentDto[]>([]);
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<WorkOrderPayload>(blankWorkOrder);
   const [reportDraft, setReportDraft] = useState(blankReport);
@@ -57,12 +58,14 @@ export function WorkOrdersPage() {
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
 
   async function load() {
-    const [orders, agents] = await Promise.all([
+    const [orders, agents, projectResponse] = await Promise.all([
       api.workOrders({ status: statusFilter || undefined, priority: priorityFilter || undefined, externalAgentId: agentFilter || undefined }),
-      api.externalAgents()
+      api.externalAgents(),
+      api.projects()
     ]);
     setWorkOrders(orders.workOrders);
     setExternalAgents(agents.externalAgents);
+    setProjects(projectResponse.projects);
   }
 
   useEffect(() => {
@@ -221,6 +224,10 @@ export function WorkOrdersPage() {
                   <option value="">Assign external agent</option>
                   {externalAgents.filter((agent) => agent.isActive).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                 </select>
+                <select disabled={!canCreate} className="h-10 rounded-md border border-border bg-input px-3 text-sm sm:col-span-2" value={draft.projectId ?? ""} onChange={(e) => setDraft({ ...draft, projectId: e.target.value || null })}>
+                  <option value="">Auto-route project</option>
+                  {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                </select>
               </div>
               <Input disabled={!canCreate} value={draft.acceptanceCriteria?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, acceptanceCriteria: lines(e.target.value) })} placeholder="Acceptance criteria, one per line" />
               <Input disabled={!canCreate} value={draft.validationCommands?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, validationCommands: lines(e.target.value) })} placeholder="Validation commands, one per line" />
@@ -302,6 +309,7 @@ function toPayload(order: WorkOrderDto): WorkOrderPayload {
     constraints: order.constraints,
     acceptanceCriteria: order.acceptanceCriteria,
     validationCommands: order.validationCommands,
+    projectId: order.projectId,
     targetProject: order.targetProject,
     targetRepository: order.targetRepository,
     sourceType: order.sourceType,
@@ -317,6 +325,7 @@ function cleanWorkOrder(order: WorkOrderPayload): WorkOrderPayload {
     ...order,
     acceptanceCriteria: order.acceptanceCriteria ?? [],
     validationCommands: order.validationCommands ?? [],
+    projectId: order.projectId || null,
     assignedExternalAgentId: order.assignedExternalAgentId || null
   };
 }

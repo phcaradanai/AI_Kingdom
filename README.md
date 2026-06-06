@@ -252,6 +252,59 @@ Required final response format for external agents:
 
 Implementation reports can create concise decision memories when decisions are provided. Huge raw outputs and secrets are not saved as memories. Completing a work order creates a Royal Report summary when the work order has a user owner.
 
+## Project Workspace
+
+M14 makes the Kingdom project-aware. A project is a long-running asset or initiative such as AI Kingdom, Godot Tower Defense, Admin Dashboard Boilerplate, E-commerce Inventory Boilerplate, or Backend Go Services. Tasks, matters, notices, council sessions, reports, memories, work orders, implementation reports, handoff briefs, and artifacts can all link to a project, but the link is optional so unassigned work remains valid.
+
+Seeded projects are idempotent and created by `npm run db:seed` or the `/projects` API when needed.
+
+Use `/projects` to:
+
+- Search projects by name, alias, or keyword
+- Create or edit project metadata
+- Set status, priority, goals, keywords, aliases, repository URL, local path, and active milestone
+- Open a project workspace at `/projects/:id`
+
+Use `/projects/:id` to review linked tasks, matters, work orders, reports, memories, artifacts, recent decisions, active milestone, and project counts.
+
+### Royal Secretary Project Routing
+
+When a task, matter, notice, or work order is created without a project, the Royal Secretary classifies it using deterministic matching:
+
+- Project name and codename
+- Aliases
+- Keywords
+- Existing source ancestry, such as a work order generated from a project-linked task
+
+Confidence behavior:
+
+- `>= 80`: auto-assign to the project and record a confirmed routing candidate.
+- `50-79`: create a suggested routing candidate and place the item in Project Inbox.
+- `< 50`: place the item in Project Inbox and leave the source unassigned.
+
+Every decision includes a reason, for example: `Matched AI Kingdom because keyword 'provider', keyword 'agent', keyword 'work order'.`
+
+Use `/project-inbox` to review low-confidence items, assign them to a project, or dismiss them. The router does not use embeddings or a vector database yet, and it does not run autonomous background workers.
+
+### Artifact Vault and Obsidian Export
+
+Artifacts are reusable project knowledge objects. Supported types:
+
+- `PROMPT`
+- `SPEC`
+- `DECISION`
+- `IMPLEMENTATION_REPORT`
+- `HANDOFF_BRIEF`
+- `ARCHITECTURE_NOTE`
+- `MARKET_RESEARCH`
+- `CODE_PLAN`
+- `ROYAL_DECREE`
+- `GENERAL_NOTE`
+
+Use `/artifacts` to create, filter, edit, and read markdown content linked to a project. Artifact creation rejects obvious secrets, and exports redact token/API-key-like values.
+
+Project export v1 returns an Obsidian-friendly JSON payload rather than writing files automatically. The payload contains `index.md`, `project-status.md`, `architecture.md`, `decisions.md`, `reports.md`, `work-orders.md`, `memories.md`, and `artifacts.md`, with wikilinks such as `[[project-status]]`.
+
 ## Useful Commands
 
 ```bash

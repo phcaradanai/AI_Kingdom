@@ -1,6 +1,7 @@
 import type { MatterCategory, MatterPriority, MatterStatus, NoticeSeverity, NoticeStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { getCharter, getVision } from "./charterService.js";
+import { routeProjectForSource } from "./projectRoutingService.js";
 import { getTreasuryOverview } from "./treasuryService.js";
 
 const TERMINAL_MATTER_STATUSES: MatterStatus[] = ["REJECTED", "COMPLETED"];
@@ -14,6 +15,7 @@ export type NoticeInput = {
   sourceType?: string;
   sourceId?: string;
   createdByAgentId?: string;
+  projectId?: string;
 };
 
 export async function createNotice(input: NoticeInput) {
@@ -28,8 +30,9 @@ export async function createNotice(input: NoticeInput) {
   });
   if (existing) return existing;
 
-  return prisma.notice.create({
+  const notice = await prisma.notice.create({
     data: {
+      projectId: input.projectId,
       title: input.title,
       content: input.content,
       severity: input.severity ?? "INFO",
@@ -38,6 +41,10 @@ export async function createNotice(input: NoticeInput) {
       createdByAgentId: input.createdByAgentId
     }
   });
+  if (!input.projectId) {
+    await routeProjectForSource({ title: notice.title, content: notice.content, sourceType: "NOTICE", sourceId: notice.id }).catch(() => undefined);
+  }
+  return notice;
 }
 
 export type NoticeListParams = {
@@ -96,6 +103,7 @@ export type MatterInput = {
   sourceType?: string;
   sourceId?: string;
   assignedAgentId?: string;
+  projectId?: string;
 };
 
 export async function createMatter(input: MatterInput) {
@@ -111,8 +119,9 @@ export async function createMatter(input: MatterInput) {
     if (existing) return existing;
   }
 
-  return prisma.matter.create({
+  const matter = await prisma.matter.create({
     data: {
+      projectId: input.projectId,
       title: input.title,
       description: input.description,
       priority: input.priority ?? "MEDIUM",
@@ -122,6 +131,10 @@ export async function createMatter(input: MatterInput) {
       assignedAgentId: input.assignedAgentId
     }
   });
+  if (!input.projectId) {
+    await routeProjectForSource({ title: matter.title, content: matter.description, sourceType: "MATTER", sourceId: matter.id }).catch(() => undefined);
+  }
+  return matter;
 }
 
 export type MatterListParams = {

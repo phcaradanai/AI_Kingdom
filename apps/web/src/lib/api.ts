@@ -2,6 +2,8 @@ import type {
   AgentDto,
   AgentPayload,
   AIProviderDto,
+  ArtifactDto,
+  ArtifactPayload,
   AuditListResponse,
   AuditLogDto,
   AuthResponse,
@@ -19,6 +21,11 @@ import type {
   NoticeDto,
   NoticeSeverity,
   NoticeStatus,
+  ObsidianExportDto,
+  ProjectDto,
+  ProjectInboxItemDto,
+  ProjectOverviewDto,
+  ProjectPayload,
   SecretaryBriefDto,
   CouncilSessionDto,
   MemoryDto,
@@ -122,6 +129,54 @@ export const api = {
   updateExternalAgent: (id: string, payload: Partial<ExternalAgentPayload>) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteExternalAgent: (id: string) => apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "DELETE" }),
+  projects: (params?: { q?: string; status?: string; priority?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.q) search.set("q", params.q);
+    if (params?.status) search.set("status", params.status);
+    if (params?.priority) search.set("priority", params.priority);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ projects: ProjectDto[] }>(`/projects${suffix}`);
+  },
+  project: (id: string) => apiRequest<{ project: ProjectDto }>(`/projects/${id}`),
+  createProject: (payload: ProjectPayload) =>
+    apiRequest<{ project: ProjectDto }>("/projects", { method: "POST", body: JSON.stringify(payload) }),
+  updateProject: (id: string, payload: Partial<ProjectPayload>) =>
+    apiRequest<{ project: ProjectDto }>(`/projects/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteProject: (id: string) => apiRequest<void>(`/projects/${id}`, { method: "DELETE" }),
+  projectOverview: (id: string) => apiRequest<ProjectOverviewDto>(`/projects/${id}/overview`),
+  projectTasks: (id: string) => apiRequest<{ tasks: TaskDto[] }>(`/projects/${id}/tasks`),
+  projectMatters: (id: string) => apiRequest<{ matters: MatterDto[] }>(`/projects/${id}/matters`),
+  projectWorkOrders: (id: string) => apiRequest<{ workOrders: WorkOrderDto[] }>(`/projects/${id}/work-orders`),
+  projectReports: (id: string) => apiRequest<{ reports: ReportDto[] }>(`/projects/${id}/reports`),
+  projectMemories: (id: string) => apiRequest<{ memories: MemoryDto[] }>(`/projects/${id}/memories`),
+  projectArtifacts: (id: string) => apiRequest<{ artifacts: ArtifactDto[] }>(`/projects/${id}/artifacts`),
+  exportProjectObsidian: (id: string) => apiRequest<ObsidianExportDto>(`/projects/${id}/export/obsidian`, { method: "POST" }),
+  projectInbox: (params?: { status?: string }) => {
+    const suffix = params?.status ? `?status=${encodeURIComponent(params.status)}` : "";
+    return apiRequest<{ inboxItems: ProjectInboxItemDto[] }>(`/project-inbox${suffix}`);
+  },
+  assignProjectInboxItem: (id: string, projectId: string) =>
+    apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/assign`, { method: "PATCH", body: JSON.stringify({ projectId }) }),
+  dismissProjectInboxItem: (id: string) =>
+    apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/dismiss`, { method: "PATCH" }),
+  classifyProject: (payload: { title: string; content: string; sourceType: string; sourceId: string; persist?: boolean }) =>
+    apiRequest<unknown>("/project-routing/classify", { method: "POST", body: JSON.stringify(payload) }),
+  assignProjectRoute: (payload: { sourceType: string; sourceId: string; projectId: string }) =>
+    apiRequest<{ assigned: boolean }>("/project-routing/assign", { method: "POST", body: JSON.stringify(payload) }),
+  artifacts: (params?: { projectId?: string; type?: string; tag?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.projectId) search.set("projectId", params.projectId);
+    if (params?.type) search.set("type", params.type);
+    if (params?.tag) search.set("tag", params.tag);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ artifacts: ArtifactDto[] }>(`/artifacts${suffix}`);
+  },
+  artifact: (id: string) => apiRequest<{ artifact: ArtifactDto }>(`/artifacts/${id}`),
+  createArtifact: (payload: ArtifactPayload) =>
+    apiRequest<{ artifact: ArtifactDto }>("/artifacts", { method: "POST", body: JSON.stringify(payload) }),
+  updateArtifact: (id: string, payload: Partial<ArtifactPayload>) =>
+    apiRequest<{ artifact: ArtifactDto }>(`/artifacts/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteArtifact: (id: string) => apiRequest<void>(`/artifacts/${id}`, { method: "DELETE" }),
   workOrders: (params?: { status?: string; priority?: string; externalAgentId?: string }) => {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);
@@ -156,7 +211,7 @@ export const api = {
       body: JSON.stringify({ value })
     }),
   tasks: () => apiRequest<{ tasks: TaskDto[] }>("/tasks"),
-  createTask: (payload: { command: string; mode: TaskMode; title?: string }) =>
+  createTask: (payload: { command: string; mode: TaskMode; title?: string; projectId?: string | null }) =>
     apiRequest<{ task: TaskDto }>("/tasks", {
       method: "POST",
       body: JSON.stringify(payload)
@@ -247,7 +302,7 @@ export const api = {
     return apiRequest<{ notices: NoticeDto[]; total: number; page: number; limit: number }>(`/notices${suffix}`);
   },
   notice: (id: string) => apiRequest<{ notice: NoticeDto }>(`/notices/${id}`),
-  createNotice: (payload: { title: string; content: string; severity?: NoticeSeverity; sourceType?: string; sourceId?: string }) =>
+  createNotice: (payload: { title: string; content: string; severity?: NoticeSeverity; projectId?: string | null; sourceType?: string; sourceId?: string }) =>
     apiRequest<{ notice: NoticeDto }>("/notices", { method: "POST", body: JSON.stringify(payload) }),
   updateNotice: (id: string, payload: Partial<{ status: NoticeStatus; title: string; content: string; severity: NoticeSeverity }>) =>
     apiRequest<{ notice: NoticeDto }>(`/notices/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
@@ -263,7 +318,7 @@ export const api = {
     return apiRequest<{ matters: MatterDto[]; total: number; page: number; limit: number }>(`/matters${suffix}`);
   },
   matter: (id: string) => apiRequest<{ matter: MatterDto }>(`/matters/${id}`),
-  createMatter: (payload: { title: string; description: string; priority?: MatterPriority; category?: MatterCategory; sourceType?: string; sourceId?: string }) =>
+  createMatter: (payload: { title: string; description: string; priority?: MatterPriority; category?: MatterCategory; projectId?: string | null; sourceType?: string; sourceId?: string }) =>
     apiRequest<{ matter: MatterDto }>("/matters", { method: "POST", body: JSON.stringify(payload) }),
   updateMatter: (id: string, payload: Partial<{ status: MatterStatus; priority: MatterPriority; category: MatterCategory; title: string; description: string; assignedAgentId: string | null }>) =>
     apiRequest<{ matter: MatterDto }>(`/matters/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),

@@ -53,6 +53,7 @@ test("extract memory candidates limits concise meaningful memories", () => {
   const now = new Date();
   const task: Task = {
     id: "task-1",
+    projectId: null,
     createdBy: "user-1",
     title: "Memory milestone",
     command: "Build memory search and keep council context concise.",
@@ -64,6 +65,7 @@ test("extract memory candidates limits concise meaningful memories", () => {
   const session: CouncilSession = {
     id: "session-1",
     taskId: "task-1",
+    projectId: null,
     status: "COMPLETED",
     selectedAgentIds: [],
     finalSummary: "Council recommends a concise memory layer. The main constraint is avoiding secrets and huge raw outputs.",

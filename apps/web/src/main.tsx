@@ -11,6 +11,10 @@ import { MattersPage } from "@/pages/MattersPage";
 import { NoticesPage } from "@/pages/NoticesPage";
 import { VisionPage } from "@/pages/VisionPage";
 import { WorkOrdersPage } from "@/pages/WorkOrdersPage";
+import { ProjectsPage } from "@/pages/ProjectsPage";
+import { ProjectDetailPage } from "@/pages/ProjectDetailPage";
+import { ProjectInboxPage } from "@/pages/ProjectInboxPage";
+import { ArtifactsPage } from "@/pages/ArtifactsPage";
 import { CouncilPage } from "@/pages/CouncilPage";
 import { DashboardPage } from "@/pages/DashboardPage";
 import { LoginPage } from "@/pages/LoginPage";
@@ -43,6 +47,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/agents" element={<AgentsPage />} />
           <Route path="/external-agents" element={<ExternalAgentsPage />} />
           <Route path="/work-orders" element={<WorkOrdersPage />} />
+          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/projects/:id" element={<ProjectDetailPage />} />
+          <Route path="/project-inbox" element={<ProjectInboxPage />} />
+          <Route path="/artifacts" element={<ArtifactsPage />} />
           <Route path="/reports" element={<ReportsPage />} />
           <Route path="/memory" element={<MemoryPage />} />
           <Route path="/users" element={<UsersPage />} />

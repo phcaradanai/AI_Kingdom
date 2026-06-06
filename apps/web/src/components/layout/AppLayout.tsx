@@ -1,4 +1,4 @@
-import { Bell, BookOpen, Bot, ClipboardList, Coins, Cpu, Crown, Eye, Landmark, LogOut, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault } from "lucide-react";
+import { Archive, Bell, BookOpen, Bot, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LogOut, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault } from "lucide-react";
 import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,9 @@ const navItems = [
   { to: "/throne-room", label: "Royal Command", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
   { to: "/notices", label: "Notices", icon: Bell, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
   { to: "/matters", label: "Matters", icon: Landmark, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/projects", label: "Projects", icon: FolderKanban, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/project-inbox", label: "Project Inbox", icon: Inbox, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+  { to: "/artifacts", label: "Artifacts", icon: Archive, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
   { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
   { to: "/charter", label: "Charter", icon: BookOpen, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
   { to: "/vision", label: "Vision", icon: Eye, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },

@@ -34,7 +34,7 @@ router.get("/:id", async (req, res, next) => {
 
 router.post("/", requireRole("KING"), async (req, res, next) => {
   try {
-    const { title, description, priority, category, sourceType, sourceId, assignedAgentId } = req.body as {
+    const { title, description, priority, category, sourceType, sourceId, assignedAgentId, projectId } = req.body as {
       title: string;
       description: string;
       priority?: MatterPriority;
@@ -42,6 +42,7 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
       sourceType?: string;
       sourceId?: string;
       assignedAgentId?: string;
+      projectId?: string;
     };
     if (!title?.trim() || !description?.trim()) {
       res.status(400).json({ error: "title and description are required" });
@@ -54,7 +55,8 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
       ...(category !== undefined && { category }),
       ...(sourceType !== undefined && { sourceType }),
       ...(sourceId !== undefined && { sourceId }),
-      ...(assignedAgentId !== undefined && { assignedAgentId })
+      ...(assignedAgentId !== undefined && { assignedAgentId }),
+      ...(projectId !== undefined && { projectId })
     });
     res.status(201).json({ matter });
   } catch (error) {

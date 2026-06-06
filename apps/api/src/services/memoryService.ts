@@ -63,6 +63,7 @@ export async function autoSaveMemories(input: {
         ...candidate,
         content: trimContent(candidate.content, 700),
         sourceTaskId: input.task.id,
+        projectId: input.task.projectId,
         sourceCouncilSessionId: input.session.id,
         createdBy: input.userId
       }

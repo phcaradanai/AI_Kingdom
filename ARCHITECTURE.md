@@ -27,12 +27,17 @@ Primary services:
 - `kingdomComplianceService.ts`: `getKingdomContext()` loads charter + vision, auto-seeds from files if missing, never throws; returns empty string on failure so the orchestrator always proceeds.
 - `auditService.ts`: audit log writes for security-sensitive actions; read functions (`listAuditLogs`, `getAuditLogEntry`, `searchAuditLogs`) with filter/pagination support; `sanitizeMetadata` strips keys containing "password", "token", "apikey", "secret", "credential", "authorization", or "bearer" recursively before any response.
 - `externalAgentWorkOrderService.ts`: external executor bridge. Seeds manual handoff targets, generates work orders from tasks/matters, builds copy-paste prompts with charter/vision/project context, records implementation reports, creates handoff briefs, captures decision memories, and creates completion report summaries.
+- `projectService.ts`: seeds default projects, returns project overview counts, creates secret-checked artifacts, and generates Obsidian-friendly markdown export payloads.
+- `projectRoutingService.ts`: Royal Secretary project classifier. Uses deterministic keyword, alias, project name/codename, and source ancestry matching. Scores are explainable; confidence >=80 auto-assigns, 50-79 creates a suggested Project Inbox item, and <50 leaves the source unassigned for review.
+- `projectContextService.ts`: builds compact project context for agents: project identity, goals, status, active milestone, recent decisions/reports, open matters, active work orders, linked memories, and artifacts. Output is capped to avoid prompt bloat.
 
 ## Data Model
 
-Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `AIProvider`, `AIProviderRoute`, `ExternalAgent`, `WorkOrder`, `WorkSession`, `ImplementationReport`, `HandoffBrief`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, `Budget`, `KingdomCharter`, `KingdomVision`, `Notice`, and `Matter`.
+Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `AIProvider`, `AIProviderRoute`, `Project`, `ProjectRoutingCandidate`, `ProjectInboxItem`, `Artifact`, `ExternalAgent`, `WorkOrder`, `WorkSession`, `ImplementationReport`, `HandoffBrief`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, `Budget`, `KingdomCharter`, `KingdomVision`, `Notice`, and `Matter`.
 
 Tasks belong to users and may produce council sessions and reports. Council sessions store selected agent IDs, provider/model metadata, fallback notices, consulted memory IDs, auto-saved memory IDs, agent responses, and final summary. Reports and memories retain source task/session references when generated from council output.
+
+Projects are long-running kingdom assets. `Task`, `Matter`, `Notice`, `CouncilSession`, `Report`, `Memory`, `WorkOrder`, `ImplementationReport`, `HandoffBrief`, and `Artifact` have optional `projectId` links so unassigned work remains valid. `ProjectRoutingCandidate` records every explainable routing decision. `ProjectInboxItem` holds low-confidence or ambiguous items for royal confirmation. `Artifact` is the project-linkable knowledge vault for prompts, specs, decisions, implementation reports, handoff briefs, architecture notes, research, code plans, decrees, and general notes.
 
 External agents are execution workers, not internal council members. `WorkOrder` is the source-of-truth package; `WorkSession` records a manual execution attempt; `ImplementationReport` captures what the external app agent did; `HandoffBrief` packages the current state for another executor. Backend code never runs shell commands for these models and never calls Claude Code/Codex/Cline APIs.
 
@@ -42,7 +47,7 @@ External agents are execution workers, not internal council members. `WorkOrder`
 
 Authentication uses bcrypt password hashes, 15-minute JWT access tokens, and server-stored refresh token sessions. Logout revokes the active refresh token record; protected access checks both JWT validity and session state.
 
-RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/middleware/rbac.ts`. `/api/agents`, `/api/settings`, `/api/providers`, `/api/users`, `/api/treasury`, and `/api/audit` require `KING`. External agent writes are KING-only; work order writes and handoff generation are KING/CROWN_PRINCE; implementation report submission is KING/CROWN_PRINCE/MINISTER; SCRIBE is read-only. Core resource routes (`/api/tasks`, `/api/council`, `/api/reports`, `/api/memory`) apply per-method role checks: `KING` has full access; `CROWN_PRINCE` has tasks/council/reports/memory; `MINISTER` has tasks/reports; `SCRIBE` has read-only tasks/council/reports/memory. Frontend navigation mirrors these roles but is not the security boundary.
+RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/middleware/rbac.ts`. `/api/agents`, `/api/settings`, `/api/providers`, `/api/users`, `/api/treasury`, and `/api/audit` require `KING`. External agent writes are KING-only; work order writes and handoff generation are KING/CROWN_PRINCE; implementation report submission is KING/CROWN_PRINCE/MINISTER; SCRIBE is read-only. Project create/update and Project Inbox assignment are KING/CROWN_PRINCE, project delete/archive is KING-only, and artifact creation is KING/CROWN_PRINCE/MINISTER. Core resource routes (`/api/tasks`, `/api/council`, `/api/reports`, `/api/memory`) apply per-method role checks: `KING` has full access; `CROWN_PRINCE` has tasks/council/reports/memory; `MINISTER` has tasks/reports; `SCRIBE` has read-only tasks/council/reports/memory. Frontend navigation mirrors these roles but is not the security boundary.
 
 ## AI Provider Flow
 
@@ -58,7 +63,13 @@ Agent records contain prompts, skills, response style, priority, and optional pr
 
 ## Frontend Layout
 
-Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders the dark kingdom dashboard shell, role-aware navigation, role badge, and sign-out. `authStore` stores the current user, access token, and refresh token. `kingdomStore` loads permitted kingdom data and provides actions for tasks, council processing, reports, memories, agents, providers, and settings. `/external-agents` manages manual executor targets; `/work-orders` handles prompt generation, implementation report submission, and handoff copying.
+Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders the dark kingdom dashboard shell, role-aware navigation, role badge, and sign-out. `authStore` stores the current user, access token, and refresh token. `kingdomStore` loads permitted kingdom data and provides actions for tasks, council processing, reports, memories, agents, providers, and settings. `/external-agents` manages manual executor targets; `/work-orders` handles prompt generation, implementation report submission, and handoff copying. `/projects` manages project records, `/projects/:id` shows linked project workspace context and Obsidian export payloads, `/project-inbox` handles low-confidence routing review, and `/artifacts` manages the project knowledge vault.
+
+## Project Routing Flow
+
+When a task, matter, notice, or work order is created without an explicit `projectId`, the Royal Secretary routing service classifies the title/content against active project names, codenames, aliases, and keywords. High-confidence matches are assigned immediately and recorded as `CONFIRMED`. Medium-confidence matches create both a `ProjectRoutingCandidate` and pending `ProjectInboxItem`. Low-confidence matches create a pending inbox item and leave the source unassigned.
+
+Before council processing, the orchestrator injects compact project context when the task has `projectId`; otherwise it adds an explicit warning that no project is assigned and project-specific assumptions should be avoided. External work-order prompts use the same project context builder.
 
 ## Deployment
 

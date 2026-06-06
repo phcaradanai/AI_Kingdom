@@ -12,6 +12,7 @@ export type GenerateAgentResponseInput = {
   temperature?: number;
   maxTokens?: number;
   kingdomContext?: string;
+  projectContext?: string;
   kingdomMemoryContext?: string;
   previousCouncilContext?: string;
 };

@@ -96,6 +96,7 @@ export class OpenAICompatibleProvider implements AIProvider {
 export function buildSystemPrompt(input: GenerateAgentResponseInput): string {
   return [
     input.kingdomContext ? input.kingdomContext : "",
+    input.projectContext ? input.projectContext : "",
     input.systemPrompt,
     `Royal role: ${input.agentRole}`,
     `Skills: ${input.agentSkills.join(", ") || "general royal counsel"}`,

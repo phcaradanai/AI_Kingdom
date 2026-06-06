@@ -113,12 +113,107 @@ export type MemoryType = "DECISION" | "FACT" | "PREFERENCE" | "CONSTRAINT" | "PR
 export type MemoryImportance = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type ReportCategory = "STRATEGY" | "RESEARCH" | "ARCHITECTURE" | "FINANCE" | "GENERAL" | "OTHER";
 export type ReportImportance = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type ProjectStatus = "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
+export type ProjectPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type ProjectInboxStatus = "PENDING" | "ASSIGNED" | "DISMISSED";
+export type ArtifactType = "PROMPT" | "SPEC" | "DECISION" | "IMPLEMENTATION_REPORT" | "HANDOFF_BRIEF" | "ARCHITECTURE_NOTE" | "MARKET_RESEARCH" | "CODE_PLAN" | "ROYAL_DECREE" | "GENERAL_NOTE";
+
+export type ProjectDto = {
+  id: string;
+  name: string;
+  codename: string | null;
+  description: string;
+  status: ProjectStatus;
+  priority: ProjectPriority;
+  goals: string[];
+  keywords: string[];
+  aliases: string[];
+  repositoryUrl: string | null;
+  localPath: string | null;
+  activeMilestone: string | null;
+  ownerUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ProjectPayload = {
+  name: string;
+  codename?: string | null;
+  description?: string;
+  status?: ProjectStatus;
+  priority?: ProjectPriority;
+  goals?: string[];
+  keywords?: string[];
+  aliases?: string[];
+  repositoryUrl?: string | null;
+  localPath?: string | null;
+  activeMilestone?: string | null;
+  ownerUserId?: string | null;
+};
+
+export type ProjectInboxItemDto = {
+  id: string;
+  sourceType: string;
+  sourceId: string;
+  title: string;
+  summary: string;
+  candidateProjectIds: string[];
+  status: ProjectInboxStatus;
+  assignedProjectId: string | null;
+  confidenceScore: number | null;
+  reason: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ArtifactDto = {
+  id: string;
+  projectId: string | null;
+  title: string;
+  type: ArtifactType;
+  content: string;
+  sourceType: string | null;
+  sourceId: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  project?: ProjectDto | null;
+};
+
+export type ArtifactPayload = {
+  projectId?: string | null;
+  title: string;
+  type?: ArtifactType;
+  content: string;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  tags?: string[];
+};
+
+export type ProjectOverviewDto = {
+  project: ProjectDto;
+  counts: {
+    tasks: number;
+    matters: number;
+    workOrders: number;
+    reports: number;
+    memories: number;
+    artifacts: number;
+    criticalMatters: number;
+  };
+};
+
+export type ObsidianExportDto = {
+  project: { id: string; name: string };
+  files: Record<string, string>;
+};
 
 export type ReportDto = {
   id: string;
   title: string;
   summary: string;
   content: string;
+  projectId: string | null;
   sourceTaskId: string | null;
   sourceCouncilSessionId: string | null;
   category: ReportCategory;
@@ -141,6 +236,7 @@ export type ReportPayload = {
   title: string;
   summary: string;
   content: string;
+  projectId?: string | null;
   sourceTaskId?: string | null;
   sourceCouncilSessionId?: string | null;
   category: ReportCategory;
@@ -151,6 +247,7 @@ export type ReportPayload = {
 export type CouncilSessionDto = {
   id: string;
   taskId: string;
+  projectId: string | null;
   status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
   selectedAgentIds: string[];
   finalSummary: string | null;
@@ -172,6 +269,7 @@ export type TaskDto = {
   command: string;
   mode: TaskMode;
   status: TaskStatus;
+  projectId: string | null;
   createdBy: string;
   createdAt: string;
   updatedAt: string;
@@ -184,6 +282,7 @@ export type MemoryDto = {
   type: MemoryType;
   title: string;
   content: string;
+  projectId: string | null;
   sourceTaskId: string | null;
   sourceCouncilSessionId: string | null;
   tags: string[];
@@ -197,6 +296,7 @@ export type MemoryPayload = {
   type: MemoryType;
   title: string;
   content: string;
+  projectId?: string | null;
   sourceTaskId?: string | null;
   sourceCouncilSessionId?: string | null;
   tags: string[];
@@ -298,6 +398,7 @@ export type NoticeDto = {
   content: string;
   severity: NoticeSeverity;
   status: NoticeStatus;
+  projectId: string | null;
   sourceType: string | null;
   sourceId: string | null;
   createdByAgentId: string | null;
@@ -312,6 +413,7 @@ export type MatterDto = {
   status: MatterStatus;
   priority: MatterPriority;
   category: MatterCategory;
+  projectId: string | null;
   sourceType: string | null;
   sourceId: string | null;
   assignedAgentId: string | null;
@@ -385,6 +487,7 @@ export type WorkSessionDto = {
 export type ImplementationReportDto = {
   id: string;
   workOrderId: string;
+  projectId: string | null;
   workSessionId: string | null;
   externalAgentId: string | null;
   summary: string;
@@ -405,6 +508,7 @@ export type ImplementationReportDto = {
 export type HandoffBriefDto = {
   id: string;
   workOrderId: string;
+  projectId: string | null;
   fromWorkSessionId: string | null;
   title: string;
   currentStatus: string;
@@ -429,6 +533,7 @@ export type WorkOrderDto = {
   constraints: string;
   acceptanceCriteria: string[];
   validationCommands: string[];
+  projectId: string | null;
   targetProject: string | null;
   targetRepository: string | null;
   sourceType: string | null;
@@ -454,6 +559,7 @@ export type WorkOrderPayload = {
   constraints?: string;
   acceptanceCriteria?: string[];
   validationCommands?: string[];
+  projectId?: string | null;
   targetProject?: string | null;
   targetRepository?: string | null;
   sourceType?: string | null;

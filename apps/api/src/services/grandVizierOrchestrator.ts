@@ -7,6 +7,7 @@ import type { AIProviderConfig } from "./aiProviderRegistry.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getKingdomContext } from "./kingdomComplianceService.js";
 import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./memoryService.js";
+import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 
@@ -54,6 +55,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
   const session = await prisma.councilSession.create({
     data: {
       taskId: task.id,
+      projectId: task.projectId,
       status: "RUNNING",
       selectedAgentIds: selectedAgents.map((agent) => agent.id)
     }
@@ -69,6 +71,9 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
     const kingdomContext = await getKingdomContext();
+    const projectContext = task.projectId
+      ? await buildProjectContext(task.projectId)
+      : "[PROJECT CONTEXT]\nNo project assigned. Avoid project-specific assumptions.";
     const relevantMemories = await findRelevantMemories(userId, task.command, 5);
     const kingdomMemoryContext = formatMemoryContext(relevantMemories);
     const fallbackNotices: string[] = [];
@@ -90,6 +95,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         temperature: agent.temperature ?? undefined,
         maxTokens: agent.maxTokens ?? defaultMaxTokens,
         kingdomContext: kingdomContext || undefined,
+        projectContext,
         kingdomMemoryContext,
         previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
       });
@@ -152,6 +158,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       temperature: grandVizier.temperature ?? undefined,
       maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
       kingdomContext: kingdomContext || undefined,
+      projectContext,
       kingdomMemoryContext,
       previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
     });

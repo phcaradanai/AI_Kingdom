@@ -10,6 +10,7 @@ import {
   generateWorkOrderFromMatter,
   generateWorkOrderFromTask
 } from "../services/externalAgentWorkOrderService.js";
+import { routeProjectForSource } from "../services/projectRoutingService.js";
 
 const router = Router();
 
@@ -21,6 +22,7 @@ const workOrderSchema = z.object({
   constraints: z.string().trim().max(5000).default(""),
   acceptanceCriteria: z.array(z.string().trim().min(1).max(500)).max(50).default([]),
   validationCommands: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+  projectId: z.string().trim().max(120).optional().nullable(),
   targetProject: z.string().trim().max(200).optional().nullable(),
   targetRepository: z.string().trim().max(500).optional().nullable(),
   sourceType: z.string().trim().max(80).optional().nullable(),
@@ -77,8 +79,17 @@ router.post("/", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => 
       data: { ...payload, createdByUserId: req.user?.id },
       include
     });
+    if (!payload.projectId) {
+      await routeProjectForSource({
+        title: workOrder.title,
+        content: `${workOrder.objective}\n${workOrder.context}\n${workOrder.instructions}`,
+        sourceType: "WORK_ORDER",
+        sourceId: workOrder.id
+      }).catch(() => undefined);
+    }
     await auditLog({ userId: req.user?.id, action: "create_work_order", resourceType: "work_order", resourceId: workOrder.id, metadata: { status: workOrder.status } });
-    res.status(201).json({ workOrder });
+    const routedWorkOrder = await prisma.workOrder.findUnique({ where: { id: workOrder.id }, include });
+    res.status(201).json({ workOrder: routedWorkOrder ?? workOrder });
   } catch (error) {
     next(error);
   }
