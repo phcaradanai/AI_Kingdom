@@ -71,13 +71,186 @@ textarea {
   filter: saturate(0.9) contrast(1.04);
 }
 
+.agent-operation-card {
+  isolation: isolate;
+  border-color: rgba(214, 170, 87, 0.18);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.18);
+  transition: border-color 220ms ease, box-shadow 220ms ease, filter 220ms ease, transform 220ms ease;
+}
+
+.agent-operation-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+}
+
+.agent-op-idle {
+  background: linear-gradient(145deg, rgba(18, 25, 43, 0.72), rgba(13, 18, 31, 0.78));
+  filter: saturate(0.9);
+}
+
+.agent-op-idle .agent-op-dot {
+  animation: agent-dot-breathe 3.2s ease-in-out infinite;
+}
+
+.agent-op-thinking {
+  border-color: rgba(214, 170, 87, 0.36);
+  box-shadow: 0 0 0 1px rgba(214, 170, 87, 0.08), 0 20px 55px rgba(0, 0, 0, 0.22);
+  animation: agent-gold-border 2.8s ease-in-out infinite;
+}
+
+.agent-op-waiting-provider {
+  border-color: rgba(251, 191, 36, 0.38);
+  box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.08), 0 20px 55px rgba(0, 0, 0, 0.22);
+}
+
+.agent-op-waiting-provider .agent-op-dot,
+.agent-op-waiting-provider svg {
+  animation: agent-amber-pulse 2.2s ease-in-out infinite;
+}
+
+.agent-op-responding {
+  border-color: rgba(214, 170, 87, 0.34);
+}
+
+.agent-op-responding::after {
+  top: 0;
+  bottom: auto;
+  height: 1px;
+  opacity: 0.75;
+  background: linear-gradient(90deg, transparent, rgba(214, 170, 87, 0.68), transparent);
+  transform: translateX(-100%);
+  animation: agent-shimmer-line 3.2s ease-in-out infinite;
+}
+
+.agent-op-summarizing {
+  border-color: rgba(214, 170, 87, 0.4);
+  box-shadow: 0 0 28px rgba(214, 170, 87, 0.1), 0 20px 55px rgba(0, 0, 0, 0.2);
+}
+
+.agent-op-summarizing svg {
+  animation: agent-soft-glyph 2.4s ease-in-out infinite;
+}
+
+.agent-op-extracting-memory {
+  border-color: rgba(147, 197, 253, 0.28);
+  box-shadow: 0 0 26px rgba(96, 165, 250, 0.08), 0 20px 55px rgba(0, 0, 0, 0.2);
+}
+
+.agent-op-extracting-memory .agent-op-dot,
+.agent-op-extracting-memory svg {
+  animation: agent-vault-pulse 2.6s ease-in-out infinite;
+}
+
+.agent-op-generating-report {
+  border-color: rgba(214, 170, 87, 0.34);
+}
+
+.agent-op-generating-report svg {
+  animation: agent-document-pulse 2.6s ease-in-out infinite;
+}
+
+.agent-op-completed {
+  border-color: rgba(52, 211, 153, 0.28);
+  box-shadow: 0 0 26px rgba(52, 211, 153, 0.08), 0 20px 55px rgba(0, 0, 0, 0.18);
+}
+
+.agent-op-failed {
+  border-color: rgba(239, 68, 68, 0.42);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.08), 0 20px 55px rgba(0, 0, 0, 0.2);
+}
+
+@keyframes agent-dot-breathe {
+  0%, 100% {
+    opacity: 0.55;
+    box-shadow: 0 0 0 rgba(214, 170, 87, 0);
+    transform: scale(0.92);
+  }
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(214, 170, 87, 0.42);
+    transform: scale(1.12);
+  }
+}
+
+@keyframes agent-gold-border {
+  0%, 100% {
+    border-color: rgba(214, 170, 87, 0.28);
+    box-shadow: 0 0 0 1px rgba(214, 170, 87, 0.06), 0 20px 55px rgba(0, 0, 0, 0.22);
+  }
+  50% {
+    border-color: rgba(214, 170, 87, 0.52);
+    box-shadow: 0 0 0 1px rgba(214, 170, 87, 0.12), 0 0 30px rgba(214, 170, 87, 0.12), 0 20px 55px rgba(0, 0, 0, 0.22);
+  }
+}
+
+@keyframes agent-amber-pulse {
+  0%, 100% {
+    opacity: 0.7;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes agent-shimmer-line {
+  0% {
+    transform: translateX(-100%);
+  }
+  55%, 100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes agent-soft-glyph {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 rgba(214, 170, 87, 0));
+    opacity: 0.82;
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(214, 170, 87, 0.38));
+    opacity: 1;
+  }
+}
+
+@keyframes agent-vault-pulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 0 rgba(96, 165, 250, 0));
+    opacity: 0.78;
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(96, 165, 250, 0.34));
+    opacity: 1;
+  }
+}
+
+@keyframes agent-document-pulse {
+  0%, 100% {
+    transform: translateY(0);
+    opacity: 0.84;
+  }
+  50% {
+    transform: translateY(-1px);
+    opacity: 1;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .agent-status-idle,
   .agent-status-thinking,
   .agent-status-waiting-provider,
   .agent-status-responding,
   .agent-status-failed,
-  .agent-status-completed {
-    transition: none;
+  .agent-status-completed,
+  .agent-operation-card,
+  .agent-operation-card::after,
+  .agent-operation-card svg,
+  .agent-op-dot {
+    animation: none !important;
+    transition: none !important;
   }
 }

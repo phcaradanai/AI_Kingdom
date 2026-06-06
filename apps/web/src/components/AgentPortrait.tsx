@@ -1,22 +1,12 @@
 import { cn } from "@/lib/utils";
 import { getAgentInitials, getAgentPortrait } from "@/lib/agentPortraits";
+import type { AgentActivityStatus } from "@/types/api";
 
 type AgentPortraitInput = {
   slug?: string | null;
   name?: string | null;
   title?: string | null;
 };
-
-export type AgentActivityStatus =
-  | "IDLE"
-  | "THINKING"
-  | "WAITING_PROVIDER"
-  | "RESPONDING"
-  | "SUMMARIZING"
-  | "EXTRACTING_MEMORY"
-  | "GENERATING_REPORT"
-  | "COMPLETED"
-  | "FAILED";
 
 type AgentPortraitProps = {
   agent?: AgentPortraitInput | null;
@@ -42,6 +32,7 @@ const textSizeClass = {
 
 const statusClass: Record<AgentActivityStatus, string> = {
   IDLE: "agent-status-idle",
+  QUEUED: "agent-status-thinking",
   THINKING: "agent-status-thinking",
   WAITING_PROVIDER: "agent-status-waiting-provider",
   RESPONDING: "agent-status-responding",
@@ -54,6 +45,7 @@ const statusClass: Record<AgentActivityStatus, string> = {
 
 const ringClass: Record<AgentActivityStatus, string> = {
   IDLE: "ring-border/70 shadow-[0_0_18px_rgba(214,170,87,0.08)]",
+  QUEUED: "ring-primary/40 shadow-[0_0_20px_rgba(214,170,87,0.12)]",
   THINKING: "ring-primary/50 shadow-[0_0_24px_rgba(214,170,87,0.18)]",
   WAITING_PROVIDER: "ring-amber-400/50 shadow-[0_0_24px_rgba(251,191,36,0.14)]",
   RESPONDING: "ring-primary/60 shadow-[0_0_28px_rgba(214,170,87,0.22)]",
@@ -66,6 +58,7 @@ const ringClass: Record<AgentActivityStatus, string> = {
 
 const statusLabel: Record<AgentActivityStatus, string> = {
   IDLE: "Idle",
+  QUEUED: "Queued",
   THINKING: "Thinking",
   WAITING_PROVIDER: "Waiting for provider",
   RESPONDING: "Responding",

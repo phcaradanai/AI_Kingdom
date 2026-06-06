@@ -32,6 +32,7 @@ import type {
   ProviderBalanceSnapshotDto,
   SecretaryBriefDto,
   CouncilSessionDto,
+  CurrentAgentActivityDto,
   MemoryDto,
   MemoryPayload,
   ReportPayload,
@@ -287,6 +288,7 @@ export const api = {
   treasuryPricingWarnings: () => apiRequest<PricingWarningsDto>("/treasury/pricing-warnings"),
   providerBalances: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances"),
   syncDeepSeekBalance: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances/deepseek/sync", { method: "POST" }),
+  getCurrentAgentActivities: () => apiRequest<{ activities: CurrentAgentActivityDto[] }>("/agent-activities/current"),
   modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
   createModelPricing: (payload: ModelPricingPayload) =>
     apiRequest<{ record: ModelPricingDto }>("/model-pricing", { method: "POST", body: JSON.stringify(payload) }),

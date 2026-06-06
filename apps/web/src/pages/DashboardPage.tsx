@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, CheckCircle2, ClipboardList, FolderKanban, Inbox, Landmark, Scroll, ScrollText, Shield, Vault, ArrowRight, Clock } from "lucide-react";
+import { AlertTriangle, Archive, CheckCircle2, ClipboardList, Crown, FileText, FolderKanban, Inbox, Landmark, Scroll, ScrollText, Shield, Sparkles, Vault, ArrowRight, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AgentPortrait } from "@/components/AgentPortrait";
@@ -15,7 +15,7 @@ import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { HandoffBriefDto, ProjectDto, ProjectInboxItemDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
+import type { AgentActivityStatus, AgentDto, CurrentAgentActivityDto, HandoffBriefDto, ProjectDto, ProjectInboxItemDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
 
 const SEVERITY_COLORS = {
   critical: "text-destructive bg-destructive/10 border-destructive/30",
@@ -29,6 +29,212 @@ const SEVERITY_ICONS = {
   info: CheckCircle2
 };
 
+const AGENT_ACTIVITY_STATUSES: AgentActivityStatus[] = [
+  "IDLE",
+  "QUEUED",
+  "THINKING",
+  "WAITING_PROVIDER",
+  "RESPONDING",
+  "SUMMARIZING",
+  "EXTRACTING_MEMORY",
+  "GENERATING_REPORT",
+  "COMPLETED",
+  "FAILED"
+];
+
+const AGENT_STATUS_META: Record<AgentActivityStatus, { label: string; Icon: typeof Clock; cardClass: string; badgeClass: string }> = {
+  IDLE: {
+    label: "Idle",
+    Icon: Clock,
+    cardClass: "agent-op-idle",
+    badgeClass: "border-primary/20 bg-primary/10 text-primary/85"
+  },
+  QUEUED: {
+    label: "Queued",
+    Icon: Clock,
+    cardClass: "agent-op-thinking",
+    badgeClass: "border-primary/30 bg-primary/10 text-primary"
+  },
+  THINKING: {
+    label: "Thinking",
+    Icon: Sparkles,
+    cardClass: "agent-op-thinking",
+    badgeClass: "border-primary/40 bg-primary/10 text-primary"
+  },
+  WAITING_PROVIDER: {
+    label: "Waiting Provider",
+    Icon: Clock,
+    cardClass: "agent-op-waiting-provider",
+    badgeClass: "border-amber-400/40 bg-amber-400/10 text-amber-300"
+  },
+  RESPONDING: {
+    label: "Responding",
+    Icon: ScrollText,
+    cardClass: "agent-op-responding",
+    badgeClass: "border-primary/40 bg-primary/10 text-primary"
+  },
+  SUMMARIZING: {
+    label: "Summarizing",
+    Icon: Crown,
+    cardClass: "agent-op-summarizing",
+    badgeClass: "border-primary/40 bg-primary/10 text-primary"
+  },
+  EXTRACTING_MEMORY: {
+    label: "Extracting Memory",
+    Icon: Vault,
+    cardClass: "agent-op-extracting-memory",
+    badgeClass: "border-blue-300/35 bg-blue-300/10 text-blue-200"
+  },
+  GENERATING_REPORT: {
+    label: "Generating Report",
+    Icon: FileText,
+    cardClass: "agent-op-generating-report",
+    badgeClass: "border-primary/40 bg-primary/10 text-primary"
+  },
+  COMPLETED: {
+    label: "Completed",
+    Icon: CheckCircle2,
+    cardClass: "agent-op-completed",
+    badgeClass: "border-emerald-400/35 bg-emerald-400/10 text-emerald-300"
+  },
+  FAILED: {
+    label: "Failed",
+    Icon: AlertTriangle,
+    cardClass: "agent-op-failed",
+    badgeClass: "border-destructive/45 bg-destructive/10 text-destructive"
+  }
+};
+
+function normalizeAgentStatus(status: string): AgentActivityStatus {
+  return AGENT_ACTIVITY_STATUSES.includes(status as AgentActivityStatus) ? (status as AgentActivityStatus) : "IDLE";
+}
+
+function buildIdleAgentActivity(agent: AgentDto): CurrentAgentActivityDto {
+  return {
+    id: `idle:${agent.id}`,
+    agent: {
+      id: agent.id,
+      slug: agent.slug,
+      name: agent.name,
+      title: agent.title,
+      role: agent.role,
+      specialty: agent.specialty,
+      isActive: agent.isActive
+    },
+    status: "IDLE",
+    activityType: "IDLE",
+    title: "Idle",
+    detail: null,
+    providerId: null,
+    providerName: null,
+    model: null,
+    operation: null,
+    projectId: null,
+    taskId: null,
+    councilSessionId: null,
+    tokensUsed: 0,
+    estimatedCostUSD: 0,
+    startedAt: null,
+    endedAt: null,
+    heartbeatAt: null,
+    errorMessage: null,
+    isStale: false
+  };
+}
+
+function formatCost(value: number) {
+  if (value <= 0) return "$0.00";
+  if (value < 0.01) return `$${value.toFixed(4)}`;
+  return `$${value.toFixed(2)}`;
+}
+
+function formatLastActive(activity: CurrentAgentActivityDto) {
+  const timestamp = activity.endedAt ?? activity.heartbeatAt ?? activity.startedAt;
+  return timestamp ? formatDate(timestamp) : "No recent activity";
+}
+
+function shortId(value: string) {
+  return value.length > 10 ? value.slice(0, 8) : value;
+}
+
+function AgentOperationCard({ activity }: { activity: CurrentAgentActivityDto }) {
+  const status = normalizeAgentStatus(activity.status);
+  const meta = AGENT_STATUS_META[status];
+  const StatusIcon = meta.Icon;
+  const providerModel = [activity.providerName, activity.model].filter(Boolean).join(" / ");
+  const detail = status === "FAILED" && activity.errorMessage ? activity.errorMessage : activity.detail;
+  const links = [
+    activity.projectId ? { label: "Project", id: activity.projectId, to: `/projects/${activity.projectId}` } : null,
+    activity.taskId ? { label: "Task", id: activity.taskId, to: "/throne-room" } : null,
+    activity.councilSessionId ? { label: "Council", id: activity.councilSessionId, to: "/council" } : null
+  ].filter(Boolean) as { label: string; id: string; to: string }[];
+
+  return (
+    <div className={cn("agent-operation-card relative overflow-hidden rounded-2xl border bg-card/70 p-4 backdrop-blur-xl", meta.cardClass)}>
+      <div className="absolute inset-0 bg-[url('/noise.png')] opacity-[0.05] mix-blend-overlay pointer-events-none" aria-hidden="true" />
+      <div className="relative flex items-start gap-4">
+        <AgentPortrait agent={activity.agent} size="lg" status={status} />
+        <div className="min-w-0 flex-1 space-y-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <div className="truncate font-display text-lg font-bold tracking-wide text-foreground">{activity.agent.name}</div>
+              <div className="truncate text-sm text-primary/75">{activity.agent.title}</div>
+            </div>
+            <div className={cn("inline-flex items-center gap-2 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-widest", meta.badgeClass)}>
+              <span className="agent-op-dot h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
+              <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
+              <span>{meta.label}</span>
+            </div>
+          </div>
+
+          <div>
+            <div className="line-clamp-1 text-sm font-semibold text-foreground">{activity.title || meta.label}</div>
+            {detail ? (
+              <div className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">{detail}</div>
+            ) : (
+              <div className="mt-1 text-xs text-muted-foreground">Awaiting the next royal operation.</div>
+            )}
+          </div>
+
+          <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-2">
+            <div>
+              <span className="font-semibold uppercase tracking-widest text-primary/65">Model</span>
+              <div className="mt-0.5 truncate text-foreground/85">{providerModel || "No provider active"}</div>
+            </div>
+            <div>
+              <span className="font-semibold uppercase tracking-widest text-primary/65">Usage</span>
+              <div className="mt-0.5 text-foreground/85">{activity.tokensUsed.toLocaleString()} tokens / {formatCost(activity.estimatedCostUSD)}</div>
+            </div>
+          </div>
+
+          {links.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {links.map((link) => (
+                <Link
+                  key={`${link.label}:${link.id}`}
+                  to={link.to}
+                  className="rounded-md border border-primary/20 bg-primary/10 px-2 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary/80 transition-colors hover:border-primary/40 hover:bg-primary/15"
+                  title={`${link.label} ${link.id}`}
+                >
+                  {link.label}: <span className="font-mono normal-case tracking-normal">{shortId(link.id)}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-primary/10 pt-3 text-[11px] uppercase tracking-widest text-muted-foreground">
+            <span>Last active: {formatLastActive(activity)}</span>
+            <div className="flex flex-wrap items-center gap-2">
+              {activity.operation && <span className="rounded-md border border-border/80 px-2 py-1">{activity.operation}</span>}
+              {activity.isStale && <span className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-amber-300">Stale heartbeat</span>}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { agents, tasks, reports, memories } = useKingdomStore();
   const user = useAuthStore((state) => state.user);
@@ -39,6 +245,8 @@ export function DashboardPage() {
   const [handoffBriefs, setHandoffBriefs] = useState<HandoffBriefDto[]>([]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [projectInbox, setProjectInbox] = useState<ProjectInboxItemDto[]>([]);
+  const [agentActivities, setAgentActivities] = useState<CurrentAgentActivityDto[]>([]);
+  const [agentActivitiesError, setAgentActivitiesError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -47,16 +255,54 @@ export function DashboardPage() {
       api.workOrders().catch(() => ({ workOrders: [] })),
       api.handoffBriefs().catch(() => ({ handoffBriefs: [] })),
       api.projects().catch(() => ({ projects: [] })),
-      api.projectInbox({ status: "PENDING" }).catch(() => ({ inboxItems: [] }))
+      api.projectInbox({ status: "PENDING" }).catch(() => ({ inboxItems: [] })),
+      api.getCurrentAgentActivities().catch((error) => {
+        setAgentActivitiesError(error instanceof Error ? error.message : "Unable to load agent activity.");
+        return { activities: [] };
+      })
     ])
-      .then(([briefRes, ordersRes, handoffsRes, projectsRes, inboxRes]) => {
+      .then(([briefRes, ordersRes, handoffsRes, projectsRes, inboxRes, activitiesRes]) => {
         if (briefRes) setBrief(briefRes);
         setWorkOrders(ordersRes.workOrders);
         setHandoffBriefs(handoffsRes.handoffBriefs);
         setProjects(projectsRes.projects);
         setProjectInbox(inboxRes.inboxItems);
+        setAgentActivities(activitiesRes.activities);
+        if (activitiesRes.activities.length > 0) setAgentActivitiesError(null);
       })
       .finally(() => setIsLoading(false));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadAgentActivities() {
+      try {
+        const response = await api.getCurrentAgentActivities();
+        if (cancelled) return;
+        setAgentActivities(response.activities);
+        setAgentActivitiesError(null);
+      } catch (error) {
+        if (cancelled) return;
+        setAgentActivitiesError(error instanceof Error ? error.message : "Unable to load agent activity.");
+      }
+    }
+
+    const interval = window.setInterval(() => {
+      if (!document.hidden) void loadAgentActivities();
+    }, 5000);
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) void loadAgentActivities();
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   const stats = [
@@ -65,6 +311,8 @@ export function DashboardPage() {
     { label: "Reports", value: reports.length, icon: ScrollText },
     { label: "Memories", value: memories.length, icon: Vault }
   ];
+
+  const displayedAgentActivities = agentActivities.length > 0 ? agentActivities : agents.map(buildIdleAgentActivity);
 
   if (isLoading) {
     return <LoadingState message="Summoning royal briefings..." className="min-h-[60vh]" />;
@@ -111,24 +359,25 @@ export function DashboardPage() {
         ))}
       </div>
 
-      {agents.length > 0 && (
+      {displayedAgentActivities.length > 0 && (
         <SectionCard
-          title="Royal Council"
+          title="Royal Agent Operations"
           icon={Shield}
-          action={<Link to="/agents" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Manage Agents</Link>}
+          action={
+            <div className="flex items-center gap-3">
+              {agentActivitiesError && <span className="hidden text-xs font-semibold uppercase tracking-wider text-amber-300 sm:inline">Activity feed degraded</span>}
+              <Link to="/agents" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Manage Agents</Link>
+            </div>
+          }
         >
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            {agents.slice(0, 5).map((agent) => (
-              <div key={agent.id} className="rounded-xl border border-primary/20 bg-muted/20 p-3">
-                <div className="flex items-center gap-3">
-                  <AgentPortrait agent={agent} size="md" status="IDLE" />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-foreground">{agent.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">{agent.title}</div>
-                    <div className="mt-1 text-[10px] font-bold uppercase tracking-widest text-primary/70">Idle</div>
-                  </div>
-                </div>
-              </div>
+          {agentActivitiesError && (
+            <div className="mb-4 rounded-lg border border-amber-400/25 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+              Live activity is temporarily unavailable. Showing local idle state where possible.
+            </div>
+          )}
+          <div className="grid gap-4 xl:grid-cols-2">
+            {displayedAgentActivities.map((activity) => (
+              <AgentOperationCard key={activity.id} activity={activity} />
             ))}
           </div>
         </SectionCard>

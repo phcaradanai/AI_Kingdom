@@ -62,6 +62,41 @@ export type AgentPayload = {
   maxTokens?: number | null;
 };
 
+export type AgentActivityStatus =
+  | "IDLE"
+  | "QUEUED"
+  | "THINKING"
+  | "WAITING_PROVIDER"
+  | "RESPONDING"
+  | "SUMMARIZING"
+  | "EXTRACTING_MEMORY"
+  | "GENERATING_REPORT"
+  | "COMPLETED"
+  | "FAILED";
+
+export type CurrentAgentActivityDto = {
+  id: string;
+  agent: Pick<AgentDto, "id" | "slug" | "name" | "title" | "role" | "specialty" | "isActive">;
+  status: AgentActivityStatus | string;
+  activityType: string;
+  title: string;
+  detail: string | null;
+  providerId: string | null;
+  providerName: string | null;
+  model: string | null;
+  operation: string | null;
+  projectId: string | null;
+  taskId: string | null;
+  councilSessionId: string | null;
+  tokensUsed: number;
+  estimatedCostUSD: number;
+  startedAt: string | null;
+  endedAt: string | null;
+  heartbeatAt: string | null;
+  errorMessage: string | null;
+  isStale: boolean;
+};
+
 export type SettingCategory = "AI" | "UI" | "SECURITY" | "SYSTEM";
 
 export type SettingDto = {
