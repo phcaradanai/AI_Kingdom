@@ -585,6 +585,37 @@ export type ImplementationReportPayload = {
   rawOutput?: string | null;
 };
 
+export type ModelPricingDto = {
+  id: string;
+  providerType: string;
+  model: string;
+  displayName: string | null;
+  inputPerMillion: number;
+  outputPerMillion: number;
+  currency: string;
+  source: string;
+  notes: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type ModelPricingPayload = {
+  providerType: string;
+  model: string;
+  displayName?: string | null;
+  inputPerMillion: number;
+  outputPerMillion: number;
+  currency?: string;
+  notes?: string | null;
+  isActive?: boolean;
+};
+
+export type PricingWarningsDto = {
+  unknownPricingUsageCount: number;
+  unknownModels: Array<{ provider: string; model: string; count: number }>;
+};
+
 export type KingdomCharterDto = {
   id: string;
   version: string;

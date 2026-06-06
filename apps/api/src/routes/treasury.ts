@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview, getTreasuryUsage } from "../services/treasuryService.js";
+import { getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview, getTreasuryUsage, getPricingWarnings } from "../services/treasuryService.js";
 
 const router = Router();
 
@@ -45,6 +45,14 @@ router.get("/reports", async (req, res, next) => {
     const days = Math.min(Number(req.query.days ?? 30), 365);
     const daily = await getTreasuryDailyReport(Number.isFinite(days) ? days : 30);
     res.json({ daily });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/pricing-warnings", async (_req, res, next) => {
+  try {
+    res.json(await getPricingWarnings());
   } catch (error) {
     next(error);
   }

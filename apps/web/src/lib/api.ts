@@ -18,6 +18,8 @@ import type {
   MatterDto,
   MatterPriority,
   MatterStatus,
+  ModelPricingDto,
+  ModelPricingPayload,
   NoticeDto,
   NoticeSeverity,
   NoticeStatus,
@@ -26,6 +28,7 @@ import type {
   ProjectInboxItemDto,
   ProjectOverviewDto,
   ProjectPayload,
+  PricingWarningsDto,
   SecretaryBriefDto,
   CouncilSessionDto,
   MemoryDto,
@@ -280,6 +283,13 @@ export const api = {
   treasuryByAgent: () => apiRequest<{ agents: TreasuryAgentDto[] }>("/treasury/agents"),
   treasuryByProvider: () => apiRequest<{ providers: TreasuryProviderDto[] }>("/treasury/providers"),
   treasuryReports: (days = 30) => apiRequest<{ daily: TreasuryDailyDto[] }>(`/treasury/reports?days=${days}`),
+  treasuryPricingWarnings: () => apiRequest<PricingWarningsDto>("/treasury/pricing-warnings"),
+  modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
+  createModelPricing: (payload: ModelPricingPayload) =>
+    apiRequest<{ record: ModelPricingDto }>("/model-pricing", { method: "POST", body: JSON.stringify(payload) }),
+  updateModelPricing: (id: string, payload: Partial<ModelPricingPayload>) =>
+    apiRequest<{ record: ModelPricingDto }>(`/model-pricing/${id}`, { method: "PUT", body: JSON.stringify(payload) }),
+  deleteModelPricing: (id: string) => apiRequest<void>(`/model-pricing/${id}`, { method: "DELETE" }),
   auditLogs: (params?: { page?: number; limit?: number; action?: string; resourceType?: string; userId?: string; startDate?: string; endDate?: string }) => {
     const search = new URLSearchParams();
     if (params?.page) search.set("page", String(params.page));

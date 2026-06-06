@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { getSettingValue } from "./settingsService.js";
+import { getModelPricing } from "./modelPricingService.js";
 
 function startOfToday(): Date {
   const d = new Date();
@@ -126,6 +127,21 @@ export async function getTreasuryUsage(limit = 100) {
       task: { select: { id: true, title: true, mode: true } }
     }
   });
+}
+
+export async function getPricingWarnings() {
+  const groups = await prisma.usageRecord.groupBy({
+    by: ["provider", "model"],
+    _count: { id: true }
+  });
+  const warnings = await Promise.all(
+    groups.map(async (g) => {
+      const { pricingStatus } = await getModelPricing(g.provider, g.model);
+      return pricingStatus === "UNKNOWN" ? { provider: g.provider, model: g.model, count: g._count.id } : null;
+    })
+  );
+  const unknownModels = warnings.filter((w): w is NonNullable<typeof w> => w !== null);
+  return { unknownPricingUsageCount: unknownModels.reduce((sum, w) => sum + w.count, 0), unknownModels };
 }
 
 export async function getTreasuryDailyReport(days = 30) {

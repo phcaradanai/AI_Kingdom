@@ -1,9 +1,15 @@
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
+import { Plus, Save, Trash2, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn, formatDate } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type {
+  ModelPricingDto,
+  ModelPricingPayload,
+  PricingWarningsDto,
   TreasuryOverviewDto,
   TreasuryAgentDto,
   TreasuryProviderDto,
@@ -195,6 +201,147 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
   );
 }
 
+const blankPricing: ModelPricingPayload = { providerType: "", model: "", displayName: "", inputPerMillion: 0, outputPerMillion: 0, notes: "" };
+
+function ModelPricingSection() {
+  const [records, setRecords] = useState<ModelPricingDto[]>([]);
+  const [warnings, setWarnings] = useState<PricingWarningsDto | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [drafts, setDrafts] = useState<Record<string, Partial<ModelPricingPayload>>>({});
+  const [isAdding, setIsAdding] = useState(false);
+  const [newDraft, setNewDraft] = useState<ModelPricingPayload>(blankPricing);
+  const [savingError, setSavingError] = useState<string | null>(null);
+
+  async function load() {
+    const [pr, pw] = await Promise.all([api.modelPricing(), api.treasuryPricingWarnings()]);
+    setRecords(pr.modelPricing);
+    setWarnings(pw);
+  }
+
+  useEffect(() => { void load(); }, []);
+
+  async function saveEdit(id: string) {
+    setSavingError(null);
+    try {
+      await api.updateModelPricing(id, drafts[id] ?? {});
+      setEditingId(null);
+      await load();
+    } catch (err) { setSavingError(err instanceof Error ? err.message : "Save failed"); }
+  }
+
+  async function createRecord(e: FormEvent) {
+    e.preventDefault();
+    setSavingError(null);
+    try {
+      await api.createModelPricing(newDraft);
+      setIsAdding(false);
+      setNewDraft(blankPricing);
+      await load();
+    } catch (err) { setSavingError(err instanceof Error ? err.message : "Create failed"); }
+  }
+
+  async function deactivate(id: string) {
+    await api.deleteModelPricing(id);
+    await load();
+  }
+
+  return (
+    <section>
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Model Pricing Registry</h2>
+        <Button variant="outline" onClick={() => setIsAdding(true)}><Plus className="h-4 w-4" />Add Pricing</Button>
+      </div>
+
+      {warnings && warnings.unknownModels.length > 0 && (
+        <div className="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
+          <span className="font-semibold">⚠ Unknown pricing detected: </span>
+          {warnings.unknownModels.map((m) => `${m.provider}:${m.model} (${m.count} calls)`).join(", ")}
+          . Add pricing records below to track costs accurately.
+        </div>
+      )}
+
+      {isAdding && (
+        <Card className="mb-4 border-primary/40">
+          <form className="space-y-3" onSubmit={createRecord}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input required placeholder="Provider type (e.g. deepseek)" value={newDraft.providerType} onChange={(e) => setNewDraft({ ...newDraft, providerType: e.target.value })} />
+              <Input required placeholder="Model (e.g. deepseek-v4-pro)" value={newDraft.model} onChange={(e) => setNewDraft({ ...newDraft, model: e.target.value })} />
+              <Input placeholder="Display name" value={newDraft.displayName ?? ""} onChange={(e) => setNewDraft({ ...newDraft, displayName: e.target.value })} />
+              <Input placeholder="Notes" value={newDraft.notes ?? ""} onChange={(e) => setNewDraft({ ...newDraft, notes: e.target.value })} />
+              <Input required type="number" min="0" step="0.0001" placeholder="Input $/M tokens" value={newDraft.inputPerMillion} onChange={(e) => setNewDraft({ ...newDraft, inputPerMillion: parseFloat(e.target.value) || 0 })} />
+              <Input required type="number" min="0" step="0.0001" placeholder="Output $/M tokens" value={newDraft.outputPerMillion} onChange={(e) => setNewDraft({ ...newDraft, outputPerMillion: parseFloat(e.target.value) || 0 })} />
+            </div>
+            {savingError && <div className="text-sm text-red-400">{savingError}</div>}
+            <div className="flex gap-2">
+              <Button type="submit"><Save className="h-4 w-4" />Save</Button>
+              <Button type="button" variant="outline" onClick={() => { setIsAdding(false); setSavingError(null); }}><X className="h-4 w-4" />Cancel</Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
+      <Card>
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="pb-2 pr-4 font-medium">Provider / Model</th>
+                <th className="pb-2 pr-4 text-right font-medium">Input $/M</th>
+                <th className="pb-2 pr-4 text-right font-medium">Output $/M</th>
+                <th className="pb-2 pr-4 font-medium">Source</th>
+                <th className="pb-2 font-medium">Notes</th>
+                <th className="pb-2" />
+              </tr>
+            </thead>
+            <tbody>
+              {records.map((r) => {
+                const isEditing = editingId === r.id;
+                const draft = drafts[r.id] ?? { inputPerMillion: r.inputPerMillion, outputPerMillion: r.outputPerMillion, notes: r.notes };
+                return (
+                  <tr key={r.id} className={cn("border-b border-border/40 last:border-0", !r.isActive && "opacity-40")}>
+                    <td className="py-2.5 pr-4">
+                      <div className="font-medium">{r.displayName ?? r.model}</div>
+                      <div className="text-xs text-muted-foreground">{r.providerType}:{r.model}</div>
+                    </td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">
+                      {isEditing ? <Input type="number" min="0" step="0.0001" className="h-7 w-24 text-right text-xs" value={draft.inputPerMillion ?? 0} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, inputPerMillion: parseFloat(e.target.value) || 0 } })} /> : `$${r.inputPerMillion}`}
+                    </td>
+                    <td className="py-2.5 pr-4 text-right tabular-nums">
+                      {isEditing ? <Input type="number" min="0" step="0.0001" className="h-7 w-24 text-right text-xs" value={draft.outputPerMillion ?? 0} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, outputPerMillion: parseFloat(e.target.value) || 0 } })} /> : `$${r.outputPerMillion}`}
+                    </td>
+                    <td className="py-2.5 pr-4 text-xs text-muted-foreground">{r.source}</td>
+                    <td className="py-2.5 pr-4 text-xs text-muted-foreground">
+                      {isEditing ? <Input className="h-7 text-xs" value={draft.notes ?? ""} onChange={(e) => setDrafts({ ...drafts, [r.id]: { ...draft, notes: e.target.value } })} /> : (r.notes ?? "—")}
+                    </td>
+                    <td className="py-2.5">
+                      <div className="flex items-center gap-1">
+                        {isEditing ? (
+                          <>
+                            <Button variant="outline" className="h-7 px-2 text-xs" onClick={() => void saveEdit(r.id)}><Save className="h-3 w-3" /></Button>
+                            <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => setEditingId(null)}><X className="h-3 w-3" /></Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setEditingId(r.id); setDrafts({ ...drafts, [r.id]: { inputPerMillion: r.inputPerMillion, outputPerMillion: r.outputPerMillion, notes: r.notes } }); }}>Edit</Button>
+                            {r.isActive && <Button variant="ghost" className="h-7 px-2 text-xs text-muted-foreground" onClick={() => void deactivate(r.id)}><Trash2 className="h-3 w-3" /></Button>}
+                          </>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {records.length === 0 && <tr><td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">No pricing records yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        {savingError && <div className="mt-2 text-sm text-red-400">{savingError}</div>}
+        <p className="mt-3 text-xs text-muted-foreground">Updated {formatDate(new Date().toISOString())} · Prices in USD per 1M tokens</p>
+      </Card>
+    </section>
+  );
+}
+
 export function TreasuryPage() {
   const [overview, setOverview] = useState<TreasuryOverviewDto | null>(null);
   const [agents, setAgents] = useState<TreasuryAgentDto[]>([]);
@@ -376,6 +523,9 @@ export function TreasuryPage() {
               <RecentUsageTable records={records} />
             </Card>
           </section>
+
+          {/* Model Pricing Registry */}
+          <ModelPricingSection />
         </div>
       )}
     </>

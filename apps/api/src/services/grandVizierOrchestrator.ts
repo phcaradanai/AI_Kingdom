@@ -1,8 +1,8 @@
 import type { Agent, Task, TaskMode } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
-import { calculateCostUSD } from "../pricing/providerPricing.js";
 import { prisma } from "../db/prisma.js";
+import { calculateCostFromRegistry } from "./modelPricingService.js";
 import type { AIProviderConfig } from "./aiProviderRegistry.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getKingdomContext } from "./kingdomComplianceService.js";
@@ -115,7 +115,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         }
       });
 
-      const agentCostUSD = calculateCostUSD(
+      const { costUSD: agentCostUSD } = await calculateCostFromRegistry(
         generated.providerName,
         generated.modelUsed,
         generated.usage.promptTokens,
@@ -169,7 +169,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     usedProviders.push(generatedSummary.providerName);
     usedModels.push(generatedSummary.modelUsed);
 
-    const summaryCostUSD = calculateCostUSD(
+    const { costUSD: summaryCostUSD } = await calculateCostFromRegistry(
       generatedSummary.providerName,
       generatedSummary.modelUsed,
       generatedSummary.usage.promptTokens,

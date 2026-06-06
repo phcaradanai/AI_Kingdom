@@ -1,17 +1,30 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Cpu, Power, Save, Plus, Edit2, X, Trash } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { api } from "@/lib/api";
+import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { AIProviderDto } from "@/types/api";
+import type { AIProviderDto, ModelPricingDto } from "@/types/api";
 
 export function ProvidersPage() {
   const providers = useKingdomStore((state) => state.providers);
   const updateProvider = useKingdomStore((state) => state.updateProvider);
   const createProvider = useKingdomStore((state) => state.createProvider);
   const deleteProvider = useKingdomStore((state) => state.deleteProvider);
+  const [pricingRecords, setPricingRecords] = useState<ModelPricingDto[]>([]);
+
+  useEffect(() => {
+    api.modelPricing().then((r) => setPricingRecords(r.modelPricing)).catch(() => undefined);
+  }, []);
+
+  function isPricingKnown(provider: AIProviderDto): boolean {
+    const model = provider.defaultModel;
+    if (!model) return false;
+    return pricingRecords.some((p) => p.providerType === provider.type && p.model === model && p.isActive);
+  }
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, Pick<AIProviderDto, "defaultModel" | "priority" | "costTier">>>({});
@@ -230,6 +243,11 @@ export function ProvidersPage() {
                     <div>
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Default Model</span>
                       <span className="font-medium">{provider.defaultModel || "None"}</span>
+                      {provider.defaultModel && provider.type !== "mock" && (
+                        <span className={cn("ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border", isPricingKnown(provider) ? "border-primary/40 bg-primary/10 text-primary" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-400")}>
+                          {isPricingKnown(provider) ? "Pricing ✓" : "Pricing ?"}
+                        </span>
+                      )}
                     </div>
                     <div>
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Routing Priority</span>

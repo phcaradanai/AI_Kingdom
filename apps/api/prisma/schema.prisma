@@ -663,6 +663,24 @@ model Memory {
   user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
 
+model AIModelPricing {
+  id               String   @id @default(cuid())
+  providerType     String
+  model            String
+  displayName      String?
+  inputPerMillion  Float
+  outputPerMillion Float
+  currency         String   @default("USD")
+  source           String   @default("manual")
+  notes            String?
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([providerType, model])
+  @@index([providerType])
+}
+
 model KingdomCharter {
   id        String   @id @default(cuid())
   version   String   @default("1.0.0")

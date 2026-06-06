@@ -4,7 +4,7 @@ import test from "node:test";
 import { PrismaClient } from "@prisma/client";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
-import { calculateCostUSD, getPricing } from "../pricing/providerPricing.js";
+import { calculateCostDetailed, calculateCostUSD, getPricing } from "../pricing/providerPricing.js";
 import { getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview } from "./treasuryService.js";
 
 const prisma = new PrismaClient();
@@ -99,6 +99,53 @@ test("calculateCostUSD calculates correct cost for gpt-4o-mini", () => {
 test("calculateCostUSD returns zero for unknown model", () => {
   const cost = calculateCostUSD("unknown-provider", "unknown-model", 1000, 500);
   assert.equal(cost, 0);
+});
+
+test("calculateCostUSD deepseek-chat cost > 0", () => {
+  const cost = calculateCostUSD("deepseek", "deepseek-chat", 1_000_000, 1_000_000);
+  assert.ok(cost > 0, "deepseek-chat should have non-zero cost");
+  // 1M input @ $0.27 + 1M output @ $1.10 = $1.37
+  assert.equal(cost, 1.37);
+});
+
+test("calculateCostUSD deepseek-v4-pro exact key cost > 0", () => {
+  const cost = calculateCostUSD("deepseek", "deepseek-v4-pro", 1_000_000, 1_000_000);
+  assert.ok(cost > 0, "deepseek-v4-pro should have non-zero cost");
+  assert.equal(cost, 1.37);
+});
+
+test("calculateCostUSD deepseek-v4-pro via alias (partial model name) cost > 0", () => {
+  // Model strings from the API may include version suffixes; alias matching should handle them
+  const cost = calculateCostUSD("deepseek", "deepseek-v4-pro-20250601", 1_000_000, 1_000_000);
+  assert.ok(cost > 0, "aliased deepseek v4-pro variant should have non-zero cost");
+});
+
+test("calculateCostUSD deepseek-reasoner cost > 0", () => {
+  const cost = calculateCostUSD("deepseek", "deepseek-reasoner", 1_000_000, 1_000_000);
+  assert.ok(cost > 0, "deepseek-reasoner should have non-zero cost");
+  // 1M input @ $0.55 + 1M output @ $2.19 = $2.74
+  assert.equal(cost, 2.74);
+});
+
+test("calculateCostDetailed returns pricingStatus known for exact match", () => {
+  const result = calculateCostDetailed("deepseek", "deepseek-chat", 1_000_000, 0);
+  assert.equal(result.pricingStatus, "known");
+  assert.ok(result.costUSD > 0);
+  assert.equal(result.resolvedKey, "deepseek:deepseek-chat");
+});
+
+test("calculateCostDetailed returns pricingStatus aliased for fuzzy match", () => {
+  const result = calculateCostDetailed("deepseek", "deepseek-v4-pro-20250601", 1_000_000, 0);
+  assert.equal(result.pricingStatus, "aliased");
+  assert.ok(result.costUSD > 0);
+  assert.equal(result.resolvedKey, "deepseek:deepseek-v4-pro");
+});
+
+test("calculateCostDetailed returns pricingStatus unknown for unrecognised model", () => {
+  const result = calculateCostDetailed("unknown-provider", "unknown-model", 1000, 500);
+  assert.equal(result.pricingStatus, "unknown");
+  assert.equal(result.costUSD, 0);
+  assert.equal(result.resolvedKey, undefined);
 });
 
 test("treasury overview returns correct structure", async () => {

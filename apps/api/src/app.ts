@@ -16,6 +16,7 @@ import externalAgentsRouter from "./routes/externalAgents.js";
 import handoffBriefsRouter from "./routes/handoffBriefs.js";
 import implementationReportsRouter from "./routes/implementationReports.js";
 import mattersRouter from "./routes/matters.js";
+import modelPricingRouter from "./routes/modelPricing.js";
 import noticesRouter from "./routes/notices.js";
 import providersRouter from "./routes/providers.js";
 import projectInboxRouter from "./routes/projectInbox.js";
@@ -88,6 +89,7 @@ export function createApp() {
   app.use("/api/memory", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/memories", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/treasury", requireAuth, requireRole("KING"), treasuryRouter);
+  app.use("/api/model-pricing", requireAuth, requireRole("KING"), modelPricingRouter);
   app.use("/api/audit", requireAuth, requireRole("KING"), auditRouter);
   app.use("/api/secretary", requireAuth, secretaryRouter);
   app.use("/api/notices", requireAuth, noticesRouter);
