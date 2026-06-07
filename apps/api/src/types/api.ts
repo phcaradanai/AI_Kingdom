@@ -100,3 +100,19 @@ export type KnowledgeMemoryDto = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type DataQuality = "TRUSTED" | "REVIEW_REQUIRED" | "TEST" | "LEGACY" | "UNKNOWN_SOURCE";
+
+export type DataQualityBadgeDto = {
+  quality: DataQuality;
+  label: string;
+  tone: "trusted" | "review" | "test" | "legacy" | "unknown";
+};
+
+export type SourceLinkDto = {
+  label: string;
+  title: string | null;
+  href: string | null;
+  type: string | null;
+  id: string | null;
+};

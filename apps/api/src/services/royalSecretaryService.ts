@@ -1,6 +1,14 @@
-import type { MatterCategory, MatterPriority, MatterStatus, NoticeSeverity, NoticeStatus } from "@prisma/client";
+import type { MatterCategory, MatterPriority, MatterStatus, NoticeSeverity, NoticeStatus, Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { getCharter, getVision } from "./charterService.js";
+import {
+  type DataQuality,
+  classifyMatter,
+  classifyNotice,
+  enrichDataQuality,
+  normalizeTitle,
+  shouldIncludeByQuality
+} from "./dataQualityService.js";
 import { routeProjectForSource } from "./projectRoutingService.js";
 import { getTreasuryOverview } from "./treasuryService.js";
 
@@ -16,20 +24,25 @@ export type NoticeInput = {
   sourceId?: string;
   createdByAgentId?: string;
   projectId?: string;
+  traceId?: string;
 };
 
 export async function createNotice(input: NoticeInput) {
-  // Dedup: same title + severity in last 24h
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const existing = await prisma.notice.findFirst({
+  const sourceType = input.sourceType ?? null;
+  const sourceId = input.sourceId ?? null;
+  const sameSource = await prisma.notice.findMany({
     where: {
-      title: input.title,
-      severity: input.severity ?? "INFO",
-      createdAt: { gte: since }
+      sourceType,
+      sourceId,
+      severity: input.severity ?? "INFO"
     }
   });
+  const existing = sameSource.find((notice) => normalizeTitle(notice.title) === normalizeTitle(input.title));
   if (existing) return existing;
 
+  const createdBySystem = Boolean(input.sourceType || input.sourceId || input.createdByAgentId || input.traceId);
+  const draft = { ...input, sourceType, sourceId, createdBySystem, dataSource: sourceType ?? undefined };
+  const dataQuality = classifyNotice(draft);
   const notice = await prisma.notice.create({
     data: {
       projectId: input.projectId,
@@ -38,7 +51,12 @@ export async function createNotice(input: NoticeInput) {
       severity: input.severity ?? "INFO",
       sourceType: input.sourceType,
       sourceId: input.sourceId,
-      createdByAgentId: input.createdByAgentId
+      createdByAgentId: input.createdByAgentId,
+      dataSource: sourceType,
+      dataQuality,
+      traceId: input.traceId,
+      createdBySystem,
+      provenance: buildProvenance(input)
     }
   });
   if (!input.projectId) {
@@ -50,6 +68,8 @@ export async function createNotice(input: NoticeInput) {
 export type NoticeListParams = {
   severity?: NoticeSeverity;
   status?: NoticeStatus;
+  includeTestData?: boolean;
+  dataQuality?: DataQuality;
   page?: number;
   limit?: number;
 };
@@ -57,25 +77,23 @@ export type NoticeListParams = {
 export async function listNotices(params: NoticeListParams = {}) {
   const page = Math.max(1, params.page ?? 1);
   const limit = Math.min(Math.max(1, params.limit ?? 50), 200);
-  const where = {
-    isTestData: false,
+  const where: Prisma.NoticeWhereInput = {
     ...(params.severity && { severity: params.severity }),
     ...(params.status && { status: params.status })
   };
-  const [total, notices] = await Promise.all([
-    prisma.notice.count({ where }),
-    prisma.notice.findMany({
-      where,
-      orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit
-    })
-  ]);
-  return { notices, total, page, limit };
+  const rawNotices = await prisma.notice.findMany({
+    where,
+    orderBy: [{ severity: "desc" }, { createdAt: "desc" }]
+  });
+  const filtered = rawNotices.filter((notice) => shouldIncludeByQuality(notice, classifyNotice(notice), params));
+  const notices = await enrichDataQuality("notice", filtered.slice((page - 1) * limit, page * limit));
+  return { notices, total: filtered.length, page, limit };
 }
 
 export async function getNotice(id: string) {
-  return prisma.notice.findUnique({ where: { id } });
+  const notice = await prisma.notice.findUnique({ where: { id } });
+  if (!notice) return null;
+  return (await enrichDataQuality("notice", [notice]))[0];
 }
 
 export async function updateNotice(id: string, fields: Partial<{ status: NoticeStatus; title: string; content: string; severity: NoticeSeverity }>) {
@@ -105,21 +123,25 @@ export type MatterInput = {
   sourceId?: string;
   assignedAgentId?: string;
   projectId?: string;
+  traceId?: string;
 };
 
 export async function createMatter(input: MatterInput) {
-  // Dedup: same sourceType + sourceId in non-terminal status
-  if (input.sourceType && input.sourceId) {
-    const existing = await prisma.matter.findFirst({
-      where: {
-        sourceType: input.sourceType,
-        sourceId: input.sourceId,
-        status: { notIn: TERMINAL_MATTER_STATUSES }
-      }
-    });
-    if (existing) return existing;
-  }
+  const sourceType = input.sourceType ?? null;
+  const sourceId = input.sourceId ?? null;
+  const sameSource = await prisma.matter.findMany({
+    where: {
+      sourceType,
+      sourceId,
+      status: { notIn: TERMINAL_MATTER_STATUSES }
+    }
+  });
+  const existing = sameSource.find((matter) => normalizeTitle(matter.title) === normalizeTitle(input.title));
+  if (existing) return existing;
 
+  const createdBySystem = Boolean(input.sourceType || input.sourceId || input.assignedAgentId || input.traceId);
+  const draft = { ...input, sourceType, sourceId, createdBySystem, dataSource: sourceType ?? undefined };
+  const dataQuality = classifyMatter(draft);
   const matter = await prisma.matter.create({
     data: {
       projectId: input.projectId,
@@ -129,7 +151,12 @@ export async function createMatter(input: MatterInput) {
       category: input.category ?? "GENERAL",
       sourceType: input.sourceType,
       sourceId: input.sourceId,
-      assignedAgentId: input.assignedAgentId
+      assignedAgentId: input.assignedAgentId,
+      dataSource: sourceType,
+      dataQuality,
+      traceId: input.traceId,
+      createdBySystem,
+      provenance: buildProvenance(input)
     }
   });
   if (!input.projectId) {
@@ -142,6 +169,8 @@ export type MatterListParams = {
   status?: MatterStatus;
   priority?: MatterPriority;
   category?: MatterCategory;
+  includeTestData?: boolean;
+  dataQuality?: DataQuality;
   page?: number;
   limit?: number;
 };
@@ -149,29 +178,27 @@ export type MatterListParams = {
 export async function listMatters(params: MatterListParams = {}) {
   const page = Math.max(1, params.page ?? 1);
   const limit = Math.min(Math.max(1, params.limit ?? 50), 200);
-  const where = {
-    isTestData: false,
+  const where: Prisma.MatterWhereInput = {
     ...(params.status && { status: params.status }),
     ...(params.priority && { priority: params.priority }),
     ...(params.category && { category: params.category })
   };
-  const [total, matters] = await Promise.all([
-    prisma.matter.count({ where }),
-    prisma.matter.findMany({
-      where,
-      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit
-    })
-  ]);
-  return { matters, total, page, limit };
+  const rawMatters = await prisma.matter.findMany({
+    where,
+    orderBy: [{ priority: "desc" }, { createdAt: "desc" }]
+  });
+  const filtered = rawMatters.filter((matter) => shouldIncludeByQuality(matter, classifyMatter(matter), params));
+  const matters = await enrichDataQuality("matter", filtered.slice((page - 1) * limit, page * limit));
+  return { matters, total: filtered.length, page, limit };
 }
 
 export async function getMatter(id: string) {
-  return prisma.matter.findUnique({ where: { id } });
+  const matter = await prisma.matter.findUnique({ where: { id } });
+  if (!matter) return null;
+  return (await enrichDataQuality("matter", [matter]))[0];
 }
 
-export async function updateMatter(id: string, fields: Partial<{ status: MatterStatus; priority: MatterPriority; category: MatterCategory; title: string; description: string; assignedAgentId: string | null }>) {
+export async function updateMatter(id: string, fields: Partial<{ status: MatterStatus; priority: MatterPriority; category: MatterCategory; title: string; description: string; assignedAgentId: string | null; projectId: string | null }>) {
   return prisma.matter.update({
     where: { id },
     data: {
@@ -180,7 +207,8 @@ export async function updateMatter(id: string, fields: Partial<{ status: MatterS
       ...(fields.category !== undefined && { category: fields.category }),
       ...(fields.title !== undefined && { title: fields.title }),
       ...(fields.description !== undefined && { description: fields.description }),
-      ...(fields.assignedAgentId !== undefined && { assignedAgentId: fields.assignedAgentId })
+      ...(fields.assignedAgentId !== undefined && { assignedAgentId: fields.assignedAgentId }),
+      ...(fields.projectId !== undefined && { projectId: fields.projectId })
     }
   });
 }
@@ -211,6 +239,23 @@ export async function inspectKingdomStatus() {
     failedTasks: failedTasksCount,
     budgetWarning: budgetStatus ? (budgetStatus.dailyWarning || budgetStatus.monthlyWarning) : false
   };
+}
+
+function buildProvenance(input: {
+  sourceType?: string | null;
+  sourceId?: string | null;
+  createdByAgentId?: string | null;
+  assignedAgentId?: string | null;
+  traceId?: string | null;
+}) {
+  const provenance = {
+    sourceType: input.sourceType ?? null,
+    sourceId: input.sourceId ?? null,
+    createdByAgentId: input.createdByAgentId ?? null,
+    assignedAgentId: input.assignedAgentId ?? null,
+    traceId: input.traceId ?? null
+  };
+  return Object.values(provenance).some(Boolean) ? provenance : undefined;
 }
 
 type RecommendedAction = { action: string; severity: "info" | "warning" | "critical"; href?: string };

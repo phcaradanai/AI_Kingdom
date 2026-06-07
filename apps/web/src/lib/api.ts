@@ -40,6 +40,7 @@ import type {
   SecretaryBriefDto,
   CouncilSessionDto,
   CurrentAgentActivityDto,
+  DataQuality,
   MemoryDto,
   MemoryPayload,
   ReportPayload,
@@ -172,23 +173,39 @@ export const api = {
   projectMemories: (id: string) => apiRequest<{ memories: MemoryDto[] }>(`/projects/${id}/memories`),
   projectArtifacts: (id: string) => apiRequest<{ artifacts: ArtifactDto[] }>(`/projects/${id}/artifacts`),
   exportProjectObsidian: (id: string) => apiRequest<ObsidianExportDto>(`/projects/${id}/export/obsidian`, { method: "POST" }),
-  projectInbox: (params?: { status?: string }) => {
-    const suffix = params?.status ? `?status=${encodeURIComponent(params.status)}` : "";
+  projectInbox: (params?: { status?: string; dataQuality?: DataQuality; includeTestData?: boolean; confidenceMin?: number; confidenceMax?: number; sourceType?: string; suggestedProjectId?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.dataQuality) search.set("dataQuality", params.dataQuality);
+    if (params?.includeTestData) search.set("includeTestData", "true");
+    if (params?.confidenceMin !== undefined) search.set("confidenceMin", String(params.confidenceMin));
+    if (params?.confidenceMax !== undefined) search.set("confidenceMax", String(params.confidenceMax));
+    if (params?.sourceType) search.set("sourceType", params.sourceType);
+    if (params?.suggestedProjectId) search.set("suggestedProjectId", params.suggestedProjectId);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
     return apiRequest<{ inboxItems: ProjectInboxItemDto[] }>(`/project-inbox${suffix}`);
   },
   assignProjectInboxItem: (id: string, projectId: string) =>
     apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/assign`, { method: "PATCH", body: JSON.stringify({ projectId }) }),
   dismissProjectInboxItem: (id: string) =>
     apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/dismiss`, { method: "PATCH" }),
+  bulkDismissProjectInboxItems: (ids: string[]) =>
+    apiRequest<{ inboxItems: ProjectInboxItemDto[] }>("/project-inbox/bulk/dismiss", { method: "PATCH", body: JSON.stringify({ ids }) }),
+  bulkAssignProjectInboxItems: (ids: string[], projectId: string) =>
+    apiRequest<{ inboxItems: ProjectInboxItemDto[] }>("/project-inbox/bulk/assign", { method: "PATCH", body: JSON.stringify({ ids, projectId }) }),
+  archiveLowConfidenceProjectInboxItems: (threshold = 0) =>
+    apiRequest<{ archived: number }>("/project-inbox/archive-low-confidence", { method: "PATCH", body: JSON.stringify({ threshold }) }),
   classifyProject: (payload: { title: string; content: string; sourceType: string; sourceId: string; persist?: boolean }) =>
     apiRequest<unknown>("/project-routing/classify", { method: "POST", body: JSON.stringify(payload) }),
   assignProjectRoute: (payload: { sourceType: string; sourceId: string; projectId: string }) =>
     apiRequest<{ assigned: boolean }>("/project-routing/assign", { method: "POST", body: JSON.stringify(payload) }),
-  artifacts: (params?: { projectId?: string; type?: string; tag?: string }) => {
+  artifacts: (params?: { projectId?: string; type?: string; tag?: string; dataQuality?: DataQuality; includeTestData?: boolean }) => {
     const search = new URLSearchParams();
     if (params?.projectId) search.set("projectId", params.projectId);
     if (params?.type) search.set("type", params.type);
     if (params?.tag) search.set("tag", params.tag);
+    if (params?.dataQuality) search.set("dataQuality", params.dataQuality);
+    if (params?.includeTestData) search.set("includeTestData", "true");
     const suffix = search.toString() ? `?${search.toString()}` : "";
     return apiRequest<{ artifacts: ArtifactDto[] }>(`/artifacts${suffix}`);
   },
@@ -197,6 +214,8 @@ export const api = {
     apiRequest<{ artifact: ArtifactDto }>("/artifacts", { method: "POST", body: JSON.stringify(payload) }),
   updateArtifact: (id: string, payload: Partial<ArtifactPayload>) =>
     apiRequest<{ artifact: ArtifactDto }>(`/artifacts/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  archiveDuplicateArtifact: (id: string) =>
+    apiRequest<{ artifact: ArtifactDto }>(`/artifacts/${id}/archive-duplicate`, { method: "PATCH" }),
   deleteArtifact: (id: string) => apiRequest<void>(`/artifacts/${id}`, { method: "DELETE" }),
   workOrders: (params?: { status?: string; priority?: string; externalAgentId?: string }) => {
     const search = new URLSearchParams();
@@ -343,12 +362,14 @@ export const api = {
     return apiRequest<AuditListResponse>(`/audit/search?${search.toString()}`);
   },
   secretaryBrief: () => apiRequest<SecretaryBriefDto>("/secretary/brief"),
-  notices: (params?: { severity?: NoticeSeverity; status?: NoticeStatus; page?: number; limit?: number }) => {
+  notices: (params?: { severity?: NoticeSeverity; status?: NoticeStatus; dataQuality?: DataQuality; includeTestData?: boolean; page?: number; limit?: number }) => {
     const search = new URLSearchParams();
     if (params?.severity) search.set("severity", params.severity);
     if (params?.status) search.set("status", params.status);
     if (params?.page) search.set("page", String(params.page));
     if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.dataQuality) search.set("dataQuality", params.dataQuality);
+    if (params?.includeTestData) search.set("includeTestData", "true");
     const suffix = search.toString() ? `?${search.toString()}` : "";
     return apiRequest<{ notices: NoticeDto[]; total: number; page: number; limit: number }>(`/notices${suffix}`);
   },
@@ -358,20 +379,22 @@ export const api = {
   updateNotice: (id: string, payload: Partial<{ status: NoticeStatus; title: string; content: string; severity: NoticeSeverity }>) =>
     apiRequest<{ notice: NoticeDto }>(`/notices/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteNotice: (id: string) => apiRequest<void>(`/notices/${id}`, { method: "DELETE" }),
-  matters: (params?: { status?: MatterStatus; priority?: MatterPriority; category?: MatterCategory; page?: number; limit?: number }) => {
+  matters: (params?: { status?: MatterStatus; priority?: MatterPriority; category?: MatterCategory; dataQuality?: DataQuality; includeTestData?: boolean; page?: number; limit?: number }) => {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);
     if (params?.priority) search.set("priority", params.priority);
     if (params?.category) search.set("category", params.category);
     if (params?.page) search.set("page", String(params.page));
     if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.dataQuality) search.set("dataQuality", params.dataQuality);
+    if (params?.includeTestData) search.set("includeTestData", "true");
     const suffix = search.toString() ? `?${search.toString()}` : "";
     return apiRequest<{ matters: MatterDto[]; total: number; page: number; limit: number }>(`/matters${suffix}`);
   },
   matter: (id: string) => apiRequest<{ matter: MatterDto }>(`/matters/${id}`),
   createMatter: (payload: { title: string; description: string; priority?: MatterPriority; category?: MatterCategory; projectId?: string | null; sourceType?: string; sourceId?: string }) =>
     apiRequest<{ matter: MatterDto }>("/matters", { method: "POST", body: JSON.stringify(payload) }),
-  updateMatter: (id: string, payload: Partial<{ status: MatterStatus; priority: MatterPriority; category: MatterCategory; title: string; description: string; assignedAgentId: string | null }>) =>
+  updateMatter: (id: string, payload: Partial<{ status: MatterStatus; priority: MatterPriority; category: MatterCategory; title: string; description: string; assignedAgentId: string | null; projectId: string | null }>) =>
     apiRequest<{ matter: MatterDto }>(`/matters/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteMatter: (id: string) => apiRequest<void>(`/matters/${id}`, { method: "DELETE" }),
   charter: () => apiRequest<{ charter: KingdomCharterDto }>("/charter"),

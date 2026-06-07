@@ -2,6 +2,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { requireRole } from "../middleware/rbac.js";
+import {
+  type DataQuality,
+  classifyArtifact,
+  enrichDataQuality,
+  normalizeTitle,
+  shouldIncludeByQuality
+} from "../services/dataQualityService.js";
 import { createArtifact } from "../services/projectService.js";
 
 const router = Router();
@@ -13,6 +20,7 @@ const artifactSchema = z.object({
   content: z.string().trim().min(1).max(20000),
   sourceType: z.string().trim().max(80).optional().nullable(),
   sourceId: z.string().trim().max(120).optional().nullable(),
+  traceId: z.string().trim().max(160).optional().nullable(),
   tags: z.array(z.string().trim().min(1).max(80)).max(50).default([])
 });
 
@@ -21,7 +29,9 @@ router.get("/", async (req, res, next) => {
     const projectId = typeof req.query.projectId === "string" ? req.query.projectId : undefined;
     const type = typeof req.query.type === "string" ? req.query.type : undefined;
     const tag = typeof req.query.tag === "string" ? req.query.tag : undefined;
-    const artifacts = await prisma.artifact.findMany({
+    const includeTestData = req.query.includeTestData === "true";
+    const dataQuality = req.query.dataQuality as DataQuality | undefined;
+    const rawArtifacts = await prisma.artifact.findMany({
       where: {
         ...(projectId ? { projectId } : {}),
         ...(type ? { type: type as never } : {}),
@@ -30,6 +40,13 @@ router.get("/", async (req, res, next) => {
       include: { project: true },
       orderBy: { updatedAt: "desc" }
     });
+    const filtered = rawArtifacts.filter((artifact) => shouldIncludeByQuality(artifact, classifyArtifact(artifact), { includeTestData, dataQuality }));
+    const duplicateKeys = findDuplicateKeys(filtered);
+    const artifacts = (await enrichDataQuality("artifact", filtered)).map((artifact) => ({
+      ...artifact,
+      duplicateKey: getArtifactDuplicateKey(artifact),
+      isDuplicate: duplicateKeys.has(getArtifactDuplicateKey(artifact))
+    }));
     res.json({ artifacts });
   } catch (error) {
     next(error);
@@ -48,7 +65,8 @@ router.post("/", requireRole("KING", "CROWN_PRINCE", "MINISTER"), async (req, re
 
 router.get("/:id", async (req, res, next) => {
   try {
-    const artifact = await prisma.artifact.findUnique({ where: { id: req.params.id }, include: { project: true } });
+    const rawArtifact = await prisma.artifact.findUnique({ where: { id: req.params.id }, include: { project: true } });
+    const artifact = rawArtifact ? (await enrichDataQuality("artifact", [rawArtifact]))[0] : null;
     if (!artifact) {
       res.status(404).json({ error: "Artifact not found" });
       return;
@@ -69,6 +87,24 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
   }
 });
 
+router.patch("/:id/archive-duplicate", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const existing = await prisma.artifact.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: "Artifact not found" });
+      return;
+    }
+    const artifact = await prisma.artifact.update({
+      where: { id: existing.id },
+      data: { tags: [...new Set([...existing.tags, "archived-duplicate"])] },
+      include: { project: true }
+    });
+    res.json({ artifact: (await enrichDataQuality("artifact", [artifact]))[0] });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete("/:id", requireRole("KING"), async (req, res, next) => {
   try {
     await prisma.artifact.delete({ where: { id: req.params.id } });
@@ -79,3 +115,16 @@ router.delete("/:id", requireRole("KING"), async (req, res, next) => {
 });
 
 export default router;
+
+function getArtifactDuplicateKey(artifact: { title: string; type: string; sourceType?: string | null; sourceId?: string | null }) {
+  return [normalizeTitle(artifact.title), artifact.type, artifact.sourceType ?? "", artifact.sourceId ?? ""].join("|");
+}
+
+function findDuplicateKeys(artifacts: Array<{ title: string; type: string; sourceType?: string | null; sourceId?: string | null }>) {
+  const counts = new Map<string, number>();
+  for (const artifact of artifacts) {
+    const key = getArtifactDuplicateKey(artifact);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([key]) => key));
+}

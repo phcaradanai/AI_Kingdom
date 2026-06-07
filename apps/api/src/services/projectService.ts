@@ -1,5 +1,6 @@
 import type { ArtifactType, ProjectPriority, ProjectStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { classifyArtifact, normalizeTitle } from "./dataQualityService.js";
 import { isSensitive } from "./memoryService.js";
 
 export const DEFAULT_PROJECTS = [
@@ -95,19 +96,43 @@ export async function createArtifact(input: {
   sourceType?: string | null;
   sourceId?: string | null;
   tags?: string[];
+  traceId?: string | null;
 }) {
   if (isSensitive(input.content) || isSensitive(input.title)) {
     throw new Error("Artifact appears to contain sensitive content");
   }
+  const sourceType = input.sourceType ?? null;
+  const sourceId = input.sourceId ?? null;
+  const type = input.type ?? "GENERAL_NOTE";
+  const sameSource = await prisma.artifact.findMany({
+    where: { sourceType, sourceId, type }
+  });
+  const existing = sameSource.find((artifact) => normalizeTitle(artifact.title) === normalizeTitle(input.title));
+  if (existing) return existing;
+
+  const createdBySystem = Boolean(sourceType || sourceId || input.traceId);
+  const dataQuality = classifyArtifact({
+    title: input.title,
+    sourceType,
+    sourceId,
+    traceId: input.traceId,
+    createdBySystem,
+    dataSource: sourceType ?? undefined
+  });
   return prisma.artifact.create({
     data: {
       projectId: input.projectId ?? null,
       title: input.title,
-      type: input.type ?? "GENERAL_NOTE",
+      type,
       content: redact(input.content),
-      sourceType: input.sourceType ?? null,
-      sourceId: input.sourceId ?? null,
-      tags: [...new Set((input.tags ?? []).map((tag) => tag.toLowerCase()))]
+      sourceType,
+      sourceId,
+      tags: [...new Set((input.tags ?? []).map((tag) => tag.toLowerCase()))],
+      dataSource: sourceType,
+      dataQuality,
+      traceId: input.traceId ?? null,
+      createdBySystem,
+      provenance: sourceType || sourceId || input.traceId ? { sourceType, sourceId, traceId: input.traceId ?? null } : undefined
     }
   });
 }

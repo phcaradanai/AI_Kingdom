@@ -45,11 +45,13 @@ async function main() {
   console.log(`  Agents:             ${marked.agents.length}`);
   marked.agents.forEach((a) => console.log(`    - ${a.slug} "${a.title}"`));
   console.log(`  Matters:            ${marked.matters.length}`);
-  marked.matters.forEach((m) => console.log(`    - ${m.id} "${m.title}"`));
+  marked.matters.forEach((m) => console.log(`    - ${formatRecord(m)}`));
   console.log(`  Notices:            ${marked.notices.length}`);
-  marked.notices.forEach((n) => console.log(`    - ${n.id} "${n.title}"`));
+  marked.notices.forEach((n) => console.log(`    - ${formatRecord(n)}`));
   console.log(`  Inbox items:        ${marked.inboxItems.length}`);
+  marked.inboxItems.forEach((i) => console.log(`    - ${formatRecord(i)}`));
   console.log(`  Artifacts:          ${marked.artifacts.length}`);
+  marked.artifacts.forEach((a) => console.log(`    - ${formatRecord(a)}`));
 
   // ── Report suspicious ──────────────────────────────────────────────────────
   if (suspicious) {
@@ -64,11 +66,19 @@ async function main() {
     );
     console.log(`  Matters:            ${suspicious.matters.length}`);
     suspicious.matters.forEach((m) =>
-      console.log(`    - ${m.id} "${m.title}" reason=${m.reason} createdAt=${m.createdAt.toISOString()}`)
+      console.log(`    - ${formatRecord(m)}`)
     );
     console.log(`  Notices:            ${suspicious.notices.length}`);
     suspicious.notices.forEach((n) =>
-      console.log(`    - ${n.id} "${n.title}" reason=${n.reason} createdAt=${n.createdAt.toISOString()}`)
+      console.log(`    - ${formatRecord(n)}`)
+    );
+    console.log(`  Inbox items:        ${suspicious.inboxItems.length}`);
+    suspicious.inboxItems.forEach((i) =>
+      console.log(`    - ${formatRecord(i)}`)
+    );
+    console.log(`  Artifacts:          ${suspicious.artifacts.length}`);
+    suspicious.artifacts.forEach((a) =>
+      console.log(`    - ${formatRecord(a)}`)
     );
 
     console.log(`\nProtected canonical records (never deleted):`);
@@ -81,8 +91,8 @@ async function main() {
   const allAgentIds = [...marked.agents.map((a) => a.id), ...(suspicious?.agents.map((a) => a.id) ?? [])];
   const matterIds = [...marked.matters.map((m) => m.id), ...(suspicious?.matters.map((m) => m.id) ?? [])];
   const noticeIds = [...marked.notices.map((n) => n.id), ...(suspicious?.notices.map((n) => n.id) ?? [])];
-  const inboxIds = marked.inboxItems.map((i) => i.id);
-  const artifactIds = marked.artifacts.map((a) => a.id);
+  const inboxIds = [...marked.inboxItems.map((i) => i.id), ...(suspicious?.inboxItems.map((i) => i.id) ?? [])];
+  const artifactIds = [...marked.artifacts.map((a) => a.id), ...(suspicious?.artifacts.map((a) => a.id) ?? [])];
 
   const totalRecords = allUserIds.length + allAgentIds.length + matterIds.length +
     noticeIds.length + inboxIds.length + artifactIds.length;
@@ -122,3 +132,7 @@ main()
     prisma.$disconnect();
     process.exit(1);
   });
+
+function formatRecord(record: { id: string; title: string; sourceType?: string | null; sourceId?: string | null; createdAt?: Date; reason?: string }) {
+  return `${record.id} "${record.title}" sourceType=${record.sourceType ?? "null"} sourceId=${record.sourceId ?? "null"} createdAt=${record.createdAt?.toISOString() ?? "unknown"} reason=${record.reason ?? "unknown"}`;
+}

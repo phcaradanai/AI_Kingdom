@@ -24,10 +24,10 @@ export const SUSPICIOUS_SLUG_PATTERNS = [
 
 export type MarkedUser = { id: string; email: string };
 export type MarkedAgent = { id: string; slug: string; title: string };
-export type MarkedRecord = { id: string; title: string };
+export type MarkedRecord = { id: string; title: string; sourceType?: string | null; sourceId?: string | null; createdAt?: Date; reason?: string };
 export type SuspiciousUser = { id: string; email: string; createdAt: Date; reason: string };
 export type SuspiciousAgent = { id: string; slug: string; title: string; createdAt: Date; reason: string };
-export type SuspiciousRecord = { id: string; title: string; createdAt: Date; reason: string };
+export type SuspiciousRecord = { id: string; title: string; sourceType?: string | null; sourceId?: string | null; createdAt: Date; reason: string };
 
 export interface MarkedTestData {
   users: MarkedUser[];
@@ -43,6 +43,8 @@ export interface SuspiciousUnmarkedData {
   agents: SuspiciousAgent[];
   matters: SuspiciousRecord[];
   notices: SuspiciousRecord[];
+  inboxItems: SuspiciousRecord[];
+  artifacts: SuspiciousRecord[];
 }
 
 export async function findMarkedTestData(prisma: PrismaClient): Promise<MarkedTestData> {
@@ -55,12 +57,19 @@ export async function findMarkedTestData(prisma: PrismaClient): Promise<MarkedTe
       where: { isTestData: true, slug: { notIn: PROTECTED_AGENT_SLUGS } },
       select: { id: true, slug: true, title: true }
     }),
-    prisma.matter.findMany({ where: { isTestData: true }, select: { id: true, title: true } }),
-    prisma.notice.findMany({ where: { isTestData: true }, select: { id: true, title: true } }),
-    prisma.projectInboxItem.findMany({ where: { isTestData: true }, select: { id: true, title: true } }),
-    prisma.artifact.findMany({ where: { isTestData: true }, select: { id: true, title: true } })
+    prisma.matter.findMany({ where: { isTestData: true }, select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true } }),
+    prisma.notice.findMany({ where: { isTestData: true }, select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true } }),
+    prisma.projectInboxItem.findMany({ where: { isTestData: true }, select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true } }),
+    prisma.artifact.findMany({ where: { isTestData: true }, select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true } })
   ]);
-  return { users, agents, matters, notices, inboxItems, artifacts };
+  return {
+    users,
+    agents,
+    matters: matters.map((record) => ({ ...record, reason: "isTestData=true" })),
+    notices: notices.map((record) => ({ ...record, reason: "isTestData=true" })),
+    inboxItems: inboxItems.map((record) => ({ ...record, reason: "isTestData=true" })),
+    artifacts: artifacts.map((record) => ({ ...record, reason: "isTestData=true" }))
+  };
 }
 
 function emailReason(email: string): string {
@@ -80,7 +89,7 @@ function titleReason(title: string, defaultPrefix: string): string {
 }
 
 export async function findSuspiciousUnmarkedData(prisma: PrismaClient): Promise<SuspiciousUnmarkedData> {
-  const [rawUsers, rawAgents, rawMatters, rawNotices] = await Promise.all([
+  const [rawUsers, rawAgents, rawMatters, rawNotices, rawInboxItems, rawArtifacts] = await Promise.all([
     prisma.user.findMany({
       where: {
         isTestData: false,
@@ -99,30 +108,108 @@ export async function findSuspiciousUnmarkedData(prisma: PrismaClient): Promise<
     }),
     prisma.matter.findMany({
       where: {
-        isTestData: false,
-        OR: [
-          { title: { startsWith: "Test Matter" } },
-          { title: { contains: "test", mode: "insensitive" as const } }
-        ]
+        isTestData: false
       },
-      select: { id: true, title: true, createdAt: true }
+      select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true }
     }),
     prisma.notice.findMany({
       where: {
+        isTestData: false
+      },
+      select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true }
+    }),
+    prisma.projectInboxItem.findMany({
+      where: {
         isTestData: false,
         OR: [
-          { title: { startsWith: "Test Notice" } },
-          { title: { contains: "test", mode: "insensitive" as const } }
+          { title: { contains: "test", mode: "insensitive" as const } },
+          { sourceType: { equals: "test", mode: "insensitive" as const } },
+          { sourceId: { contains: "test", mode: "insensitive" as const } },
+          { sourceType: "NOTICE", confidenceScore: { lte: 0 } },
+          { confidenceScore: { lte: 0 } }
         ]
       },
-      select: { id: true, title: true, createdAt: true }
+      select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true, confidenceScore: true }
+    }),
+    prisma.artifact.findMany({
+      where: {
+        isTestData: false,
+        OR: [
+          { title: { contains: "Implementation Report: M13", mode: "insensitive" as const } },
+          { title: { contains: "Implementation Report: M14", mode: "insensitive" as const } },
+          { title: { contains: "report work test", mode: "insensitive" as const } },
+          { title: { contains: "generated implementation-report", mode: "insensitive" as const } },
+          { title: { contains: "generated implementation report", mode: "insensitive" as const } },
+          { sourceType: { equals: "test", mode: "insensitive" as const } },
+          { sourceId: { equals: "test", mode: "insensitive" as const } }
+        ]
+      },
+      select: { id: true, title: true, sourceType: true, sourceId: true, createdAt: true }
     })
   ]);
 
   return {
     users: rawUsers.map((u) => ({ ...u, reason: emailReason(u.email) })),
     agents: rawAgents.map((a) => ({ ...a, reason: slugReason(a.slug) })),
-    matters: rawMatters.map((m) => ({ ...m, reason: titleReason(m.title, "Test Matter") })),
-    notices: rawNotices.map((n) => ({ ...n, reason: titleReason(n.title, "Test Notice") }))
+    matters: rawMatters
+      .filter((m) => suspiciousMatterReason(m) !== null)
+      .map((m) => ({ ...m, reason: suspiciousMatterReason(m) ?? "unknown" })),
+    notices: rawNotices
+      .filter((n) => suspiciousNoticeReason(n) !== null)
+      .map((n) => ({ ...n, reason: suspiciousNoticeReason(n) ?? "unknown" })),
+    inboxItems: rawInboxItems
+      .filter((i) => suspiciousInboxReason(i) !== null)
+      .map((i) => ({ ...i, reason: suspiciousInboxReason(i) ?? "unknown" })),
+    artifacts: rawArtifacts
+      .filter((a) => suspiciousArtifactReason(a) !== null)
+      .map((a) => ({ ...a, reason: suspiciousArtifactReason(a) ?? "unknown" }))
   };
+}
+
+function suspiciousMatterReason(record: { title: string; sourceType?: string | null; sourceId?: string | null }) {
+  const title = record.title.toLowerCase();
+  if (title.includes("test")) return titleReason(record.title, "Test Matter");
+  if (title.includes("dup matter")) return `title contains "dup matter"`;
+  if (title.includes("del test")) return `title contains "del test"`;
+  if (title.includes("cp test")) return `title contains "cp test"`;
+  if (hasGeneratedSuffix(record.title)) return "title has generated timestamp/id suffix";
+  if (isSourceTest(record)) return "source is test";
+  return null;
+}
+
+function suspiciousNoticeReason(record: { title: string; sourceType?: string | null; sourceId?: string | null }) {
+  const title = record.title.toLowerCase();
+  if (title.includes("test")) return titleReason(record.title, "Test Notice");
+  if (title.includes("dup")) return `title contains "dup"`;
+  if (title.includes("unread test")) return `title contains "unread test"`;
+  if (title.includes("read test")) return `title contains "read test"`;
+  if (hasGeneratedSuffix(record.title)) return "title has generated timestamp/id suffix";
+  if (isSourceTest(record)) return "source is test";
+  return null;
+}
+
+function suspiciousInboxReason(record: { title: string; sourceType?: string | null; sourceId?: string | null; confidenceScore?: number | null }) {
+  if (record.title.toLowerCase().includes("test")) return `title contains "test"`;
+  if (isSourceTest(record)) return "source is test";
+  if (record.sourceType === "NOTICE" && (record.sourceId ?? "").toLowerCase() === "test") return "NOTICE with source test";
+  if ((record.confidenceScore ?? 1) <= 0) return "confidence 0% generated review record";
+  return null;
+}
+
+function suspiciousArtifactReason(record: { title: string; sourceType?: string | null; sourceId?: string | null }) {
+  const title = record.title.toLowerCase();
+  if (title.includes("implementation report: m13")) return `title contains "Implementation Report: M13"`;
+  if (title.includes("implementation report: m14")) return `title contains "Implementation Report: M14"`;
+  if (title.includes("report work test")) return `title contains "report work test"`;
+  if (title.includes("generated implementation-report") || title.includes("generated implementation report")) return "generated implementation-report duplicate";
+  if (isSourceTest(record)) return "source is test";
+  return null;
+}
+
+function isSourceTest(record: { sourceType?: string | null; sourceId?: string | null }) {
+  return [record.sourceType, record.sourceId].some((value) => value?.toLowerCase() === "test");
+}
+
+function hasGeneratedSuffix(title: string) {
+  return /\b(cm[a-z0-9]{8,}|[0-9]{10,}|[0-9]{4}[0-9]{2}[0-9]{2}[t -]?[0-9]{4,})$/i.test(title.trim());
 }

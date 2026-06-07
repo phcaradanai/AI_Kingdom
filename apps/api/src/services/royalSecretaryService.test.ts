@@ -60,7 +60,7 @@ test("listNotices filters by status", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     await createNotice({ title: `Unread ${suffix}`, content: "x", severity: "INFO", sourceType: "test", sourceId: suffix });
-    const result = await listNotices({ status: "UNREAD" });
+    const result = await listNotices({ status: "UNREAD", includeTestData: true });
     assert.ok(result.notices.some((n) => n.title === `Unread ${suffix}`));
   } finally {
     await cleanup(suffix);
@@ -94,7 +94,7 @@ test("createMatter prevents duplicate for same sourceType+sourceId in non-termin
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const m1 = await createMatter({ title: `Dup matter ${suffix}`, description: "First", sourceType: "test", sourceId: suffix });
-    const m2 = await createMatter({ title: `Dup matter 2 ${suffix}`, description: "Second", sourceType: "test", sourceId: suffix });
+    const m2 = await createMatter({ title: `Dup matter ${suffix}`, description: "Second", sourceType: "test", sourceId: suffix });
     assert.equal(m1.id, m2.id);
   } finally {
     await cleanup(suffix);
@@ -128,8 +128,27 @@ test("listMatters filters by priority", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     await createMatter({ title: `Critical matter ${suffix}`, description: "y", priority: "CRITICAL", sourceType: "test", sourceId: suffix });
-    const result = await listMatters({ priority: "CRITICAL" });
+    const result = await listMatters({ priority: "CRITICAL", includeTestData: true });
     assert.ok(result.matters.some((m) => m.title === `Critical matter ${suffix}`));
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("TEST notices and matters are hidden by default and returned with includeTestData", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  try {
+    const notice = await createNotice({ title: `Hidden notice ${suffix}`, content: "x", sourceType: "test", sourceId: suffix });
+    const matter = await createMatter({ title: `Hidden matter ${suffix}`, description: "x", sourceType: "test", sourceId: suffix });
+    const defaultNotices = await listNotices({ status: "UNREAD" });
+    const defaultMatters = await listMatters({});
+    assert.equal(defaultNotices.notices.some((n) => n.id === notice.id), false);
+    assert.equal(defaultMatters.matters.some((m) => m.id === matter.id), false);
+
+    const testNotices = await listNotices({ includeTestData: true, dataQuality: "TEST" });
+    const testMatters = await listMatters({ includeTestData: true, dataQuality: "TEST" });
+    assert.ok(testNotices.notices.some((n) => n.id === notice.id));
+    assert.ok(testMatters.matters.some((m) => m.id === matter.id));
   } finally {
     await cleanup(suffix);
   }

@@ -59,7 +59,7 @@ async function main() {
   console.log(`Matters suspicious (unmarked):  ${suspicious.matters.length}`);
   if (suspicious.matters.length > 0) {
     suspicious.matters.slice(0, 10).forEach((m) =>
-      console.log(`  - ${m.id} "${m.title}" (${m.createdAt.toISOString()}) reason=${m.reason}`)
+      console.log(`  - ${formatRecord(m)}`)
     );
     if (suspicious.matters.length > 10) console.log(`  ... and ${suspicious.matters.length - 10} more`);
   }
@@ -69,20 +69,34 @@ async function main() {
   console.log(`Notices suspicious (unmarked):  ${suspicious.notices.length}`);
   if (suspicious.notices.length > 0) {
     suspicious.notices.slice(0, 10).forEach((n) =>
-      console.log(`  - ${n.id} "${n.title}" (${n.createdAt.toISOString()}) reason=${n.reason}`)
+      console.log(`  - ${formatRecord(n)}`)
     );
     if (suspicious.notices.length > 10) console.log(`  ... and ${suspicious.notices.length - 10} more`);
   }
 
   // ── ProjectInboxItems + Artifacts ──────────────────────────────────────────
   console.log(`\nInbox items isTestData=true:    ${marked.inboxItems.length}`);
+  console.log(`Inbox suspicious (unmarked):    ${suspicious.inboxItems.length}`);
+  if (suspicious.inboxItems.length > 0) {
+    suspicious.inboxItems.slice(0, 10).forEach((i) =>
+      console.log(`  - ${formatRecord(i)}`)
+    );
+    if (suspicious.inboxItems.length > 10) console.log(`  ... and ${suspicious.inboxItems.length - 10} more`);
+  }
   console.log(`Artifacts isTestData=true:      ${marked.artifacts.length}`);
+  console.log(`Artifacts suspicious (unmarked): ${suspicious.artifacts.length}`);
+  if (suspicious.artifacts.length > 0) {
+    suspicious.artifacts.slice(0, 10).forEach((a) =>
+      console.log(`  - ${formatRecord(a)}`)
+    );
+    if (suspicious.artifacts.length > 10) console.log(`  ... and ${suspicious.artifacts.length - 10} more`);
+  }
 
   // ── Summary ────────────────────────────────────────────────────────────────
   const totalTagged = marked.users.length + marked.agents.length + marked.matters.length +
     marked.notices.length + marked.inboxItems.length + marked.artifacts.length;
   const totalSuspicious = suspicious.users.length + suspicious.agents.length +
-    suspicious.matters.length + suspicious.notices.length;
+    suspicious.matters.length + suspicious.notices.length + suspicious.inboxItems.length + suspicious.artifacts.length;
 
   console.log("\n=== Summary ===");
   console.log(`Confirmed test records (isTestData=true):   ${totalTagged}`);
@@ -99,3 +113,7 @@ main()
     prisma.$disconnect();
     process.exit(1);
   });
+
+function formatRecord(record: { id: string; title: string; sourceType?: string | null; sourceId?: string | null; createdAt?: Date; reason?: string }) {
+  return `${record.id} "${record.title}" sourceType=${record.sourceType ?? "null"} sourceId=${record.sourceId ?? "null"} createdAt=${record.createdAt?.toISOString() ?? "unknown"} reason=${record.reason ?? "unknown"}`;
+}

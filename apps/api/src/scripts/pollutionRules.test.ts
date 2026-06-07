@@ -56,6 +56,36 @@ test("findSuspiciousUnmarkedData detects unmarked notices with test titles", asy
   }
 });
 
+test("findSuspiciousUnmarkedData detects suspicious inbox items and artifacts", async () => {
+  const suffix = `prtest-${Date.now()}`;
+  const inbox = await prisma.projectInboxItem.create({
+    data: {
+      sourceType: "NOTICE",
+      sourceId: `cmq-${suffix}`,
+      title: `Project inbox test ${suffix}`,
+      summary: "test inbox pollution",
+      confidenceScore: 0,
+      isTestData: false
+    }
+  });
+  const artifact = await prisma.artifact.create({
+    data: {
+      title: `Implementation Report: M13 RBAC ${suffix}`,
+      content: "test artifact pollution",
+      type: "IMPLEMENTATION_REPORT",
+      isTestData: false
+    }
+  });
+  try {
+    const { inboxItems, artifacts } = await findSuspiciousUnmarkedData(prisma);
+    assert.ok(inboxItems.some((item) => item.id === inbox.id), "pollution inbox item must appear in suspicious inbox items");
+    assert.ok(artifacts.some((item) => item.id === artifact.id), "pollution artifact must appear in suspicious artifacts");
+  } finally {
+    await prisma.projectInboxItem.delete({ where: { id: inbox.id } }).catch(() => undefined);
+    await prisma.artifact.delete({ where: { id: artifact.id } }).catch(() => undefined);
+  }
+});
+
 test("findSuspiciousUnmarkedData does not return isTestData=true matters", async () => {
   const suffix = `prtest-${Date.now()}`;
   const matter = await prisma.matter.create({

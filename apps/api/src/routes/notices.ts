@@ -1,6 +1,7 @@
 import { Router } from "express";
 import type { NoticeSeverity, NoticeStatus } from "@prisma/client";
 import { requireRole } from "../middleware/rbac.js";
+import type { DataQuality } from "../services/dataQualityService.js";
 import { createNotice, deleteNotice, getNotice, listNotices, updateNotice } from "../services/royalSecretaryService.js";
 
 const router = Router();
@@ -9,9 +10,11 @@ router.get("/", async (req, res, next) => {
   try {
     const severity = req.query.severity as NoticeSeverity | undefined;
     const status = req.query.status as NoticeStatus | undefined;
+    const includeTestData = req.query.includeTestData === "true";
+    const dataQuality = req.query.dataQuality as DataQuality | undefined;
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 50;
-    const result = await listNotices({ severity, status, page, limit });
+    const result = await listNotices({ severity, status, includeTestData, dataQuality, page, limit });
     res.json(result);
   } catch (error) {
     next(error);
@@ -33,13 +36,15 @@ router.get("/:id", async (req, res, next) => {
 
 router.post("/", requireRole("KING"), async (req, res, next) => {
   try {
-    const { title, content, severity, sourceType, sourceId, createdByAgentId } = req.body as {
+    const { title, content, severity, sourceType, sourceId, createdByAgentId, projectId, traceId } = req.body as {
       title: string;
       content: string;
       severity?: NoticeSeverity;
       sourceType?: string;
       sourceId?: string;
       createdByAgentId?: string;
+      projectId?: string;
+      traceId?: string;
     };
     if (!title?.trim() || !content?.trim()) {
       res.status(400).json({ error: "title and content are required" });
@@ -51,7 +56,9 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
       ...(severity !== undefined && { severity }),
       ...(sourceType !== undefined && { sourceType }),
       ...(sourceId !== undefined && { sourceId }),
-      ...(createdByAgentId !== undefined && { createdByAgentId })
+      ...(createdByAgentId !== undefined && { createdByAgentId }),
+      ...(projectId !== undefined && { projectId }),
+      ...(traceId !== undefined && { traceId })
     });
     res.status(201).json({ notice });
   } catch (error) {

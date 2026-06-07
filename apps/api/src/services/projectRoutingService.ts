@@ -1,5 +1,6 @@
 import type { Project, ProjectRoutingStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { classifyProjectInboxItem } from "./dataQualityService.js";
 
 export type ProjectClassificationInput = {
   title: string;
@@ -67,18 +68,38 @@ export async function routeProjectForSource(input: ProjectClassificationInput) {
     return { classification, candidate, inboxItem: null };
   }
 
-  const inboxItem = await prisma.projectInboxItem.create({
-    data: {
+  const inboxData = {
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    title: input.title,
+    summary: trim(input.content, 800),
+    candidateProjectIds: classification.candidateProjects.map((item) => item.project.id),
+    confidenceScore: classification.confidenceScore,
+    reason: classification.reason,
+    status: "PENDING" as const,
+    dataSource: input.sourceType,
+    dataQuality: classifyProjectInboxItem({
+      title: input.title,
       sourceType: input.sourceType,
       sourceId: input.sourceId,
-      title: input.title,
-      summary: trim(input.content, 800),
-      candidateProjectIds: classification.candidateProjects.map((item) => item.project.id),
       confidenceScore: classification.confidenceScore,
-      reason: classification.reason,
-      status: "PENDING"
+      createdBySystem: true,
+      dataSource: input.sourceType
+    }),
+    createdBySystem: true,
+    provenance: {
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      routingStatus: status,
+      reason: classification.reason
     }
+  };
+  const existingInboxItem = await prisma.projectInboxItem.findFirst({
+    where: { sourceType: input.sourceType, sourceId: input.sourceId, status: "PENDING" }
   });
+  const inboxItem = existingInboxItem
+    ? await prisma.projectInboxItem.update({ where: { id: existingInboxItem.id }, data: inboxData })
+    : await prisma.projectInboxItem.create({ data: inboxData });
 
   return { classification, candidate, inboxItem };
 }

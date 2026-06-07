@@ -142,6 +142,7 @@ export async function cleanupTestRun(testRunId: string): Promise<void> {
   await Promise.all([
     prisma.notice.deleteMany({ where: { testRunId } }),
     prisma.matter.deleteMany({ where: { testRunId } }),
+    prisma.projectInboxItem.deleteMany({ where: { testRunId } }),
     prisma.artifact.deleteMany({ where: { testRunId } })
   ]);
   // Agents and users last (cascade deletes linked records)

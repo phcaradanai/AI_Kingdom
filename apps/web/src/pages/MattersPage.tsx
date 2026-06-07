@@ -1,5 +1,6 @@
 import { ChevronDown, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { MatterCategory, MatterDto, MatterPriority, MatterStatus } from "@/types/api";
+import type { DataQuality, MatterCategory, MatterDto, MatterPriority, MatterStatus, ProjectDto } from "@/types/api";
 
 const PRIORITY_BADGE: Record<MatterPriority, string> = {
   CRITICAL: "bg-red-500/20 text-red-400",
@@ -42,6 +43,7 @@ const PRIORITIES: MatterPriority[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 const CATEGORIES: MatterCategory[] = ["TREASURY", "SECURITY", "REVENUE", "SYSTEM", "RESEARCH", "PRODUCT", "GENERAL"];
 const ALL_STATUSES = Object.keys(STATUS_LABELS) as MatterStatus[];
 const UPDATABLE_STATUSES = ALL_STATUSES;
+const QUALITIES: DataQuality[] = ["TRUSTED", "REVIEW_REQUIRED", "TEST", "LEGACY", "UNKNOWN_SOURCE"];
 
 export function MattersPage() {
   const user = useAuthStore((state) => state.user);
@@ -49,12 +51,16 @@ export function MattersPage() {
   const canUpdate = user?.role === "KING" || user?.role === "CROWN_PRINCE";
 
   const [matters, setMatters] = useState<MatterDto[]>([]);
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filterStatus, setFilterStatus] = useState<MatterStatus | "">("");
   const [filterPriority, setFilterPriority] = useState<MatterPriority | "">("");
   const [filterCategory, setFilterCategory] = useState<MatterCategory | "">("");
+  const [filterQuality, setFilterQuality] = useState<DataQuality | "">("");
+  const [includeTestData, setIncludeTestData] = useState(false);
   const [selected, setSelected] = useState<MatterDto | null>(null);
+  const [linkProjectId, setLinkProjectId] = useState("");
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
@@ -70,6 +76,8 @@ export function MattersPage() {
       status: filterStatus || undefined,
       priority: filterPriority || undefined,
       category: filterCategory || undefined,
+      dataQuality: filterQuality || undefined,
+      includeTestData,
       page,
       limit: PAGE_SIZE
     }).then((r) => {
@@ -78,7 +86,8 @@ export function MattersPage() {
     }).catch(() => undefined).finally(() => setLoading(false));
   }
 
-  useEffect(() => { loadMatters(); }, [filterStatus, filterPriority, filterCategory, page]);
+  useEffect(() => { loadMatters(); }, [filterStatus, filterPriority, filterCategory, filterQuality, includeTestData, page]);
+  useEffect(() => { api.projects().then((r) => setProjects(r.projects)).catch(() => undefined); }, []);
 
   async function updateStatus(matter: MatterDto, status: MatterStatus) {
     if (!canUpdate) return;
@@ -92,6 +101,29 @@ export function MattersPage() {
     const res = await api.createMatter({ title: newTitle, description: newDesc, priority: newPriority, category: newCategory });
     setMatters((ms) => [res.matter, ...ms]);
     setNewTitle(""); setNewDesc(""); setNewPriority("MEDIUM"); setNewCategory("GENERAL"); setShowCreate(false);
+  }
+
+  async function createWorkOrder(matter: MatterDto) {
+    await api.workOrderFromMatter(matter.id);
+  }
+
+  async function sendToCouncil(matter: MatterDto) {
+    await api.createTask({
+      title: `Council review: ${matter.title}`,
+      command: `${matter.description}\n\nSource matter: ${matter.id}`,
+      mode: "PLAN",
+      projectId: matter.projectId
+    });
+    const updated = await api.updateMatter(matter.id, { status: "COUNCIL_REVIEW" });
+    setMatters((ms) => ms.map((m) => m.id === updated.matter.id ? updated.matter : m));
+    setSelected(updated.matter);
+  }
+
+  async function linkToProject(matter: MatterDto) {
+    if (!linkProjectId) return;
+    const updated = await api.updateMatter(matter.id, { projectId: linkProjectId });
+    setMatters((ms) => ms.map((m) => m.id === updated.matter.id ? updated.matter : m));
+    setSelected(updated.matter);
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
@@ -126,6 +158,18 @@ export function MattersPage() {
           <option value="">All categories</option>
           {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
         </select>
+        <select
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+          value={filterQuality}
+          onChange={(e) => { setFilterQuality(e.target.value as DataQuality | ""); setPage(1); }}
+        >
+          <option value="">All quality</option>
+          {QUALITIES.map((q) => <option key={q} value={q}>{qualityLabel(q)}</option>)}
+        </select>
+        <label className="flex h-10 items-center gap-2 rounded-md border border-input px-3 text-sm text-muted-foreground">
+          <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} />
+          Show test
+        </label>
         {isKing && (
           <Button className="ml-auto" onClick={() => setShowCreate((v) => !v)} variant={showCreate ? "outline" : "primary"}>
             <Plus className="h-4 w-4" />
@@ -192,6 +236,7 @@ export function MattersPage() {
                     <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", PRIORITY_BADGE[m.priority])}>{m.priority}</span>
                     <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", STATUS_COLORS[m.status])}>{STATUS_LABELS[m.status]}</span>
                     <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{m.category}</span>
+                    <span className={qualityClass(m.dataQuality)}>{qualityLabel(m.dataQuality)}</span>
                   </div>
                   <div className="mt-1 font-medium text-sm">{m.title}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">{m.description}</div>
@@ -223,12 +268,22 @@ export function MattersPage() {
                 </button>
               </div>
               <h3 className="mt-3 font-semibold">{selected.title}</h3>
+              {(selected.dataQuality === "TEST" || selected.dataQuality === "UNKNOWN_SOURCE") && (
+                <div className="mt-3 rounded-md border border-yellow-500/30 bg-yellow-500/10 p-2 text-xs text-yellow-200">
+                  {selected.dataQuality === "TEST" ? "This matter looks like test data." : "This matter has no trustworthy source link."}
+                </div>
+              )}
               <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{selected.description}</p>
               <dl className="mt-4 space-y-2 text-xs text-muted-foreground">
                 <div className="flex justify-between"><dt>Status</dt><dd><span className={cn("rounded-full px-2 py-0.5", STATUS_COLORS[selected.status])}>{STATUS_LABELS[selected.status]}</span></dd></div>
                 <div className="flex justify-between"><dt>Category</dt><dd>{selected.category}</dd></div>
+                <div className="flex justify-between"><dt>Priority</dt><dd>{selected.priority}</dd></div>
+                <div className="flex justify-between"><dt>Quality</dt><dd><span className={qualityClass(selected.dataQuality)}>{qualityLabel(selected.dataQuality)}</span></dd></div>
+                <div className="flex justify-between gap-3"><dt>Source</dt><dd className="text-right">{selected.humanReadableSource ?? "Unknown source"}</dd></div>
+                {selected.projectId && <div className="flex justify-between"><dt>Project</dt><dd><Link to={`/projects/${selected.projectId}`} className="text-primary hover:underline">Open project</Link></dd></div>}
+                {selected.traceId && <div className="flex justify-between"><dt>Trace</dt><dd><Link to={`/usage-traces/${selected.traceId}`} className="text-primary hover:underline">View trace</Link></dd></div>}
                 <div className="flex justify-between"><dt>Raised</dt><dd>{formatDate(selected.createdAt)}</dd></div>
-                {selected.sourceType && <div className="flex justify-between"><dt>Source</dt><dd>{selected.sourceType}</dd></div>}
+                <div className="flex justify-between"><dt>Updated</dt><dd>{formatDate(selected.updatedAt)}</dd></div>
               </dl>
               {canUpdate && (
                 <div className="mt-4">
@@ -245,10 +300,37 @@ export function MattersPage() {
                   </div>
                 </div>
               )}
+              {canUpdate && (
+                <div className="mt-4 space-y-2">
+                  <Button className="w-full" variant="outline" onClick={() => void createWorkOrder(selected)}>Create work order</Button>
+                  <Button className="w-full" variant="outline" onClick={() => void sendToCouncil(selected)}>Send to council</Button>
+                  <div className="flex gap-2">
+                    <select className="min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-xs" value={linkProjectId} onChange={(e) => setLinkProjectId(e.target.value)}>
+                      <option value="">Link project</option>
+                      {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+                    </select>
+                    <Button variant="outline" onClick={() => void linkToProject(selected)}>Link</Button>
+                  </div>
+                  <Button className="w-full" variant="outline" onClick={() => void updateStatus(selected, "COMPLETED")}>Archive</Button>
+                </div>
+              )}
             </Card>
           </div>
         )}
       </div>
     </>
   );
+}
+
+function qualityLabel(value: DataQuality) {
+  return value.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function qualityClass(value: DataQuality) {
+  const base = "rounded-full px-2 py-0.5 text-xs font-medium";
+  if (value === "TRUSTED") return `${base} bg-green-500/15 text-green-300`;
+  if (value === "REVIEW_REQUIRED") return `${base} bg-yellow-500/15 text-yellow-300`;
+  if (value === "TEST") return `${base} bg-red-500/15 text-red-300`;
+  if (value === "LEGACY") return `${base} bg-blue-500/15 text-blue-300`;
+  return `${base} bg-muted text-muted-foreground`;
 }

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import type { MatterCategory, MatterPriority, MatterStatus } from "@prisma/client";
+import type { DataQuality } from "../services/dataQualityService.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createMatter, deleteMatter, getMatter, listMatters, updateMatter } from "../services/royalSecretaryService.js";
 
@@ -10,9 +11,11 @@ router.get("/", async (req, res, next) => {
     const status = req.query.status as MatterStatus | undefined;
     const priority = req.query.priority as MatterPriority | undefined;
     const category = req.query.category as MatterCategory | undefined;
+    const includeTestData = req.query.includeTestData === "true";
+    const dataQuality = req.query.dataQuality as DataQuality | undefined;
     const page = Number(req.query.page) || 1;
     const limit = Number(req.query.limit) || 50;
-    const result = await listMatters({ status, priority, category, page, limit });
+    const result = await listMatters({ status, priority, category, includeTestData, dataQuality, page, limit });
     res.json(result);
   } catch (error) {
     next(error);
@@ -34,7 +37,7 @@ router.get("/:id", async (req, res, next) => {
 
 router.post("/", requireRole("KING"), async (req, res, next) => {
   try {
-    const { title, description, priority, category, sourceType, sourceId, assignedAgentId, projectId } = req.body as {
+    const { title, description, priority, category, sourceType, sourceId, assignedAgentId, projectId, traceId } = req.body as {
       title: string;
       description: string;
       priority?: MatterPriority;
@@ -43,6 +46,7 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
       sourceId?: string;
       assignedAgentId?: string;
       projectId?: string;
+      traceId?: string;
     };
     if (!title?.trim() || !description?.trim()) {
       res.status(400).json({ error: "title and description are required" });
@@ -56,7 +60,8 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
       ...(sourceType !== undefined && { sourceType }),
       ...(sourceId !== undefined && { sourceId }),
       ...(assignedAgentId !== undefined && { assignedAgentId }),
-      ...(projectId !== undefined && { projectId })
+      ...(projectId !== undefined && { projectId }),
+      ...(traceId !== undefined && { traceId })
     });
     res.status(201).json({ matter });
   } catch (error) {
@@ -72,13 +77,14 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
       res.status(404).json({ error: "Matter not found" });
       return;
     }
-    const { status, priority, category, title, description, assignedAgentId } = req.body as {
+    const { status, priority, category, title, description, assignedAgentId, projectId } = req.body as {
       status?: MatterStatus;
       priority?: MatterPriority;
       category?: MatterCategory;
       title?: string;
       description?: string;
       assignedAgentId?: string | null;
+      projectId?: string | null;
     };
     const matter = await updateMatter(id, {
       ...(status !== undefined && { status }),
@@ -86,7 +92,8 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
       ...(category !== undefined && { category }),
       ...(title !== undefined && { title }),
       ...(description !== undefined && { description }),
-      ...(assignedAgentId !== undefined && { assignedAgentId })
+      ...(assignedAgentId !== undefined && { assignedAgentId }),
+      ...(projectId !== undefined && { projectId })
     });
     res.json({ matter });
   } catch (error) {

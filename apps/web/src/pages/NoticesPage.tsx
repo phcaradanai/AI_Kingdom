@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { NoticeDto, NoticeSeverity, NoticeStatus } from "@/types/api";
+import type { DataQuality, NoticeDto, NoticeSeverity, NoticeStatus } from "@/types/api";
 
 const SEVERITY_STYLES: Record<NoticeSeverity, string> = {
   CRITICAL: "border-red-500/40 bg-red-500/8 text-red-300",
@@ -23,17 +23,21 @@ const SEVERITY_BADGE: Record<NoticeSeverity, string> = {
 
 const SEVERITIES: NoticeSeverity[] = ["CRITICAL", "WARNING", "INFO"];
 const STATUSES: NoticeStatus[] = ["UNREAD", "READ", "ARCHIVED"];
+const QUALITIES: DataQuality[] = ["TRUSTED", "REVIEW_REQUIRED", "TEST", "LEGACY", "UNKNOWN_SOURCE"];
 
 export function NoticesPage() {
   const user = useAuthStore((state) => state.user);
   const isKing = user?.role === "KING";
   const canUpdate = user?.role === "KING" || user?.role === "CROWN_PRINCE";
+  const canShowTest = canUpdate;
 
   const [notices, setNotices] = useState<NoticeDto[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [filterSeverity, setFilterSeverity] = useState<NoticeSeverity | "">("");
   const [filterStatus, setFilterStatus] = useState<NoticeStatus | "">("");
+  const [filterQuality, setFilterQuality] = useState<DataQuality | "">("");
+  const [includeTestData, setIncludeTestData] = useState(false);
   const [selected, setSelected] = useState<NoticeDto | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -48,6 +52,8 @@ export function NoticesPage() {
     api.notices({
       severity: filterSeverity || undefined,
       status: filterStatus || undefined,
+      dataQuality: filterQuality || undefined,
+      includeTestData,
       page,
       limit: PAGE_SIZE
     }).then((r) => {
@@ -56,7 +62,15 @@ export function NoticesPage() {
     }).catch(() => undefined).finally(() => setLoading(false));
   }
 
-  useEffect(() => { loadNotices(); }, [filterSeverity, filterStatus, page]);
+  useEffect(() => { loadNotices(); }, [filterSeverity, filterStatus, filterQuality, includeTestData, page]);
+
+  const duplicateTitles = new Set(
+    Object.entries(notices.reduce<Record<string, number>>((acc, notice) => {
+      const key = normalizeTitle(notice.title);
+      acc[key] = (acc[key] ?? 0) + 1;
+      return acc;
+    }, {})).filter(([, count]) => count > 1).map(([title]) => title)
+  );
 
   async function markRead(notice: NoticeDto) {
     if (!canUpdate || notice.status === "READ") return;
@@ -103,7 +117,21 @@ export function NoticesPage() {
           <option value="">All statuses</option>
           {STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm text-foreground"
+          value={filterQuality}
+          onChange={(e) => { setFilterQuality(e.target.value as DataQuality | ""); setPage(1); }}
+        >
+          <option value="">All quality</option>
+          {QUALITIES.map((q) => <option key={q} value={q}>{qualityLabel(q)}</option>)}
+        </select>
         <div className="ml-auto flex gap-2">
+          {canShowTest && (
+            <label className="flex h-10 items-center gap-2 rounded-md border border-input px-3 text-sm text-muted-foreground">
+              <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} />
+              Show test/legacy
+            </label>
+          )}
           {isKing && (
             <Button onClick={() => setShowCreate((v) => !v)} variant={showCreate ? "outline" : "primary"}>
               <Plus className="h-4 w-4" />
@@ -164,11 +192,14 @@ export function NoticesPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <span className={cn("rounded-full px-2 py-0.5 text-xs font-medium", SEVERITY_BADGE[n.severity])}>{n.severity}</span>
+                    <span className={qualityClass(n.dataQuality)}>{qualityLabel(n.dataQuality)}</span>
+                    {duplicateTitles.has(normalizeTitle(n.title)) && <span className="rounded-full bg-yellow-500/15 px-2 py-0.5 text-xs text-yellow-300">Possible duplicate</span>}
                     {n.status !== "UNREAD" && (
                       <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{n.status}</span>
                     )}
                   </div>
                   <div className="mt-1 font-medium text-sm">{n.title}</div>
+                  <div className="mt-0.5 text-xs text-muted-foreground">{n.humanReadableSource ?? "Unknown source"}</div>
                   <div className="mt-0.5 text-xs text-muted-foreground">{formatDate(n.createdAt)}</div>
                 </div>
                 {canUpdate && (
@@ -212,16 +243,39 @@ export function NoticesPage() {
                 </button>
               </div>
               <h3 className="mt-3 font-semibold">{selected.title}</h3>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className={qualityClass(selected.dataQuality)}>{qualityLabel(selected.dataQuality)}</span>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground">{selected.status === "UNREAD" ? "Unread" : selected.status === "READ" ? "Read" : "Archived"}</span>
+              </div>
               <p className="mt-2 text-sm text-muted-foreground whitespace-pre-wrap">{selected.content}</p>
               <dl className="mt-4 space-y-2 text-xs text-muted-foreground">
                 <div className="flex justify-between"><dt>Status</dt><dd>{selected.status}</dd></div>
+                <div className="flex justify-between gap-3"><dt>Source</dt><dd className="text-right">{selected.humanReadableSource ?? "Unknown source"}</dd></div>
                 <div className="flex justify-between"><dt>Created</dt><dd>{formatDate(selected.createdAt)}</dd></div>
-                {selected.sourceType && <div className="flex justify-between"><dt>Source</dt><dd>{selected.sourceType}</dd></div>}
+                <div className="flex justify-between"><dt>Updated</dt><dd>{formatDate(selected.updatedAt)}</dd></div>
               </dl>
+              {canUpdate && selected.status !== "ARCHIVED" && <Button className="mt-4 w-full" variant="outline" onClick={() => void archiveNotice(selected)}>Archive</Button>}
             </Card>
           </div>
         )}
       </div>
     </>
   );
+}
+
+function normalizeTitle(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function qualityLabel(value: DataQuality) {
+  return value.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function qualityClass(value: DataQuality) {
+  const base = "rounded-full px-2 py-0.5 text-xs font-medium";
+  if (value === "TRUSTED") return `${base} bg-green-500/15 text-green-300`;
+  if (value === "REVIEW_REQUIRED") return `${base} bg-yellow-500/15 text-yellow-300`;
+  if (value === "TEST") return `${base} bg-red-500/15 text-red-300`;
+  if (value === "LEGACY") return `${base} bg-blue-500/15 text-blue-300`;
+  return `${base} bg-muted text-muted-foreground`;
 }

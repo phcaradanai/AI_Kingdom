@@ -172,6 +172,21 @@ export type ProjectStatus = "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
 export type ProjectPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type ProjectInboxStatus = "PENDING" | "ASSIGNED" | "DISMISSED";
 export type ArtifactType = "PROMPT" | "SPEC" | "DECISION" | "IMPLEMENTATION_REPORT" | "HANDOFF_BRIEF" | "ARCHITECTURE_NOTE" | "MARKET_RESEARCH" | "CODE_PLAN" | "ROYAL_DECREE" | "GENERAL_NOTE";
+export type DataQuality = "TRUSTED" | "REVIEW_REQUIRED" | "TEST" | "LEGACY" | "UNKNOWN_SOURCE";
+
+export type DataQualityBadgeDto = {
+  quality: DataQuality;
+  label: string;
+  tone: "trusted" | "review" | "test" | "legacy" | "unknown";
+};
+
+export type SourceLinkDto = {
+  label: string;
+  title: string | null;
+  href: string | null;
+  type: string | null;
+  id: string | null;
+};
 
 export type ProjectDto = {
   id: string;
@@ -217,6 +232,14 @@ export type ProjectInboxItemDto = {
   assignedProjectId: string | null;
   confidenceScore: number | null;
   reason: string | null;
+  dataSource: string | null;
+  dataQuality: DataQuality;
+  dataQualityBadge?: DataQualityBadgeDto;
+  provenance: Record<string, unknown> | null;
+  traceId: string | null;
+  createdBySystem: boolean;
+  humanReadableSource?: string;
+  sourceLink?: SourceLinkDto;
   createdAt: string;
   updatedAt: string;
 };
@@ -230,6 +253,16 @@ export type ArtifactDto = {
   sourceType: string | null;
   sourceId: string | null;
   tags: string[];
+  dataSource: string | null;
+  dataQuality: DataQuality;
+  dataQualityBadge?: DataQualityBadgeDto;
+  provenance: Record<string, unknown> | null;
+  traceId: string | null;
+  createdBySystem: boolean;
+  humanReadableSource?: string;
+  sourceLink?: SourceLinkDto;
+  duplicateKey?: string;
+  isDuplicate?: boolean;
   createdAt: string;
   updatedAt: string;
   project?: ProjectDto | null;
@@ -242,6 +275,7 @@ export type ArtifactPayload = {
   content: string;
   sourceType?: string | null;
   sourceId?: string | null;
+  traceId?: string | null;
   tags?: string[];
 };
 
@@ -612,6 +646,14 @@ export type NoticeDto = {
   sourceType: string | null;
   sourceId: string | null;
   createdByAgentId: string | null;
+  dataSource: string | null;
+  dataQuality: DataQuality;
+  dataQualityBadge?: DataQualityBadgeDto;
+  provenance: Record<string, unknown> | null;
+  traceId: string | null;
+  createdBySystem: boolean;
+  humanReadableSource?: string;
+  sourceLink?: SourceLinkDto;
   createdAt: string;
   updatedAt: string;
 };
@@ -627,6 +669,14 @@ export type MatterDto = {
   sourceType: string | null;
   sourceId: string | null;
   assignedAgentId: string | null;
+  dataSource: string | null;
+  dataQuality: DataQuality;
+  dataQualityBadge?: DataQualityBadgeDto;
+  provenance: Record<string, unknown> | null;
+  traceId: string | null;
+  createdBySystem: boolean;
+  humanReadableSource?: string;
+  sourceLink?: SourceLinkDto;
   createdAt: string;
   updatedAt: string;
 };

@@ -255,6 +255,11 @@ model Notice {
   createdByAgentId String?
   isTestData       Boolean        @default(false)
   testRunId        String?
+  dataSource       String?
+  dataQuality      String?
+  provenance       Json?
+  traceId          String?
+  createdBySystem  Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -273,6 +278,11 @@ model Matter {
   assignedAgentId  String?
   isTestData       Boolean        @default(false)
   testRunId        String?
+  dataSource       String?
+  dataQuality      String?
+  provenance       Json?
+  traceId          String?
+  createdBySystem  Boolean        @default(false)
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -429,6 +439,11 @@ model ProjectInboxItem {
   reason              String?
   isTestData          Boolean            @default(false)
   testRunId           String?
+  dataSource          String?
+  dataQuality         String?
+  provenance          Json?
+  traceId             String?
+  createdBySystem     Boolean            @default(false)
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 }
@@ -444,6 +459,11 @@ model Artifact {
   tags       String[]     @default([])
   isTestData Boolean      @default(false)
   testRunId  String?
+  dataSource String?
+  dataQuality String?
+  provenance Json?
+  traceId    String?
+  createdBySystem Boolean @default(false)
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
   project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)

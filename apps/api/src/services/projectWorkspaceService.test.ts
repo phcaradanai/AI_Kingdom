@@ -92,6 +92,27 @@ test("project routing low confidence creates inbox item and leaves source unassi
   }
 });
 
+test("project routing does not create duplicate pending inbox items for the same source", async () => {
+  await ensureDefaultProjects();
+  const { user } = await createUser("KING");
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "Ambiguous duplicate note", command: "Review the idea without a clear project match.", mode: "ASK", status: "PENDING" }
+  });
+
+  try {
+    const first = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
+    const second = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
+    assert.equal(first.inboxItem?.id, second.inboxItem?.id);
+    const count = await prisma.projectInboxItem.count({ where: { sourceType: "TASK", sourceId: task.id, status: "PENDING" } });
+    assert.equal(count, 1);
+  } finally {
+    await prisma.projectInboxItem.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.projectRoutingCandidate.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
 test("project inbox assignment links source to selected project", async () => {
   await ensureDefaultProjects();
   const { user } = await createUser("KING");
@@ -158,6 +179,59 @@ test("task matter work order and artifact can link to project", async () => {
     await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
     await prisma.matter.delete({ where: { id: matter.id } }).catch(() => undefined);
     await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("createArtifact does not create duplicate for same normalized title type and source", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const first = await createArtifact({
+    title: `Duplicate artifact ${suffix}`,
+    type: "IMPLEMENTATION_REPORT",
+    content: "first",
+    sourceType: "WORK_ORDER",
+    sourceId: suffix
+  });
+  const second = await createArtifact({
+    title: `Duplicate   Artifact ${suffix}`,
+    type: "IMPLEMENTATION_REPORT",
+    content: "second",
+    sourceType: "WORK_ORDER",
+    sourceId: suffix
+  });
+  try {
+    assert.equal(first.id, second.id);
+  } finally {
+    await prisma.artifact.deleteMany({ where: { sourceType: "WORK_ORDER", sourceId: suffix } });
+  }
+});
+
+test("GET /api/artifacts returns source links where available", async () => {
+  await ensureDefaultProjects();
+  const { user, token } = await createUser("KING");
+  const workOrder = await prisma.workOrder.create({
+    data: { title: "Artifact source work order", objective: "Test source label", status: "READY", createdByUserId: user.id }
+  });
+  const artifact = await createArtifact({
+    title: "Artifact with source link",
+    type: "SPEC",
+    content: "source link test",
+    sourceType: "WORK_ORDER",
+    sourceId: workOrder.id
+  });
+  try {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/artifacts`, { headers: { Authorization: `Bearer ${token}` } });
+      assert.equal(res.status, 200);
+      const body = await res.json() as { artifacts: Array<{ id: string; sourceLink?: { title: string | null; href: string | null } }> };
+      const found = body.artifacts.find((item) => item.id === artifact.id);
+      assert.ok(found?.sourceLink);
+      assert.equal(found.sourceLink.title, workOrder.title);
+      assert.equal(found.sourceLink.href, "/work-orders");
+    });
+  } finally {
+    await prisma.artifact.delete({ where: { id: artifact.id } }).catch(() => undefined);
+    await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } });
   }
 });
