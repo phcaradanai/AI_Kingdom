@@ -35,11 +35,34 @@ export type AgentDto = {
   preferredProviderId: string | null;
   defaultModel: string | null;
   fallbackProviderIds: string[];
+  fallbackModels: string[];
+  routingPolicy: string | null;
   costPreference: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature: number | null;
   maxTokens: number | null;
   createdAt: string;
   updatedAt: string;
+};
+
+export type AgentRoutingPolicy = "GLOBAL_ROUTING" | "FIXED_PRIMARY" | "FIXED_PRIMARY_WITH_FALLBACK" | "SANDBOX_FREE_ONLY" | "LOWEST_COST" | "QUALITY_FIRST";
+
+export type AgentRoutingPreviewDto = {
+  effectiveRoute: {
+    provider: { id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string };
+    model: string;
+    fallbackProviders: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string }>;
+  } | null;
+  fallbackProviderDetails: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; isActive: boolean } | null>;
+  latestUsage: { provider: string; providerId: string | null; model: string; totalTokens: number; estimatedCostUSD: number; createdAt: string } | null;
+};
+
+export type ProviderModelsDto = {
+  models: string[];
+  count: number;
+  lastSyncedAt: string | null;
+  fromCache: boolean;
+  validationStatus: string | null;
+  message?: string;
 };
 
 export type AgentPayload = {
@@ -57,6 +80,8 @@ export type AgentPayload = {
   preferredProviderId?: string | null;
   defaultModel?: string | null;
   fallbackProviderIds?: string[];
+  fallbackModels?: string[];
+  routingPolicy?: string | null;
   costPreference?: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature?: number | null;
   maxTokens?: number | null;

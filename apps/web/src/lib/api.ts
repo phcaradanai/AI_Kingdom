@@ -58,7 +58,9 @@ import type {
   UsageTraceDetailsDto,
   WorkOrderDto,
   WorkOrderPayload,
-  WorkSessionDto
+  WorkSessionDto,
+  AgentRoutingPreviewDto,
+  ProviderModelsDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -146,6 +148,8 @@ export const api = {
     await apiRequest<void>(`/providers/${id}`, { method: "DELETE" });
   },
   validateModels: () => apiRequest<{ success: boolean }>("/providers/validate-models", { method: "POST" }),
+  getProviderModels: (id: string) => apiRequest<ProviderModelsDto>(`/providers/${id}/models`),
+  getAgentRoutingPreview: (id: string) => apiRequest<AgentRoutingPreviewDto>(`/agents/${id}/routing-preview`),
   externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
   createExternalAgent: (payload: ExternalAgentPayload) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),

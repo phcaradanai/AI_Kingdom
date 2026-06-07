@@ -168,6 +168,35 @@ router.post("/validate-models", requireRole("KING"), async (req, res, next) => {
   }
 });
 
+router.get("/:id/models", requireRole("KING"), async (req, res, next) => {
+  try {
+    const providerId = req.params.id ?? "";
+    if (!providerId) { res.status(400).json({ error: "Provider id required" }); return; }
+    const providers = await listAIProviders({ syncDefaults: false });
+    const provider = providers.find((item) => item.id === providerId) ?? await getAIProvider(providerId);
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+    if (provider.type !== "openrouter") {
+      res.json({ models: [], lastSyncedAt: null, message: "Model list only available for OpenRouter providers" });
+      return;
+    }
+    const { models, success } = await (await import("../services/openRouterModelService.js")).fetchOpenRouterModels();
+    const cachedModels = (provider.config as any)?.openRouterModels as string[] | undefined;
+    const modelList = models.length > 0 ? models : (cachedModels ?? []);
+    res.json({
+      models: modelList,
+      count: modelList.length,
+      lastSyncedAt: provider.lastValidationTime ?? null,
+      fromCache: !success,
+      validationStatus: provider.modelValidationStatus
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post("/:id/test", requireRole("KING"), async (req, res, next) => {
   let traceId: string | null = null;
   try {

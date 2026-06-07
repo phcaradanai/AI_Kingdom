@@ -2,6 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
+import { selectAIProviderRoute } from "../services/aiProviderRouter.js";
+import { listAIProviders } from "../services/aiProviderRegistry.js";
 
 const router = Router();
 
@@ -21,6 +23,8 @@ const agentSchema = z.object({
   preferredProviderId: z.string().trim().max(120).optional().nullable(),
   defaultModel: z.string().trim().max(120).optional().nullable(),
   fallbackProviderIds: z.array(z.string().trim().min(1).max(120)).max(10).default([]),
+  fallbackModels: z.array(z.string().trim().min(1).max(200)).max(10).default([]),
+  routingPolicy: z.enum(["GLOBAL_ROUTING", "FIXED_PRIMARY", "FIXED_PRIMARY_WITH_FALLBACK", "SANDBOX_FREE_ONLY", "LOWEST_COST", "QUALITY_FIRST"]).optional().nullable(),
   costPreference: z.enum(["LOW", "BALANCED", "QUALITY"]).optional().nullable(),
   temperature: z.coerce.number().min(0).max(2).optional().nullable(),
   maxTokens: z.coerce.number().int().min(64).max(8000).optional().nullable()
@@ -110,6 +114,66 @@ router.patch("/:id", async (req, res, next) => {
       metadata: { slug: agent.slug, isActive: agent.isActive }
     });
     res.json({ agent });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/routing-preview", async (req, res, next) => {
+  try {
+    const agent = await prisma.agent.findUnique({ where: { id: req.params.id } });
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    type ProviderSummary = { id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string };
+    const allProviders = await listAIProviders({ activeOnly: false });
+    let effectiveRoute: { provider: ProviderSummary; model: string; fallbackProviders: ProviderSummary[] } | null = null;
+
+    try {
+      const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
+      effectiveRoute = {
+        provider: {
+          id: route.provider.id,
+          name: route.provider.name,
+          type: route.provider.type,
+          environmentMode: route.provider.environmentMode,
+          hasCredentials: route.provider.hasCredentials,
+          costTier: route.provider.costTier,
+          defaultModel: route.provider.defaultModel
+        },
+        model: route.model,
+        fallbackProviders: route.fallbackProviders.map((fp) => ({
+          id: fp.id,
+          name: fp.name,
+          type: fp.type,
+          environmentMode: fp.environmentMode,
+          hasCredentials: fp.hasCredentials,
+          costTier: fp.costTier,
+          defaultModel: fp.defaultModel
+        }))
+      };
+    } catch {
+      // provider unavailable — still return agent config
+    }
+
+    const latestUsage = await prisma.usageRecord.findFirst({
+      where: { agentId: agent.id },
+      orderBy: { createdAt: "desc" },
+      select: { provider: true, providerId: true, model: true, totalTokens: true, estimatedCostUSD: true, createdAt: true }
+    });
+
+    const fallbackProviderDetails = agent.fallbackProviderIds
+      .map((id) => allProviders.find((p) => p.id === id))
+      .filter(Boolean)
+      .map((p) => p && ({ id: p.id, name: p.name, type: p.type, environmentMode: p.environmentMode, hasCredentials: p.hasCredentials, costTier: p.costTier, isActive: p.isActive }));
+
+    res.json({
+      effectiveRoute,
+      fallbackProviderDetails,
+      latestUsage: latestUsage ?? null
+    });
   } catch (error) {
     next(error);
   }

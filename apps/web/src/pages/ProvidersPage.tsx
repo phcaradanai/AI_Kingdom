@@ -106,7 +106,7 @@ export function ProvidersPage() {
           <div className="flex gap-2">
             <Button onClick={handleValidateModels} variant="outline" disabled={isValidating}>
               <Cpu className={cn("h-4 w-4 mr-2", isValidating && "animate-spin")} />
-              {isValidating ? "Validating..." : "Validate Models"}
+              {isValidating ? "Syncing…" : "Sync & Validate Models"}
             </Button>
             <Button onClick={() => setIsAddOpen(true)}>
               <Plus className="h-4 w-4 mr-2" />
@@ -292,11 +292,11 @@ export function ProvidersPage() {
                     </div>
                     {provider.type === "openrouter" && (
                       <div className="col-span-2">
-                        <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Model Validation Status</span>
+                        <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Model Registry</span>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
                           {provider.modelValidationStatus === "VALID" && (
                             <span className="inline-flex items-center gap-1 rounded bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-500 border border-green-500/20">
-                              Valid
+                              Default model valid
                             </span>
                           )}
                           {provider.modelValidationStatus === "INVALID_MODEL" && (
@@ -314,12 +314,18 @@ export function ProvidersPage() {
                               Not Checked
                             </span>
                           )}
+                          {(provider.config?.openRouterModels as string[] | undefined)?.length ? (
+                            <span className="text-xs text-muted-foreground">
+                              {(provider.config!.openRouterModels as string[]).length.toLocaleString()} models synced
+                            </span>
+                          ) : null}
                           {provider.lastValidationTime && (
                             <span className="text-xs text-muted-foreground">
-                              Checked: {new Date(provider.lastValidationTime).toLocaleString()}
+                              · last synced {new Date(provider.lastValidationTime).toLocaleString()}
                             </span>
                           )}
                         </div>
+                        <p className="mt-1 text-xs text-muted-foreground">Model IDs use provider prefix format, e.g. <span className="font-mono">openai/gpt-4o-mini</span></p>
                       </div>
                     )}
                     <div className="col-span-2">

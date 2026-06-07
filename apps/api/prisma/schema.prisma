@@ -352,6 +352,8 @@ model Agent {
   preferredProviderId String?
   defaultModel String?
   fallbackProviderIds String[] @default([])
+  fallbackModels      String[] @default([])
+  routingPolicy       String?  @default("GLOBAL_ROUTING")
   costPreference String?
   temperature Float?
   maxTokens   Int?
