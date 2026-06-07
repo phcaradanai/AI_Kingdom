@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getModelDisplayName, getProviderDisplayName, getProviderModeBadge } from "@/lib/providerDisplay";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { SettingDto } from "@/types/api";
 
@@ -42,11 +43,12 @@ export function SettingsPage() {
                 <div key={provider.id} className="rounded-md border border-border bg-muted/30 p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
-                      <div className="text-sm font-semibold">{provider.name}</div>
-                      <div className="mt-1 font-mono text-xs text-muted-foreground">{provider.defaultModel}</div>
+                      <div className="text-sm font-semibold">{getProviderDisplayName(provider)}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">{getModelDisplayName(provider.defaultModel)}</div>
                     </div>
                     <div className="flex flex-wrap gap-2 text-xs">
                       <span className="rounded-full border border-border px-2 py-1">{provider.isActive ? "active" : "inactive"}</span>
+                      <span className="rounded-full border border-border px-2 py-1">{getProviderModeBadge(provider)}</span>
                       <span className="rounded-full border border-border px-2 py-1">{provider.costTier}</span>
                       <span className="rounded-full border border-border px-2 py-1">{provider.hasCredentials ? "env" : "no env"}</span>
                     </div>
@@ -128,7 +130,9 @@ function SettingRow({ setting, onUpdate }: { setting: SettingDto; onUpdate: (key
           </Button>
         ) : setting.key === "AI_PROVIDER" ? (
           <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
-            <option value="mock">mock</option>
+            {setting.value === "mock" && <option value="mock">Local Sandbox Baseline (legacy)</option>}
+            <option value="local-sandbox-baseline">Local Sandbox Baseline</option>
+            <option value="openrouter-free">OpenRouter Free Sandbox</option>
             <option value="openai-compatible">openai-compatible</option>
             <option value="openai">openai</option>
             <option value="openrouter">openrouter</option>

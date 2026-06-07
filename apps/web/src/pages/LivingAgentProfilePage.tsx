@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
+import { getModelDisplayName, getProviderDisplayName } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import type {
   AgentActivityStatus,
@@ -115,7 +116,7 @@ function TimelineItem({ item }: { item: LivingAgentTimelineItemDto }) {
             </span>
             {item.provider && (
               <span className="rounded-full border border-muted-foreground/10 bg-muted/10 px-2 py-0.5 text-[10px] text-muted-foreground">
-                {item.provider}{item.model ? ` · ${item.model}` : ""}
+                {getProviderDisplayName(item.provider)}{item.model ? ` · ${getModelDisplayName(item.model)}` : ""}
               </span>
             )}
           </div>
@@ -379,7 +380,7 @@ function OverviewTab({ profile, onSwitchTab }: { profile: LivingAgentProfileDto;
           {currentActivity.detail && <div className="text-xs text-muted-foreground mt-0.5">{currentActivity.detail}</div>}
           <div className="mt-2 flex gap-3 text-xs text-muted-foreground">
             <span>{currentActivity.status}</span>
-            {currentActivity.providerName && <span>{currentActivity.providerName}{currentActivity.model ? ` · ${currentActivity.model}` : ""}</span>}
+            {currentActivity.providerName && <span>{getProviderDisplayName(currentActivity.providerName)}{currentActivity.model ? ` · ${getModelDisplayName(currentActivity.model)}` : ""}</span>}
             {currentActivity.startedAt && <span>Started {formatDate(currentActivity.startedAt)}</span>}
           </div>
         </div>
@@ -522,8 +523,8 @@ function UsageTab({ profile }: { profile: LivingAgentProfileDto }) {
             {usageSummary.byProvider.map((row, i) => (
               <div key={i} className="flex items-center justify-between py-2.5 text-sm">
                 <div>
-                  <span className="font-medium text-foreground">{row.provider}</span>
-                  <span className="text-muted-foreground"> · {row.model}</span>
+                  <span className="font-medium text-foreground">{getProviderDisplayName(row.provider)}</span>
+                  <span className="text-muted-foreground"> · {getModelDisplayName(row.model)}</span>
                 </div>
                 <div className="flex gap-4 text-xs text-muted-foreground">
                   <span>{row.callCount} calls</span>
@@ -601,7 +602,7 @@ function RelationsTab({ relations, loading }: { relations: LivingAgentRelationsD
     { label: "Traces", items: nodes.usageTraces, icon: Zap, link: (id: string, item?: { traceId?: string }) => item?.traceId ? `/usage-traces/${item.traceId}` : "/treasury", getText: (item: { operation: string; status: string }) => `${item.operation} · ${item.status}` },
     { label: "Reports", items: nodes.reports, icon: FileText, link: () => "/reports", getText: (item: { title: string }) => item.title },
     { label: "Memories", items: nodes.memories, icon: Vault, link: () => "/memory", getText: (item: { title: string }) => item.title },
-    { label: "Providers / Models", items: nodes.providers, icon: Cpu, link: () => "/providers", getText: (item: { provider: string; model: string; callCount: number }) => `${item.provider} · ${item.model} (${item.callCount} calls)` }
+    { label: "Providers / Models", items: nodes.providers, icon: Cpu, link: () => "/providers", getText: (item: { provider: string; model: string; callCount: number }) => `${getProviderDisplayName(item.provider)} · ${getModelDisplayName(item.model)} (${item.callCount} calls)` }
   ] as const;
 
   return (
@@ -732,8 +733,8 @@ function ProvidersTab({ profile }: { profile: LivingAgentProfileDto }) {
         {profile.providerModelSummary.map((row, i) => (
           <div key={i} className="flex items-center justify-between py-3 text-sm">
             <div>
-              <span className="font-medium text-foreground">{row.provider}</span>
-              <span className="text-muted-foreground ml-1">· {row.model}</span>
+              <span className="font-medium text-foreground">{getProviderDisplayName(row.provider)}</span>
+              <span className="text-muted-foreground ml-1">· {getModelDisplayName(row.model)}</span>
             </div>
             <div className="flex gap-4 text-xs text-muted-foreground">
               <span>{row.callCount} calls</span>

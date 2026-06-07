@@ -101,7 +101,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       let traceId: string | null = null;
       try {
         const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
-        const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders, agent.defaultModel);
+        const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders);
         const trace = await createAIUsageTrace({
           actorUserId: userId,
           actorRole: task.user.role,
@@ -334,7 +334,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       throw new Error("Grand Vizier is not available");
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
-    const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders, grandVizier.defaultModel);
+    const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders);
     const summaryTrace = await createAIUsageTrace({
       actorUserId: userId,
       actorRole: task.user.role,
@@ -644,14 +644,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
   }
 }
 
-function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fallbackProviders: AIProviderConfig[], agentModel?: string | null) {
+function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fallbackProviders: AIProviderConfig[]) {
   const configs = [primary, ...fallbackProviders];
   return configs
     .map((provider, index) => {
       try {
         return {
           provider: createAIProviderFromConfig(provider),
-          model: index === 0 ? primaryModel : agentModel ?? provider.defaultModel
+          model: index === 0 ? primaryModel : provider.defaultModel
         };
       } catch {
         return null;

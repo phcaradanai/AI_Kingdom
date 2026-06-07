@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import type { AttributionStatus, AIUsageTraceStepDto, UsageTraceDetailsDto } from "@/types/api";
 
@@ -118,7 +119,7 @@ function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean
         <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex items-center gap-2">
             {stepStatusIcon(step.status)}
-            <h4 className="text-sm font-semibold text-foreground">{step.title}</h4>
+            <h4 className="text-sm font-semibold text-foreground">{getProviderTerminologyText(step.title)}</h4>
           </div>
           <span className={cn(
             "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
@@ -130,7 +131,7 @@ function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean
         </div>
 
         {step.detail && (
-          <p className="mt-1.5 text-xs text-muted-foreground">{step.detail}</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">{getProviderTerminologyText(step.detail)}</p>
         )}
 
         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -141,10 +142,10 @@ function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean
             </span>
           )}
           {step.providerName && (
-            <span>{step.providerName}</span>
+            <span>{getProviderDisplayName(step.providerId ?? step.providerName)}</span>
           )}
           {step.model && (
-            <span className="font-mono text-[10px]">{step.model}</span>
+            <span className="text-[10px]">{getModelDisplayName(step.model)}</span>
           )}
           {step.tokensUsed != null && step.tokensUsed > 0 && (
             <span>{step.tokensUsed.toLocaleString()} tokens</span>
@@ -281,8 +282,8 @@ export function UsageTracePage() {
             <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <div><div className="text-xs text-muted-foreground">Started</div><div className="mt-1 text-sm">{formatDate(trace.startedAt)}</div></div>
               {trace.completedAt && <div><div className="text-xs text-muted-foreground">Completed</div><div className="mt-1 text-sm">{formatDate(trace.completedAt)}</div></div>}
-              <div><div className="text-xs text-muted-foreground">Provider</div><div className="mt-1 text-sm">{trace.providerName ?? "—"}</div></div>
-              <div><div className="text-xs text-muted-foreground">Model</div><div className="mt-1 font-mono text-xs">{trace.model ?? "—"}</div></div>
+              <div><div className="text-xs text-muted-foreground">Provider</div><div className="mt-1 text-sm">{trace.providerName ? getProviderDisplayName(trace.providerId ?? trace.providerName) : "—"}</div></div>
+              <div><div className="text-xs text-muted-foreground">Model</div><div className="mt-1 text-xs">{trace.model ? getModelDisplayName(trace.model) : "—"}</div></div>
               <div><div className="text-xs text-muted-foreground">Actor</div><div className="mt-1 text-sm">{trace.actorDisplayName ?? trace.actorUserId ?? "—"}</div></div>
               <div><div className="text-xs text-muted-foreground">Status</div><div className="mt-1 text-sm">{readable(trace.status)}</div></div>
               {duration(trace.startedAt, trace.completedAt) && (
@@ -373,7 +374,7 @@ export function UsageTracePage() {
             <div className="mt-3 space-y-2 text-sm">
               {details.usageRecords.map((record) => (
                 <div key={record.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/10 px-3 py-2">
-                  <span>{record.provider} · <span className="font-mono text-xs">{record.model}</span></span>
+                  <span>{getProviderDisplayName(record.providerId ?? record.provider)} · <span className="text-xs">{getModelDisplayName(record.model)}</span></span>
                   <span className="font-mono text-xs">{record.totalTokens.toLocaleString()} tokens · ${record.estimatedCostUSD.toFixed(4)}</span>
                 </div>
               ))}

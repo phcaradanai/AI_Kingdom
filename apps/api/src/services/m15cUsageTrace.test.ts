@@ -270,7 +270,7 @@ test("Provider test creates trusted trace and safe usage record", async () => {
   let traceId: string | null = null;
   try {
     await withServer(async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/api/providers/mock/test`, {
+      const response = await fetch(`${baseUrl}/api/providers/local-sandbox-baseline/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ prompt: "Bearer secret-token sk-1234567890abcdef password=hunter2 readiness test" })
@@ -306,7 +306,7 @@ test("Provider test route creates timeline steps", async () => {
   let traceId: string | null = null;
   try {
     await withServer(async (baseUrl) => {
-      const response = await fetch(`${baseUrl}/api/providers/mock/test`, {
+      const response = await fetch(`${baseUrl}/api/providers/local-sandbox-baseline/test`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ prompt: "Test step creation" })

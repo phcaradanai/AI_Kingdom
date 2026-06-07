@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { getModelDisplayName, getProviderDisplayName } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { api } from "@/lib/api";
 import type {
@@ -262,8 +263,8 @@ function ProviderTable({ providers }: { providers: TreasuryProviderDto[] }) {
           {providers.map((p) => (
             <tr key={`${p.provider}:${p.model}`} className="border-b border-border/40 last:border-0">
               <td className="py-2.5 pr-4">
-                <div className="font-medium capitalize">{p.provider}</div>
-                <div className="text-xs text-muted-foreground">{p.model}</div>
+                <div className="font-medium">{getProviderDisplayName(p.providerId ?? p.provider)}</div>
+                <div className="text-xs text-muted-foreground">{getModelDisplayName(p.model)}</div>
               </td>
               <td className="py-2.5 pr-4 text-right tabular-nums">{p.callCount}</td>
               <td className="py-2.5 pr-4 text-right tabular-nums text-xs">{formatTokens(p.promptTokens)}</td>
@@ -382,7 +383,7 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
                   <td className="py-2 pr-4">
                     <AttributionBadge status={r.attributionStatus} />
                   </td>
-                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{r.model}</td>
+                  <td className="py-2 pr-4 text-xs text-muted-foreground">{getProviderDisplayName(r.providerId ?? r.provider)} · {getModelDisplayName(r.model)}</td>
                   <td className="py-2 pr-4 text-right tabular-nums text-xs">{formatTokens(r.totalTokens)}</td>
                   <td className="py-2 text-right font-mono tabular-nums text-xs">
                     {formatCost(r.estimatedCostUSD)}
@@ -478,14 +479,14 @@ function ModelPricingSection() {
       {warnings && warnings.unknownModels.length > 0 && (
         <div className="mb-3 rounded-lg border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm text-destructive">
           <span className="font-semibold">⚠ Unknown pricing: </span>
-          {warnings.unknownModels.map((m) => `${m.provider}:${m.model} (${m.count} calls)`).join(", ")}
+          {warnings.unknownModels.map((m) => `${getProviderDisplayName(m.provider)}:${getModelDisplayName(m.model)} (${m.count} calls)`).join(", ")}
           . Add pricing records below.
         </div>
       )}
       {warnings && warnings.estimatedModels.length > 0 && (
         <div className="mb-4 rounded-lg border border-yellow-500/40 bg-yellow-500/10 px-4 py-3 text-sm text-yellow-200">
           <span className="font-semibold">~ Estimated cost ({warnings.estimatedPricingUsageCount} records): </span>
-          {warnings.estimatedModels.map((m) => `${m.provider}:${m.model} (${m.count})`).join(", ")}
+          {warnings.estimatedModels.map((m) => `${getProviderDisplayName(m.provider)}:${getModelDisplayName(m.model)} (${m.count})`).join(", ")}
           . DeepSeek cache details unavailable; input estimated at cache-miss rate.
         </div>
       )}
@@ -541,7 +542,7 @@ function ModelPricingSection() {
                         {r.isDeprecated && <span className="rounded bg-yellow-500/20 px-1 py-0.5 text-[10px] text-yellow-400 border border-yellow-500/30">deprecated</span>}
                         {r.supportsThinking && <span className="rounded bg-primary/10 px-1 py-0.5 text-[10px] text-primary border border-primary/20">thinking</span>}
                       </div>
-                      <div className="text-xs text-muted-foreground">{r.providerType}:{r.model}</div>
+                      <div className="text-xs text-muted-foreground">{getProviderDisplayName(r.providerType)}:{getModelDisplayName(r.model)}</div>
                       {r.concurrencyLimit && <div className="text-[10px] text-muted-foreground/60">{r.concurrencyLimit} concurrent</div>}
                     </td>
                     <td className="py-2.5 pr-3 text-right tabular-nums text-xs">

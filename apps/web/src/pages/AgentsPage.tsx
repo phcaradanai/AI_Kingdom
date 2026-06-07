@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { getProviderDisplayName } from "@/lib/providerDisplay";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { AgentDto, AgentPayload } from "@/types/api";
@@ -156,7 +157,7 @@ export function AgentsPage() {
               <FormField id="agent-provider" label="Preferred Provider" description="Optional. Leave blank to use routing policy.">
                 <select id="agent-provider" className={selectCls} value={draft.preferredProviderId ?? ""} onChange={(e) => setDraft({ ...draft, preferredProviderId: e.target.value || null })}>
                   <option value="">Routing policy (auto)</option>
-                  {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
+                  {providers.map((provider) => <option key={provider.id} value={provider.id}>{getProviderDisplayName(provider)}</option>)}
                 </select>
               </FormField>
               <FormField id="agent-cost-policy" label="Cost Policy">
@@ -168,7 +169,7 @@ export function AgentsPage() {
                 </select>
               </FormField>
               <FormField id="agent-fallback" label="Routing Policy">
-                <Input id="agent-fallback" value={draft.fallbackProviderIds?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, fallbackProviderIds: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Fallback provider IDs" />
+                <Input id="agent-fallback" value={draft.fallbackProviderIds?.join(", ") ?? ""} onChange={(e) => setDraft({ ...draft, fallbackProviderIds: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Fallback provider IDs or sandbox model IDs" />
               </FormField>
             </div>
 
@@ -177,7 +178,7 @@ export function AgentsPage() {
                 <Input id="agent-priority" type="number" value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: Number(e.target.value) })} placeholder="100" />
               </FormField>
               <FormField id="agent-model" label="Default Model" description="Optional model override for this agent.">
-                <Input id="agent-model" value={draft.defaultModel ?? ""} onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })} placeholder="gpt-4o-mini" />
+                <Input id="agent-model" value={draft.defaultModel ?? ""} onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })} placeholder="openrouter/owl-alpha" />
               </FormField>
               <FormField id="agent-temperature" label="Temperature" description="Lower = more deterministic, higher = more creative.">
                 <Input id="agent-temperature" type="number" step="0.1" min="0" max="2" value={draft.temperature ?? ""} onChange={(e) => setDraft({ ...draft, temperature: e.target.value ? Number(e.target.value) : null })} placeholder="0.7" />

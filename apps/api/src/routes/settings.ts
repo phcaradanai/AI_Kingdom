@@ -65,7 +65,7 @@ router.patch("/:key", async (req, res, next) => {
 });
 
 function validateSettingValue(key: string, value: string): string | null {
-  if (key === "AI_PROVIDER" && !["mock", "openai-compatible", "openai", "openrouter", "deepseek"].includes(value)) return "AI_PROVIDER must be a supported provider id";
+  if (key === "AI_PROVIDER" && !["local-sandbox-baseline", "openrouter-free", "mock", "openai-compatible", "openai", "openrouter", "deepseek"].includes(value)) return "AI_PROVIDER must be a supported provider id";
   if (key === "AI_COST_MODE" && !["low", "balanced", "quality"].includes(value)) return "AI_COST_MODE must be low, balanced, or quality";
   if (key === "DEFAULT_TASK_MODE" && !["ASK", "PLAN", "RESEARCH", "BUILD"].includes(value)) return "DEFAULT_TASK_MODE is invalid";
   if (["AUTO_PROCESS_TASKS", "AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS"].includes(key) && !["true", "false"].includes(value)) return `${key} must be true or false`;

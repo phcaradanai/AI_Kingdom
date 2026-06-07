@@ -15,6 +15,15 @@ export type PricingResult = {
 // inputCacheMissPerMillion). The static table is a safety net only.
 const PRICING_TABLE: Record<string, ModelPricing> = {
   "mock:deterministic-mock-v1": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "sandbox:local-sandbox-baseline": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "local-sandbox-baseline:local-sandbox-baseline": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:nvidia/nemotron-3-ultra-550b-a55b:free": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:nvidia/nemotron-3-super-120b-a12b:free": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:poolside/laguna-m.1:free": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:poolside/laguna-xs.2:free": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:google/gemma-4-31b-it:free": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:google/gemma-4-26b-a4b-it:free": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
+  "openrouter:openrouter/owl-alpha": { inputPerMillion: 0.0, outputPerMillion: 0.0 },
   "openai:gpt-4o": { inputPerMillion: 2.5, outputPerMillion: 10.0 },
   "openai:gpt-4o-mini": { inputPerMillion: 0.15, outputPerMillion: 0.6 },
   "openai:gpt-4-turbo": { inputPerMillion: 10.0, outputPerMillion: 30.0 },

@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 import type { AIProviderConfig, AICostMode, AICostPreference } from "./aiProviderRegistry.js";
 import { getAIProvider, listAIProviders } from "./aiProviderRegistry.js";
+import { LEGACY_MOCK_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_ID, OPENROUTER_FREE_PROVIDER_ID } from "./aiProviderRegistry.js";
 import { getSettingValue } from "./settingsService.js";
 
 export type RequiredAICapabilities = {
@@ -21,13 +22,13 @@ export type AIProviderRouteSelection = {
 };
 
 const TASK_MODE_PROVIDER_ORDER: Record<TaskMode, string[]> = {
-  ASK: ["deepseek", "openrouter", "openai", "mock"],
-  PLAN: ["openrouter", "openai", "deepseek", "mock"],
-  RESEARCH: ["openrouter", "gemini", "openai", "mock"],
-  BUILD: ["deepseek", "openrouter", "openai", "mock"]
+  ASK: [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID],
+  PLAN: [OPENROUTER_FREE_PROVIDER_ID, "openrouter", "openai", "deepseek", LOCAL_SANDBOX_PROVIDER_ID],
+  RESEARCH: [OPENROUTER_FREE_PROVIDER_ID, "openrouter", "gemini", "openai", LOCAL_SANDBOX_PROVIDER_ID],
+  BUILD: [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID]
 };
 
-const DEFAULT_FALLBACK_CHAIN = ["deepseek", "openrouter", "openai", "mock"];
+const DEFAULT_FALLBACK_CHAIN = [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID];
 
 export async function selectAIProviderRoute(input: {
   agent: Agent;
@@ -47,10 +48,7 @@ export async function selectAIProviderRoute(input: {
       : input.agent.fallbackProviderIds.length
         ? input.agent.fallbackProviderIds
         : DEFAULT_FALLBACK_CHAIN;
-    const fallbackProviders = fallbackIds
-      .filter((id) => id !== agentProvider.id)
-      .map((id) => capableProviders.find((provider) => provider.id === id))
-      .filter((provider): provider is AIProviderConfig => Boolean(provider));
+    const fallbackProviders = resolveFallbackProviders(fallbackIds, agentProvider, capableProviders);
     return {
       provider: agentProvider,
       model: input.agent.defaultModel ?? agentProvider.defaultModel,
@@ -75,10 +73,7 @@ export async function selectAIProviderRoute(input: {
   if (dbRoute?.preferredProviderId) {
     const preferred = capableProviders.find((provider) => provider.id === dbRoute.preferredProviderId);
     if (preferred) {
-      const fallbackProviders = dbRoute.fallbackProviderIds
-        .filter((id) => id !== preferred.id)
-        .map((id) => capableProviders.find((provider) => provider.id === id))
-        .filter((provider): provider is AIProviderConfig => Boolean(provider));
+      const fallbackProviders = resolveFallbackProviders(dbRoute.fallbackProviderIds, preferred, capableProviders);
       return {
         provider: preferred,
         model: input.agent.defaultModel ?? dbRoute.preferredModel ?? preferred.defaultModel,
@@ -90,7 +85,7 @@ export async function selectAIProviderRoute(input: {
   }
 
   const modeOrdered = orderByPolicy(capableProviders, input.taskMode, costMode);
-  const provider = modeOrdered[0] ?? providers.find((item) => item.id === "mock");
+  const provider = modeOrdered[0] ?? providers.find((item) => item.id === LOCAL_SANDBOX_PROVIDER_ID);
   if (!provider) {
     throw new Error("No active AI provider is available");
   }
@@ -100,14 +95,11 @@ export async function selectAIProviderRoute(input: {
     : input.agent.fallbackProviderIds.length
       ? input.agent.fallbackProviderIds
       : DEFAULT_FALLBACK_CHAIN;
-  const fallbackProviders = fallbackIds
-    .filter((id) => id !== provider.id)
-    .map((id) => capableProviders.find((candidate) => candidate.id === id))
-    .filter((candidate): candidate is AIProviderConfig => Boolean(candidate));
+  const fallbackProviders = resolveFallbackProviders(fallbackIds, provider, capableProviders);
 
-  if (!fallbackProviders.some((candidate) => candidate.id === "mock")) {
-    const mock = providers.find((candidate) => candidate.id === "mock");
-    if (mock && mock.id !== provider.id) fallbackProviders.push(mock);
+  if (!fallbackProviders.some((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID)) {
+    const sandbox = providers.find((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID) ?? providers.find((candidate) => candidate.id === LEGACY_MOCK_PROVIDER_ID);
+    if (sandbox && sandbox.id !== provider.id) fallbackProviders.push(sandbox);
   }
 
   return {
@@ -157,4 +149,24 @@ function costModeRank(provider: AIProviderConfig, costMode: AICostMode): number 
   if (costMode === "low") return costRank;
   if (costMode === "quality") return 4 - costRank;
   return Math.abs(costRank - 2);
+}
+
+function resolveFallbackProviders(fallbackIds: string[], primaryProvider: AIProviderConfig, capableProviders: AIProviderConfig[]): AIProviderConfig[] {
+  const resolved: AIProviderConfig[] = [];
+  for (const id of fallbackIds) {
+    const provider = capableProviders.find((candidate) => candidate.id === id || (id === LEGACY_MOCK_PROVIDER_ID && candidate.id === LOCAL_SANDBOX_PROVIDER_ID));
+    if (provider) {
+      if (provider.id !== primaryProvider.id) resolved.push(provider);
+      continue;
+    }
+
+    if (isModelFallback(id) && primaryProvider.type === "openrouter") {
+      resolved.push({ ...primaryProvider, defaultModel: id });
+    }
+  }
+  return resolved;
+}
+
+function isModelFallback(value: string): boolean {
+  return value.includes("/") || value.includes(":");
 }

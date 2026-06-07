@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
-import { ensureDefaultAIProviders, listAIProviders, createAIProvider, deleteAIProvider } from "../services/aiProviderRegistry.js";
+import { ensureDefaultAIProviders, listAIProviders, getAIProvider, createAIProvider, deleteAIProvider } from "../services/aiProviderRegistry.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
@@ -32,7 +32,7 @@ const providerCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   type: z.string().trim().min(1).max(50),
   baseUrl: z.string().url().optional().or(z.literal("")),
-  defaultModel: z.string().trim().max(200).optional(), // allowed empty for mock
+  defaultModel: z.string().trim().max(200).optional(), // allowed empty for local sandbox providers
   priority: z.coerce.number().int().min(1).max(5000),
   costTier: z.enum(["FREE", "LOW", "MEDIUM", "HIGH", "PREMIUM"]),
   capabilities: z.object({
@@ -156,8 +156,13 @@ router.post("/:id/test", requireRole("KING"), async (req, res, next) => {
   try {
     await ensureDefaultAIProviders();
     const payload = providerTestSchema.parse(req.body);
+    const providerId = req.params.id;
+    if (!providerId) {
+      res.status(400).json({ error: "Provider id is required" });
+      return;
+    }
     const providers = await listAIProviders({ syncDefaults: false });
-    const provider = providers.find((item) => item.id === req.params.id);
+    const provider = providers.find((item) => item.id === providerId) ?? await getAIProvider(providerId);
     if (!provider) {
       res.status(404).json({ error: "Provider not found" });
       return;
@@ -329,6 +334,14 @@ function toPublicProvider(provider: Awaited<ReturnType<typeof listAIProviders>>[
     costTier: provider.costTier,
     capabilities: provider.capabilities,
     hasCredentials: provider.hasCredentials,
+    environmentMode: provider.environmentMode,
+    maxTokensPerRequest: provider.maxTokensPerRequest,
+    maxRequestsPerDay: provider.maxRequestsPerDay,
+    maxTokensPerDay: provider.maxTokensPerDay,
+    maxEstimatedCostPerDay: provider.maxEstimatedCostPerDay,
+    allowSensitiveContext: provider.allowSensitiveContext,
+    isFreeTier: provider.isFreeTier,
+    notes: provider.notes,
     createdAt: provider.createdAt,
     updatedAt: provider.updatedAt
   };

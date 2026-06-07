@@ -14,7 +14,7 @@ const envSchema = z.object({
   CORS_ORIGIN: z.string().default("http://localhost:5173"),
   CORS_ALLOWED_ORIGINS: z.string().optional(),
   APP_PUBLIC_URL: z.string().optional().default("http://localhost:5173"),
-  AI_PROVIDER: z.string().default("mock"),
+  AI_PROVIDER: z.string().default("local-sandbox-baseline"),
   AI_COST_MODE: z.enum(["low", "balanced", "quality"]).default("balanced"),
   OPENAI_BASE_URL: z.string().url().default("https://api.openai.com/v1"),
   OPENAI_API_KEY: z.string().optional().default(""),

@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { LOCAL_SANDBOX_PROVIDER_ID, OPENROUTER_FREE_PROVIDER_ID } from "../services/aiProviderRegistry.js";
 import type { AIProvider } from "./aiProvider.js";
 import { MockAIProvider } from "./mockAIProvider.js";
 import { OpenAICompatibleProvider } from "./openAICompatibleProvider.js";
@@ -17,13 +18,17 @@ export function createAIProvider(providerName: string = env.AI_PROVIDER): AIProv
 }
 
 export function createAIProviderByName(providerName: string): AIProvider {
+  if (providerName === LOCAL_SANDBOX_PROVIDER_ID || providerName === "sandbox" || providerName === "mock") {
+    return new MockAIProvider();
+  }
+
   if (providerName === "openai") {
     return new OpenAIProvider();
   }
 
-  if (providerName === "openrouter") {
+  if (providerName === "openrouter" || providerName === OPENROUTER_FREE_PROVIDER_ID) {
     return new OpenAICompatibleProvider({
-      providerId: "openrouter",
+      providerId: providerName,
       apiKey: env.OPENROUTER_API_KEY,
       baseUrl: env.OPENROUTER_BASE_URL,
       defaultModel: env.OPENROUTER_MODEL,
@@ -53,9 +58,17 @@ export function createAIProviderByName(providerName: string): AIProvider {
 }
 
 export function createAIProviderFromConfig(config: ProviderRuntimeConfig): AIProvider {
-  if (config.id === "mock" || config.type === "mock") return new MockAIProvider();
+  if (config.id === LOCAL_SANDBOX_PROVIDER_ID || config.id === "mock" || config.type === "sandbox" || config.type === "mock") return new MockAIProvider();
   if (config.id === "openai" || config.type === "openai") return new OpenAIProvider();
-  if (config.id === "openrouter" || config.type === "openrouter") return createAIProviderByName("openrouter");
+  if (config.id === OPENROUTER_FREE_PROVIDER_ID || config.id === "openrouter" || config.type === "openrouter") {
+    return new OpenAICompatibleProvider({
+      providerId: config.id,
+      apiKey: env.OPENROUTER_API_KEY,
+      baseUrl: config.baseUrl ?? env.OPENROUTER_BASE_URL,
+      defaultModel: config.defaultModel,
+      headers: openRouterHeaders()
+    });
+  }
   if (config.id === "deepseek" || config.type === "deepseek") return createAIProviderByName("deepseek");
   if (config.type === "openai-compatible" && config.baseUrl) {
     return new OpenAICompatibleProvider({

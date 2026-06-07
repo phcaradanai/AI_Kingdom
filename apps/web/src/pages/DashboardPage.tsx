@@ -12,6 +12,7 @@ import { PriorityBadge } from "@/components/ui/PriorityBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
+import { getProviderModelDisplay } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
@@ -190,7 +191,9 @@ function AgentOperationCard({ activity }: { activity: CurrentAgentActivityDto })
   const status = normalizeAgentStatus(activity.status);
   const meta = AGENT_STATUS_META[status];
   const StatusIcon = meta.Icon;
-  const providerModel = [activity.providerName, activity.model].filter(Boolean).join(" / ");
+  const providerModel = activity.providerName || activity.model
+    ? getProviderModelDisplay(activity.providerName, activity.model)
+    : "";
   const detail = status === "FAILED" && activity.errorMessage ? activity.errorMessage : activity.detail;
   const isTrusted = activity.attributionStatus === "TRUSTED";
   const links = [

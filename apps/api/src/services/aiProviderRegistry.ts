@@ -5,6 +5,7 @@ import { prisma } from "../db/prisma.js";
 export type AICostTier = "FREE" | "LOW" | "MEDIUM" | "HIGH" | "PREMIUM";
 export type AICostMode = "low" | "balanced" | "quality";
 export type AICostPreference = "LOW" | "BALANCED" | "QUALITY";
+export type AIProviderEnvironmentMode = "SANDBOX" | "PRODUCTION" | "DISABLED";
 
 export type AIProviderCapabilities = {
   supportsChat: boolean;
@@ -28,10 +29,26 @@ export type AIProviderConfig = {
   costTier: AICostTier;
   capabilities: AIProviderCapabilities;
   config?: Record<string, unknown> | null;
+  environmentMode: AIProviderEnvironmentMode;
+  maxTokensPerRequest?: number | null;
+  maxRequestsPerDay?: number | null;
+  maxTokensPerDay?: number | null;
+  maxEstimatedCostPerDay?: number | null;
+  allowSensitiveContext: boolean;
+  isFreeTier: boolean;
+  notes?: string | null;
   hasCredentials: boolean;
   createdAt: Date;
   updatedAt: Date;
 };
+
+export const LOCAL_SANDBOX_PROVIDER_ID = "local-sandbox-baseline";
+export const LOCAL_SANDBOX_PROVIDER_NAME = "Local Sandbox Baseline";
+export const LOCAL_SANDBOX_MODEL = "local-sandbox-baseline";
+export const LEGACY_MOCK_PROVIDER_ID = "mock";
+export const LEGACY_MOCK_MODEL = "deterministic-mock-v1";
+export const OPENROUTER_FREE_PROVIDER_ID = "openrouter-free";
+export const OPENROUTER_FREE_PROVIDER_NAME = "OpenRouter Free Sandbox";
 
 const now = new Date(0);
 
@@ -39,17 +56,48 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
   const selected = env.AI_PROVIDER;
   return [
     {
-      id: "mock",
-      name: "Mock",
-      type: "mock",
-      defaultModel: "deterministic-mock-v1",
+      id: LOCAL_SANDBOX_PROVIDER_ID,
+      name: LOCAL_SANDBOX_PROVIDER_NAME,
+      type: "sandbox",
+      defaultModel: LOCAL_SANDBOX_MODEL,
       isActive: true,
       priority: 1000,
       supportsChat: true,
       supportsJsonMode: true,
       costTier: "FREE",
       capabilities: { supportsChat: true, supportsJsonMode: true },
+      environmentMode: "SANDBOX",
+      allowSensitiveContext: false,
+      isFreeTier: true,
+      notes: "Deterministic local baseline used when sandbox or production providers are unavailable.",
       hasCredentials: true,
+      createdAt: now,
+      updatedAt: now
+    },
+    {
+      id: OPENROUTER_FREE_PROVIDER_ID,
+      name: OPENROUTER_FREE_PROVIDER_NAME,
+      type: "openrouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      defaultModel: "openrouter/owl-alpha",
+      isActive: true,
+      priority: 5,
+      supportsChat: true,
+      supportsTools: true,
+      supportsVision: true,
+      supportsJsonMode: true,
+      costTier: "FREE",
+      capabilities: { supportsChat: true, supportsTools: true, supportsVision: true, supportsJsonMode: true },
+      config: { credentialEnvKey: "OPENROUTER_API_KEY" },
+      environmentMode: "SANDBOX",
+      maxTokensPerRequest: 2500,
+      maxRequestsPerDay: 100,
+      maxTokensPerDay: 120000,
+      maxEstimatedCostPerDay: 0,
+      allowSensitiveContext: false,
+      isFreeTier: true,
+      notes: "Free OpenRouter sandbox preset. API key is referenced by environment variable only.",
+      hasCredentials: Boolean(env.OPENROUTER_API_KEY),
       createdAt: now,
       updatedAt: now
     },
@@ -65,6 +113,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       supportsJsonMode: true,
       costTier: "MEDIUM",
       capabilities: { supportsChat: true, supportsJsonMode: true },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false,
       hasCredentials: Boolean(env.OPENAI_COMPATIBLE_API_KEY && env.OPENAI_COMPATIBLE_BASE_URL),
       createdAt: now,
       updatedAt: now
@@ -83,6 +134,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       supportsJsonMode: true,
       costTier: "HIGH",
       capabilities: { supportsChat: true, supportsTools: true, supportsVision: true, supportsJsonMode: true },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false,
       hasCredentials: Boolean(env.OPENAI_API_KEY),
       createdAt: now,
       updatedAt: now
@@ -101,6 +155,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       supportsJsonMode: true,
       costTier: "MEDIUM",
       capabilities: { supportsChat: true, supportsTools: true, supportsVision: true, supportsJsonMode: true },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false,
       hasCredentials: Boolean(env.OPENROUTER_API_KEY),
       createdAt: now,
       updatedAt: now
@@ -117,6 +174,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       supportsJsonMode: true,
       costTier: "LOW",
       capabilities: { supportsChat: true, supportsJsonMode: true },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false,
       hasCredentials: Boolean(env.DEEPSEEK_API_KEY),
       createdAt: now,
       updatedAt: now
@@ -134,6 +194,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       costTier: "HIGH",
       capabilities: { supportsChat: true, supportsTools: true, supportsVision: true },
       config: { runtimeStatus: "planned" },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false,
       hasCredentials: Boolean(env.ANTHROPIC_API_KEY),
       createdAt: now,
       updatedAt: now
@@ -150,6 +213,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       costTier: "LOW",
       capabilities: { supportsChat: true, supportsVision: true },
       config: { runtimeStatus: "planned" },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false,
       hasCredentials: Boolean(env.GEMINI_API_KEY),
       createdAt: now,
       updatedAt: now
@@ -166,6 +232,9 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
       costTier: "FREE",
       capabilities: { supportsChat: true },
       config: { runtimeStatus: "planned" },
+      environmentMode: "SANDBOX",
+      allowSensitiveContext: false,
+      isFreeTier: true,
       hasCredentials: Boolean(env.LOCAL_AI_BASE_URL),
       createdAt: now,
       updatedAt: now
@@ -174,6 +243,19 @@ export function getEnvProviderConfigs(): AIProviderConfig[] {
 }
 
 export async function ensureDefaultAIProviders() {
+  await prisma.aIProvider.updateMany({
+    where: { id: LEGACY_MOCK_PROVIDER_ID },
+    data: {
+      name: LOCAL_SANDBOX_PROVIDER_NAME,
+      defaultModel: LOCAL_SANDBOX_MODEL,
+      costTier: "FREE",
+      environmentMode: "SANDBOX",
+      allowSensitiveContext: false,
+      isFreeTier: true,
+      notes: "Legacy mock provider ID retained for backward compatibility. Use local-sandbox-baseline for new routing."
+    }
+  });
+
   for (const provider of getEnvProviderConfigs()) {
     await prisma.aIProvider.upsert({
       where: { id: provider.id },
@@ -181,8 +263,20 @@ export async function ensureDefaultAIProviders() {
         name: provider.name,
         type: provider.type,
         baseUrl: provider.baseUrl,
+        defaultModel: provider.defaultModel,
+        isActive: provider.isActive,
+        priority: provider.priority,
+        costTier: provider.costTier,
         capabilities: provider.capabilities as Prisma.InputJsonObject,
-        config: publicProviderConfig(provider) as Prisma.InputJsonObject
+        config: publicProviderConfig(provider) as Prisma.InputJsonObject,
+        environmentMode: provider.environmentMode,
+        maxTokensPerRequest: provider.maxTokensPerRequest,
+        maxRequestsPerDay: provider.maxRequestsPerDay,
+        maxTokensPerDay: provider.maxTokensPerDay,
+        maxEstimatedCostPerDay: provider.maxEstimatedCostPerDay,
+        allowSensitiveContext: provider.allowSensitiveContext,
+        isFreeTier: provider.isFreeTier,
+        notes: provider.notes
       },
       create: {
         id: provider.id,
@@ -194,7 +288,15 @@ export async function ensureDefaultAIProviders() {
         priority: provider.priority,
         costTier: provider.costTier,
         capabilities: provider.capabilities as Prisma.InputJsonObject,
-        config: publicProviderConfig(provider) as Prisma.InputJsonObject
+        config: publicProviderConfig(provider) as Prisma.InputJsonObject,
+        environmentMode: provider.environmentMode,
+        maxTokensPerRequest: provider.maxTokensPerRequest,
+        maxRequestsPerDay: provider.maxRequestsPerDay,
+        maxTokensPerDay: provider.maxTokensPerDay,
+        maxEstimatedCostPerDay: provider.maxEstimatedCostPerDay,
+        allowSensitiveContext: provider.allowSensitiveContext,
+        isFreeTier: provider.isFreeTier,
+        notes: provider.notes
       }
     });
   }
@@ -214,13 +316,20 @@ export async function listAIProviders(options: { activeOnly?: boolean; syncDefau
     if (!merged.some((item) => item.id === provider.id)) merged.push(provider);
   }
 
-  const filtered = options.activeOnly ? merged.filter((provider) => provider.isActive && provider.supportsChat) : merged;
+  const hasCanonicalSandbox = merged.some((provider) => provider.id === LOCAL_SANDBOX_PROVIDER_ID);
+  const withoutLegacyDuplicate = hasCanonicalSandbox
+    ? merged.filter((provider) => provider.id !== LEGACY_MOCK_PROVIDER_ID)
+    : merged;
+  const filtered = options.activeOnly
+    ? withoutLegacyDuplicate.filter((provider) => provider.isActive && provider.supportsChat)
+    : withoutLegacyDuplicate;
   return filtered.sort((a, b) => a.priority - b.priority || a.name.localeCompare(b.name));
 }
 
 export async function getAIProvider(providerId: string): Promise<AIProviderConfig | null> {
   const providers = await listAIProviders();
-  return providers.find((provider) => provider.id === providerId) ?? null;
+  const canonicalProviderId = providerId === LEGACY_MOCK_PROVIDER_ID || providerId === LEGACY_MOCK_MODEL ? LOCAL_SANDBOX_PROVIDER_ID : providerId;
+  return providers.find((provider) => provider.id === canonicalProviderId) ?? providers.find((provider) => provider.id === providerId) ?? null;
 }
 
 export async function createAIProvider(payload: {
@@ -270,7 +379,11 @@ export function publicProviderConfig(provider: AIProviderConfig): Record<string,
   return {
     hasCredentials: provider.hasCredentials,
     runtimeStatus: provider.config?.runtimeStatus,
-    credentialSource: provider.hasCredentials ? "env" : "none"
+    credentialEnvKey: provider.config?.credentialEnvKey,
+    credentialSource: provider.hasCredentials ? "env" : "none",
+    providerMode: provider.environmentMode,
+    costTier: provider.costTier,
+    isFreeTier: provider.isFreeTier
   };
 }
 
@@ -278,7 +391,8 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
   const capabilities = normalizeCapabilities(dbProvider.capabilities);
   const config = typeof dbProvider.config === "object" && dbProvider.config !== null ? (dbProvider.config as Record<string, unknown>) : null;
   const credentialEnvKey = config?.credentialEnvKey as string | undefined;
-  const hasCredentials = envProvider?.hasCredentials ?? (dbProvider.type === "mock" || (credentialEnvKey ? Boolean(process.env[credentialEnvKey]) : false));
+  const isLocalSandbox = dbProvider.type === "mock" || dbProvider.type === "sandbox" || dbProvider.id === LOCAL_SANDBOX_PROVIDER_ID;
+  const hasCredentials = envProvider?.hasCredentials ?? (isLocalSandbox || (credentialEnvKey ? Boolean(process.env[credentialEnvKey]) : false));
   
   return {
     id: dbProvider.id,
@@ -286,8 +400,7 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
     type: dbProvider.type,
     baseUrl: dbProvider.baseUrl ?? envProvider?.baseUrl ?? null,
     defaultModel: dbProvider.defaultModel || envProvider?.defaultModel || "",
-    // BUGFIX: Mock provider should remain active for local/demo mode, even if DB state was dirtied.
-    isActive: dbProvider.type === "mock" ? true : (dbProvider.isActive && (hasCredentials || ["anthropic", "gemini", "local"].includes(dbProvider.type) === false)),
+    isActive: isLocalSandbox ? true : (dbProvider.isActive && (hasCredentials || ["anthropic", "gemini", "local"].includes(dbProvider.type) === false)),
     priority: dbProvider.priority,
     supportsChat: capabilities.supportsChat,
     supportsTools: capabilities.supportsTools,
@@ -296,6 +409,14 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
     costTier: normalizeCostTier(dbProvider.costTier),
     capabilities,
     config,
+    environmentMode: normalizeEnvironmentMode(dbProvider.environmentMode),
+    maxTokensPerRequest: dbProvider.maxTokensPerRequest,
+    maxRequestsPerDay: dbProvider.maxRequestsPerDay,
+    maxTokensPerDay: dbProvider.maxTokensPerDay,
+    maxEstimatedCostPerDay: dbProvider.maxEstimatedCostPerDay,
+    allowSensitiveContext: dbProvider.allowSensitiveContext,
+    isFreeTier: dbProvider.isFreeTier,
+    notes: dbProvider.notes,
     hasCredentials,
     createdAt: dbProvider.createdAt,
     updatedAt: dbProvider.updatedAt
@@ -315,4 +436,8 @@ function normalizeCapabilities(value: Prisma.JsonValue): AIProviderCapabilities 
 
 function normalizeCostTier(value: string): AICostTier {
   return ["FREE", "LOW", "MEDIUM", "HIGH", "PREMIUM"].includes(value) ? (value as AICostTier) : "MEDIUM";
+}
+
+function normalizeEnvironmentMode(value: string): AIProviderEnvironmentMode {
+  return ["SANDBOX", "PRODUCTION", "DISABLED"].includes(value) ? (value as AIProviderEnvironmentMode) : "PRODUCTION";
 }

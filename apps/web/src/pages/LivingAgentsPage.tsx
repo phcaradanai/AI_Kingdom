@@ -5,6 +5,7 @@ import { AgentPortrait } from "@/components/AgentPortrait";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
+import { getProviderDisplayName } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import type { AgentActivityStatus, LivingAgentSummaryDto } from "@/types/api";
 
@@ -223,7 +224,7 @@ function AgentCard({ agent }: { agent: LivingAgentSummaryDto }) {
           {topProvider && (
             <span className="inline-flex items-center gap-1 rounded-full border border-muted-foreground/20 bg-muted/20 px-2 py-0.5 text-[10px] text-muted-foreground">
               <Zap className="h-2.5 w-2.5" />
-              {topProvider.provider}
+              {getProviderDisplayName(topProvider.provider)}
             </span>
           )}
         </div>

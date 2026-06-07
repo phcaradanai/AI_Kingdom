@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
+import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { CouncilSessionDto } from "@/types/api";
@@ -155,7 +156,7 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
           {session.providerName && (
             <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-3 py-1.5 text-muted-foreground font-medium">
               <Cpu className="h-3.5 w-3.5" />
-              {session.providerName}{session.modelUsed ? ` · ${session.modelUsed}` : ""}
+              {getProviderDisplayName(session.providerName)}{session.modelUsed ? ` · ${getModelDisplayName(session.modelUsed)}` : ""}
             </div>
           )}
           <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-3 py-1.5 text-muted-foreground font-medium">
@@ -171,7 +172,7 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
         {session.fallbackNotice && (
           <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 flex gap-3">
              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" />
-             <p className="text-sm leading-relaxed text-amber-500/90 font-medium">{session.fallbackNotice}</p>
+             <p className="text-sm leading-relaxed text-amber-500/90 font-medium">{getProviderTerminologyText(session.fallbackNotice)}</p>
           </div>
         )}
 

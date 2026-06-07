@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api";
+import { getModelDisplayName, getProviderDisplayName, getProviderModeBadge, isLocalSandboxProvider } from "@/lib/providerDisplay";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { AIProviderDto, ModelPricingDto } from "@/types/api";
@@ -23,6 +24,7 @@ export function ProvidersPage() {
   function isPricingKnown(provider: AIProviderDto): boolean {
     const model = provider.defaultModel;
     if (!model) return false;
+    if (isLocalSandboxProvider(provider)) return true;
     return pricingRecords.some((p) => p.providerType === provider.type && p.model === model && p.isActive);
   }
 
@@ -74,7 +76,7 @@ export function ProvidersPage() {
     if (!provider.isActive) {
       return <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] uppercase font-bold text-muted-foreground border border-border tracking-wider">INACTIVE</span>;
     }
-    if (provider.isActive && !provider.hasCredentials && provider.type !== "mock") {
+    if (provider.isActive && !provider.hasCredentials && !isLocalSandboxProvider(provider)) {
       return <span className="rounded-full bg-destructive/20 px-2 py-0.5 text-[10px] uppercase font-bold text-destructive border border-destructive/50 tracking-wider">MISSING KEY</span>;
     }
     return <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[10px] uppercase font-bold text-primary border border-primary/50 tracking-wider">READY</span>;
@@ -118,7 +120,7 @@ export function ProvidersPage() {
                   <option value="deepseek">deepseek</option>
                   <option value="gemini">gemini</option>
                   <option value="local">local</option>
-                  <option value="mock">mock</option>
+                  <option value="sandbox">sandbox</option>
                 </select>
               </div>
               <div>
@@ -129,7 +131,7 @@ export function ProvidersPage() {
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">Default Model</label>
                 <p className="text-[11px] text-muted-foreground/80 mb-1.5">Example: deepseek-chat, openai/gpt-4o-mini.</p>
-                <Input required={addDraft.type !== "mock"} value={addDraft.defaultModel} onChange={(e) => setAddDraft({ ...addDraft, defaultModel: e.target.value })} placeholder="e.g. gpt-4o-mini" />
+                <Input required={addDraft.type !== "sandbox"} value={addDraft.defaultModel} onChange={(e) => setAddDraft({ ...addDraft, defaultModel: e.target.value })} placeholder="e.g. gpt-4o-mini" />
               </div>
               <div>
                 <label className="text-xs font-semibold text-muted-foreground block mb-1">Routing Priority <span className="font-normal">(Lower numbers preferred first)</span></label>
@@ -180,9 +182,10 @@ export function ProvidersPage() {
                     <div className="p-2 bg-primary/10 rounded-lg text-primary"><Cpu className="h-5 w-5" /></div>
                     <div>
                       <h2 className="font-display text-lg flex flex-wrap items-center gap-2">
-                        {provider.name}
+                        {getProviderDisplayName(provider)}
                         {getReadinessBadge(provider)}
                       </h2>
+                      <div className="mt-0.5 text-xs text-muted-foreground">{getProviderModeBadge(provider)}</div>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -241,12 +244,12 @@ export function ProvidersPage() {
                   <div className="grid grid-cols-2 gap-y-5 text-sm mt-5 border-t border-border/50 pt-5">
                     <div>
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Provider Type</span>
-                      <span className="font-medium">{provider.type}</span>
+                      <span className="font-medium">{isLocalSandboxProvider(provider) ? "sandbox" : provider.type}</span>
                     </div>
                     <div>
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Default Model</span>
-                      <span className="font-medium">{provider.defaultModel || "None"}</span>
-                      {provider.defaultModel && provider.type !== "mock" && (
+                      <span className="font-medium">{provider.defaultModel ? getModelDisplayName(provider.defaultModel) : "None"}</span>
+                      {provider.defaultModel && !isLocalSandboxProvider(provider) && (
                         <span className={cn("ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border", isPricingKnown(provider) ? "border-primary/40 bg-primary/10 text-primary" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-400")}>
                           {isPricingKnown(provider) ? "Pricing ✓" : "Pricing ?"}
                         </span>
@@ -263,7 +266,7 @@ export function ProvidersPage() {
                     <div className="col-span-2">
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Credential Status</span>
                       <span className="font-medium">
-                        {provider.type === "mock" ? "No env credentials required" : 
+                        {isLocalSandboxProvider(provider) ? "No env credentials required" : 
                          provider.hasCredentials ? "Env key configured" : "Missing env key"}
                       </span>
                     </div>

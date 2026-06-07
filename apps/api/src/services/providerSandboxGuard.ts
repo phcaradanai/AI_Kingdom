@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import type { AIProviderConfig } from "./aiProviderRegistry.js";
+import { LOCAL_SANDBOX_PROVIDER_ID } from "./aiProviderRegistry.js";
 import { redactSecrets } from "./usageAttributionService.js";
 
 export type SandboxGuardResult =
@@ -40,7 +41,7 @@ export async function checkSandboxQuota(providerId: string): Promise<SandboxGuar
     }
 
     const totalCost = costAgg._sum.estimatedCostUSD ?? 0;
-    if (provider.maxEstimatedCostPerDay != null && totalCost >= provider.maxEstimatedCostPerDay) {
+    if (provider.maxEstimatedCostPerDay != null && provider.maxEstimatedCostPerDay > 0 && totalCost >= provider.maxEstimatedCostPerDay) {
       return { allowed: false, reason: `Daily cost quota exceeded ($${provider.maxEstimatedCostPerDay}/day)` };
     }
   }
@@ -71,5 +72,5 @@ export async function selectKnowledgeExtractionProvider(): Promise<string> {
     },
     orderBy: { priority: "asc" }
   });
-  return freeProvider?.id ?? "mock";
+  return freeProvider?.id ?? LOCAL_SANDBOX_PROVIDER_ID;
 }

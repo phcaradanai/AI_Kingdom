@@ -276,25 +276,27 @@ test("extractKnowledgeCandidatesFromTrace creates candidates with traceId", asyn
   }
 });
 
-test("sandbox provider DISABLED mode routes to fallback (mock)", async () => {
-  const provider = await prisma.aIProvider.findUnique({ where: { id: "mock" } });
+test("sandbox provider DISABLED mode blocks provider use", async () => {
+  const providerId = "local-sandbox-baseline";
+  const provider = await prisma.aIProvider.findUnique({ where: { id: providerId } });
   if (!provider) {
     // Skip if no provider in test DB
     return;
   }
   // DISABLED check
-  await prisma.aIProvider.update({ where: { id: "mock" }, data: { environmentMode: "DISABLED" } });
-  const result = await checkSandboxQuota("mock");
+  await prisma.aIProvider.update({ where: { id: providerId }, data: { environmentMode: "DISABLED" } });
+  const result = await checkSandboxQuota(providerId);
   assert.equal(result.allowed, false, "DISABLED provider should not be allowed");
   // Reset
-  await prisma.aIProvider.update({ where: { id: "mock" }, data: { environmentMode: "SANDBOX" } });
+  await prisma.aIProvider.update({ where: { id: providerId }, data: { environmentMode: "SANDBOX" } });
 });
 
 test("sandbox provider refuses sensitive context by default (isFreeTier)", async () => {
-  const provider = await prisma.aIProvider.findUnique({ where: { id: "mock" } });
+  const providerId = "local-sandbox-baseline";
+  const provider = await prisma.aIProvider.findUnique({ where: { id: providerId } });
   if (!provider) return;
 
-  const result = await checkSandboxQuota("mock");
+  const result = await checkSandboxQuota(providerId);
   if (result.allowed) {
     assert.equal(result.redacted, !provider.allowSensitiveContext, "Free tier should have redacted=true when allowSensitiveContext=false");
   }

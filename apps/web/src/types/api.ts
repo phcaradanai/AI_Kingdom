@@ -145,6 +145,14 @@ export type AIProviderDto = {
     supportsJsonMode?: boolean;
   };
   hasCredentials: boolean;
+  environmentMode?: "SANDBOX" | "PRODUCTION" | "DISABLED";
+  maxTokensPerRequest?: number | null;
+  maxRequestsPerDay?: number | null;
+  maxTokensPerDay?: number | null;
+  maxEstimatedCostPerDay?: number | null;
+  allowSensitiveContext?: boolean;
+  isFreeTier?: boolean;
+  notes?: string | null;
   createdAt: string;
   updatedAt: string;
 };

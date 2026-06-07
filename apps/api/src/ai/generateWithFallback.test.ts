@@ -4,6 +4,7 @@ import type { AIProvider } from "./aiProvider.js";
 import { generateWithFallback } from "./generateWithFallback.js";
 import { prisma } from "../db/prisma.js";
 import { buildTraceContext, createAIUsageTrace } from "../services/aiUsageTraceService.js";
+import { LOCAL_SANDBOX_MODEL, LOCAL_SANDBOX_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_NAME } from "../services/aiProviderRegistry.js";
 
 async function createTestTrace(label: string) {
   const trace = await createAIUsageTrace({
@@ -26,7 +27,7 @@ async function createTestTrace(label: string) {
   });
 }
 
-test("failed AI provider falls back to mock response without throwing", async () => {
+test("failed AI provider falls back to local sandbox baseline without throwing", async () => {
   const failingProvider: AIProvider = {
     name: "openai",
     model: "failing-model",
@@ -35,7 +36,7 @@ test("failed AI provider falls back to mock response without throwing", async ()
     }
   };
 
-  const traceContext = await createTestTrace(`fallback-mock-${Date.now()}`);
+  const traceContext = await createTestTrace(`fallback-sandbox-${Date.now()}`);
   const result = await generateWithFallback(failingProvider, {
     command: "Build the throne room processing flow",
     mode: "BUILD",
@@ -46,14 +47,25 @@ test("failed AI provider falls back to mock response without throwing", async ()
     responseStyle: "structured"
   }, traceContext);
 
-  assert.equal(result.providerName, "mock");
-  assert.equal(result.modelUsed, "deterministic-mock-v1");
+  assert.equal(result.providerName, LOCAL_SANDBOX_PROVIDER_NAME);
+  assert.equal(result.providerId, LOCAL_SANDBOX_PROVIDER_ID);
+  assert.equal(result.modelUsed, LOCAL_SANDBOX_MODEL);
   assert.match(result.response, /Royal Architect/);
   assert.match(result.fallbackNotice ?? "", /simulated provider failure/);
+  assert.match(result.fallbackNotice ?? "", /Fallback used: Local Sandbox Baseline/);
   assert.ok(result.usage.totalTokens > 0);
+
+  const step = await prisma.aIUsageTraceStep.findFirst({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_FALLBACK" }
+  });
+  assert.ok(step);
+  assert.equal(step.providerName, LOCAL_SANDBOX_PROVIDER_NAME);
+  assert.equal(step.providerType, "sandbox");
+  assert.equal(step.model, LOCAL_SANDBOX_MODEL);
+  assert.match(JSON.stringify(step.metadata), /fallbackReason/);
 });
 
-test("fallback chain tries the next configured provider before mock", async () => {
+test("fallback chain tries the next configured provider before local sandbox baseline", async () => {
   const failingProvider: AIProvider = {
     name: "deepseek",
     model: "deepseek-chat",

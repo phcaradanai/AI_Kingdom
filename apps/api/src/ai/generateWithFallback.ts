@@ -1,6 +1,15 @@
 import type { AIProvider, GenerateAgentResponseInput, TokenUsage } from "./aiProvider.js";
 import { MockAIProvider } from "./mockAIProvider.js";
 import { addTraceStep, markTraceFallbackUsed, markTraceProviderCalling, type TraceContext } from "../services/aiUsageTraceService.js";
+import {
+  LEGACY_MOCK_MODEL,
+  LEGACY_MOCK_PROVIDER_ID,
+  LOCAL_SANDBOX_MODEL,
+  LOCAL_SANDBOX_PROVIDER_ID,
+  LOCAL_SANDBOX_PROVIDER_NAME,
+  OPENROUTER_FREE_PROVIDER_ID,
+  OPENROUTER_FREE_PROVIDER_NAME
+} from "../services/aiProviderRegistry.js";
 
 export type AIProviderCall = {
   provider: AIProvider;
@@ -33,13 +42,14 @@ export async function generateWithFallback(
   for (const call of providers) {
     const candidate = call.provider;
     const model = call.model ?? input.model ?? candidate.model;
-    attemptedProviders.push(candidate.name);
+    const meta = providerTraceMeta(candidate.name, model);
+    attemptedProviders.push(meta.providerId);
     try {
       await markTraceProviderCalling(traceContext.traceId, {
-        providerId: candidate.name,
-        providerType: candidate.name,
-        providerName: candidate.name,
-        model
+        providerId: meta.providerId,
+        providerType: meta.providerType,
+        providerName: meta.providerName,
+        model: meta.model
       });
       const result = await candidate.generateAgentResponse({
         ...input,
@@ -50,7 +60,7 @@ export async function generateWithFallback(
           attributionStatus: traceContext.attributionStatus,
           attemptedProviders,
           fallbackFailures: failures,
-          fallbackProvider: candidate.name
+          fallbackProvider: meta.providerId
         });
         // Timeline: PROVIDER_FALLBACK step
         await addTraceStep({
@@ -58,68 +68,75 @@ export async function generateWithFallback(
           stepType: "PROVIDER_FALLBACK",
           operation: "provider_fallback",
           title: "Provider fallback used",
-          detail: `Fell back to ${candidate.name}`,
+          detail: `Fell back to ${meta.providerName}`,
           status: "FALLBACK_USED",
-          providerName: candidate.name,
-          model,
+          providerId: meta.providerId,
+          providerType: meta.providerType,
+          providerName: meta.providerName,
+          model: meta.model,
           metadata: {
             fromProviders: failures.map((f) => f.split(" failed:")[0]),
-            toProvider: candidate.name,
+            toProvider: meta.providerName,
+            fallbackReason: failures.join(" | "),
             failures: failures.map((f) => f.slice(0, 200))
           }
         }).catch(() => undefined);
       }
       return {
         response: result.response,
-        providerName: candidate.name,
-        providerId: candidate.name,
-        modelUsed: model,
-        fallbackNotice: failures.length > 0 ? buildFallbackNotice(failures, candidate.name) : undefined,
+        providerName: meta.providerName,
+        providerId: meta.providerId,
+        modelUsed: meta.model,
+        fallbackNotice: failures.length > 0 ? buildFallbackNotice(failures, meta.providerName) : undefined,
         attemptedProviders,
         usage: result.usage
       };
     } catch (error) {
-      failures.push(`${candidate.name} failed: ${error instanceof Error ? error.message : String(error)}`);
+      failures.push(`${meta.providerName} failed: ${error instanceof Error ? error.message : String(error)}`);
     }
   }
 
   const mockProvider = new MockAIProvider();
-  if (!attemptedProviders.includes(mockProvider.name)) attemptedProviders.push(mockProvider.name);
+  const sandboxMeta = providerTraceMeta(mockProvider.name, mockProvider.model);
+  if (!attemptedProviders.includes(sandboxMeta.providerId)) attemptedProviders.push(sandboxMeta.providerId);
   await markTraceProviderCalling(traceContext.traceId, {
-    providerId: mockProvider.name,
-    providerType: mockProvider.name,
-    providerName: mockProvider.name,
-    model: mockProvider.model
+    providerId: sandboxMeta.providerId,
+    providerType: sandboxMeta.providerType,
+    providerName: sandboxMeta.providerName,
+    model: sandboxMeta.model
   });
   const mockResult = await mockProvider.generateAgentResponse(input);
   await markTraceFallbackUsed(traceContext.traceId, {
     attributionStatus: traceContext.attributionStatus,
     attemptedProviders,
     fallbackFailures: failures,
-    fallbackProvider: mockProvider.name
+    fallbackProvider: sandboxMeta.providerId
   });
-  // Timeline: PROVIDER_FALLBACK step for mock fallback
+  // Timeline: PROVIDER_FALLBACK step for local sandbox fallback
   await addTraceStep({
     traceId: traceContext.traceId,
     stepType: "PROVIDER_FALLBACK",
     operation: "provider_fallback",
-    title: "Mock provider fallback used",
-    detail: `All providers failed, fell back to ${mockProvider.name}`,
+    title: "Local sandbox baseline fallback used",
+    detail: `All providers failed; fallback to ${sandboxMeta.providerName}`,
     status: "FALLBACK_USED",
-    providerName: mockProvider.name,
-    model: mockProvider.model,
+    providerId: sandboxMeta.providerId,
+    providerType: sandboxMeta.providerType,
+    providerName: sandboxMeta.providerName,
+    model: sandboxMeta.model,
     metadata: {
       fromProviders: failures.map((f) => f.split(" failed:")[0]),
-      toProvider: mockProvider.name,
+      toProvider: sandboxMeta.providerName,
+      fallbackReason: failures.join(" | "),
       failures: failures.map((f) => f.slice(0, 200))
     }
   }).catch(() => undefined);
   return {
     response: mockResult.response,
-    providerName: mockProvider.name,
-    providerId: mockProvider.name,
-    modelUsed: mockProvider.model,
-    fallbackNotice: buildFallbackNotice(failures, mockProvider.name),
+    providerName: sandboxMeta.providerName,
+    providerId: sandboxMeta.providerId,
+    modelUsed: sandboxMeta.model,
+    fallbackNotice: buildFallbackNotice(failures, sandboxMeta.providerName),
     attemptedProviders,
     usage: mockResult.usage
   };
@@ -133,4 +150,37 @@ function buildFallbackNotice(failures: string[], winner: string): string {
 function normalizeProviderCalls(provider: AIProvider | AIProvider[] | AIProviderCall[]): AIProviderCall[] {
   if (!Array.isArray(provider)) return [{ provider }];
   return provider.map((item) => ("generateAgentResponse" in item ? { provider: item } : item));
+}
+
+function providerTraceMeta(providerName: string, model?: string) {
+  if (
+    providerName === LEGACY_MOCK_PROVIDER_ID ||
+    providerName === LOCAL_SANDBOX_PROVIDER_ID ||
+    providerName === "sandbox" ||
+    model === LEGACY_MOCK_MODEL ||
+    model === LOCAL_SANDBOX_MODEL
+  ) {
+    return {
+      providerId: LOCAL_SANDBOX_PROVIDER_ID,
+      providerType: "sandbox",
+      providerName: LOCAL_SANDBOX_PROVIDER_NAME,
+      model: LOCAL_SANDBOX_MODEL
+    };
+  }
+
+  if (providerName === OPENROUTER_FREE_PROVIDER_ID) {
+    return {
+      providerId: OPENROUTER_FREE_PROVIDER_ID,
+      providerType: "openrouter",
+      providerName: OPENROUTER_FREE_PROVIDER_NAME,
+      model: model ?? ""
+    };
+  }
+
+  return {
+    providerId: providerName,
+    providerType: providerName,
+    providerName,
+    model: model ?? ""
+  };
 }

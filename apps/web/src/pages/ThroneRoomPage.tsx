@@ -7,6 +7,7 @@ import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
+import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { TaskDto, TaskMode } from "@/types/api";
@@ -170,8 +171,8 @@ export function ThroneRoomPage() {
                 {latestSession.providerName && (
                   <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-md border border-border/50">
                     <Cpu className="h-3 w-3" />
-                    {latestSession.providerName}
-                    {latestSession.modelUsed ? ` · ${latestSession.modelUsed}` : ""}
+                    {getProviderDisplayName(latestSession.providerName)}
+                    {latestSession.modelUsed ? ` · ${getModelDisplayName(latestSession.modelUsed)}` : ""}
                   </div>
                 )}
               </div>
@@ -188,7 +189,7 @@ export function ThroneRoomPage() {
               </div>
               {latestSession.fallbackNotice && (
                 <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-500/90 font-medium">
-                  {latestSession.fallbackNotice}
+                  {getProviderTerminologyText(latestSession.fallbackNotice)}
                 </div>
               )}
             </div>

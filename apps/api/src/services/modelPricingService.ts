@@ -1,5 +1,14 @@
 import { prisma } from "../db/prisma.js";
 import { PRICING_TABLE } from "../pricing/providerPricing.js";
+import {
+  LEGACY_MOCK_MODEL,
+  LEGACY_MOCK_PROVIDER_ID,
+  LOCAL_SANDBOX_MODEL,
+  LOCAL_SANDBOX_PROVIDER_ID,
+  LOCAL_SANDBOX_PROVIDER_NAME,
+  OPENROUTER_FREE_PROVIDER_ID,
+  OPENROUTER_FREE_PROVIDER_NAME
+} from "./aiProviderRegistry.js";
 
 export type PricingSource = "db" | "static" | "unknown";
 // KNOWN   = exact cache-aware or legacy pricing matched and all token counts present
@@ -87,7 +96,8 @@ export function invalidatePricingCache() {
 
 export async function getModelPricing(providerType: string, model: string): Promise<ModelPricingResult> {
   const pricingCache = await loadCache();
-  const key = `${providerType}:${model}`;
+  const normalized = normalizePricingKey(providerType, model);
+  const key = `${normalized.providerType}:${normalized.model}`;
 
   // 1. Exact match in DB
   const dbRow = pricingCache.get(key);
@@ -119,8 +129,8 @@ export async function getModelPricing(providerType: string, model: string): Prom
   }
 
   // 3. Static table fuzzy alias (deepseek only)
-  if (providerType === "deepseek") {
-    const lc = model.toLowerCase();
+  if (normalized.providerType === "deepseek") {
+    const lc = normalized.model.toLowerCase();
     for (const [tableKey, pricing] of Object.entries(PRICING_TABLE)) {
       if (!tableKey.startsWith("deepseek:")) continue;
       const suffix = tableKey.slice("deepseek:".length);
@@ -218,7 +228,16 @@ export const DEFAULT_MODEL_PRICING: Array<{
   unsupportedThinkingParams?: string[];
   notes?: string;
 }> = [
-  { providerType: "mock", model: "deterministic-mock-v1", displayName: "Mock (deterministic)", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "mock", model: "deterministic-mock-v1", displayName: "Local Sandbox Baseline (legacy)", inputPerMillion: 0, outputPerMillion: 0, notes: "Legacy deterministic baseline model retained for old usage records." },
+  { providerType: "sandbox", model: "local-sandbox-baseline", displayName: "Local Sandbox Baseline", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "local-sandbox-baseline", model: "local-sandbox-baseline", displayName: "Local Sandbox Baseline", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "nvidia/nemotron-3-ultra-550b-a55b:free", displayName: "OpenRouter Free: Nemotron 3 Ultra", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "nvidia/nemotron-3-super-120b-a12b:free", displayName: "OpenRouter Free: Nemotron 3 Super", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "poolside/laguna-m.1:free", displayName: "OpenRouter Free: Laguna M", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "poolside/laguna-xs.2:free", displayName: "OpenRouter Free: Laguna XS", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "google/gemma-4-31b-it:free", displayName: "OpenRouter Free: Gemma 4 31B", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "google/gemma-4-26b-a4b-it:free", displayName: "OpenRouter Free: Gemma 4 26B", inputPerMillion: 0, outputPerMillion: 0 },
+  { providerType: "openrouter", model: "openrouter/owl-alpha", displayName: "OpenRouter Free: Owl Alpha", inputPerMillion: 0, outputPerMillion: 0 },
   { providerType: "openai", model: "gpt-4o", displayName: "GPT-4o", inputPerMillion: 2.5, outputPerMillion: 10.0 },
   { providerType: "openai", model: "gpt-4o-mini", displayName: "GPT-4o Mini", inputPerMillion: 0.15, outputPerMillion: 0.6 },
   { providerType: "openai", model: "gpt-4-turbo", displayName: "GPT-4 Turbo", inputPerMillion: 10.0, outputPerMillion: 30.0 },
@@ -343,4 +362,23 @@ export async function ensureDefaultModelPricing() {
     });
   }
   invalidatePricingCache();
+}
+
+function normalizePricingKey(providerType: string, model: string): { providerType: string; model: string } {
+  if (
+    providerType === LOCAL_SANDBOX_PROVIDER_NAME ||
+    providerType === LOCAL_SANDBOX_PROVIDER_ID ||
+    providerType === LEGACY_MOCK_PROVIDER_ID ||
+    providerType === "sandbox" ||
+    model === LEGACY_MOCK_MODEL ||
+    model === LOCAL_SANDBOX_MODEL
+  ) {
+    return { providerType: "sandbox", model: LOCAL_SANDBOX_MODEL };
+  }
+
+  if (providerType === OPENROUTER_FREE_PROVIDER_NAME || providerType === OPENROUTER_FREE_PROVIDER_ID) {
+    return { providerType: "openrouter", model };
+  }
+
+  return { providerType, model };
 }
