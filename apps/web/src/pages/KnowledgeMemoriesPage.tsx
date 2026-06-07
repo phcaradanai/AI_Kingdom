@@ -1,6 +1,6 @@
 import { Archive, Brain, ChevronRight, Link as LinkIcon, RefreshCw, Search } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
@@ -40,10 +40,12 @@ function TrustBadge({ level }: { level: string }) {
 }
 
 export function KnowledgeMemoriesPage() {
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get("q") || searchParams.get("id") || "";
   const [memories, setMemories] = useState<KnowledgeMemoryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState<string>("");
-  const [search, setSearch] = useState<string>("");
+  const [search, setSearch] = useState<string>(initialSearch);
   const [acting, setActing] = useState<string | null>(null);
 
   const load = async () => {
@@ -71,7 +73,12 @@ export function KnowledgeMemoriesPage() {
   const filtered = memories.filter((m) => {
     if (!search) return true;
     const q = search.toLowerCase();
-    return m.title.toLowerCase().includes(q) || m.content.toLowerCase().includes(q) || m.tags.some((t) => t.includes(q));
+    return (
+      m.id.toLowerCase().includes(q) ||
+      m.title.toLowerCase().includes(q) ||
+      m.content.toLowerCase().includes(q) ||
+      m.tags.some((t) => t.includes(q))
+    );
   });
 
   return (

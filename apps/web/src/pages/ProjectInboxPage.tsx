@@ -3,6 +3,7 @@ import { Archive, Check, ChevronDown, ChevronRight, Eye, EyeOff, Inbox, X } from
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { EmptyState } from "@/components/ui/EmptyState";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
@@ -297,7 +298,12 @@ export function ProjectInboxPage() {
             </Card>
           );
         })}
-        {items.length === 0 ? <Card>No inbox items match this filter.</Card> : null}
+        {items.length === 0 ? (
+          <EmptyState
+            title="No inbox items"
+            description="No actionable routing decisions. Low-confidence signals are not stored."
+          />
+        ) : null}
       </div>
     </>
   );

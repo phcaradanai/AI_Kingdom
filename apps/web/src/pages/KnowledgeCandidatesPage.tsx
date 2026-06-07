@@ -178,6 +178,44 @@ export function KnowledgeCandidatesPage() {
                 <span>{formatDate(c.createdAt)}</span>
               </div>
 
+              {(() => {
+                const meta = (c.metadata && typeof c.metadata === "object") ? (c.metadata as Record<string, any>) : {};
+                const targetMemoryId = meta.targetMemoryId;
+                const hasDuplicateWarning = !!targetMemoryId;
+                const isTraceMissing = !c.traceId;
+
+                return (
+                  <div className="space-y-2">
+                    {hasDuplicateWarning && (
+                      <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <div>
+                          <span>Warning: Duplicate candidate fingerprint already exists in memory. Merge suggestion available.</span>
+                          <Link
+                            to={`/knowledge-lab/memories?q=${targetMemoryId}`}
+                            className="underline text-amber-400 hover:text-amber-300 ml-1 font-semibold"
+                          >
+                            View existing memory
+                          </Link>
+                        </div>
+                      </div>
+                    )}
+                    {isTraceMissing && (
+                      <div className="flex items-start gap-2 rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 text-xs text-yellow-300">
+                        <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                        <span>Warning: Source trace is missing/required for verification.</span>
+                      </div>
+                    )}
+                    {meta.sourceTrust && (
+                      <div className="text-[10px] text-muted-foreground">
+                        Value Gate Source Trust: <span className="font-semibold text-muted-foreground/90">{meta.sourceTrust}</span>
+                        {meta.retentionPolicy && <> | Retention Policy: <span className="font-semibold text-muted-foreground/90">{meta.retentionPolicy}</span></>}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               {c.tags.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {c.tags.map((tag) => (

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type { KnowledgeCategory, KnowledgeCandidateStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { redactSecrets } from "./usageAttributionService.js";
+import { evaluateRecordValue, shouldPersistRecord } from "./dataValueGateService.js";
 
 // ---------- Types ----------
 
@@ -183,20 +184,53 @@ export async function proposeKnowledgeCandidate(
   input: ProposeKnowledgeCandidateInput
 ): Promise<KnowledgeCandidateDto | null> {
   if (isSensitive(input.title) || isSensitive(input.content)) return null;
-  if (!input.traceId) return null;
 
   const fingerprint = buildFingerprint(input.title, input.content);
 
-  // Deduplicate
-  const existing = await prisma.agentKnowledgeCandidate.findFirst({
-    where: { fingerprint }
+  // Apply M15H: Kingdom Data Value Gate
+  const gateDecision = await evaluateRecordValue({
+    recordType: "knowledgeCandidate",
+    origin: "SYSTEM_GENERATED",
+    title: input.title,
+    content: input.content,
+    traceId: input.traceId ?? undefined,
+    projectId: input.projectId ?? undefined,
+    category: input.category ?? "UNKNOWN",
+    confidence: input.confidence ?? undefined,
+    sourceType: input.sourceType,
+    sourceId: input.sourceId ?? undefined,
+    metadata: {
+      fingerprint,
+      taskId: input.taskId,
+      councilSessionId: input.councilSessionId,
+      ...input.metadata
+    }
   });
-  if (existing) return null;
 
-  const existingMemory = await prisma.agentKnowledgeMemory.findFirst({
-    where: { fingerprint }
+  const persist = shouldPersistRecord(gateDecision, {
+    recordType: "knowledgeCandidate",
+    origin: "SYSTEM_GENERATED"
   });
-  if (existingMemory) return null;
+
+  if (!persist) {
+    return null;
+  }
+
+  const status = gateDecision.decision === "REJECT" ? ("REJECTED" as const) : ("PENDING" as const);
+  const rejectionReason = gateDecision.decision === "REJECT" ? gateDecision.reason : null;
+
+  let targetMemoryId: string | null = null;
+  if (gateDecision.reason.includes("Merge suggestion available")) {
+    const mem = await prisma.agentKnowledgeMemory.findFirst({ where: { fingerprint } });
+    targetMemoryId = mem?.id ?? null;
+  }
+
+  const meta = {
+    ...(input.metadata as object),
+    retentionPolicy: gateDecision.retentionPolicy,
+    sourceTrust: gateDecision.sourceTrust,
+    ...(targetMemoryId ? { targetMemoryId } : {})
+  };
 
   const candidate = await prisma.agentKnowledgeCandidate.create({
     data: {
@@ -212,11 +246,12 @@ export async function proposeKnowledgeCandidate(
       summary: input.summary ? trimContent(input.summary, 300) : null,
       category: input.category ?? "UNKNOWN",
       confidence: input.confidence ?? null,
-      status: "PENDING",
+      status,
+      rejectionReason,
       proposedByAgentId: input.proposedByAgentId ?? null,
       tags: input.tags ?? [],
       fingerprint,
-      metadata: (input.metadata as object) ?? undefined
+      metadata: meta
     }
   });
 

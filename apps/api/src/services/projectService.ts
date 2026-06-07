@@ -2,6 +2,7 @@ import type { ArtifactType, ProjectPriority, ProjectStatus } from "@prisma/clien
 import { prisma } from "../db/prisma.js";
 import { classifyArtifact, normalizeTitle } from "./dataQualityService.js";
 import { isSensitive } from "./memoryService.js";
+import { evaluateRecordValue } from "./dataValueGateService.js";
 
 export const DEFAULT_PROJECTS = [
   {
@@ -104,13 +105,35 @@ export async function createArtifact(input: {
   const sourceType = input.sourceType ?? null;
   const sourceId = input.sourceId ?? null;
   const type = input.type ?? "GENERAL_NOTE";
+
+  const createdBySystem = Boolean(sourceType || sourceId || input.traceId);
+
+  // Apply M15H: Kingdom Data Value Gate
+  const gateDecision = await evaluateRecordValue({
+    recordType: "artifact",
+    origin: createdBySystem ? "SYSTEM_GENERATED" : "USER_CREATED",
+    title: input.title,
+    content: input.content,
+    sourceType,
+    sourceId,
+    category: type,
+    projectId: input.projectId,
+    traceId: input.traceId || undefined
+  });
+
+  if (gateDecision.decision === "REJECT" || gateDecision.decision === "ARCHIVE") {
+    if (!createdBySystem) {
+      throw new Error(gateDecision.reason);
+    }
+    return null;
+  }
+
   const sameSource = await prisma.artifact.findMany({
     where: { sourceType, sourceId, type }
   });
   const existing = sameSource.find((artifact) => normalizeTitle(artifact.title) === normalizeTitle(input.title));
   if (existing) return existing;
 
-  const createdBySystem = Boolean(sourceType || sourceId || input.traceId);
   const dataQuality = classifyArtifact({
     title: input.title,
     sourceType,

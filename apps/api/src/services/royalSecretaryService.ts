@@ -11,6 +11,7 @@ import {
 } from "./dataQualityService.js";
 import { routeProjectForSource } from "./projectRoutingService.js";
 import { getTreasuryOverview } from "./treasuryService.js";
+import { evaluateRecordValue } from "./dataValueGateService.js";
 
 const TERMINAL_MATTER_STATUSES: MatterStatus[] = ["REJECTED", "COMPLETED"];
 
@@ -41,6 +42,28 @@ export async function createNotice(input: NoticeInput) {
   if (existing) return existing;
 
   const createdBySystem = Boolean(input.sourceType || input.sourceId || input.createdByAgentId || input.traceId);
+
+  // Apply M15H: Kingdom Data Value Gate
+  const gateDecision = await evaluateRecordValue({
+    recordType: "notice",
+    origin: createdBySystem ? "SYSTEM_GENERATED" : "USER_CREATED",
+    title: input.title,
+    content: input.content,
+    sourceType,
+    sourceId,
+    category: input.severity ?? "INFO",
+    traceId: input.traceId
+  });
+
+  if (gateDecision.decision === "REJECT") {
+    if (!createdBySystem) {
+      throw new Error(gateDecision.reason);
+    }
+    return null;
+  }
+
+  const status = gateDecision.decision === "ARCHIVE" ? ("ARCHIVED" as NoticeStatus) : ("UNREAD" as NoticeStatus);
+
   const draft = { ...input, sourceType, sourceId, createdBySystem, dataSource: sourceType ?? undefined };
   const dataQuality = classifyNotice(draft);
   const notice = await prisma.notice.create({
@@ -49,6 +72,7 @@ export async function createNotice(input: NoticeInput) {
       title: input.title,
       content: input.content,
       severity: input.severity ?? "INFO",
+      status,
       sourceType: input.sourceType,
       sourceId: input.sourceId,
       createdByAgentId: input.createdByAgentId,
@@ -59,7 +83,7 @@ export async function createNotice(input: NoticeInput) {
       provenance: buildProvenance(input)
     }
   });
-  if (!input.projectId) {
+  if (notice && !input.projectId) {
     await routeProjectForSource({ title: notice.title, content: notice.content, sourceType: "NOTICE", sourceId: notice.id }).catch(() => undefined);
   }
   return notice;
@@ -140,6 +164,28 @@ export async function createMatter(input: MatterInput) {
   if (existing) return existing;
 
   const createdBySystem = Boolean(input.sourceType || input.sourceId || input.assignedAgentId || input.traceId);
+
+  // Apply M15H: Kingdom Data Value Gate
+  const gateDecision = await evaluateRecordValue({
+    recordType: "matter",
+    origin: createdBySystem ? "SYSTEM_GENERATED" : "USER_CREATED",
+    title: input.title,
+    content: input.description,
+    sourceType,
+    sourceId,
+    category: input.category ?? "GENERAL",
+    traceId: input.traceId
+  });
+
+  if (gateDecision.decision === "REJECT") {
+    if (!createdBySystem) {
+      throw new Error(gateDecision.reason);
+    }
+    return null;
+  }
+
+  const status = gateDecision.decision === "ARCHIVE" ? ("REJECTED" as MatterStatus) : ("DETECTED" as MatterStatus);
+
   const draft = { ...input, sourceType, sourceId, createdBySystem, dataSource: sourceType ?? undefined };
   const dataQuality = classifyMatter(draft);
   const matter = await prisma.matter.create({
@@ -147,6 +193,7 @@ export async function createMatter(input: MatterInput) {
       projectId: input.projectId,
       title: input.title,
       description: input.description,
+      status,
       priority: input.priority ?? "MEDIUM",
       category: input.category ?? "GENERAL",
       sourceType: input.sourceType,
@@ -159,7 +206,7 @@ export async function createMatter(input: MatterInput) {
       provenance: buildProvenance(input)
     }
   });
-  if (!input.projectId) {
+  if (matter && !input.projectId) {
     await routeProjectForSource({ title: matter.title, content: matter.description, sourceType: "MATTER", sourceId: matter.id }).catch(() => undefined);
   }
   return matter;

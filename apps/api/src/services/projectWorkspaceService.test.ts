@@ -173,9 +173,9 @@ test("task matter work order and artifact can link to project", async () => {
     assert.equal(task.projectId, project.id);
     assert.equal(matter.projectId, project.id);
     assert.equal(workOrder.projectId, project.id);
-    assert.equal(artifact.projectId, project.id);
+    assert.equal(artifact!.projectId, project.id);
   } finally {
-    await prisma.artifact.delete({ where: { id: artifact.id } }).catch(() => undefined);
+    await prisma.artifact.delete({ where: { id: artifact!.id } }).catch(() => undefined);
     await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
     await prisma.matter.delete({ where: { id: matter.id } }).catch(() => undefined);
     await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
@@ -200,7 +200,7 @@ test("createArtifact does not create duplicate for same normalized title type an
     sourceId: suffix
   });
   try {
-    assert.equal(first.id, second.id);
+    assert.equal(first!.id, second!.id);
   } finally {
     await prisma.artifact.deleteMany({ where: { sourceType: "WORK_ORDER", sourceId: suffix } });
   }
@@ -224,13 +224,13 @@ test("GET /api/artifacts returns source links where available", async () => {
       const res = await fetch(`${baseUrl}/api/artifacts`, { headers: { Authorization: `Bearer ${token}` } });
       assert.equal(res.status, 200);
       const body = await res.json() as { artifacts: Array<{ id: string; sourceLink?: { title: string | null; href: string | null } }> };
-      const found = body.artifacts.find((item) => item.id === artifact.id);
+      const found = body.artifacts.find((item) => item.id === artifact!.id);
       assert.ok(found?.sourceLink);
       assert.equal(found.sourceLink.title, workOrder.title);
       assert.equal(found.sourceLink.href, "/work-orders");
     });
   } finally {
-    await prisma.artifact.delete({ where: { id: artifact.id } }).catch(() => undefined);
+    await prisma.artifact.delete({ where: { id: artifact!.id } }).catch(() => undefined);
     await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } });
   }

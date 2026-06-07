@@ -37,9 +37,9 @@ test("createNotice creates a notice with default status UNREAD", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const notice = await createNotice({ title: `Test notice ${suffix}`, content: "Content", severity: "INFO", sourceType: "test", sourceId: suffix });
-    assert.equal(notice.status, "UNREAD");
-    assert.equal(notice.severity, "INFO");
-    assert.ok(typeof notice.id === "string");
+    assert.equal(notice!.status, "UNREAD");
+    assert.equal(notice!.severity, "INFO");
+    assert.ok(typeof notice!.id === "string");
   } finally {
     await cleanup(suffix);
   }
@@ -50,7 +50,7 @@ test("createNotice prevents duplicate (same title + severity in last 24h)", asyn
   try {
     const n1 = await createNotice({ title: `Dup ${suffix}`, content: "First", severity: "WARNING", sourceType: "test", sourceId: suffix });
     const n2 = await createNotice({ title: `Dup ${suffix}`, content: "Second", severity: "WARNING", sourceType: "test", sourceId: suffix });
-    assert.equal(n1.id, n2.id);
+    assert.equal(n1!.id, n2!.id);
   } finally {
     await cleanup(suffix);
   }
@@ -71,7 +71,7 @@ test("updateNotice marks notice as READ", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const notice = await createNotice({ title: `Read test ${suffix}`, content: "y", sourceType: "test", sourceId: suffix });
-    const updated = await updateNotice(notice.id, { status: "READ" });
+    const updated = await updateNotice(notice!.id, { status: "READ" });
     assert.equal(updated.status, "READ");
   } finally {
     await cleanup(suffix);
@@ -82,9 +82,9 @@ test("createMatter creates a matter with default status DETECTED", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const matter = await createMatter({ title: `Test matter ${suffix}`, description: "Desc", priority: "HIGH", category: "SYSTEM", sourceType: "test", sourceId: suffix });
-    assert.equal(matter.status, "DETECTED");
-    assert.equal(matter.priority, "HIGH");
-    assert.equal(matter.category, "SYSTEM");
+    assert.equal(matter!.status, "DETECTED");
+    assert.equal(matter!.priority, "HIGH");
+    assert.equal(matter!.category, "SYSTEM");
   } finally {
     await cleanup(suffix);
   }
@@ -95,7 +95,7 @@ test("createMatter prevents duplicate for same sourceType+sourceId in non-termin
   try {
     const m1 = await createMatter({ title: `Dup matter ${suffix}`, description: "First", sourceType: "test", sourceId: suffix });
     const m2 = await createMatter({ title: `Dup matter ${suffix}`, description: "Second", sourceType: "test", sourceId: suffix });
-    assert.equal(m1.id, m2.id);
+    assert.equal(m1!.id, m2!.id);
   } finally {
     await cleanup(suffix);
   }
@@ -105,9 +105,9 @@ test("createMatter allows second matter after first is COMPLETED", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const m1 = await createMatter({ title: `Done matter ${suffix}`, description: "First", sourceType: "test", sourceId: suffix });
-    await updateMatter(m1.id, { status: "COMPLETED" });
+    await updateMatter(m1!.id, { status: "COMPLETED" });
     const m2 = await createMatter({ title: `New matter ${suffix}`, description: "Second", sourceType: "test", sourceId: suffix });
-    assert.notEqual(m1.id, m2.id);
+    assert.notEqual(m1!.id, m2!.id);
   } finally {
     await prisma.matter.deleteMany({ where: { sourceType: "test", sourceId: { contains: suffix } } });
   }
@@ -117,7 +117,7 @@ test("updateMatter changes status", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   try {
     const matter = await createMatter({ title: `Status test ${suffix}`, description: "x", sourceType: "test", sourceId: suffix });
-    const updated = await updateMatter(matter.id, { status: "AWAITING_ROYAL_DECISION" });
+    const updated = await updateMatter(matter!.id, { status: "AWAITING_ROYAL_DECISION" });
     assert.equal(updated.status, "AWAITING_ROYAL_DECISION");
   } finally {
     await cleanup(suffix);
@@ -142,13 +142,13 @@ test("TEST notices and matters are hidden by default and returned with includeTe
     const matter = await createMatter({ title: `Hidden matter ${suffix}`, description: "x", sourceType: "test", sourceId: suffix });
     const defaultNotices = await listNotices({ status: "UNREAD" });
     const defaultMatters = await listMatters({});
-    assert.equal(defaultNotices.notices.some((n) => n.id === notice.id), false);
-    assert.equal(defaultMatters.matters.some((m) => m.id === matter.id), false);
+    assert.equal(defaultNotices.notices.some((n) => n.id === notice!.id), false);
+    assert.equal(defaultMatters.matters.some((m) => m.id === matter!.id), false);
 
     const testNotices = await listNotices({ includeTestData: true, dataQuality: "TEST" });
     const testMatters = await listMatters({ includeTestData: true, dataQuality: "TEST" });
-    assert.ok(testNotices.notices.some((n) => n.id === notice.id));
-    assert.ok(testMatters.matters.some((m) => m.id === matter.id));
+    assert.ok(testNotices.notices.some((n) => n.id === notice!.id));
+    assert.ok(testMatters.matters.some((m) => m.id === matter!.id));
   } finally {
     await cleanup(suffix);
   }
@@ -223,7 +223,7 @@ test("PATCH /api/notices/:id CROWN_PRINCE can mark READ", async () => {
   const notice = await createNotice({ title: `CP test ${suffix}`, content: "z", sourceType: "test", sourceId: suffix });
   try {
     const { port } = server.address() as AddressInfo;
-    const res = await fetch(`http://127.0.0.1:${port}/api/notices/${notice.id}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/notices/${notice!.id}`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ status: "READ" })
@@ -246,7 +246,7 @@ test("DELETE /api/notices/:id requires KING — CROWN_PRINCE gets 403", async ()
   const notice = await createNotice({ title: `Del test ${suffix}`, content: "z", sourceType: "test", sourceId: suffix });
   try {
     const { port } = server.address() as AddressInfo;
-    const res = await fetch(`http://127.0.0.1:${port}/api/notices/${notice.id}`, {
+    const res = await fetch(`http://127.0.0.1:${port}/api/notices/${notice!.id}`, {
       method: "DELETE",
       headers: { Authorization: `Bearer ${token}` }
     });

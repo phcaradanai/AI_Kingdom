@@ -11,6 +11,7 @@ import {
   shouldCreateInboxItem
 } from "./routingQualityGate.js";
 import { getBooleanSetting } from "./settingsService.js";
+import { evaluateRecordValue, shouldPersistRecord } from "./dataValueGateService.js";
 
 export type ProjectClassificationInput = {
   title: string;
@@ -54,31 +55,8 @@ export async function classifyProjectForText(input: ProjectClassificationInput):
   };
 }
 
-export async function routeProjectForSource(input: ProjectClassificationInput) {
+export async function analyzeProjectRoutingForSource(input: ProjectClassificationInput) {
   const classification = await classifyProjectForText(input);
-  const status: ProjectRoutingStatus = classification.confidenceScore >= 80
-    ? "CONFIRMED"
-    : classification.confidenceScore >= 50
-      ? "SUGGESTED"
-      : "NEEDS_REVIEW";
-
-  const candidate = await prisma.projectRoutingCandidate.create({
-    data: {
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      suggestedProjectId: classification.suggestedProjectId,
-      confidenceScore: classification.confidenceScore,
-      reason: classification.reason,
-      status
-    }
-  });
-
-  if (classification.confidenceScore >= 80 && classification.suggestedProjectId) {
-    await assignProjectToSource(input.sourceType, input.sourceId, classification.suggestedProjectId);
-    return { classification, candidate, inboxItem: null };
-  }
-
-  // ── M15F: Routing quality gate ──────────────────────────────────────────
   const bestCandidate = classification.candidateProjects[0];
   const allSignals: MatchSignal[] = bestCandidate?.signals ?? [];
   const { routingQuality, evidence, ignoredSignals } = classifyRoutingQuality(
@@ -91,57 +69,67 @@ export async function routeProjectForSource(input: ProjectClassificationInput) {
   const humanReason = generateHumanReason(routingQuality, evidence, ignoredSignals, suggestedProjectName);
   const dataQualityLabel = classifyDataQualityLabel(input.sourceType, input.sourceId, true);
 
-  // Should we create an inbox item?
-  const createNormal = shouldCreateInboxItem(routingQuality);
-  const debugMode = await getBooleanSetting("ROUTING_DEBUG_MODE", false);
-  const createDebug = !createNormal && debugMode;
-
-  if (!createNormal && !createDebug) {
-    // Suppress — only the routing candidate was created (audit trail)
-    return { classification, candidate, inboxItem: null };
-  }
-
-  const inboxData = {
+  const gateDecision = await evaluateRecordValue({
+    recordType: "projectInboxItem",
+    origin: input.sourceType?.toLowerCase().includes("test") ? "TEST" : "SYSTEM_GENERATED",
+    title: input.title,
+    content: input.content,
     sourceType: input.sourceType,
     sourceId: input.sourceId,
-    title: input.title,
-    summary: trim(input.content, 800),
-    candidateProjectIds: classification.candidateProjects.map((item) => item.project.id),
-    confidenceScore: classification.confidenceScore,
-    reason: classification.reason,
-    status: "PENDING" as const,
-    dataSource: input.sourceType,
-    dataQuality: classifyProjectInboxItem({
-      title: input.title,
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      confidenceScore: classification.confidenceScore,
-      createdBySystem: true,
-      dataSource: input.sourceType
-    }),
-    createdBySystem: true,
-    provenance: {
-      sourceType: input.sourceType,
-      sourceId: input.sourceId,
-      routingStatus: status,
-      reason: classification.reason
-    },
-    // M15F quality gate fields
-    routingConfidence: classification.confidenceScore,
-    routingQuality: createDebug ? "DEBUG_ONLY" : routingQuality,
-    dataQualityLabel,
+    confidence: classification.confidenceScore,
+    projectId: classification.suggestedProjectId,
+    metadata: {
+      evidence,
+      ignoredSignals,
+      candidateProjectIds: classification.candidateProjects.map((item) => item.project.id)
+    }
+  });
+
+  return {
+    classification,
+    routingQuality,
+    evidence,
+    ignoredSignals,
     humanTitle,
     humanReason,
-    evidence: evidence.length > 0 ? evidence : undefined,
-    ignoredSignals: ignoredSignals.length > 0 ? ignoredSignals : undefined
+    dataQualityLabel,
+    gateDecision
   };
+}
+
+export async function createProjectInboxItemFromRoutingDecision(
+  input: ProjectClassificationInput,
+  analysis: any,
+  explicitUserAction = false
+) {
+  const status: ProjectRoutingStatus = analysis.classification.confidenceScore >= 80
+    ? "CONFIRMED"
+    : analysis.classification.confidenceScore >= 50
+      ? "SUGGESTED"
+      : "NEEDS_REVIEW";
+
+  const candidate = await prisma.projectRoutingCandidate.create({
+    data: {
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      suggestedProjectId: analysis.classification.suggestedProjectId,
+      confidenceScore: analysis.classification.confidenceScore,
+      reason: analysis.classification.reason,
+      status
+    }
+  });
+
+  if (analysis.classification.confidenceScore >= 80 && analysis.classification.suggestedProjectId) {
+    await assignProjectToSource(input.sourceType, input.sourceId, analysis.classification.suggestedProjectId);
+    return { candidate, inboxItem: null };
+  }
 
   // Dedup: same sourceType + sourceId + PENDING
   const existingInboxItem = await prisma.projectInboxItem.findFirst({
     where: { sourceType: input.sourceType, sourceId: input.sourceId, status: "PENDING" }
   });
 
-  // Dedup: same normalizedTitle + sourceType within 5-minute window (Part 8)
+  // Dedup: same normalizedTitle + sourceType within 5-minute window
   const normalizedTitle = normalizeTitle(input.title);
   const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
   const recentDuplicate = !existingInboxItem ? await prisma.projectInboxItem.findFirst({
@@ -154,12 +142,69 @@ export async function routeProjectForSource(input: ProjectClassificationInput) {
   }) : null;
 
   const duplicateItem = existingInboxItem ?? recentDuplicate;
+  if (duplicateItem) {
+    return { candidate, inboxItem: duplicateItem };
+  }
 
-  const inboxItem = duplicateItem
-    ? await prisma.projectInboxItem.update({ where: { id: duplicateItem.id }, data: inboxData })
-    : await prisma.projectInboxItem.create({ data: inboxData });
+  // Value Gate check
+  const persist = shouldPersistRecord(analysis.gateDecision, {
+    recordType: "projectInboxItem",
+    origin: "SYSTEM_GENERATED",
+    explicitUserAction
+  });
 
-  return { classification, candidate, inboxItem };
+  // If explicitUserAction is false, and decision is REJECT or PREVIEW_ONLY, skip inbox creation
+  if (!explicitUserAction && (analysis.gateDecision.decision === "REJECT" || analysis.gateDecision.decision === "PREVIEW_ONLY")) {
+    return { candidate, inboxItem: null };
+  }
+
+  if (!persist) {
+    return { candidate, inboxItem: null };
+  }
+
+  const inboxData = {
+    sourceType: input.sourceType,
+    sourceId: input.sourceId,
+    title: input.title,
+    summary: trim(input.content, 800),
+    candidateProjectIds: analysis.classification.candidateProjects.map((item: any) => item.project.id),
+    confidenceScore: analysis.classification.confidenceScore,
+    reason: analysis.classification.reason,
+    status: "PENDING" as const,
+    dataSource: input.sourceType,
+    dataQuality: classifyProjectInboxItem({
+      title: input.title,
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      confidenceScore: analysis.classification.confidenceScore,
+      createdBySystem: true,
+      dataSource: input.sourceType
+    }),
+    createdBySystem: true,
+    provenance: {
+      sourceType: input.sourceType,
+      sourceId: input.sourceId,
+      routingStatus: status,
+      reason: analysis.classification.reason
+    },
+    routingConfidence: analysis.classification.confidenceScore,
+    routingQuality: analysis.gateDecision.decision === "PREVIEW_ONLY" ? "DEBUG_ONLY" : analysis.routingQuality,
+    dataQualityLabel: analysis.gateDecision.sourceTrust === "TRUSTED" ? "TRUSTED_SOURCE" : analysis.dataQualityLabel,
+    humanTitle: analysis.humanTitle,
+    humanReason: analysis.humanReason,
+    evidence: analysis.evidence.length > 0 ? analysis.evidence : undefined,
+    ignoredSignals: analysis.ignoredSignals.length > 0 ? analysis.ignoredSignals : undefined
+  };
+
+  const inboxItem = await prisma.projectInboxItem.create({ data: inboxData });
+
+  return { candidate, inboxItem };
+}
+
+export async function routeProjectForSource(input: ProjectClassificationInput) {
+  const analysis = await analyzeProjectRoutingForSource(input);
+  const { candidate, inboxItem } = await createProjectInboxItemFromRoutingDecision(input, analysis, false);
+  return { classification: analysis.classification, candidate, inboxItem };
 }
 
 export async function assignProjectToSource(sourceType: string, sourceId: string, projectId: string) {

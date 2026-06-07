@@ -22,7 +22,9 @@
     "db:seed:staging": "node ../../scripts/with-root-env.mjs tsx prisma/seed-staging.ts",
     "data:inspect-pollution": "node ../../scripts/with-root-env.mjs tsx src/scripts/inspect-pollution.ts",
     "data:cleanup-test-data": "node ../../scripts/with-root-env.mjs tsx src/scripts/cleanup-test-data.ts",
-    "data:archive-low-quality-inbox": "node ../../scripts/with-root-env.mjs tsx src/scripts/archive-low-quality-inbox.ts"
+    "data:archive-low-quality-inbox": "node ../../scripts/with-root-env.mjs tsx src/scripts/archive-low-quality-inbox.ts",
+    "data:inspect-low-value": "node ../../scripts/with-root-env.mjs tsx src/scripts/inspect-low-value.ts",
+    "data:archive-low-value": "node ../../scripts/with-root-env.mjs tsx src/scripts/archive-low-value.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
