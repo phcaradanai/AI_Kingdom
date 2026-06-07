@@ -18,6 +18,7 @@ type ChatCompletionUsage = {
 };
 
 type ChatCompletionResponse = {
+  model?: string;
   choices?: Array<{ message?: { content?: string } }>;
   usage?: ChatCompletionUsage;
 };
@@ -122,7 +123,8 @@ export class OpenAICompatibleProvider implements AIProvider {
 
       return {
         response: content,
-        usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens }
+        usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens },
+        responseModel: payload.model ?? null
       };
     } finally {
       clearTimeout(timeout);

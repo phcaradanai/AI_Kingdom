@@ -29,6 +29,7 @@ export type TokenUsage = {
 export type AgentResponseResult = {
   response: string;
   usage: TokenUsage;
+  responseModel?: string | null;
 };
 
 export type KnownAIProviderType =

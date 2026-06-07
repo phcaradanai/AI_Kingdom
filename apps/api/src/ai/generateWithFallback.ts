@@ -34,7 +34,35 @@ export type GenerateWithFallbackResult = {
   fallbackReason?: string;
   errorCode?: string;
   errorMessage?: string;
+  configuredModel?: string;
+  actualSentModel?: string;
+  responseModel?: string | null;
 };
+
+const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
+  "openrouter": "OpenRouter",
+  "openai": "OpenAI",
+  "deepseek": "DeepSeek",
+  "anthropic": "Anthropic",
+  "gemini": "Gemini",
+  "local": "Local / Ollama",
+  "openai-compatible": "OpenAI-Compatible"
+};
+
+export function normalizeModelIdForProvider(providerType: string, modelId: string): string {
+  if (providerType === "sandbox") return LOCAL_SANDBOX_MODEL;
+  return modelId.trim();
+}
+
+function getProviderType(providerName: string): string {
+  if (
+    providerName === LOCAL_SANDBOX_PROVIDER_ID ||
+    providerName === LEGACY_MOCK_PROVIDER_ID ||
+    providerName === "sandbox"
+  ) return "sandbox";
+  if (providerName === OPENROUTER_FREE_PROVIDER_ID || providerName === "openrouter" || providerName.startsWith("openrouter-")) return "openrouter";
+  return providerName;
+}
 
 export async function generateWithFallback(
   provider: AIProvider | AIProvider[] | AIProviderCall[],
@@ -50,8 +78,10 @@ export async function generateWithFallback(
   const failures: string[] = [];
 
   const firstCall = providers[0];
-  const firstModel = firstCall ? (firstCall.model ?? input.model ?? firstCall.provider.model) : undefined;
-  const firstMeta = firstCall ? providerTraceMeta(firstCall.provider.name, firstModel) : undefined;
+  const firstConfiguredModel = firstCall ? (firstCall.model ?? input.model ?? firstCall.provider.model) : undefined;
+  const firstProviderType = firstCall ? getProviderType(firstCall.provider.name) : undefined;
+  const firstActualModel = firstConfiguredModel !== undefined ? normalizeModelIdForProvider(firstProviderType ?? "", firstConfiguredModel) : undefined;
+  const firstMeta = firstCall ? providerTraceMeta(firstCall.provider.name, firstActualModel) : undefined;
 
   const attemptedProviderId = firstMeta?.providerId;
   const attemptedModel = firstMeta?.model;
@@ -62,14 +92,16 @@ export async function generateWithFallback(
 
   for (const call of providers) {
     const candidate = call.provider;
-    const model = call.model ?? input.model ?? candidate.model;
-    const meta = providerTraceMeta(candidate.name, model);
+    const configuredModel = call.model ?? input.model ?? candidate.model;
+    const providerType = getProviderType(candidate.name);
+    const actualSentModel = normalizeModelIdForProvider(providerType, configuredModel ?? "");
+    const meta = providerTraceMeta(candidate.name, actualSentModel);
     attemptedProviders.push(meta.providerId);
     try {
       // Online validation (Part 2)
-      if (meta.providerType === "openrouter" && model) {
+      if (meta.providerType === "openrouter" && actualSentModel) {
         const { models, success } = await fetchOpenRouterModels();
-        if (success && !models.includes(model)) {
+        if (success && !models.includes(actualSentModel)) {
           await prisma.aIProvider.updateMany({
             where: { id: meta.providerId },
             data: {
@@ -78,7 +110,7 @@ export async function generateWithFallback(
             }
           }).catch(() => undefined);
 
-          const validationError = new Error(`Model validation failed: '${model}' is not a valid OpenRouter model.`);
+          const validationError = new Error(`Model validation failed: '${actualSentModel}' is not a valid OpenRouter model.`);
           (validationError as any).statusCode = 404;
           (validationError as any).endpointPath = "/chat/completions";
           throw validationError;
@@ -109,7 +141,7 @@ export async function generateWithFallback(
       });
       const result = await candidate.generateAgentResponse({
         ...input,
-        model
+        model: actualSentModel
       });
       if (failures.length > 0) {
         await markTraceFallbackUsed(traceContext.traceId, {
@@ -167,7 +199,7 @@ export async function generateWithFallback(
         providerName: meta.providerName,
         providerId: meta.providerId,
         modelUsed: meta.model,
-        fallbackNotice: fallbackUsed ? buildFallbackNotice(failures, attemptedProviderId, attemptedModel, meta.providerId, meta.model, errorCode, errorMessage) : undefined,
+        fallbackNotice: fallbackUsed ? buildFallbackNotice(failures, attemptedProviderId, firstMeta?.providerName, attemptedModel, meta.providerName, meta.model, errorCode, errorMessage) : undefined,
         attemptedProviders,
         usage: result.usage,
         attemptedProviderId,
@@ -177,7 +209,10 @@ export async function generateWithFallback(
         fallbackUsed,
         fallbackReason,
         errorCode,
-        errorMessage
+        errorMessage,
+        configuredModel,
+        actualSentModel,
+        responseModel: result.responseModel ?? null
       };
     } catch (error) {
       const statusCode = (error as any).statusCode ?? 500;
@@ -279,7 +314,7 @@ export async function generateWithFallback(
     providerName: sandboxMeta.providerName,
     providerId: sandboxMeta.providerId,
     modelUsed: sandboxMeta.model,
-    fallbackNotice: buildFallbackNotice(failures, attemptedProviderId, attemptedModel, sandboxMeta.providerId, sandboxMeta.model, errorCode, errorMessage),
+    fallbackNotice: buildFallbackNotice(failures, attemptedProviderId, firstMeta?.providerName, attemptedModel, sandboxMeta.providerName, sandboxMeta.model, errorCode, errorMessage),
     attemptedProviders,
     usage: mockResult.usage,
     attemptedProviderId,
@@ -289,23 +324,29 @@ export async function generateWithFallback(
     fallbackUsed: true,
     fallbackReason,
     errorCode,
-    errorMessage
+    errorMessage,
+    configuredModel: firstConfiguredModel,
+    actualSentModel: firstActualModel,
+    responseModel: null
   };
 }
 
 function buildFallbackNotice(
   failures: string[],
   attemptedProviderId: string | undefined,
+  attemptedProviderName: string | undefined,
   attemptedModel: string | undefined,
-  finalProviderId: string,
+  finalProviderName: string,
   finalModel: string,
   errorCode?: string,
   errorMessage?: string
 ): string {
   if (failures.length === 0) return "";
   const errorDetails = errorCode === "404" ? "404 Not Found" : (errorMessage || "error");
-  const attemptedLabel = attemptedProviderId && attemptedModel ? `${attemptedProviderId}/${attemptedModel}` : "Primary model";
-  return `Primary model failed: ${attemptedLabel} returned ${errorDetails}. Final answer generated by ${finalProviderId}/${finalModel}.`;
+  const attemptedLabel = (attemptedProviderName ?? attemptedProviderId) && attemptedModel
+    ? `${attemptedProviderName ?? attemptedProviderId} / ${attemptedModel}`
+    : "Primary model";
+  return `Primary model failed: ${attemptedLabel} returned ${errorDetails}. Final answer generated by ${finalProviderName} / ${finalModel}.`;
 }
 
 function normalizeProviderCalls(provider: AIProvider | AIProvider[] | AIProviderCall[]): AIProviderCall[] {
@@ -342,7 +383,7 @@ function providerTraceMeta(providerName: string, model?: string) {
     return {
       providerId: providerName,
       providerType: "openrouter",
-      providerName,
+      providerName: PROVIDER_DISPLAY_NAMES[providerName] ?? providerName,
       model: model ?? ""
     };
   }
@@ -350,7 +391,7 @@ function providerTraceMeta(providerName: string, model?: string) {
   return {
     providerId: providerName,
     providerType: providerName,
-    providerName,
+    providerName: PROVIDER_DISPLAY_NAMES[providerName] ?? providerName,
     model: model ?? ""
   };
 }
