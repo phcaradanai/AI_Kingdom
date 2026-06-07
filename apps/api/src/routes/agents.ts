@@ -31,6 +31,7 @@ const agentPatchSchema = agentSchema.partial();
 router.get("/", async (_req, res, next) => {
   try {
     const agents = await prisma.agent.findMany({
+      where: { isTestData: false },
       orderBy: [{ isActive: "desc" }, { priority: "asc" }, { createdAt: "asc" }]
     });
     res.json({ agents });

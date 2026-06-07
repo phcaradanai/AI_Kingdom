@@ -14,6 +14,8 @@ import type {
   ImplementationReportPayload,
   KingdomCharterDto,
   KingdomVisionDto,
+  KnowledgeCandidateDto,
+  KnowledgeMemoryDto,
   LivingAgentProfileDto,
   LivingAgentRelationsDto,
   LivingAgentSummaryDto,
@@ -377,7 +379,49 @@ export const api = {
     apiRequest<{ charter: KingdomCharterDto }>("/charter", { method: "PATCH", body: JSON.stringify(payload) }),
   vision: () => apiRequest<{ vision: KingdomVisionDto }>("/vision"),
   updateVision: (payload: { content?: string }) =>
-    apiRequest<{ vision: KingdomVisionDto }>("/vision", { method: "PATCH", body: JSON.stringify(payload) })
+    apiRequest<{ vision: KingdomVisionDto }>("/vision", { method: "PATCH", body: JSON.stringify(payload) }),
+
+  // Knowledge Lab
+  knowledgeCandidates: (params?: { status?: string; agentId?: string; projectId?: string; category?: string; limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.agentId) search.set("agentId", params.agentId);
+    if (params?.projectId) search.set("projectId", params.projectId);
+    if (params?.category) search.set("category", params.category);
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.offset) search.set("offset", String(params.offset));
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ candidates: KnowledgeCandidateDto[] }>(`/knowledge-candidates${suffix}`);
+  },
+  approveCandidate: (id: string) =>
+    apiRequest<{ memory: KnowledgeMemoryDto }>(`/knowledge-candidates/${id}/approve`, { method: "POST" }),
+  rejectCandidate: (id: string, reason: string) =>
+    apiRequest<{ candidate: KnowledgeCandidateDto }>(`/knowledge-candidates/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reason })
+    }),
+  mergeCandidate: (id: string, targetMemoryId: string) =>
+    apiRequest<{ memory: KnowledgeMemoryDto }>(`/knowledge-candidates/${id}/merge`, {
+      method: "POST",
+      body: JSON.stringify({ targetMemoryId })
+    }),
+  knowledgeMemories: (params?: { agentId?: string; projectId?: string; category?: string; tag?: string; trustLevel?: string; limit?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.agentId) search.set("agentId", params.agentId);
+    if (params?.projectId) search.set("projectId", params.projectId);
+    if (params?.category) search.set("category", params.category);
+    if (params?.tag) search.set("tag", params.tag);
+    if (params?.trustLevel) search.set("trustLevel", params.trustLevel);
+    if (params?.limit) search.set("limit", String(params.limit));
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ memories: KnowledgeMemoryDto[] }>(`/knowledge-memories${suffix}`);
+  },
+  archiveKnowledgeMemory: (id: string) =>
+    apiRequest<{ memory: KnowledgeMemoryDto }>(`/knowledge-memories/${id}/archive`, { method: "POST" }),
+  agentKnowledgeMemories: (agentId: string) =>
+    apiRequest<{ memories: KnowledgeMemoryDto[] }>(`/knowledge-memories/agent/${agentId}`),
+  agentKnowledgeCandidates: (agentId: string) =>
+    apiRequest<{ candidates: KnowledgeCandidateDto[] }>(`/knowledge-candidates?agentId=${encodeURIComponent(agentId)}`)
 };
 
 async function refreshAccessToken(): Promise<string | null> {

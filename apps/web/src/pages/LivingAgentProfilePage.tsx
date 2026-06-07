@@ -28,10 +28,12 @@ import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import type {
   AgentActivityStatus,
+  KnowledgeCandidateDto,
+  KnowledgeMemoryDto,
   LivingAgentProfileDto,
   LivingAgentRelationsDto,
-  LivingAgentTimelineItemDto,
-  LivingAgentTimelineFilters
+  LivingAgentTimelineFilters,
+  LivingAgentTimelineItemDto
 } from "@/types/api";
 
 const KNOWN_STATUSES: AgentActivityStatus[] = [
@@ -43,7 +45,7 @@ function toPortraitStatus(status: string): AgentActivityStatus {
   return KNOWN_STATUSES.includes(status as AgentActivityStatus) ? (status as AgentActivityStatus) : "IDLE";
 }
 
-type Tab = "overview" | "timeline" | "usage" | "traces" | "relations" | "council" | "reports" | "memory" | "projects" | "providers" | "audit";
+type Tab = "overview" | "timeline" | "usage" | "traces" | "relations" | "council" | "reports" | "memory" | "knowledge" | "projects" | "providers" | "audit";
 
 const TABS: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "overview", label: "Overview", icon: Eye },
@@ -54,6 +56,7 @@ const TABS: { id: Tab; label: string; icon: typeof Activity }[] = [
   { id: "council", label: "Council Work", icon: ScrollText },
   { id: "reports", label: "Reports", icon: FileText },
   { id: "memory", label: "Memory", icon: Vault },
+  { id: "knowledge", label: "Knowledge", icon: Sparkles },
   { id: "projects", label: "Projects", icon: FolderKanban },
   { id: "providers", label: "Provider / Model", icon: Cpu },
   { id: "audit", label: "Audit", icon: Shield }
@@ -345,6 +348,7 @@ export function LivingAgentProfilePage() {
         {activeTab === "council" && <CouncilTab profile={profile} />}
         {activeTab === "reports" && <ReportsTab profile={profile} />}
         {activeTab === "memory" && <MemoryTab profile={profile} />}
+        {activeTab === "knowledge" && <KnowledgeTab agentId={agentId ?? ""} />}
         {activeTab === "projects" && <ProjectsTab profile={profile} />}
         {activeTab === "providers" && <ProvidersTab profile={profile} />}
         {activeTab === "audit" && <AuditTab profile={profile} />}
@@ -764,4 +768,108 @@ function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
   return String(n);
+}
+
+function KnowledgeTab({ agentId }: { agentId: string }) {
+  const [candidates, setCandidates] = useState<KnowledgeCandidateDto[]>([]);
+  const [memories, setMemories] = useState<KnowledgeMemoryDto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!agentId) return;
+    setLoading(true);
+    Promise.all([
+      api.agentKnowledgeCandidates(agentId).catch(() => ({ candidates: [] })),
+      api.agentKnowledgeMemories(agentId).catch(() => ({ memories: [] }))
+    ]).then(([c, m]) => {
+      setCandidates(c.candidates);
+      setMemories(m.memories);
+    }).finally(() => setLoading(false));
+  }, [agentId]);
+
+  if (loading) return <LoadingState message="Loading knowledge..." />;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-amber-400" />
+          Knowledge Candidates ({candidates.length})
+        </h3>
+        {candidates.length === 0 ? (
+          <div className="rounded-xl border border-border/40 bg-muted/10 p-4 text-sm text-muted-foreground">
+            No candidates proposed by this agent.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {candidates.slice(0, 10).map((c) => (
+              <div key={c.id} className="rounded-xl border border-border/50 bg-card/50 p-4">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className={cn(
+                    "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                    c.status === "PENDING" ? "text-amber-400 border-amber-400/30 bg-amber-400/10" :
+                    c.status === "APPROVED" ? "text-emerald-400 border-emerald-400/30 bg-emerald-400/10" :
+                    "text-muted-foreground border-muted-foreground/20 bg-muted/20"
+                  )}>{c.status}</span>
+                  <span className="text-[10px] text-muted-foreground">{c.category.replace(/_/g, " ")}</span>
+                </div>
+                <div className="text-sm font-medium text-foreground">{c.title}</div>
+                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{c.content}</div>
+                <div className="flex flex-wrap gap-3 mt-2 text-[11px] text-muted-foreground">
+                  {c.traceId && (
+                    <Link to={`/usage-traces/${c.traceId}`} className="flex items-center gap-1 hover:text-primary">
+                      <ExternalLink className="h-3 w-3" /> Trace
+                    </Link>
+                  )}
+                  {c.taskId && <span>Task: {c.taskId.slice(-8)}</span>}
+                  <span>{formatDate(c.createdAt)}</span>
+                </div>
+              </div>
+            ))}
+            {candidates.length > 10 && (
+              <Link to={`/knowledge-lab/candidates?agentId=${agentId}`} className="block text-center text-xs text-primary hover:underline py-2">
+                View all {candidates.length} candidates
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div>
+        <h3 className="font-semibold text-foreground mb-3 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+          Approved Memories ({memories.length})
+        </h3>
+        {memories.length === 0 ? (
+          <div className="rounded-xl border border-border/40 bg-muted/10 p-4 text-sm text-muted-foreground">
+            No approved memories for this agent.
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {memories.slice(0, 10).map((m) => (
+              <div key={m.id} className="rounded-xl border border-border/50 bg-card/50 p-4">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <span className="text-[10px] text-emerald-400 font-semibold">{m.trustLevel}</span>
+                  <span className="text-[10px] text-muted-foreground">{m.category.replace(/_/g, " ")}</span>
+                  {m.useCount > 0 && <span className="text-[10px] text-muted-foreground">Used {m.useCount}×</span>}
+                </div>
+                <div className="text-sm font-medium text-foreground">{m.title}</div>
+                <div className="text-xs text-muted-foreground mt-1 line-clamp-2">{m.content}</div>
+                {m.createdFromTraceId && (
+                  <Link to={`/usage-traces/${m.createdFromTraceId}`} className="flex items-center gap-1 mt-2 text-[11px] text-muted-foreground hover:text-primary">
+                    <ExternalLink className="h-3 w-3" /> Source Trace
+                  </Link>
+                )}
+              </div>
+            ))}
+            {memories.length > 10 && (
+              <Link to={`/knowledge-lab/memories?agentId=${agentId}`} className="block text-center text-xs text-primary hover:underline py-2">
+                View all {memories.length} memories
+              </Link>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }

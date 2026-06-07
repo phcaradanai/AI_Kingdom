@@ -58,6 +58,7 @@ export async function listNotices(params: NoticeListParams = {}) {
   const page = Math.max(1, params.page ?? 1);
   const limit = Math.min(Math.max(1, params.limit ?? 50), 200);
   const where = {
+    isTestData: false,
     ...(params.severity && { severity: params.severity }),
     ...(params.status && { status: params.status })
   };
@@ -149,6 +150,7 @@ export async function listMatters(params: MatterListParams = {}) {
   const page = Math.max(1, params.page ?? 1);
   const limit = Math.min(Math.max(1, params.limit ?? 50), 200);
   const where = {
+    isTestData: false,
     ...(params.status && { status: params.status }),
     ...(params.priority && { priority: params.priority }),
     ...(params.category && { category: params.category })
@@ -191,11 +193,11 @@ export async function deleteMatter(id: string) {
 
 export async function inspectKingdomStatus() {
   const [unreadCount, criticalCount, openMattersCount, criticalMattersCount, awaitingDecisionCount, failedTasksCount, budgetStatus] = await Promise.all([
-    prisma.notice.count({ where: { status: "UNREAD" } }),
-    prisma.notice.count({ where: { status: "UNREAD", severity: "CRITICAL" } }),
-    prisma.matter.count({ where: { status: { notIn: TERMINAL_MATTER_STATUSES } } }),
-    prisma.matter.count({ where: { priority: "CRITICAL", status: { notIn: TERMINAL_MATTER_STATUSES } } }),
-    prisma.matter.count({ where: { status: "AWAITING_ROYAL_DECISION" } }),
+    prisma.notice.count({ where: { isTestData: false, status: "UNREAD" } }),
+    prisma.notice.count({ where: { isTestData: false, status: "UNREAD", severity: "CRITICAL" } }),
+    prisma.matter.count({ where: { isTestData: false, status: { notIn: TERMINAL_MATTER_STATUSES } } }),
+    prisma.matter.count({ where: { isTestData: false, priority: "CRITICAL", status: { notIn: TERMINAL_MATTER_STATUSES } } }),
+    prisma.matter.count({ where: { isTestData: false, status: "AWAITING_ROYAL_DECISION" } }),
     prisma.task.count({ where: { status: "FAILED" } }),
     getTreasuryOverview().then((o) => o.budgetStatus).catch(() => null)
   ]);
@@ -248,17 +250,17 @@ export async function generateDailyBrief() {
 
   const [urgentNotices, mattersList, awaitingList] = await Promise.all([
     prisma.notice.findMany({
-      where: { status: "UNREAD", severity: { in: ["CRITICAL", "WARNING"] } },
+      where: { isTestData: false, status: "UNREAD", severity: { in: ["CRITICAL", "WARNING"] } },
       orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
       take: 5
     }),
     prisma.matter.findMany({
-      where: { status: { notIn: TERMINAL_MATTER_STATUSES } },
+      where: { isTestData: false, status: { notIn: TERMINAL_MATTER_STATUSES } },
       orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
       take: 10
     }),
     prisma.matter.findMany({
-      where: { status: "AWAITING_ROYAL_DECISION" },
+      where: { isTestData: false, status: "AWAITING_ROYAL_DECISION" },
       orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
       take: 10
     })

@@ -11,11 +11,18 @@
     "typecheck": "npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces",
     "test": "npm run test --workspace @ai-kingdom/api",
+    "test:api": "npm run test:api --workspace @ai-kingdom/api",
+    "test:db:prepare": "node scripts/prepare-test-db.mjs",
+    "test:db:migrate": "npm run test:db:migrate --workspace @ai-kingdom/api",
+    "test:db:seed": "npm run test:db:seed --workspace @ai-kingdom/api",
+    "test:db:reset": "npm run test:db:reset --workspace @ai-kingdom/api",
     "db:generate": "npm run db:generate --workspace @ai-kingdom/api",
     "db:migrate": "npm run db:migrate --workspace @ai-kingdom/api",
     "db:deploy": "npm run db:deploy --workspace @ai-kingdom/api",
     "db:seed": "npm run db:seed --workspace @ai-kingdom/api",
-    "db:seed:staging": "npm run db:seed:staging --workspace @ai-kingdom/api"
+    "db:seed:staging": "npm run db:seed:staging --workspace @ai-kingdom/api",
+    "data:inspect-pollution": "npm run data:inspect-pollution --workspace @ai-kingdom/api",
+    "data:cleanup-test-data": "npm run data:cleanup-test-data --workspace @ai-kingdom/api"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

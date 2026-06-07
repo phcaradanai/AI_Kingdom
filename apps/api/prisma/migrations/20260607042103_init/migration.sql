@@ -51,8 +51,7 @@ CREATE INDEX "AIUsageTraceStep_taskId_idx" ON "AIUsageTraceStep"("taskId");
 -- CreateIndex
 CREATE INDEX "AIUsageTraceStep_sequence_idx" ON "AIUsageTraceStep"("sequence");
 
--- AddForeignKey
-ALTER TABLE "AIUsageTraceStep" ADD CONSTRAINT "AIUsageTraceStep_traceId_fkey" FOREIGN KEY ("traceId") REFERENCES "AIUsageTrace"("traceId") ON DELETE CASCADE ON UPDATE CASCADE;
+-- NOTE: AIUsageTraceStep_traceId_fkey is added in 20260607160000_add_ai_usage_trace after AIUsageTrace is created.
 
 -- AddForeignKey
 ALTER TABLE "AIUsageTraceStep" ADD CONSTRAINT "AIUsageTraceStep_agentId_fkey" FOREIGN KEY ("agentId") REFERENCES "Agent"("id") ON DELETE SET NULL ON UPDATE CASCADE;

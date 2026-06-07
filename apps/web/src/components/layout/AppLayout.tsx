@@ -1,4 +1,4 @@
-import { Activity, Archive, Bell, BookOpen, Bot, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LogOut, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault } from "lucide-react";
+import { Activity, Archive, Bell, BookOpen, Bot, Brain, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LogOut, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault } from "lucide-react";
 import { useEffect } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,7 @@ const navCategories = [
       { to: "/reports", label: "Reports", icon: ScrollText, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/memory", label: "Memory", icon: Vault, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
       { to: "/living-agents", label: "Living Agents", icon: Activity, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/knowledge-lab", label: "Knowledge Lab", icon: Brain, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
     ]
   },
   {

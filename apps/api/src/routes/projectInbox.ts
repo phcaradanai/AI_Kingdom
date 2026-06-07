@@ -10,7 +10,7 @@ router.get("/", async (req, res, next) => {
   try {
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const inboxItems = await prisma.projectInboxItem.findMany({
-      where: { ...(status ? { status: status as never } : {}) },
+      where: { isTestData: false, ...(status ? { status: status as never } : {}) },
       orderBy: { createdAt: "desc" }
     });
     res.json({ inboxItems });

@@ -987,3 +987,65 @@ export type KingdomVisionDto = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type KnowledgeCategory =
+  | "PROJECT_FACT"
+  | "ARCHITECTURE_DECISION"
+  | "USER_PREFERENCE"
+  | "PROVIDER_BEHAVIOR"
+  | "WORKFLOW_RULE"
+  | "BUG_LEARNING"
+  | "PROMPT_PATTERN"
+  | "COST_LEARNING"
+  | "RISK"
+  | "UNKNOWN";
+
+export type KnowledgeCandidateStatus = "PENDING" | "APPROVED" | "REJECTED" | "MERGED" | "ARCHIVED";
+
+export type KnowledgeCandidateDto = {
+  id: string;
+  agentId: string;
+  projectId: string | null;
+  taskId: string | null;
+  councilSessionId: string | null;
+  traceId: string | null;
+  sourceType: string;
+  sourceId: string | null;
+  title: string;
+  content: string;
+  summary: string | null;
+  category: KnowledgeCategory;
+  confidence: number | null;
+  status: KnowledgeCandidateStatus;
+  proposedByAgentId: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  rejectionReason: string | null;
+  tags: string[];
+  fingerprint: string | null;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type KnowledgeMemoryDto = {
+  id: string;
+  sourceCandidateId: string | null;
+  agentId: string | null;
+  projectId: string | null;
+  title: string;
+  content: string;
+  summary: string | null;
+  category: KnowledgeCategory;
+  trustLevel: string;
+  tags: string[];
+  fingerprint: string | null;
+  createdFromTraceId: string | null;
+  approvedByUserId: string | null;
+  approvedAt: string | null;
+  lastUsedAt: string | null;
+  useCount: number;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
+};

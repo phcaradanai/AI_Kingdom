@@ -8,6 +8,8 @@ import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { requirePermission, requireRole } from "./middleware/rbac.js";
 import agentActivitiesRouter from "./routes/agentActivities.js";
+import knowledgeCandidatesRouter from "./routes/knowledgeCandidates.js";
+import knowledgeMemoriesRouter from "./routes/knowledgeMemories.js";
 import livingAgentsRouter from "./routes/livingAgents.js";
 import agentsRouter from "./routes/agents.js";
 import artifactsRouter from "./routes/artifacts.js";
@@ -97,6 +99,8 @@ export function createApp() {
   app.use("/api/memories", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/treasury", requireAuth, requireRole("KING"), treasuryRouter);
   app.use("/api/usage-traces", requireAuth, usageTracesRouter);
+  app.use("/api/knowledge-candidates", requireAuth, knowledgeCandidatesRouter);
+  app.use("/api/knowledge-memories", requireAuth, knowledgeMemoriesRouter);
   app.use("/api/model-pricing", requireAuth, requireRole("KING"), modelPricingRouter);
   app.use("/api/audit", requireAuth, requireRole("KING"), auditRouter);
   app.use("/api/secretary", requireAuth, secretaryRouter);

@@ -71,3 +71,6 @@ ALTER TABLE "UsageRecord" ADD CONSTRAINT "UsageRecord_traceId_fkey" FOREIGN KEY 
 ALTER TABLE "AgentActivity" ADD CONSTRAINT "AgentActivity_traceId_fkey" FOREIGN KEY ("traceId") REFERENCES "AIUsageTrace"("traceId") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "AgentActivity" ADD CONSTRAINT "AgentActivity_usageRecordId_fkey" FOREIGN KEY ("usageRecordId") REFERENCES "UsageRecord"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "AgentActivity" ADD CONSTRAINT "AgentActivity_reportId_fkey" FOREIGN KEY ("reportId") REFERENCES "Report"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey (deferred from 20260607042103_init — AIUsageTrace must exist first)
+ALTER TABLE "AIUsageTraceStep" ADD CONSTRAINT "AIUsageTraceStep_traceId_fkey" FOREIGN KEY ("traceId") REFERENCES "AIUsageTrace"("traceId") ON DELETE CASCADE ON UPDATE CASCADE;

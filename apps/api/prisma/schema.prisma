@@ -7,6 +7,33 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum ProviderEnvironmentMode {
+  SANDBOX
+  PRODUCTION
+  DISABLED
+}
+
+enum KnowledgeCandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  MERGED
+  ARCHIVED
+}
+
+enum KnowledgeCategory {
+  PROJECT_FACT
+  ARCHITECTURE_DECISION
+  USER_PREFERENCE
+  PROVIDER_BEHAVIOR
+  WORKFLOW_RULE
+  BUG_LEARNING
+  PROMPT_PATTERN
+  COST_LEARNING
+  RISK
+  UNKNOWN
+}
+
 enum TaskStatus {
   PENDING
   RUNNING
@@ -226,6 +253,8 @@ model Notice {
   sourceType       String?
   sourceId         String?
   createdByAgentId String?
+  isTestData       Boolean        @default(false)
+  testRunId        String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -242,6 +271,8 @@ model Matter {
   sourceType       String?
   sourceId         String?
   assignedAgentId  String?
+  isTestData       Boolean        @default(false)
+  testRunId        String?
   createdAt        DateTime       @default(now())
   updatedAt        DateTime       @updatedAt
   project          Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -254,6 +285,8 @@ model User {
   displayName   String         @map("name")
   role          UserRole       @default(KING)
   isActive      Boolean        @default(true)
+  isTestData    Boolean        @default(false)
+  testRunId     String?
   lastLoginAt   DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -301,6 +334,8 @@ model Agent {
   skills      String[]      @default([])
   responseStyle String      @default("")
   isActive    Boolean         @default(true)
+  isTestData  Boolean         @default(false)
+  testRunId   String?
   priority    Int             @default(100)
   preferredProviderId String?
   defaultModel String?
@@ -392,6 +427,8 @@ model ProjectInboxItem {
   assignedProjectId   String?
   confidenceScore     Int?
   reason              String?
+  isTestData          Boolean            @default(false)
+  testRunId           String?
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 }
@@ -405,6 +442,8 @@ model Artifact {
   sourceType String?
   sourceId   String?
   tags       String[]     @default([])
+  isTestData Boolean      @default(false)
+  testRunId  String?
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
   project    Project?     @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -504,19 +543,27 @@ model HandoffBrief {
 }
 
 model AIProvider {
-  id           String   @id
-  name         String
-  type         String
-  baseUrl      String?
-  defaultModel String
-  isActive     Boolean  @default(true)
-  priority     Int      @default(100)
-  costTier     String   @default("MEDIUM")
-  capabilities Json
-  config       Json?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-  routes       AIProviderRoute[] @relation("PreferredProvider")
+  id                    String                  @id
+  name                  String
+  type                  String
+  baseUrl               String?
+  defaultModel          String
+  isActive              Boolean                 @default(true)
+  priority              Int                     @default(100)
+  costTier              String                  @default("MEDIUM")
+  capabilities          Json
+  config                Json?
+  environmentMode       ProviderEnvironmentMode @default(PRODUCTION)
+  maxTokensPerRequest   Int?
+  maxRequestsPerDay     Int?
+  maxTokensPerDay       Int?
+  maxEstimatedCostPerDay Float?
+  allowSensitiveContext Boolean                 @default(false)
+  isFreeTier            Boolean                 @default(false)
+  notes                 String?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+  routes                AIProviderRoute[]       @relation("PreferredProvider")
 }
 
 model AIProviderRoute {
@@ -921,4 +968,64 @@ model KingdomVision {
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model AgentKnowledgeCandidate {
+  id                String                   @id @default(cuid())
+  agentId           String
+  projectId         String?
+  taskId            String?
+  councilSessionId  String?
+  traceId           String?
+  sourceType        String
+  sourceId          String?
+  title             String
+  content           String
+  summary           String?
+  category          KnowledgeCategory        @default(UNKNOWN)
+  confidence        Float?
+  status            KnowledgeCandidateStatus @default(PENDING)
+  proposedByAgentId String?
+  reviewedByUserId  String?
+  reviewedAt        DateTime?
+  rejectionReason   String?
+  tags              String[]                 @default([])
+  fingerprint       String?
+  metadata          Json?
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
+
+  @@index([agentId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([traceId])
+  @@index([status])
+  @@index([fingerprint])
+}
+
+model AgentKnowledgeMemory {
+  id                 String    @id @default(cuid())
+  sourceCandidateId  String?
+  agentId            String?
+  projectId          String?
+  title              String
+  content            String
+  summary            String?
+  category           KnowledgeCategory @default(UNKNOWN)
+  trustLevel         String    @default("APPROVED")
+  tags               String[]  @default([])
+  fingerprint        String?
+  createdFromTraceId String?
+  approvedByUserId   String?
+  approvedAt         DateTime?
+  lastUsedAt         DateTime?
+  useCount           Int       @default(0)
+  metadata           Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@index([agentId])
+  @@index([projectId])
+  @@index([category])
+  @@index([fingerprint])
 }

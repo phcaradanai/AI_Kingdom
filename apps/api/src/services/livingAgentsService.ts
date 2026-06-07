@@ -127,6 +127,7 @@ function startOfToday(): Date {
 
 export async function getLivingAgents(): Promise<LivingAgentSummaryDto[]> {
   const agents = await prisma.agent.findMany({
+    where: { isTestData: false },
     orderBy: [{ priority: "asc" }, { title: "asc" }]
   });
 

@@ -43,6 +43,7 @@ const updateUserSchema = z.object({
 router.get("/", async (_req, res, next) => {
   try {
     const users = await prisma.user.findMany({
+      where: { isTestData: false },
       select: userSelect,
       orderBy: [{ role: "asc" }, { createdAt: "asc" }]
     });
