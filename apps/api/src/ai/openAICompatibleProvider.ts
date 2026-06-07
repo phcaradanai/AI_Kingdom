@@ -54,7 +54,8 @@ export class OpenAICompatibleProvider implements AIProvider {
     const timeout = setTimeout(() => controller.abort(), env.AI_TIMEOUT_MS);
 
     try {
-      const response = await fetch(`${this.baseUrl}/chat/completions`, {
+      const url = this.baseUrl.endsWith("/chat/completions") ? this.baseUrl : `${this.baseUrl}/chat/completions`;
+      const response = await fetch(url, {
         method: "POST",
         signal: controller.signal,
         headers: {
@@ -81,7 +82,13 @@ export class OpenAICompatibleProvider implements AIProvider {
 
       if (!response.ok) {
         const body = await response.text();
-        throw new Error(`${this.name} provider error ${response.status}: ${body}`);
+        const err = new Error(`${this.name} provider error ${response.status}: ${body}`);
+        (err as any).providerId = this.name;
+        (err as any).providerName = this.name;
+        (err as any).model = input.model ?? this.model;
+        (err as any).endpointPath = "/chat/completions";
+        (err as any).statusCode = response.status;
+        throw err;
       }
 
       const payload = (await response.json()) as ChatCompletionResponse;

@@ -145,6 +145,7 @@ export const api = {
   deleteProvider: async (id: string) => {
     await apiRequest<void>(`/providers/${id}`, { method: "DELETE" });
   },
+  validateModels: () => apiRequest<{ success: boolean }>("/providers/validate-models", { method: "POST" }),
   externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
   createExternalAgent: (payload: ExternalAgentPayload) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),

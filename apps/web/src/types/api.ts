@@ -153,6 +153,9 @@ export type AIProviderDto = {
   allowSensitiveContext?: boolean;
   isFreeTier?: boolean;
   notes?: string | null;
+  modelValidationStatus?: string | null;
+  lastValidationTime?: string | null;
+  config?: Record<string, any> | null;
   createdAt: string;
   updatedAt: string;
 };

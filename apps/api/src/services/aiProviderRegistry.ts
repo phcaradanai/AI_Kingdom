@@ -38,6 +38,8 @@ export type AIProviderConfig = {
   isFreeTier: boolean;
   notes?: string | null;
   hasCredentials: boolean;
+  modelValidationStatus?: string | null;
+  lastValidationTime?: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -383,7 +385,8 @@ export function publicProviderConfig(provider: AIProviderConfig): Record<string,
     credentialSource: provider.hasCredentials ? "env" : "none",
     providerMode: provider.environmentMode,
     costTier: provider.costTier,
-    isFreeTier: provider.isFreeTier
+    isFreeTier: provider.isFreeTier,
+    openRouterModels: provider.config?.openRouterModels
   };
 }
 
@@ -418,6 +421,8 @@ function mergeProvider(dbProvider: PrismaAIProvider, envProvider?: AIProviderCon
     isFreeTier: dbProvider.isFreeTier,
     notes: dbProvider.notes,
     hasCredentials,
+    modelValidationStatus: dbProvider.modelValidationStatus,
+    lastValidationTime: dbProvider.lastValidationTime,
     createdAt: dbProvider.createdAt,
     updatedAt: dbProvider.updatedAt
   };

@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultAIProviders, listAIProviders, getAIProvider, createAIProvider, deleteAIProvider } from "../services/aiProviderRegistry.js";
+import { validateOpenRouterModels } from "../services/openRouterModelService.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
@@ -145,6 +146,22 @@ router.delete("/:id", requireRole("KING"), async (req, res, next) => {
       metadata: { id: existing.id, name: existing.name }
     });
 
+    res.json({ success: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/validate-models", requireRole("KING"), async (req, res, next) => {
+  try {
+    await validateOpenRouterModels(["openrouter", "openrouter-free"]);
+    await auditLog({
+      userId: req.user?.id,
+      action: "validate_openrouter_models",
+      resourceType: "ai_provider",
+      resourceId: "openrouter",
+      metadata: { validatedProviders: ["openrouter", "openrouter-free"] }
+    });
     res.json({ success: true });
   } catch (error) {
     next(error);
@@ -342,6 +359,11 @@ function toPublicProvider(provider: Awaited<ReturnType<typeof listAIProviders>>[
     allowSensitiveContext: provider.allowSensitiveContext,
     isFreeTier: provider.isFreeTier,
     notes: provider.notes,
+    modelValidationStatus: provider.modelValidationStatus,
+    lastValidationTime: provider.lastValidationTime,
+    config: provider.config ? {
+      openRouterModels: provider.config.openRouterModels
+    } : null,
     createdAt: provider.createdAt,
     updatedAt: provider.updatedAt
   };

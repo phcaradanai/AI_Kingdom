@@ -43,6 +43,15 @@ export function AgentsPage() {
   const [draft, setDraft] = useState<AgentPayload>(selected ? toPayload(selected) : blankAgent);
   const [error, setError] = useState<string | null>(null);
 
+  const selectedProvider = draft.preferredProviderId ? providers.find((p) => p.id === draft.preferredProviderId) : null;
+  const isModelInvalid = !!(
+    selectedProvider &&
+    selectedProvider.type === "openrouter" &&
+    draft.defaultModel &&
+    selectedProvider.config?.openRouterModels &&
+    !selectedProvider.config.openRouterModels.includes(draft.defaultModel)
+  );
+
   function selectAgent(agent: AgentDto | null) {
     setSelected(agent);
     setDraft(agent ? toPayload(agent) : blankAgent);
@@ -179,6 +188,11 @@ export function AgentsPage() {
               </FormField>
               <FormField id="agent-model" label="Default Model" description="Optional model override for this agent.">
                 <Input id="agent-model" value={draft.defaultModel ?? ""} onChange={(e) => setDraft({ ...draft, defaultModel: e.target.value })} placeholder="openrouter/owl-alpha" />
+                {isModelInvalid && (
+                  <div className="mt-1 text-xs text-yellow-500 font-medium bg-yellow-500/10 border border-yellow-500/20 rounded p-2">
+                    Warning: Model override "{draft.defaultModel}" is not in the validated list of models for {selectedProvider?.name}. This might trigger a 404 or failover at runtime.
+                  </div>
+                )}
               </FormField>
               <FormField id="agent-temperature" label="Temperature" description="Lower = more deterministic, higher = more creative.">
                 <Input id="agent-temperature" type="number" step="0.1" min="0" max="2" value={draft.temperature ?? ""} onChange={(e) => setDraft({ ...draft, temperature: e.target.value ? Number(e.target.value) : null })} placeholder="0.7" />

@@ -15,7 +15,21 @@ export function ProvidersPage() {
   const updateProvider = useKingdomStore((state) => state.updateProvider);
   const createProvider = useKingdomStore((state) => state.createProvider);
   const deleteProvider = useKingdomStore((state) => state.deleteProvider);
+  const refresh = useKingdomStore((state) => state.refresh);
   const [pricingRecords, setPricingRecords] = useState<ModelPricingDto[]>([]);
+  const [isValidating, setIsValidating] = useState(false);
+
+  async function handleValidateModels() {
+    setIsValidating(true);
+    try {
+      await api.validateModels();
+      await refresh();
+    } catch (err) {
+      console.error("Failed model validation:", err);
+    } finally {
+      setIsValidating(false);
+    }
+  }
 
   useEffect(() => {
     api.modelPricing().then((r) => setPricingRecords(r.modelPricing)).catch(() => undefined);
@@ -89,10 +103,16 @@ export function ProvidersPage() {
         title="AI providers"
         description="Manage active providers, routing priority, default models, cost tiers, and public capabilities."
         action={
-          <Button onClick={() => setIsAddOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Provider
-          </Button>
+          <div className="flex gap-2">
+            <Button onClick={handleValidateModels} variant="outline" disabled={isValidating}>
+              <Cpu className={cn("h-4 w-4 mr-2", isValidating && "animate-spin")} />
+              {isValidating ? "Validating..." : "Validate Models"}
+            </Button>
+            <Button onClick={() => setIsAddOpen(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              Add Provider
+            </Button>
+          </div>
         }
       />
 
@@ -270,6 +290,38 @@ export function ProvidersPage() {
                          provider.hasCredentials ? "Env key configured" : "Missing env key"}
                       </span>
                     </div>
+                    {provider.type === "openrouter" && (
+                      <div className="col-span-2">
+                        <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Model Validation Status</span>
+                        <div className="flex flex-wrap items-center gap-2 mt-1">
+                          {provider.modelValidationStatus === "VALID" && (
+                            <span className="inline-flex items-center gap-1 rounded bg-green-500/10 px-2 py-0.5 text-xs font-semibold text-green-500 border border-green-500/20">
+                              Valid
+                            </span>
+                          )}
+                          {provider.modelValidationStatus === "INVALID_MODEL" && (
+                            <span className="inline-flex items-center gap-1 rounded bg-destructive/10 px-2 py-0.5 text-xs font-semibold text-destructive border border-destructive/20">
+                              Invalid Model
+                            </span>
+                          )}
+                          {provider.modelValidationStatus === "PROVIDER_UNAVAILABLE" && (
+                            <span className="inline-flex items-center gap-1 rounded bg-yellow-500/10 px-2 py-0.5 text-xs font-semibold text-yellow-500 border border-yellow-500/20">
+                              Provider Unavailable
+                            </span>
+                          )}
+                          {(!provider.modelValidationStatus || provider.modelValidationStatus === "NOT_CHECKED") && (
+                            <span className="inline-flex items-center gap-1 rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground border border-border">
+                              Not Checked
+                            </span>
+                          )}
+                          {provider.lastValidationTime && (
+                            <span className="text-xs text-muted-foreground">
+                              Checked: {new Date(provider.lastValidationTime).toLocaleString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                     <div className="col-span-2">
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-2">Capabilities</span>
                       <div className="flex flex-wrap gap-2 text-xs">
