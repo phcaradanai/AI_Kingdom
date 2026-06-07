@@ -1,6 +1,16 @@
 import type { Project, ProjectRoutingStatus } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { classifyProjectInboxItem } from "./dataQualityService.js";
+import {
+  type MatchSignal,
+  classifyDataQualityLabel,
+  classifyRoutingQuality,
+  generateHumanReason,
+  generateHumanTitle,
+  isGenericKeyword,
+  shouldCreateInboxItem
+} from "./routingQualityGate.js";
+import { getBooleanSetting } from "./settingsService.js";
 
 export type ProjectClassificationInput = {
   title: string;
@@ -13,7 +23,7 @@ export type ProjectClassificationResult = {
   suggestedProjectId: string | null;
   confidenceScore: number;
   reason: string;
-  candidateProjects: Array<{ project: Project; score: number; matches: string[] }>;
+  candidateProjects: Array<{ project: Project; score: number; matches: string[]; signals: MatchSignal[] }>;
 };
 
 export async function classifyProjectForText(input: ProjectClassificationInput): Promise<ProjectClassificationResult> {
@@ -68,6 +78,29 @@ export async function routeProjectForSource(input: ProjectClassificationInput) {
     return { classification, candidate, inboxItem: null };
   }
 
+  // ── M15F: Routing quality gate ──────────────────────────────────────────
+  const bestCandidate = classification.candidateProjects[0];
+  const allSignals: MatchSignal[] = bestCandidate?.signals ?? [];
+  const { routingQuality, evidence, ignoredSignals } = classifyRoutingQuality(
+    classification.confidenceScore,
+    allSignals
+  );
+
+  const suggestedProjectName = bestCandidate?.project.name ?? null;
+  const humanTitle = generateHumanTitle(input.title);
+  const humanReason = generateHumanReason(routingQuality, evidence, ignoredSignals, suggestedProjectName);
+  const dataQualityLabel = classifyDataQualityLabel(input.sourceType, input.sourceId, true);
+
+  // Should we create an inbox item?
+  const createNormal = shouldCreateInboxItem(routingQuality);
+  const debugMode = await getBooleanSetting("ROUTING_DEBUG_MODE", false);
+  const createDebug = !createNormal && debugMode;
+
+  if (!createNormal && !createDebug) {
+    // Suppress — only the routing candidate was created (audit trail)
+    return { classification, candidate, inboxItem: null };
+  }
+
   const inboxData = {
     sourceType: input.sourceType,
     sourceId: input.sourceId,
@@ -92,13 +125,38 @@ export async function routeProjectForSource(input: ProjectClassificationInput) {
       sourceId: input.sourceId,
       routingStatus: status,
       reason: classification.reason
-    }
+    },
+    // M15F quality gate fields
+    routingConfidence: classification.confidenceScore,
+    routingQuality: createDebug ? "DEBUG_ONLY" : routingQuality,
+    dataQualityLabel,
+    humanTitle,
+    humanReason,
+    evidence: evidence.length > 0 ? evidence : undefined,
+    ignoredSignals: ignoredSignals.length > 0 ? ignoredSignals : undefined
   };
+
+  // Dedup: same sourceType + sourceId + PENDING
   const existingInboxItem = await prisma.projectInboxItem.findFirst({
     where: { sourceType: input.sourceType, sourceId: input.sourceId, status: "PENDING" }
   });
-  const inboxItem = existingInboxItem
-    ? await prisma.projectInboxItem.update({ where: { id: existingInboxItem.id }, data: inboxData })
+
+  // Dedup: same normalizedTitle + sourceType within 5-minute window (Part 8)
+  const normalizedTitle = normalizeTitle(input.title);
+  const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+  const recentDuplicate = !existingInboxItem ? await prisma.projectInboxItem.findFirst({
+    where: {
+      sourceType: input.sourceType,
+      status: "PENDING",
+      createdAt: { gte: fiveMinutesAgo },
+      title: { equals: normalizedTitle, mode: "insensitive" }
+    }
+  }) : null;
+
+  const duplicateItem = existingInboxItem ?? recentDuplicate;
+
+  const inboxItem = duplicateItem
+    ? await prisma.projectInboxItem.update({ where: { id: duplicateItem.id }, data: inboxData })
     : await prisma.projectInboxItem.create({ data: inboxData });
 
   return { classification, candidate, inboxItem };
@@ -173,37 +231,50 @@ async function findSourceAncestryProject(sourceType: string, sourceId: string) {
 
 function scoreProject(project: Project, text: string, ancestryProjectId?: string | null) {
   const matches: string[] = [];
+  const signals: MatchSignal[] = [];
   let score = 0;
   if (ancestryProjectId === project.id) {
     score += 90;
     matches.push("source ancestry already links to this project");
+    signals.push({ type: "source_ancestry", value: "source ancestry", projectName: project.name, score: 90 });
   }
   const name = normalize(project.name);
   if (text.includes(name)) {
     score += 80;
     matches.push(`project name '${project.name}'`);
+    signals.push({ type: "project_name", value: project.name, projectName: project.name, score: 80 });
   }
   if (project.codename && text.includes(normalize(project.codename))) {
     score += 70;
     matches.push(`codename '${project.codename}'`);
+    signals.push({ type: "codename", value: project.codename, projectName: project.name, score: 70 });
   }
   for (const alias of project.aliases) {
     if (text.includes(normalize(alias))) {
       score += 50;
       matches.push(`alias '${alias}'`);
+      signals.push({ type: "alias", value: alias, projectName: project.name, score: 50 });
     }
   }
   for (const keyword of project.keywords) {
     if (text.includes(normalize(keyword))) {
-      score += keyword.includes(" ") ? 28 : 18;
+      const keywordScore = keyword.includes(" ") ? 28 : 18;
+      // M15F: generic keywords still score for legacy compatibility but are
+      // classified as ignoredSignals by the quality gate.
+      score += keywordScore;
       matches.push(`keyword '${keyword}'`);
+      signals.push({ type: "keyword", value: keyword, projectName: project.name, score: keywordScore });
     }
   }
-  return { project, score, matches };
+  return { project, score, matches, signals };
 }
 
 function normalize(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9.#+]+/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function normalizeTitle(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function trim(value: string, maxLength: number): string {

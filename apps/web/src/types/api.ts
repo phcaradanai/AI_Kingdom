@@ -178,7 +178,7 @@ export type ReportCategory = "STRATEGY" | "RESEARCH" | "ARCHITECTURE" | "FINANCE
 export type ReportImportance = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type ProjectStatus = "ACTIVE" | "PAUSED" | "COMPLETED" | "ARCHIVED";
 export type ProjectPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
-export type ProjectInboxStatus = "PENDING" | "ASSIGNED" | "DISMISSED";
+export type ProjectInboxStatus = "PENDING" | "ASSIGNED" | "DISMISSED" | "ARCHIVED";
 export type ArtifactType = "PROMPT" | "SPEC" | "DECISION" | "IMPLEMENTATION_REPORT" | "HANDOFF_BRIEF" | "ARCHITECTURE_NOTE" | "MARKET_RESEARCH" | "CODE_PLAN" | "ROYAL_DECREE" | "GENERAL_NOTE";
 export type DataQuality = "TRUSTED" | "REVIEW_REQUIRED" | "TEST" | "LEGACY" | "UNKNOWN_SOURCE";
 
@@ -229,6 +229,8 @@ export type ProjectPayload = {
   ownerUserId?: string | null;
 };
 
+export type RoutingQuality = "HIGH" | "MEDIUM" | "LOW" | "DEBUG_ONLY" | "NO_MATCH";
+
 export type ProjectInboxItemDto = {
   id: string;
   sourceType: string;
@@ -248,6 +250,14 @@ export type ProjectInboxItemDto = {
   createdBySystem: boolean;
   humanReadableSource?: string;
   sourceLink?: SourceLinkDto;
+  // M15F routing quality gate fields
+  routingConfidence: number | null;
+  routingQuality: RoutingQuality | null;
+  dataQualityLabel: string | null;
+  humanTitle: string | null;
+  humanReason: string | null;
+  evidence: Record<string, unknown>[] | null;
+  ignoredSignals: Record<string, unknown>[] | null;
   createdAt: string;
   updatedAt: string;
 };

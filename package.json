@@ -22,7 +22,8 @@
     "db:seed": "npm run db:seed --workspace @ai-kingdom/api",
     "db:seed:staging": "npm run db:seed:staging --workspace @ai-kingdom/api",
     "data:inspect-pollution": "npm run data:inspect-pollution --workspace @ai-kingdom/api",
-    "data:cleanup-test-data": "npm run data:cleanup-test-data --workspace @ai-kingdom/api"
+    "data:cleanup-test-data": "npm run data:cleanup-test-data --workspace @ai-kingdom/api",
+    "data:archive-low-quality-inbox": "npm run data:archive-low-quality-inbox --workspace @ai-kingdom/api"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

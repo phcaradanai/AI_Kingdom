@@ -173,11 +173,13 @@ export const api = {
   projectMemories: (id: string) => apiRequest<{ memories: MemoryDto[] }>(`/projects/${id}/memories`),
   projectArtifacts: (id: string) => apiRequest<{ artifacts: ArtifactDto[] }>(`/projects/${id}/artifacts`),
   exportProjectObsidian: (id: string) => apiRequest<ObsidianExportDto>(`/projects/${id}/export/obsidian`, { method: "POST" }),
-  projectInbox: (params?: { status?: string; dataQuality?: DataQuality; includeTestData?: boolean; confidenceMin?: number; confidenceMax?: number; sourceType?: string; suggestedProjectId?: string }) => {
+  projectInbox: (params?: { status?: string; dataQuality?: DataQuality; includeTestData?: boolean; includeDebug?: boolean; routingQuality?: string; confidenceMin?: number; confidenceMax?: number; sourceType?: string; suggestedProjectId?: string }) => {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);
     if (params?.dataQuality) search.set("dataQuality", params.dataQuality);
     if (params?.includeTestData) search.set("includeTestData", "true");
+    if (params?.includeDebug) search.set("includeDebug", "true");
+    if (params?.routingQuality) search.set("routingQuality", params.routingQuality);
     if (params?.confidenceMin !== undefined) search.set("confidenceMin", String(params.confidenceMin));
     if (params?.confidenceMax !== undefined) search.set("confidenceMax", String(params.confidenceMax));
     if (params?.sourceType) search.set("sourceType", params.sourceType);
@@ -189,10 +191,14 @@ export const api = {
     apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/assign`, { method: "PATCH", body: JSON.stringify({ projectId }) }),
   dismissProjectInboxItem: (id: string) =>
     apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/dismiss`, { method: "PATCH" }),
+  archiveProjectInboxItem: (id: string) =>
+    apiRequest<{ inboxItem: ProjectInboxItemDto }>(`/project-inbox/${id}/archive`, { method: "PATCH" }),
   bulkDismissProjectInboxItems: (ids: string[]) =>
     apiRequest<{ inboxItems: ProjectInboxItemDto[] }>("/project-inbox/bulk/dismiss", { method: "PATCH", body: JSON.stringify({ ids }) }),
   bulkAssignProjectInboxItems: (ids: string[], projectId: string) =>
     apiRequest<{ inboxItems: ProjectInboxItemDto[] }>("/project-inbox/bulk/assign", { method: "PATCH", body: JSON.stringify({ ids, projectId }) }),
+  bulkArchiveProjectInboxItems: (ids: string[]) =>
+    apiRequest<{ inboxItems: ProjectInboxItemDto[] }>("/project-inbox/bulk/archive", { method: "PATCH", body: JSON.stringify({ ids }) }),
   archiveLowConfidenceProjectInboxItems: (threshold = 0) =>
     apiRequest<{ archived: number }>("/project-inbox/archive-low-confidence", { method: "PATCH", body: JSON.stringify({ threshold }) }),
   classifyProject: (payload: { title: string; content: string; sourceType: string; sourceId: string; persist?: boolean }) =>

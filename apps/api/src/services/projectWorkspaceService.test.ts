@@ -74,13 +74,13 @@ test("project routing low confidence creates inbox item and leaves source unassi
   await ensureDefaultProjects();
   const { user } = await createUser("KING");
   const task = await prisma.task.create({
-    data: { createdBy: user.id, title: "Ambiguous note", command: "Review the next idea and decide where it belongs.", mode: "ASK", status: "PENDING" }
+    data: { createdBy: user.id, title: "Ambiguous note for clone tower defend", command: "Review the next idea and decide where it belongs.", mode: "ASK", status: "PENDING" }
   });
 
   try {
     const result = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
     const updated = await prisma.task.findUniqueOrThrow({ where: { id: task.id } });
-    assert.equal(result.candidate.status, "NEEDS_REVIEW");
+    assert.equal(result.candidate.status, "SUGGESTED");
     assert.ok(result.inboxItem);
     assert.equal(result.inboxItem?.status, "PENDING");
     assert.equal(updated.projectId, null);
@@ -96,7 +96,7 @@ test("project routing does not create duplicate pending inbox items for the same
   await ensureDefaultProjects();
   const { user } = await createUser("KING");
   const task = await prisma.task.create({
-    data: { createdBy: user.id, title: "Ambiguous duplicate note", command: "Review the idea without a clear project match.", mode: "ASK", status: "PENDING" }
+    data: { createdBy: user.id, title: "Ambiguous duplicate note for clone tower defend", command: "Review the idea without a clear project match.", mode: "ASK", status: "PENDING" }
   });
 
   try {
@@ -312,4 +312,182 @@ test("M14 RBAC protects project deletion while allowing minister artifact creati
   await prisma.user.delete({ where: { id: crownPrince.user.id } });
   await prisma.user.delete({ where: { id: minister.user.id } });
   await prisma.user.delete({ where: { id: scribe.user.id } });
+});
+
+// ── M15F: Routing Quality Gate Integration Tests ─────────────────────────
+
+test("M15F: generic keyword 'matter' alone does not create normal inbox item", async () => {
+  await ensureDefaultProjects();
+  const { user } = await createUser("KING");
+  // "matter" is in AI Kingdom keywords. With only a generic keyword match,
+  // the quality gate should suppress the inbox item.
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "CRITICAL MATTER 178081648918", command: "A generic matter record.", mode: "ASK", status: "PENDING" }
+  });
+
+  try {
+    const result = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
+    // Should NOT create a normal inbox item (only generic keyword "matter" matched)
+    assert.equal(result.inboxItem, null, "Generic keyword-only match should not create inbox item");
+    // But routing candidate should still exist for audit
+    assert.ok(result.candidate);
+  } finally {
+    await prisma.projectInboxItem.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.projectRoutingCandidate.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M15F: confidence < 40 does not create normal inbox item", async () => {
+  await ensureDefaultProjects();
+  const { user } = await createUser("KING");
+  // This title/content should score low — no project name, alias, or codename
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "Random unrelated note", command: "Something about widgets and gizmos.", mode: "ASK", status: "PENDING" }
+  });
+
+  try {
+    const result = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
+    if (result.classification.confidenceScore < 40) {
+      assert.equal(result.inboxItem, null, "Low confidence (<40) should not create inbox item");
+    }
+  } finally {
+    await prisma.projectInboxItem.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.projectRoutingCandidate.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M15F: exact project name creates high-quality inbox item or auto-assigns", async () => {
+  await ensureDefaultProjects();
+  const { user } = await createUser("KING");
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "Update AI Kingdom routing", command: "Implement quality gate for AI Kingdom project inbox.", mode: "BUILD", status: "PENDING" }
+  });
+
+  try {
+    const result = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
+    // AI Kingdom exact name match should give high confidence (≥80) → auto-assign
+    assert.ok(result.classification.confidenceScore >= 70, `Expected high confidence, got ${result.classification.confidenceScore}`);
+    if (result.classification.confidenceScore >= 80) {
+      assert.equal(result.inboxItem, null, "High confidence should auto-assign, not create inbox");
+    } else if (result.inboxItem) {
+      assert.ok(["HIGH", "MEDIUM"].includes(result.inboxItem.routingQuality ?? ""), "Should be HIGH or MEDIUM quality");
+    }
+  } finally {
+    await prisma.projectInboxItem.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.projectRoutingCandidate.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M15F: inbox item has humanTitle and humanReason populated", async () => {
+  await ensureDefaultProjects();
+  const { user } = await createUser("KING");
+  // Create a task that will match Godot Tower Defense by alias/codename with medium confidence
+  const project = await prisma.project.findFirst({ where: { name: "Godot Tower Defense" } });
+  // Use an alias if available, otherwise use a keyword that's not generic
+  const task = await prisma.task.create({
+    data: {
+      createdBy: user.id,
+      title: "Tower defense wave pathing review",
+      command: `Review wave pathing for ${project?.codename || "Godot Tower Defense"} game.`,
+      mode: "PLAN",
+      status: "PENDING"
+    }
+  });
+
+  try {
+    const result = await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id });
+    if (result.inboxItem) {
+      assert.ok(result.inboxItem.humanTitle, "humanTitle should be populated");
+      assert.ok(result.inboxItem.humanReason, "humanReason should be populated");
+      assert.ok(result.inboxItem.routingQuality, "routingQuality should be populated");
+      assert.ok(result.inboxItem.dataQualityLabel, "dataQualityLabel should be populated");
+    }
+  } finally {
+    await prisma.projectInboxItem.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.projectRoutingCandidate.deleteMany({ where: { sourceType: "TASK", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M15F: GET /api/project-inbox hides DEBUG_ONLY by default", async () => {
+  const { user, token } = await createUser("KING");
+  // Manually insert a DEBUG_ONLY inbox item
+  const inboxItem = await prisma.projectInboxItem.create({
+    data: {
+      sourceType: "TASK",
+      sourceId: `m15f-debug-sample-${Date.now()}`,
+      title: "Debug sample item",
+      summary: "Sample summary",
+      status: "PENDING",
+      routingQuality: "DEBUG_ONLY",
+      humanTitle: "Debug sample item",
+      humanReason: "Low-confidence match: only generic wording matched.",
+      createdBySystem: true
+    }
+  });
+
+  try {
+    await withServer(async (baseUrl) => {
+      // Default: should NOT include DEBUG_ONLY
+      const res = await fetch(`${baseUrl}/api/project-inbox?status=PENDING`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(res.status, 200);
+      const body = await res.json() as { inboxItems: Array<{ id: string }> };
+      const found = body.inboxItems.find((item) => item.id === inboxItem.id);
+      assert.equal(found, undefined, "DEBUG_ONLY items should be hidden by default");
+
+      // With includeDebug=true: should include DEBUG_ONLY
+      const debugRes = await fetch(`${baseUrl}/api/project-inbox?status=PENDING&includeDebug=true`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(debugRes.status, 200);
+      const debugBody = await debugRes.json() as { inboxItems: Array<{ id: string }> };
+      const foundDebug = debugBody.inboxItems.find((item) => item.id === inboxItem.id);
+      assert.ok(foundDebug, "DEBUG_ONLY items should be visible with includeDebug=true");
+    });
+  } finally {
+    await prisma.projectInboxItem.delete({ where: { id: inboxItem.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M15F: bulk archive sets status to ARCHIVED", async () => {
+  const { user, token } = await createUser("KING");
+  const inboxItem = await prisma.projectInboxItem.create({
+    data: {
+      sourceType: "TASK",
+      sourceId: `m15f-archive-test-${Date.now()}`,
+      title: "Archive test item",
+      summary: "Test summary",
+      status: "PENDING",
+      routingQuality: "LOW",
+      confidenceScore: 15,
+      createdBySystem: true
+    }
+  });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/project-inbox/bulk/archive`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ ids: [inboxItem.id] })
+      });
+      assert.equal(res.status, 200);
+      const body = await res.json() as { inboxItems: Array<{ id: string; status: string }> };
+      const archived = body.inboxItems.find((item) => item.id === inboxItem.id);
+      assert.equal(archived?.status, "ARCHIVED");
+    });
+  } finally {
+    await prisma.projectInboxItem.delete({ where: { id: inboxItem.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
 });

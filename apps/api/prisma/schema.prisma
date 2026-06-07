@@ -228,6 +228,7 @@ enum ProjectInboxStatus {
   PENDING
   ASSIGNED
   DISMISSED
+  ARCHIVED
 }
 
 enum ArtifactType {
@@ -437,6 +438,14 @@ model ProjectInboxItem {
   assignedProjectId   String?
   confidenceScore     Int?
   reason              String?
+  // M15F routing quality gate fields
+  routingConfidence   Int?
+  routingQuality      String?            // HIGH, MEDIUM, LOW, DEBUG_ONLY, NO_MATCH
+  dataQualityLabel    String?            // TRUSTED_SOURCE, REVIEW_REQUIRED, LEGACY, TEST, UNKNOWN_SOURCE
+  humanTitle          String?
+  humanReason         String?
+  evidence            Json?
+  ignoredSignals      Json?
   isTestData          Boolean            @default(false)
   testRunId           String?
   dataSource          String?
