@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Clipboard, FileText, Handshake, Plus, Send } from "lucide-react";
+import { Clipboard, FileText, Handshake, Plus, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -39,8 +39,22 @@ const blankReport: Omit<ImplementationReportPayload, "workOrderId"> = {
   nextRecommendedAction: ""
 };
 
-const statuses: WorkOrderStatus[] = ["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED"];
+const statuses: WorkOrderStatus[] = ["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"];
 const priorities: WorkOrderPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+
+function getStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    DRAFT: "Draft",
+    READY: "Ready",
+    IN_PROGRESS: "In Progress",
+    NEEDS_REVIEW: "Needs Review",
+    COMPLETED: "Completed",
+    FAILED: "Failed",
+    CANCELLED: "Cancelled",
+    ARCHIVED: "Archived"
+  };
+  return labels[status] ?? `Unknown (${status})`;
+}
 
 export function WorkOrdersPage() {
   const user = useAuthStore((state) => state.user);
@@ -52,9 +66,15 @@ export function WorkOrdersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<WorkOrderPayload>(blankWorkOrder);
   const [reportDraft, setReportDraft] = useState(blankReport);
+  
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
   const [agentFilter, setAgentFilter] = useState("");
+  const [includeArchived, setIncludeArchived] = useState(false);
+  const [includeLegacy, setIncludeLegacy] = useState(false);
+  const [includeTestData, setIncludeTestData] = useState(false);
+
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [generatedPrompt, setGeneratedPrompt] = useState("");
   const [taskId, setTaskId] = useState("");
   const [matterId, setMatterId] = useState("");
@@ -64,7 +84,14 @@ export function WorkOrdersPage() {
 
   async function load() {
     const [orders, agents, projectResponse] = await Promise.all([
-      api.workOrders({ status: statusFilter || undefined, priority: priorityFilter || undefined, externalAgentId: agentFilter || undefined }),
+      api.workOrders({
+        status: statusFilter || undefined,
+        priority: priorityFilter || undefined,
+        externalAgentId: agentFilter || undefined,
+        includeArchived,
+        includeLegacy,
+        includeTestData
+      }),
       api.externalAgents(),
       api.projects()
     ]);
@@ -75,7 +102,7 @@ export function WorkOrdersPage() {
 
   useEffect(() => {
     void load();
-  }, [statusFilter, priorityFilter, agentFilter]);
+  }, [statusFilter, priorityFilter, agentFilter, includeArchived, includeLegacy, includeTestData]);
 
   function select(order: WorkOrderDto | null) {
     setSelectedId(order?.id ?? null);
@@ -94,7 +121,15 @@ export function WorkOrdersPage() {
         setSelectedId(response.workOrder.id);
       } else {
         const response = await api.createWorkOrder(cleanWorkOrder(draft));
-        setSelectedId(response.workOrder.id);
+        if (response.status === "REJECTED" || response.status === "PREVIEW_ONLY") {
+          setError(response.reason || `Create failed: work order ${response.status.toLowerCase()}.`);
+          return;
+        }
+        if (response.workOrder) {
+          setSelectedId(response.workOrder.id);
+        } else {
+          setError("Create failed: no work order returned.");
+        }
       }
       await load();
     } catch (saveError) {
@@ -104,16 +139,34 @@ export function WorkOrdersPage() {
 
   async function generateFromTask() {
     if (!taskId.trim()) return;
-    const response = await api.workOrderFromTask(taskId.trim());
-    setSelectedId(response.workOrder.id);
-    await load();
+    setError(null);
+    try {
+      const response = await api.workOrderFromTask(taskId.trim());
+      if (response.workOrder) {
+        setSelectedId(response.workOrder.id);
+      } else {
+        setError("Work order generation skipped by central gate.");
+      }
+      await load();
+    } catch (genError) {
+      setError(genError instanceof Error ? genError.message : "Unable to generate work order");
+    }
   }
 
   async function generateFromMatter() {
     if (!matterId.trim()) return;
-    const response = await api.workOrderFromMatter(matterId.trim());
-    setSelectedId(response.workOrder.id);
-    await load();
+    setError(null);
+    try {
+      const response = await api.workOrderFromMatter(matterId.trim());
+      if (response.workOrder) {
+        setSelectedId(response.workOrder.id);
+      } else {
+        setError("Work order generation skipped by central gate.");
+      }
+      await load();
+    } catch (genError) {
+      setError(genError instanceof Error ? genError.message : "Unable to generate work order");
+    }
   }
 
   async function buildPrompt() {
@@ -145,6 +198,86 @@ export function WorkOrdersPage() {
     await load();
   }
 
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === workOrders.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(workOrders.map(o => o.id));
+    }
+  };
+
+  const handleBulkArchive = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      await Promise.all(selectedIds.map(id => api.updateWorkOrder(id, { status: "ARCHIVED" })));
+      setSelectedIds([]);
+      await load();
+    } catch (err) {
+      setError("Bulk archive failed");
+    }
+  };
+
+  const handleBulkComplete = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      await Promise.all(selectedIds.map(id => api.updateWorkOrder(id, { status: "COMPLETED" })));
+      setSelectedIds([]);
+      await load();
+    } catch (err) {
+      setError("Bulk completion failed");
+    }
+  };
+
+  const handleBulkLegacy = async () => {
+    if (selectedIds.length === 0) return;
+    try {
+      await Promise.all(selectedIds.map(id => api.updateWorkOrder(id, { workQuality: "LEGACY" })));
+      setSelectedIds([]);
+      await load();
+    } catch (err) {
+      setError("Bulk mark legacy failed");
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) return;
+    if (!window.confirm(`Are you sure you want to delete ${selectedIds.length} items? This will only succeed for safe test/junk items.`)) return;
+    try {
+      await Promise.all(selectedIds.map(id => api.deleteWorkOrder(id).catch(() => undefined)));
+      setSelectedIds([]);
+      await load();
+    } catch (err) {
+      setError("Bulk delete failed");
+    }
+  };
+
+  function renderWorkOrderBadges(order: WorkOrderDto) {
+    const badges = [];
+    if (order.status === "ARCHIVED") {
+      badges.push(<span key="archived" className="rounded-full bg-slate-500/20 text-slate-400 border border-slate-500/30 px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider">Archived</span>);
+    }
+    if (order.isTestData || order.dataQuality === "TEST" || order.workQuality === "TEST" || order.workQuality === "DEBUG_ONLY") {
+      badges.push(<span key="test" className="rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider">Test/Debug</span>);
+    }
+    if (order.workQuality === "DUPLICATE") {
+      badges.push(<span key="duplicate" className="rounded-full bg-orange-500/20 text-orange-400 border border-orange-500/30 px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider">Duplicate</span>);
+    }
+    if (order.dataQuality === "LEGACY" || order.workQuality === "LEGACY" || order.workQuality === "COMPLETED_ARCHIVE") {
+      badges.push(<span key="legacy" className="rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider">Legacy</span>);
+    }
+    if (order.dataQuality === "UNKNOWN_SOURCE") {
+      badges.push(<span key="unknown" className="rounded-full bg-rose-500/20 text-rose-400 border border-rose-500/30 px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider">Unknown source</span>);
+    }
+    if (badges.length === 0 || (order.workQuality === "ACTIONABLE" && order.status !== "ARCHIVED")) {
+      badges.push(<span key="actionable" className="rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] uppercase font-bold tracking-wider">Actionable</span>);
+    }
+    return <div className="flex flex-wrap gap-1.5 mt-2">{badges}</div>;
+  }
+
   return (
     <>
       <PageHeader
@@ -161,7 +294,7 @@ export function WorkOrdersPage() {
               <FormField id="filter-status" label="Status">
                 <select id="filter-status" className={selectCls} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                   <option value="">All statuses</option>
-                  {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                  {statuses.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
                 </select>
               </FormField>
               <FormField id="filter-priority" label="Priority">
@@ -176,6 +309,20 @@ export function WorkOrdersPage() {
                   {externalAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                 </select>
               </FormField>
+              <div className="mt-2 space-y-2 border-t border-border pt-3">
+                <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
+                  <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} className="rounded border-border" />
+                  Show archived
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
+                  <input type="checkbox" checked={includeLegacy} onChange={(e) => setIncludeLegacy(e.target.checked)} className="rounded border-border" />
+                  Show legacy
+                </label>
+                <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
+                  <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} className="rounded border-border" />
+                  Show test/debug
+                </label>
+              </div>
             </div>
           </Card>
 
@@ -200,18 +347,61 @@ export function WorkOrdersPage() {
           ) : null}
 
           {canCreate ? <Button className="w-full" onClick={() => select(null)}><Plus className="h-4 w-4" />Create Work Order</Button> : null}
+
+          {/* Bulk Actions */}
+          {workOrders.length > 0 && canCreate && (
+            <Card className="p-3 bg-muted/40">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-semibold text-muted-foreground">{selectedIds.length} selected</span>
+                <Button variant="outline" className="h-7 text-xs px-2" onClick={toggleSelectAll}>
+                  {selectedIds.length === workOrders.length ? "Deselect All" : "Select All"}
+                </Button>
+              </div>
+              {selectedIds.length > 0 && (
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <Button variant="outline" className="h-7 text-xs px-2 flex items-center gap-1" onClick={handleBulkArchive}>
+                    <Archive className="h-3 w-3" /> Archive
+                  </Button>
+                  <Button variant="outline" className="h-7 text-xs px-2 flex items-center gap-1" onClick={handleBulkComplete}>
+                    <CheckCircle2 className="h-3 w-3" /> Complete
+                  </Button>
+                  <Button variant="outline" className="h-7 text-xs px-2 flex items-center gap-1" onClick={handleBulkLegacy}>
+                    Mark Legacy
+                  </Button>
+                  <Button variant="outline" className="h-7 text-xs px-2 text-destructive flex items-center gap-1 hover:bg-destructive/10" onClick={handleBulkDelete}>
+                    <Trash2 className="h-3 w-3" /> Delete Junk
+                  </Button>
+                </div>
+              )}
+            </Card>
+          )}
+
           {workOrders.map((order) => (
-            <Card key={order.id} className={cn("transition", selected?.id === order.id && "border-primary/60 bg-primary/10")}>
-              <button className="w-full text-left" onClick={() => select(order)}>
+            <Card key={order.id} className={cn("transition relative", selected?.id === order.id && "border-primary/60 bg-primary/10")}>
+              {canCreate && (
+                <button
+                  type="button"
+                  className="absolute top-4 left-4 z-10 text-muted-foreground hover:text-foreground"
+                  onClick={() => toggleSelect(order.id)}
+                >
+                  {selectedIds.includes(order.id) ? (
+                    <CheckSquare className="h-5 w-5 text-primary" />
+                  ) : (
+                    <Square className="h-5 w-5" />
+                  )}
+                </button>
+              )}
+              <button className={cn("w-full text-left", canCreate ? "pl-11" : "")} onClick={() => select(order)}>
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <h2 className="font-display text-lg">{order.title}</h2>
+                    <h2 className="font-display text-lg leading-tight">{order.title}</h2>
                     <p className="mt-1 text-xs text-muted-foreground">{formatDate(order.updatedAt)}</p>
                   </div>
-                  <span className="rounded-full border border-border px-2 py-1 text-xs">{order.priority}</span>
+                  <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold">{order.priority}</span>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span>{order.status}</span>
+                {renderWorkOrderBadges(order)}
+                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground border-t border-border/50 pt-2">
+                  <span>{getStatusLabel(order.status)}</span>
                   {order.assignedExternalAgent ? <span>{order.assignedExternalAgent.name}</span> : <span>Unassigned</span>}
                 </div>
               </button>
@@ -246,7 +436,7 @@ export function WorkOrdersPage() {
               <div className="grid gap-4 sm:grid-cols-2">
                 <FormField id="wo-status" label="Status">
                   <select id="wo-status" disabled={!canCreate} className={selectCls} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as WorkOrderStatus })}>
-                    {statuses.map((status) => <option key={status} value={status}>{status}</option>)}
+                    {statuses.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
                   </select>
                 </FormField>
                 <FormField id="wo-priority" label="Priority">
@@ -287,10 +477,36 @@ export function WorkOrdersPage() {
               {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
               {canCreate ? <Button><Send className="h-4 w-4" />Save Work Order</Button> : null}
             </form>
+
+            {selected && (
+              <details className="text-xs text-muted-foreground mt-5 border-t border-border pt-4">
+                <summary className="cursor-pointer hover:underline font-semibold">Technical Details</summary>
+                <div className="mt-2 space-y-1 bg-muted/20 p-3 rounded-md font-mono">
+                  <div>ID: {selected.id}</div>
+                  {selected.sourceType && <div>Source Type: {selected.sourceType}</div>}
+                  {selected.sourceId && <div>Source ID: {selected.sourceId}</div>}
+                  {selected.traceId && <div>Trace ID: {selected.traceId}</div>}
+                  {selected.dataQuality && <div>Data Quality: {selected.dataQuality}</div>}
+                  {selected.workQuality && <div>Work Quality: {selected.workQuality}</div>}
+                  {selected.archiveReason && <div className="text-amber-300">Archive Reason: {selected.archiveReason}</div>}
+                </div>
+              </details>
+            )}
           </Card>
 
           {selected ? (
             <>
+              {selected.sourceLink && selected.sourceLink.href && (
+                <Card className="bg-primary/5 border-primary/20">
+                  <div className="flex items-center gap-3 text-sm">
+                    <span className="font-semibold text-primary">{selected.sourceLink.label}:</span>
+                    <a href={selected.sourceLink.href} className="text-foreground hover:text-primary hover:underline font-medium">
+                      {selected.sourceLink.title || selected.sourceLink.id}
+                    </a>
+                  </div>
+                </Card>
+              )}
+
               <Card>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-display text-lg">External Prompt</h2>

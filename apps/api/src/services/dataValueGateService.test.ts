@@ -15,6 +15,7 @@ import {
 } from "./agentKnowledgeService.js";
 import { createMatter } from "./royalSecretaryService.js";
 import { createArtifact } from "./projectService.js";
+import { createWorkOrder } from "./externalAgentWorkOrderService.js";
 
 async function cleanup(suffix: string) {
   // delete project inbox items
@@ -80,6 +81,16 @@ async function cleanup(suffix: string) {
   await prisma.agent.deleteMany({
     where: {
       slug: { startsWith: `test-agent-${suffix}` }
+    }
+  });
+
+  // delete test work orders
+  await prisma.workOrder.deleteMany({
+    where: {
+      OR: [
+        { title: { contains: suffix } },
+        { sourceType: { startsWith: `test_src_${suffix}` } }
+      ]
     }
   });
 }
@@ -387,16 +398,16 @@ test("9. DataValueDecision includes human-readable reasons and sourceTrust class
 test("10. Duplicate artifact is rejected / returns null", async () => {
   const suffix = `${Date.now()}-t10`;
   try {
-    const art1 = await createArtifact({
+    const art1Res = await createArtifact({
       title: `Unique spec doc ${suffix}`,
       type: "SPEC" as ArtifactType,
       content: "This is a detailed specification doc for monorepo routing features.",
       sourceType: `test_src_${suffix}`,
       sourceId: "art123"
     });
-    assert.ok(art1, "First artifact should be created successfully");
+    assert.equal(art1Res.status, "CREATED", "First artifact should be created successfully");
 
-    const art2 = await createArtifact({
+    const art2Res = await createArtifact({
       title: `Unique spec doc ${suffix}`,
       type: "SPEC" as ArtifactType,
       content: "This is a duplicate specification doc.",
@@ -404,7 +415,203 @@ test("10. Duplicate artifact is rejected / returns null", async () => {
       sourceId: "art123"
     });
 
-    assert.equal(art2, null, "Second duplicate artifact should be rejected by the gate and return null");
+    assert.equal(art2Res.status, "REJECTED", "Second duplicate artifact should be rejected by the gate");
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("11. Stale/Legacy Title Evaluation", async () => {
+  const suffix = `${Date.now()}-t11`;
+  const decision = await evaluateRecordValue({
+    recordType: "workOrder",
+    origin: "SYSTEM_GENERATED",
+    title: `M13 completion for tests ${suffix}`,
+    content: "Objective text",
+    sourceType: "TASK",
+    sourceId: "task123",
+    metadata: {
+      status: "READY",
+      createdAt: new Date().toISOString()
+    }
+  });
+
+  assert.equal(decision.decision, "ARCHIVE");
+  assert.equal(decision.quality, "LEGACY");
+});
+
+test("12. READY Stale Unassigned Evaluation", async () => {
+  const suffix = `${Date.now()}-t12`;
+  const eightDaysAgo = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  const decision = await evaluateRecordValue({
+    recordType: "workOrder",
+    origin: "SYSTEM_GENERATED",
+    title: `Stale work order ${suffix}`,
+    content: "Actionable objective",
+    sourceType: "TASK",
+    sourceId: "task123",
+    metadata: {
+      status: "READY",
+      createdAt: eightDaysAgo.toISOString()
+    }
+  });
+
+  assert.equal(decision.decision, "ARCHIVE");
+  assert.equal(decision.quality, "LEGACY");
+});
+
+test("13. Actionable Work Order Evaluation", async () => {
+  const suffix = `${Date.now()}-t13`;
+  const decision = await evaluateRecordValue({
+    recordType: "workOrder",
+    origin: "SYSTEM_GENERATED",
+    title: `High quality work order ${suffix}`,
+    content: "Actionable objective",
+    sourceType: "TASK",
+    sourceId: "task123",
+    projectId: "project123",
+    metadata: {
+      status: "READY",
+      createdAt: new Date().toISOString()
+    }
+  });
+
+  assert.equal(decision.decision, "PERSIST");
+  assert.equal(decision.quality, "HIGH");
+});
+
+test("14. Duplicate Work Order Creation", async () => {
+  const suffix = `${Date.now()}-t14`;
+  try {
+    const res1 = await createWorkOrder({
+      title: `Unique title ${suffix}`,
+      objective: "Objective description",
+      sourceType: "TASK",
+      sourceId: `src_${suffix}`,
+      status: "READY"
+    });
+    assert.equal(res1.status, "CREATED");
+
+    const res2 = await createWorkOrder({
+      title: `Unique title ${suffix}`,
+      objective: "Duplicate objective",
+      sourceType: "TASK",
+      sourceId: `src_${suffix}`,
+      status: "READY"
+    });
+    assert.equal(res2.status, "EXISTING");
+    assert.equal(res2.workOrder?.id, res1.workOrder?.id);
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("15. PREVIEW_ONLY Behavior", async () => {
+  const suffix = `${Date.now()}-t15`;
+  try {
+    // 1. System generated and status DRAFT should return PREVIEW_ONLY and not write to DB
+    const res1 = await createWorkOrder({
+      title: `Draft work order ${suffix}`,
+      objective: "Objective description",
+      sourceType: "TASK",
+      sourceId: `src_${suffix}`,
+      status: "DRAFT"
+    }, false); // explicitUserAction = false
+
+    assert.equal(res1.status, "PREVIEW_ONLY");
+    assert.equal(res1.workOrder, undefined);
+
+    const checkDb = await prisma.workOrder.findFirst({
+      where: { title: `Draft work order ${suffix}` }
+    });
+    assert.equal(checkDb, null, "Should not be persisted in the DB");
+
+    // 2. User action (explicitUserAction = true) should save as DRAFT and return CREATED
+    const res2 = await createWorkOrder({
+      title: `Draft work order ${suffix}`,
+      objective: "Objective description",
+      sourceType: "TASK",
+      sourceId: `src_${suffix}`,
+      status: "DRAFT"
+    }, true); // explicitUserAction = true
+
+    assert.equal(res2.status, "CREATED");
+    assert.equal(res2.workOrder?.status, "DRAFT");
+
+    const checkDbSaved = await prisma.workOrder.findFirst({
+      where: { title: `Draft work order ${suffix}` }
+    });
+    assert.ok(checkDbSaved, "Should be saved to the DB under user action");
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("16. System-generated REJECTED Work Order", async () => {
+  const suffix = `${Date.now()}-t16`;
+  try {
+    const res = await createWorkOrder({
+      title: `Empty objective ${suffix}`,
+      objective: "",
+      sourceType: "TASK",
+      sourceId: `src_${suffix}`,
+      status: "READY"
+    }, false); // system generated
+
+    assert.equal(res.status, "REJECTED");
+    assert.equal(res.workOrder, undefined);
+
+    const checkDb = await prisma.workOrder.findFirst({
+      where: { title: `Empty objective ${suffix}` }
+    });
+    assert.equal(checkDb, null, "Rejected work order should not be in the database");
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("17. User-created REJECTED Work Order", async () => {
+  const suffix = `${Date.now()}-t17`;
+  try {
+    await assert.rejects(
+      async () => {
+        await createWorkOrder({
+          title: `Empty objective ${suffix}`,
+          objective: "",
+          sourceType: "TASK",
+          sourceId: `src_${suffix}`,
+          status: "READY"
+        }, true); // user action
+      },
+      /Validation failed/,
+      "User-created rejected work order should throw validation error"
+    );
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("18. Archived Status Rendering", async () => {
+  const suffix = `${Date.now()}-t18`;
+  try {
+    const res = await createWorkOrder({
+      title: `M13 Completion legacy ${suffix}`,
+      objective: "Validate implementation",
+      sourceType: "TASK",
+      sourceId: `src_${suffix}`,
+      status: "READY"
+    });
+
+    assert.equal(res.status, "CREATED");
+    assert.equal(res.workOrder?.status, "ARCHIVED");
+    assert.ok(res.workOrder?.archivedAt);
+    assert.equal(res.workOrder?.workQuality, "COMPLETED_ARCHIVE");
+
+    const fetched = await prisma.workOrder.findUnique({
+      where: { id: res.workOrder?.id }
+    });
+    assert.ok(fetched);
+    assert.equal(fetched.status, "ARCHIVED");
   } finally {
     await cleanup(suffix);
   }

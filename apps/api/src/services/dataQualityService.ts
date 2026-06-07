@@ -127,8 +127,12 @@ export async function getHumanReadableSource(record: QualityRecord): Promise<Sou
   }
 }
 
+export function classifyWorkOrder(record: QualityRecord): DataQuality {
+  return classifyRecord(record, "workOrder");
+}
+
 export async function enrichDataQuality<T extends QualityRecord>(
-  kind: "matter" | "notice" | "projectInboxItem" | "artifact",
+  kind: "matter" | "notice" | "projectInboxItem" | "artifact" | "workOrder",
   records: T[]
 ): Promise<Array<T & { dataQuality: DataQuality; dataQualityBadge: DataQualityBadge; humanReadableSource: string; sourceLink: SourceLink }>> {
   return Promise.all(records.map(async (record) => {
@@ -155,7 +159,7 @@ export function normalizeTitle(value: string): string {
   return value.toLowerCase().replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
 }
 
-function classifyByKind(kind: "matter" | "notice" | "projectInboxItem" | "artifact", record: QualityRecord): DataQuality {
+function classifyByKind(kind: "matter" | "notice" | "projectInboxItem" | "artifact" | "workOrder", record: QualityRecord): DataQuality {
   switch (kind) {
     case "matter":
       return classifyMatter(record);
@@ -165,10 +169,12 @@ function classifyByKind(kind: "matter" | "notice" | "projectInboxItem" | "artifa
       return classifyProjectInboxItem(record);
     case "artifact":
       return classifyArtifact(record);
+    case "workOrder":
+      return classifyWorkOrder(record);
   }
 }
 
-function classifyRecord(record: QualityRecord, kind?: "matter" | "notice" | "projectInboxItem" | "artifact"): DataQuality {
+function classifyRecord(record: QualityRecord, kind?: "matter" | "notice" | "projectInboxItem" | "artifact" | "workOrder"): DataQuality {
   const explicit = normalizeQuality(record.dataQuality);
   if (explicit === "TEST" || explicit === "TRUSTED") return explicit;
   if (record.isTestData) return "TEST";

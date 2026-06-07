@@ -282,6 +282,7 @@ export function DashboardPage() {
   
   const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
+  const [workOrdersHiddenCount, setWorkOrdersHiddenCount] = useState(0);
   const [handoffBriefs, setHandoffBriefs] = useState<HandoffBriefDto[]>([]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [projectInbox, setProjectInbox] = useState<ProjectInboxItemDto[]>([]);
@@ -292,7 +293,7 @@ export function DashboardPage() {
   useEffect(() => {
     Promise.all([
       api.secretaryBrief().catch(() => null),
-      api.workOrders().catch(() => ({ workOrders: [] })),
+      api.workOrders().catch(() => ({ workOrders: [], hiddenCount: 0 })),
       api.handoffBriefs().catch(() => ({ handoffBriefs: [] })),
       api.projects().catch(() => ({ projects: [] })),
       api.projectInbox({ status: "PENDING" }).catch(() => ({ inboxItems: [] })),
@@ -304,6 +305,7 @@ export function DashboardPage() {
       .then(([briefRes, ordersRes, handoffsRes, projectsRes, inboxRes, activitiesRes]) => {
         if (briefRes) setBrief(briefRes);
         setWorkOrders(ordersRes.workOrders);
+        setWorkOrdersHiddenCount(ordersRes.hiddenCount ?? 0);
         setHandoffBriefs(handoffsRes.handoffBriefs);
         setProjects(projectsRes.projects);
         setProjectInbox(inboxRes.inboxItems);
@@ -574,7 +576,12 @@ export function DashboardPage() {
           }
         >
           <div className="grid gap-4 sm:grid-cols-3 mb-6">
-            <StatCard className="bg-transparent border-none p-0" title="Open Orders" value={workOrders.filter((order) => ["DRAFT", "READY"].includes(order.status)).length} />
+            <StatCard 
+              className="bg-transparent border-none p-0" 
+              title="Open Orders" 
+              value={workOrders.filter((order) => ["DRAFT", "READY"].includes(order.status)).length} 
+              description={workOrdersHiddenCount > 0 ? `${workOrdersHiddenCount} archived legacy work orders hidden` : undefined}
+            />
             <StatCard className="bg-transparent border-none p-0" title="In Progress" value={workOrders.filter((order) => order.status === "IN_PROGRESS").length} />
             <StatCard className="bg-transparent border-none p-0" title="Needs Review" value={workOrders.filter((order) => order.status === "NEEDS_REVIEW").length} trend={workOrders.filter((order) => order.status === "NEEDS_REVIEW").length > 0 ? { value: "Review", isPositive: false } : undefined} />
           </div>

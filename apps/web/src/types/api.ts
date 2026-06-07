@@ -726,7 +726,7 @@ export type SecretaryBriefDto = {
 export type ExternalAgentType = "CLAUDE_CODE" | "CODEX" | "CLINE" | "KILO" | "ANTIGRAVITY" | "HERMES" | "OPENCODE" | "CUSTOM";
 export type ExternalAgentExecutionMode = "MANUAL_COPY_PASTE" | "CLI_MANUAL" | "API" | "FUTURE_AUTOMATED";
 export type ExternalAgentSafetyLevel = "LOW_RISK" | "MEDIUM_RISK" | "HIGH_RISK";
-export type WorkOrderStatus = "DRAFT" | "READY" | "IN_PROGRESS" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED";
+export type WorkOrderStatus = "DRAFT" | "READY" | "IN_PROGRESS" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED" | "ARCHIVED";
 export type WorkOrderPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type WorkSessionStatus = "STARTED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "INTERRUPTED";
 export type ImplementationTestResult = "NOT_RUN" | "PASSED" | "FAILED" | "PARTIAL";
@@ -821,6 +821,17 @@ export type WorkOrderDto = {
   priority: WorkOrderPriority;
   createdByUserId: string | null;
   createdByAgentId: string | null;
+  isTestData: boolean;
+  createdBySystem: boolean;
+  dataQuality?: DataQuality | null;
+  workQuality?: string | null;
+  archiveReason?: string | null;
+  archivedAt?: string | null;
+  traceId?: string | null;
+  provenance?: Record<string, unknown> | null;
+  dataQualityBadge?: DataQualityBadgeDto;
+  humanReadableSource?: string;
+  sourceLink?: SourceLinkDto;
   createdAt: string;
   updatedAt: string;
   assignedExternalAgent?: ExternalAgentDto | null;
@@ -845,6 +856,10 @@ export type WorkOrderPayload = {
   assignedExternalAgentId?: string | null;
   status?: WorkOrderStatus;
   priority?: WorkOrderPriority;
+  dataQuality?: string | null;
+  workQuality?: string | null;
+  archiveReason?: string | null;
+  archivedAt?: string | null;
 };
 
 export type ImplementationReportPayload = {

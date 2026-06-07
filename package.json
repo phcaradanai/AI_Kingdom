@@ -25,7 +25,9 @@
     "data:cleanup-test-data": "npm run data:cleanup-test-data --workspace @ai-kingdom/api",
     "data:archive-low-quality-inbox": "npm run data:archive-low-quality-inbox --workspace @ai-kingdom/api",
     "data:inspect-low-value": "npm run data:inspect-low-value --workspace @ai-kingdom/api",
-    "data:archive-low-value": "npm run data:archive-low-value --workspace @ai-kingdom/api"
+    "data:archive-low-value": "npm run data:archive-low-value --workspace @ai-kingdom/api",
+    "data:inspect-work-orders": "npm run data:inspect-work-orders --workspace @ai-kingdom/api",
+    "data:archive-low-value-work-orders": "npm run data:archive-low-value-work-orders --workspace @ai-kingdom/api"
   },
   "devDependencies": {
     "typescript": "^5.6.3"

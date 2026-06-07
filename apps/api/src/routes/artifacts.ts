@@ -56,8 +56,12 @@ router.get("/", async (req, res, next) => {
 router.post("/", requireRole("KING", "CROWN_PRINCE", "MINISTER"), async (req, res, next) => {
   try {
     const payload = artifactSchema.parse(req.body);
-    const artifact = await createArtifact(payload);
-    res.status(201).json({ artifact });
+    const result = await createArtifact(payload, true);
+    if (result.status === "REJECTED") {
+      res.status(400).json({ error: result.reason });
+      return;
+    }
+    res.status(201).json({ artifact: result.artifact });
   } catch (error) {
     next(error);
   }

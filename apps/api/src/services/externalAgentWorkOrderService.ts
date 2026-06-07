@@ -6,6 +6,7 @@ import { getCharter, getVision } from "./charterService.js";
 import { isSensitive } from "./memoryService.js";
 import { buildProjectContext } from "./projectContextService.js";
 import { createArtifact } from "./projectService.js";
+import { evaluateRecordValue } from "./dataValueGateService.js";
 
 type WorkOrderWithRelations = WorkOrder & {
   assignedExternalAgent?: ExternalAgent | null;
@@ -120,29 +121,27 @@ export async function generateWorkOrderFromTask(taskId: string, userId?: string 
     task.reports.length ? `Related reports: ${task.reports.map((report) => report.title).join(", ")}` : ""
   ].filter(Boolean).join("\n\n");
 
-  return prisma.workOrder.create({
-    data: {
-      title: `Work Order: ${task.title}`,
-      objective: redact(task.command),
-      context,
-      instructions: "Implement the requested work in the target project. Keep changes scoped, validate them, and report results in the required format.",
-      constraints: defaultConstraints(),
-      acceptanceCriteria: [
-        "Requested behavior is implemented.",
-        "Existing Kingdom architecture and conventions are preserved.",
-        "No API keys, tokens, passwords, or secrets are exposed.",
-        "Validation commands are run or clearly reported as not run."
-      ],
-      validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
-      projectId: task.projectId,
-      targetProject: task.projectId ? null : "AI Kingdom",
-      sourceType: "TASK",
-      sourceId: task.id,
-      status: "READY",
-      priority: task.mode === "BUILD" ? "HIGH" : "MEDIUM",
-      createdByUserId: userId ?? task.createdBy
-    }
-  });
+  return createWorkOrder({
+    title: `Work Order: ${task.title}`,
+    objective: redact(task.command),
+    context,
+    instructions: "Implement the requested work in the target project. Keep changes scoped, validate them, and report results in the required format.",
+    constraints: defaultConstraints(),
+    acceptanceCriteria: [
+      "Requested behavior is implemented.",
+      "Existing Kingdom architecture and conventions are preserved.",
+      "No API keys, tokens, passwords, or secrets are exposed.",
+      "Validation commands are run or clearly reported as not run."
+    ],
+    validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
+    projectId: task.projectId,
+    targetProject: task.projectId ? null : "AI Kingdom",
+    sourceType: "TASK",
+    sourceId: task.id,
+    status: "READY",
+    priority: task.mode === "BUILD" ? "HIGH" : "MEDIUM",
+    createdByUserId: userId ?? task.createdBy
+  }, false);
 }
 
 export async function generateWorkOrderFromMatter(matterId: string, userId?: string | null) {
@@ -153,36 +152,34 @@ export async function generateWorkOrderFromMatter(matterId: string, userId?: str
     ? await prisma.notice.findMany({ where: { sourceType: matter.sourceType, sourceId: matter.sourceId }, take: 5, orderBy: { createdAt: "desc" } })
     : [];
 
-  return prisma.workOrder.create({
-    data: {
-      title: `Matter Work Order: ${matter.title}`,
-      objective: redact(matter.description),
-      context: [
-        `Matter: ${matter.title}`,
-        `Category: ${matter.category}`,
-        `Priority: ${matter.priority}`,
-        `Status: ${matter.status}`,
-        `Description: ${redact(matter.description)}`,
-        relatedNotices.length ? `Related notices: ${relatedNotices.map((notice) => notice.title).join(", ")}` : ""
-      ].filter(Boolean).join("\n\n"),
-      instructions: "Resolve or advance this matter with a scoped implementation or investigation. Preserve Kingdom source-of-truth decisions.",
-      constraints: defaultConstraints(),
-      acceptanceCriteria: [
-        "Matter is addressed or clearly advanced.",
-        "Risks and remaining work are documented.",
-        "No secrets are exposed.",
-        "Validation commands are run or clearly reported as not run."
-      ],
-      validationCommands: ["npm run typecheck", "npm run test"],
-      projectId: matter.projectId,
-      targetProject: matter.projectId ? null : "AI Kingdom",
-      sourceType: "MATTER",
-      sourceId: matter.id,
-      status: "READY",
-      priority: matter.priority,
-      createdByUserId: userId ?? null
-    }
-  });
+  return createWorkOrder({
+    title: `Matter Work Order: ${matter.title}`,
+    objective: redact(matter.description),
+    context: [
+      `Matter: ${matter.title}`,
+      `Category: ${matter.category}`,
+      `Priority: ${matter.priority}`,
+      `Status: ${matter.status}`,
+      `Description: ${redact(matter.description)}`,
+      relatedNotices.length ? `Related notices: ${relatedNotices.map((notice) => notice.title).join(", ")}` : ""
+    ].filter(Boolean).join("\n\n"),
+    instructions: "Resolve or advance this matter with a scoped implementation or investigation. Preserve Kingdom source-of-truth decisions.",
+    constraints: defaultConstraints(),
+    acceptanceCriteria: [
+      "Matter is addressed or clearly advanced.",
+      "Risks and remaining work are documented.",
+      "No secrets are exposed.",
+      "Validation commands are run or clearly reported as not run."
+    ],
+    validationCommands: ["npm run typecheck", "npm run test"],
+    projectId: matter.projectId,
+    targetProject: matter.projectId ? null : "AI Kingdom",
+    sourceType: "MATTER",
+    sourceId: matter.id,
+    status: "READY",
+    priority: matter.priority,
+    createdByUserId: userId ?? null
+  }, false);
 }
 
 export async function buildExternalAgentPrompt(workOrderId: string, externalAgentId: string): Promise<string> {
@@ -500,4 +497,101 @@ function notFound(message: string) {
   const error = new Error(message);
   error.name = "NotFoundError";
   return error;
+}
+
+export type CreateWorkOrderResult = {
+  status: "CREATED" | "EXISTING" | "PREVIEW_ONLY" | "REJECTED";
+  workOrder?: WorkOrder;
+  reason?: string;
+};
+
+export async function createWorkOrder(
+  data: any,
+  explicitUserAction = false
+): Promise<CreateWorkOrderResult> {
+  const title = (data.title ?? "").trim();
+  const objective = (data.objective ?? "").trim();
+  const instructions = (data.instructions ?? "").trim();
+  const status = data.status ?? "DRAFT";
+  const sourceType = data.sourceType ?? null;
+  const sourceId = data.sourceId ?? null;
+  const projectId = data.projectId ?? null;
+  const isTestData = data.isTestData ?? false;
+
+  const createdBySystem = Boolean(sourceType || sourceId || data.traceId || data.createdByAgentId);
+
+  if (sourceType && sourceId && title) {
+    const titleNorm = title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const existing = await prisma.workOrder.findFirst({
+      where: {
+        sourceType,
+        sourceId,
+        status: { notIn: ["ARCHIVED", "CANCELLED", "FAILED"] }
+      }
+    });
+    if (existing && existing.title.toLowerCase().replace(/[^a-z0-9]+/g, "") === titleNorm) {
+      return { status: "EXISTING", workOrder: existing };
+    }
+  }
+
+  const gateDecision = await evaluateRecordValue({
+    recordType: "workOrder",
+    origin: isTestData ? "TEST" : (createdBySystem ? "SYSTEM_GENERATED" : "USER_CREATED"),
+    title,
+    content: objective,
+    sourceType,
+    sourceId,
+    projectId,
+    metadata: {
+      instructions,
+      status,
+      assignedExternalAgentId: data.assignedExternalAgentId,
+      id: data.id,
+      isTestData
+    }
+  });
+
+  if (gateDecision.decision === "REJECT") {
+    if (explicitUserAction) {
+      throw new Error("Validation failed for user-created WorkOrder: " + gateDecision.reason);
+    }
+    return { status: "REJECTED", reason: gateDecision.reason };
+  }
+
+  if (gateDecision.decision === "PREVIEW_ONLY") {
+    if (explicitUserAction) {
+      const workOrder = await prisma.workOrder.create({
+        data: {
+          ...data,
+          status: "DRAFT",
+          dataQuality: "REVIEW_REQUIRED",
+          workQuality: "DEBUG_ONLY",
+          createdBySystem
+        }
+      });
+      return { status: "CREATED", workOrder };
+    }
+    return { status: "PREVIEW_ONLY", reason: gateDecision.reason };
+  }
+
+  const dataQuality = gateDecision.sourceTrust === "TEST" ? "TEST" : (gateDecision.sourceTrust === "TRUSTED" ? "TRUSTED" : "REVIEW_REQUIRED");
+  const workQuality = gateDecision.quality === "JUNK" ? "JUNK" : (gateDecision.decision === "ARCHIVE" ? "COMPLETED_ARCHIVE" : "ACTIONABLE");
+
+  const finalStatus = gateDecision.decision === "ARCHIVE" ? "ARCHIVED" : status;
+  const archivedAt = finalStatus === "ARCHIVED" ? new Date() : null;
+  const archiveReason = finalStatus === "ARCHIVED" ? gateDecision.reason : null;
+
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      ...data,
+      status: finalStatus,
+      dataQuality,
+      workQuality,
+      archiveReason,
+      archivedAt,
+      createdBySystem
+    }
+  });
+
+  return { status: "CREATED", workOrder };
 }

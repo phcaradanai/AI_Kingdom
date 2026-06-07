@@ -5,7 +5,7 @@ import { getBooleanSetting } from "./settingsService.js";
 export type DataValueGateOrigin = "USER_CREATED" | "SYSTEM_GENERATED" | "SEED" | "TEST" | "IMPORT";
 
 export type DataValueGateInput = {
-  recordType: "projectInboxItem" | "matter" | "notice" | "artifact" | "knowledgeCandidate";
+  recordType: "projectInboxItem" | "matter" | "notice" | "artifact" | "knowledgeCandidate" | "workOrder";
   origin: DataValueGateOrigin;
   explicitUserAction?: boolean;
   actorUserId?: string;
@@ -23,7 +23,7 @@ export type DataValueGateInput = {
 
 export type DataValueDecision = {
   decision: "PERSIST" | "PREVIEW_ONLY" | "ARCHIVE" | "REJECT";
-  quality: "HIGH" | "MEDIUM" | "LOW" | "JUNK";
+  quality: "HIGH" | "MEDIUM" | "LOW" | "JUNK" | "LEGACY";
   reason: string;
   requiredAction?: string;
   retentionPolicy?: string;
@@ -78,7 +78,8 @@ export async function evaluateRecordValue(input: DataValueGateInput): Promise<Da
     const isBypassableType =
       input.recordType === "matter" ||
       input.recordType === "notice" ||
-      input.recordType === "artifact";
+      input.recordType === "artifact" ||
+      input.recordType === "workOrder";
 
     if (isBypassableType) {
       return {
@@ -103,6 +104,8 @@ export async function evaluateRecordValue(input: DataValueGateInput): Promise<Da
       return evaluateArtifact(input, sourceTrust);
     case "knowledgeCandidate":
       return evaluateKnowledgeCandidate(input, sourceTrust);
+    case "workOrder":
+      return evaluateWorkOrder(input, sourceTrust);
     default:
       throw new Error(`Unsupported record type in Data Value Gate: ${(input as any).recordType}`);
   }
@@ -660,6 +663,151 @@ async function evaluateKnowledgeCandidate(
     quality: "LOW",
     reason: "Candidate has unknown category or lacks durable value.",
     retentionPolicy: "SHORT_TERM_REVIEW",
+    sourceTrust
+  };
+}
+
+async function evaluateWorkOrder(
+  input: DataValueGateInput,
+  sourceTrust: "TRUSTED" | "REVIEW_REQUIRED" | "UNTRUSTED" | "TEST"
+): Promise<DataValueDecision> {
+  const title = (input.title ?? "").trim();
+  const objective = (input.content ?? "").trim();
+  const instructions = (input.metadata?.instructions ?? "").trim();
+  const status = input.metadata?.status ?? "DRAFT";
+  const sourceType = input.sourceType ?? null;
+  const sourceId = input.sourceId ?? null;
+  const projectId = input.projectId ?? null;
+  const assignedExternalAgentId = input.metadata?.assignedExternalAgentId ?? null;
+  const createdAt = input.metadata?.createdAt ? new Date(input.metadata.createdAt) : null;
+
+  // 1. check if test or debug (JUNK/TEST)
+  const isTest = 
+    sourceTrust === "TEST" || 
+    isTestOrDebugText(title) || 
+    isTestOrDebugText(objective) || 
+    isTestOrDebugText(instructions) ||
+    (sourceType && isTestOrDebugText(sourceType)) ||
+    (sourceId && isTestOrDebugText(sourceId)) ||
+    (input.metadata?.isTestData);
+
+  if (isTest) {
+    return {
+      decision: "REJECT",
+      quality: "JUNK",
+      reason: "Work order is test or debug data.",
+      sourceTrust
+    };
+  }
+
+  // 2. check duplicate with same normalized title + sourceType/sourceId
+  if (sourceType && sourceId && title) {
+    const titleNorm = title.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    const existing = await prisma.workOrder.findMany({
+      where: {
+        sourceType,
+        sourceId,
+        id: input.metadata?.id ? { not: input.metadata.id } : undefined
+      }
+    });
+    const hasExactDup = existing.some(
+      (wo) => wo.title.toLowerCase().replace(/[^a-z0-9]+/g, "") === titleNorm
+    );
+    if (hasExactDup) {
+      return {
+        decision: "REJECT",
+        quality: "JUNK",
+        reason: "Duplicate work order with same normalized title and source.",
+        sourceTrust
+      };
+    }
+  }
+
+  // 3. ARCHIVE check: Already completed/verified (completed, failed, cancelled, archived)
+  if (["COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"].includes(status)) {
+    return {
+      decision: "ARCHIVE",
+      quality: "LEGACY",
+      reason: `Work order is in terminal status: ${status}.`,
+      sourceTrust
+    };
+  }
+
+  // 4. ARCHIVE check: old manual verification work with generated/test title
+  const isLegacyTestTitle = /^(m13 rbac|m13 completion|manual m13 verification|handoff:\s*manual m13 verification|m14\s+.*|m13\s+.*)/i.test(title);
+  if (isLegacyTestTitle) {
+    return {
+      decision: "ARCHIVE",
+      quality: "LEGACY",
+      reason: "Work order has a legacy generated or verification style title.",
+      sourceTrust
+    };
+  }
+
+  // 5. ARCHIVE check: READY but unassigned and stale (no action/assigned agent)
+  if (status === "READY" && !assignedExternalAgentId && createdAt) {
+    const ageInMs = Date.now() - createdAt.getTime();
+    const sevenDaysInMs = 7 * 24 * 60 * 60 * 1000;
+    if (ageInMs > sevenDaysInMs) {
+      return {
+        decision: "ARCHIVE",
+        quality: "LEGACY",
+        reason: "Work order is READY but unassigned and stale (more than 7 days old).",
+        sourceTrust
+      };
+    }
+  }
+
+  // 6. ARCHIVE check: duplicate handoff/report work
+  if (input.metadata?.id) {
+    const existingReport = await prisma.implementationReport.findFirst({
+      where: { workOrderId: input.metadata.id }
+    });
+    if (existingReport && status !== "NEEDS_REVIEW") {
+      return {
+        decision: "ARCHIVE",
+        quality: "LEGACY",
+        reason: "Implementation report already exists and no action remains.",
+        sourceTrust
+      };
+    }
+  }
+
+  // 7. REJECT / JUNK: no source, no project, no actionable instruction
+  if (!sourceType && !sourceId && !projectId && (!objective || objective.trim().length === 0)) {
+    return {
+      decision: "REJECT",
+      quality: "JUNK",
+      reason: "Work order has no source, no project, and no actionable instruction.",
+      sourceTrust
+    };
+  }
+
+  // 8. REJECT / JUNK: empty objective
+  if (!objective || objective.trim().length === 0) {
+    return {
+      decision: "REJECT",
+      quality: "JUNK",
+      reason: "Work order objective is empty.",
+      sourceTrust
+    };
+  }
+
+  // 9. PREVIEW_ONLY: generated candidate not explicitly confirmed
+  if (input.origin === "SYSTEM_GENERATED" && status === "DRAFT") {
+    return {
+      decision: "PREVIEW_ONLY",
+      quality: "LOW",
+      reason: "Generated candidate work order not explicitly confirmed.",
+      sourceTrust
+    };
+  }
+
+  // 10. PERSIST / ACTIONABLE
+  return {
+    decision: "PERSIST",
+    quality: "HIGH",
+    reason: "Work order meets quality standards.",
     sourceTrust
   };
 }

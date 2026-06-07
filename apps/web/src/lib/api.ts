@@ -223,22 +223,36 @@ export const api = {
   archiveDuplicateArtifact: (id: string) =>
     apiRequest<{ artifact: ArtifactDto }>(`/artifacts/${id}/archive-duplicate`, { method: "PATCH" }),
   deleteArtifact: (id: string) => apiRequest<void>(`/artifacts/${id}`, { method: "DELETE" }),
-  workOrders: (params?: { status?: string; priority?: string; externalAgentId?: string }) => {
+  workOrders: (params?: {
+    status?: string;
+    priority?: string;
+    externalAgentId?: string;
+    includeArchived?: boolean;
+    includeLegacy?: boolean;
+    includeTestData?: boolean;
+    quality?: string;
+  }) => {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);
     if (params?.priority) search.set("priority", params.priority);
     if (params?.externalAgentId) search.set("externalAgentId", params.externalAgentId);
+    if (params?.includeArchived) search.set("includeArchived", "true");
+    if (params?.includeLegacy) search.set("includeLegacy", "true");
+    if (params?.includeTestData) search.set("includeTestData", "true");
+    if (params?.quality) search.set("quality", params.quality);
     const suffix = search.toString() ? `?${search.toString()}` : "";
-    return apiRequest<{ workOrders: WorkOrderDto[] }>(`/work-orders${suffix}`);
+    return apiRequest<{ workOrders: WorkOrderDto[]; hiddenCount: number }>(`/work-orders${suffix}`);
   },
   workOrder: (id: string) => apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}`),
   createWorkOrder: (payload: WorkOrderPayload) =>
-    apiRequest<{ workOrder: WorkOrderDto }>("/work-orders", { method: "POST", body: JSON.stringify(payload) }),
+    apiRequest<{ workOrder?: WorkOrderDto; status?: "PREVIEW_ONLY" | "REJECTED"; reason?: string }>("/work-orders", { method: "POST", body: JSON.stringify(payload) }),
   updateWorkOrder: (id: string, payload: Partial<WorkOrderPayload>) =>
     apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteWorkOrder: (id: string) => apiRequest<void>(`/work-orders/${id}`, { method: "DELETE" }),
-  workOrderFromTask: (taskId: string) => apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/from-task/${taskId}`, { method: "POST" }),
-  workOrderFromMatter: (matterId: string) => apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/from-matter/${matterId}`, { method: "POST" }),
+  workOrderFromTask: (taskId: string) =>
+    apiRequest<{ workOrder?: WorkOrderDto; status?: "PREVIEW_ONLY" | "REJECTED"; reason?: string }>(`/work-orders/from-task/${taskId}`, { method: "POST" }),
+  workOrderFromMatter: (matterId: string) =>
+    apiRequest<{ workOrder?: WorkOrderDto; status?: "PREVIEW_ONLY" | "REJECTED"; reason?: string }>(`/work-orders/from-matter/${matterId}`, { method: "POST" }),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>
     apiRequest<{ prompt: string }>(`/work-orders/${id}/build-prompt/${externalAgentId}`, { method: "POST" }),
   createHandoffBrief: (id: string) => apiRequest<{ handoffBrief: HandoffBriefDto }>(`/work-orders/${id}/handoff`, { method: "POST" }),

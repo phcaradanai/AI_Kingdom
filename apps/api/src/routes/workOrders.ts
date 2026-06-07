@@ -3,12 +3,14 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { requireRole } from "../middleware/rbac.js";
 import { auditLog } from "../services/auditService.js";
+import { enrichDataQuality } from "../services/dataQualityService.js";
 import {
   buildExternalAgentPrompt,
   createHandoffBrief,
   createWorkOrderCompletionReport,
   generateWorkOrderFromMatter,
-  generateWorkOrderFromTask
+  generateWorkOrderFromTask,
+  createWorkOrder
 } from "../services/externalAgentWorkOrderService.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
 
@@ -28,8 +30,12 @@ const workOrderSchema = z.object({
   sourceType: z.string().trim().max(80).optional().nullable(),
   sourceId: z.string().trim().max(120).optional().nullable(),
   assignedExternalAgentId: z.string().trim().max(120).optional().nullable(),
-  status: z.enum(["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED"]).default("DRAFT"),
-  priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM")
+  status: z.enum(["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"]).default("DRAFT"),
+  priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
+  dataQuality: z.string().trim().max(80).optional().nullable(),
+  workQuality: z.string().trim().max(80).optional().nullable(),
+  archiveReason: z.string().trim().max(500).optional().nullable(),
+  archivedAt: z.string().trim().optional().nullable()
 });
 
 const include = {
@@ -44,7 +50,12 @@ router.get("/", async (req, res, next) => {
     const status = typeof req.query.status === "string" ? req.query.status : undefined;
     const priority = typeof req.query.priority === "string" ? req.query.priority : undefined;
     const assignedExternalAgentId = typeof req.query.externalAgentId === "string" ? req.query.externalAgentId : undefined;
-    const workOrders = await prisma.workOrder.findMany({
+    const includeArchived = req.query.includeArchived === "true";
+    const includeLegacy = req.query.includeLegacy === "true";
+    const includeTestData = req.query.includeTestData === "true";
+    const qualityFilter = typeof req.query.quality === "string" ? req.query.quality : undefined;
+
+    const rawWorkOrders = await prisma.workOrder.findMany({
       where: {
         ...(status ? { status: status as never } : {}),
         ...(priority ? { priority: priority as never } : {}),
@@ -53,7 +64,32 @@ router.get("/", async (req, res, next) => {
       include,
       orderBy: [{ updatedAt: "desc" }]
     });
-    res.json({ workOrders });
+
+    const filtered = rawWorkOrders.filter((order) => {
+      if (qualityFilter) {
+        if (order.dataQuality !== qualityFilter && order.workQuality !== qualityFilter) {
+          return false;
+        }
+      }
+
+      // Default hides
+      if (!includeTestData && (order.isTestData || order.dataQuality === "TEST" || order.workQuality === "TEST" || order.workQuality === "JUNK" || order.workQuality === "DEBUG_ONLY")) {
+        return false;
+      }
+      if (!includeArchived && order.status === "ARCHIVED" && !status) {
+        return false;
+      }
+      if (!includeLegacy && (order.dataQuality === "LEGACY" || order.workQuality === "LEGACY" || order.workQuality === "COMPLETED_ARCHIVE")) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const hiddenCount = rawWorkOrders.length - filtered.length;
+    const enriched = await enrichDataQuality("workOrder", filtered);
+
+    res.json({ workOrders: enriched, hiddenCount });
   } catch (error) {
     next(error);
   }
@@ -66,7 +102,8 @@ router.get("/:id", async (req, res, next) => {
       res.status(404).json({ error: "Work order not found" });
       return;
     }
-    res.json({ workOrder });
+    const enriched = (await enrichDataQuality("workOrder", [workOrder]))[0];
+    res.json({ workOrder: enriched });
   } catch (error) {
     next(error);
   }
@@ -75,11 +112,17 @@ router.get("/:id", async (req, res, next) => {
 router.post("/", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
   try {
     const payload = workOrderSchema.parse(req.body);
-    const workOrder = await prisma.workOrder.create({
-      data: { ...payload, createdByUserId: req.user?.id },
-      include
-    });
-    if (!payload.projectId) {
+    const result = await createWorkOrder({ ...payload, createdByUserId: req.user?.id }, true);
+    if (result.status === "REJECTED") {
+      res.status(400).json({ error: result.reason, status: "REJECTED" });
+      return;
+    }
+    if (result.status === "PREVIEW_ONLY") {
+      res.status(200).json({ status: "PREVIEW_ONLY", reason: result.reason });
+      return;
+    }
+    const workOrder = result.workOrder;
+    if (workOrder && !payload.projectId) {
       await routeProjectForSource({
         title: workOrder.title,
         content: `${workOrder.objective}\n${workOrder.context}\n${workOrder.instructions}`,
@@ -87,8 +130,10 @@ router.post("/", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => 
         sourceId: workOrder.id
       }).catch(() => undefined);
     }
-    await auditLog({ userId: req.user?.id, action: "create_work_order", resourceType: "work_order", resourceId: workOrder.id, metadata: { status: workOrder.status } });
-    const routedWorkOrder = await prisma.workOrder.findUnique({ where: { id: workOrder.id }, include });
+    if (workOrder) {
+      await auditLog({ userId: req.user?.id, action: "create_work_order", resourceType: "work_order", resourceId: workOrder.id, metadata: { status: workOrder.status } });
+    }
+    const routedWorkOrder = workOrder ? await prisma.workOrder.findUnique({ where: { id: workOrder.id }, include }) : null;
     res.status(201).json({ workOrder: routedWorkOrder ?? workOrder });
   } catch (error) {
     next(error);
@@ -103,7 +148,23 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
       return;
     }
     const payload = workOrderSchema.partial().parse(req.body);
-    const workOrder = await prisma.workOrder.update({ where: { id: existing.id }, data: payload, include });
+    
+    // Update dataQuality and workQuality concepts, archive properties if marked ARCHIVED
+    const finalStatus = payload.status ?? existing.status;
+    const archivedAt = finalStatus === "ARCHIVED" ? (existing.archivedAt ?? new Date()) : existing.archivedAt;
+    const archiveReason = finalStatus === "ARCHIVED" ? (payload.constraints || existing.archiveReason || "Manually archived") : existing.archiveReason;
+    const workQuality = finalStatus === "ARCHIVED" ? "COMPLETED_ARCHIVE" : existing.workQuality;
+
+    const workOrder = await prisma.workOrder.update({
+      where: { id: existing.id },
+      data: {
+        ...payload,
+        archivedAt,
+        archiveReason,
+        workQuality
+      },
+      include
+    });
     if (payload.status === "COMPLETED") {
       await createWorkOrderCompletionReport(workOrder.id);
     }
@@ -132,8 +193,19 @@ router.delete("/:id", requireRole("KING"), async (req, res, next) => {
 router.post("/from-task/:taskId", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
   try {
     const { taskId } = req.params as { taskId: string };
-    const workOrder = await generateWorkOrderFromTask(taskId, req.user?.id);
-    await auditLog({ userId: req.user?.id, action: "create_work_order_from_task", resourceType: "work_order", resourceId: workOrder.id, metadata: { taskId } });
+    const result = await generateWorkOrderFromTask(taskId, req.user?.id);
+    if (result.status === "REJECTED") {
+      res.status(400).json({ error: result.reason, status: "REJECTED" });
+      return;
+    }
+    if (result.status === "PREVIEW_ONLY") {
+      res.status(200).json({ status: "PREVIEW_ONLY", reason: result.reason });
+      return;
+    }
+    const workOrder = result.workOrder;
+    if (workOrder) {
+      await auditLog({ userId: req.user?.id, action: "create_work_order_from_task", resourceType: "work_order", resourceId: workOrder.id, metadata: { taskId } });
+    }
     res.status(201).json({ workOrder });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
@@ -147,8 +219,19 @@ router.post("/from-task/:taskId", requireRole("KING", "CROWN_PRINCE"), async (re
 router.post("/from-matter/:matterId", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
   try {
     const { matterId } = req.params as { matterId: string };
-    const workOrder = await generateWorkOrderFromMatter(matterId, req.user?.id);
-    await auditLog({ userId: req.user?.id, action: "create_work_order_from_matter", resourceType: "work_order", resourceId: workOrder.id, metadata: { matterId } });
+    const result = await generateWorkOrderFromMatter(matterId, req.user?.id);
+    if (result.status === "REJECTED") {
+      res.status(400).json({ error: result.reason, status: "REJECTED" });
+      return;
+    }
+    if (result.status === "PREVIEW_ONLY") {
+      res.status(200).json({ status: "PREVIEW_ONLY", reason: result.reason });
+      return;
+    }
+    const workOrder = result.workOrder;
+    if (workOrder) {
+      await auditLog({ userId: req.user?.id, action: "create_work_order_from_matter", resourceType: "work_order", resourceId: workOrder.id, metadata: { matterId } });
+    }
     res.status(201).json({ workOrder });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {

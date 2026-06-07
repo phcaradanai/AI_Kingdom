@@ -179,6 +179,7 @@ enum WorkOrderStatus {
   COMPLETED
   FAILED
   CANCELLED
+  ARCHIVED
 }
 
 enum WorkOrderPriority {
@@ -497,6 +498,14 @@ model WorkOrder {
   priority                WorkOrderPriority      @default(MEDIUM)
   createdByUserId         String?
   createdByAgentId        String?
+  isTestData              Boolean                @default(false)
+  createdBySystem         Boolean                @default(false)
+  dataQuality             String?
+  workQuality             String?
+  archiveReason           String?
+  archivedAt              DateTime?
+  traceId                 String?
+  provenance              Json?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   project                 Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)

@@ -87,7 +87,9 @@ test("generate work order from task", async () => {
   });
 
   try {
-    const workOrder = await generateWorkOrderFromTask(task.id, user.id);
+    const result = await generateWorkOrderFromTask(task.id, user.id);
+    assert.equal(result.status, "CREATED");
+    const workOrder = result.workOrder!;
     assert.equal(workOrder.sourceType, "TASK");
     assert.equal(workOrder.sourceId, task.id);
     assert.equal(workOrder.status, "READY");
@@ -106,7 +108,9 @@ test("generate work order from matter", async () => {
   });
 
   try {
-    const workOrder = await generateWorkOrderFromMatter(matter.id, user.id);
+    const result = await generateWorkOrderFromMatter(matter.id, user.id);
+    assert.equal(result.status, "CREATED");
+    const workOrder = result.workOrder!;
     assert.equal(workOrder.sourceType, "MATTER");
     assert.equal(workOrder.sourceId, matter.id);
     assert.equal(workOrder.priority, "HIGH");

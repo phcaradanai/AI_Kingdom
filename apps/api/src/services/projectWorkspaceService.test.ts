@@ -167,7 +167,8 @@ test("task matter work order and artifact can link to project", async () => {
   const task = await prisma.task.create({ data: { projectId: project.id, createdBy: user.id, title: "Godot task", command: "Tune wave pathing.", mode: "BUILD", status: "PENDING" } });
   const matter = await prisma.matter.create({ data: { projectId: project.id, title: "Godot matter", description: "Review vfx performance.", priority: "HIGH", category: "PRODUCT" } });
   const workOrder = await prisma.workOrder.create({ data: { projectId: project.id, title: "Godot work order", objective: "Implement tower balance.", status: "READY", createdByUserId: user.id } });
-  const artifact = await createArtifact({ projectId: project.id, title: "Godot architecture note", type: "ARCHITECTURE_NOTE", content: "Keep pathing state compact.", tags: ["godot"] });
+  const result = await createArtifact({ projectId: project.id, title: "Godot architecture note", type: "ARCHITECTURE_NOTE", content: "Keep pathing state compact.", tags: ["godot"] });
+  const artifact = result.artifact;
 
   try {
     assert.equal(task.projectId, project.id);
@@ -185,14 +186,14 @@ test("task matter work order and artifact can link to project", async () => {
 
 test("createArtifact does not create duplicate for same normalized title type and source", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  const first = await createArtifact({
+  const firstRes = await createArtifact({
     title: `Duplicate artifact ${suffix}`,
     type: "IMPLEMENTATION_REPORT",
     content: "first",
     sourceType: "WORK_ORDER",
     sourceId: suffix
   });
-  const second = await createArtifact({
+  const secondRes = await createArtifact({
     title: `Duplicate   Artifact ${suffix}`,
     type: "IMPLEMENTATION_REPORT",
     content: "second",
@@ -200,7 +201,7 @@ test("createArtifact does not create duplicate for same normalized title type an
     sourceId: suffix
   });
   try {
-    assert.equal(first!.id, second!.id);
+    assert.equal(firstRes.artifact!.id, secondRes.artifact!.id);
   } finally {
     await prisma.artifact.deleteMany({ where: { sourceType: "WORK_ORDER", sourceId: suffix } });
   }
@@ -212,13 +213,14 @@ test("GET /api/artifacts returns source links where available", async () => {
   const workOrder = await prisma.workOrder.create({
     data: { title: "Artifact source work order", objective: "Test source label", status: "READY", createdByUserId: user.id }
   });
-  const artifact = await createArtifact({
+  const result = await createArtifact({
     title: "Artifact with source link",
     type: "SPEC",
     content: "source link test",
     sourceType: "WORK_ORDER",
     sourceId: workOrder.id
   });
+  const artifact = result.artifact;
   try {
     await withServer(async (baseUrl) => {
       const res = await fetch(`${baseUrl}/api/artifacts`, { headers: { Authorization: `Bearer ${token}` } });

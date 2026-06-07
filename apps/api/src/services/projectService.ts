@@ -89,16 +89,25 @@ export async function getProjectOverview(projectId: string) {
   return { project, counts: { tasks, matters, workOrders, reports, memories, artifacts, criticalMatters } };
 }
 
-export async function createArtifact(input: {
-  projectId?: string | null;
-  title: string;
-  type?: ArtifactType;
-  content: string;
-  sourceType?: string | null;
-  sourceId?: string | null;
-  tags?: string[];
-  traceId?: string | null;
-}) {
+export type CreateArtifactResult = {
+  status: "CREATED" | "EXISTING" | "PREVIEW_ONLY" | "REJECTED";
+  artifact?: any;
+  reason?: string;
+};
+
+export async function createArtifact(
+  input: {
+    projectId?: string | null;
+    title: string;
+    type?: ArtifactType;
+    content: string;
+    sourceType?: string | null;
+    sourceId?: string | null;
+    tags?: string[];
+    traceId?: string | null;
+  },
+  explicitUserAction = false
+): Promise<CreateArtifactResult> {
   if (isSensitive(input.content) || isSensitive(input.title)) {
     throw new Error("Artifact appears to contain sensitive content");
   }
@@ -122,17 +131,19 @@ export async function createArtifact(input: {
   });
 
   if (gateDecision.decision === "REJECT" || gateDecision.decision === "ARCHIVE") {
-    if (!createdBySystem) {
+    if (explicitUserAction) {
       throw new Error(gateDecision.reason);
     }
-    return null;
+    return { status: "REJECTED", reason: gateDecision.reason };
   }
 
   const sameSource = await prisma.artifact.findMany({
     where: { sourceType, sourceId, type }
   });
   const existing = sameSource.find((artifact) => normalizeTitle(artifact.title) === normalizeTitle(input.title));
-  if (existing) return existing;
+  if (existing) {
+    return { status: "EXISTING", artifact: existing };
+  }
 
   const dataQuality = classifyArtifact({
     title: input.title,
@@ -142,7 +153,8 @@ export async function createArtifact(input: {
     createdBySystem,
     dataSource: sourceType ?? undefined
   });
-  return prisma.artifact.create({
+  
+  const created = await prisma.artifact.create({
     data: {
       projectId: input.projectId ?? null,
       title: input.title,
@@ -158,6 +170,8 @@ export async function createArtifact(input: {
       provenance: sourceType || sourceId || input.traceId ? { sourceType, sourceId, traceId: input.traceId ?? null } : undefined
     }
   });
+
+  return { status: "CREATED", artifact: created };
 }
 
 export async function exportProjectObsidian(projectId: string) {
