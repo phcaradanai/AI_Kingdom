@@ -14,6 +14,11 @@ import type {
   ImplementationReportPayload,
   KingdomCharterDto,
   KingdomVisionDto,
+  LivingAgentProfileDto,
+  LivingAgentRelationsDto,
+  LivingAgentSummaryDto,
+  LivingAgentTimelineFilters,
+  LivingAgentTimelineItemDto,
   MatterCategory,
   MatterDto,
   MatterPriority,
@@ -290,6 +295,25 @@ export const api = {
   providerBalances: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances"),
   syncDeepSeekBalance: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances/deepseek/sync", { method: "POST" }),
   getCurrentAgentActivities: () => apiRequest<{ activities: CurrentAgentActivityDto[] }>("/agent-activities/current"),
+  getLivingAgents: () => apiRequest<{ agents: LivingAgentSummaryDto[] }>("/living-agents"),
+  getLivingAgentProfile: (agentId: string) => apiRequest<{ profile: LivingAgentProfileDto }>(`/living-agents/${encodeURIComponent(agentId)}`),
+  getLivingAgentTimeline: (agentId: string, filters: LivingAgentTimelineFilters = {}) => {
+    const search = new URLSearchParams();
+    if (filters.sourceType) search.set("sourceType", filters.sourceType);
+    if (filters.operation) search.set("operation", filters.operation);
+    if (filters.projectId) search.set("projectId", filters.projectId);
+    if (filters.attributionStatus) search.set("attributionStatus", filters.attributionStatus);
+    if (filters.from) search.set("from", filters.from);
+    if (filters.to) search.set("to", filters.to);
+    if (filters.limit) search.set("limit", String(filters.limit));
+    if (filters.cursor) search.set("cursor", filters.cursor);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ items: LivingAgentTimelineItemDto[]; nextCursor: string | null; total: number }>(
+      `/living-agents/${encodeURIComponent(agentId)}/timeline${suffix}`
+    );
+  },
+  getLivingAgentRelations: (agentId: string) =>
+    apiRequest<{ relations: LivingAgentRelationsDto }>(`/living-agents/${encodeURIComponent(agentId)}/relations`),
   usageTrace: (traceId: string) => apiRequest<UsageTraceDetailsDto>(`/usage-traces/${encodeURIComponent(traceId)}`),
   modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
   createModelPricing: (payload: ModelPricingPayload) =>

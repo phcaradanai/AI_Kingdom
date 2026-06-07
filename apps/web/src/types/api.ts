@@ -848,6 +848,128 @@ export type PricingWarningsDto = {
   estimatedModels: Array<{ provider: string; model: string; count: number; note?: string }>;
 };
 
+export type LivingAgentSummaryDto = {
+  id: string;
+  slug: string;
+  name: string;
+  title: string;
+  role: string;
+  specialty: string;
+  description: string;
+  isActive: boolean;
+  priority: number;
+  preferredProviderId: string | null;
+  defaultModel: string | null;
+  createdAt: string;
+  updatedAt: string;
+  currentStatus: string;
+  lastActivityAt: string | null;
+  lastActivityTitle: string | null;
+  totalCalls: number;
+  totalTokens: number;
+  totalEstimatedCostUSD: number;
+  tokensToday: number;
+  costToday: number;
+  trustedTraceCount: number;
+  partialTraceCount: number;
+  legacyUnattributedCount: number;
+  linkedProjectCount: number;
+  providerSummary: Array<{ provider: string; callCount: number; totalCostUSD: number }>;
+  modelSummary: Array<{ model: string; callCount: number }>;
+  topOperations: Array<{ operation: string; count: number }>;
+};
+
+export type LivingAgentTimelineItemDto = {
+  id: string;
+  type: "TRACE_STEP" | "TRACE" | "USAGE_RECORD" | "AGENT_ACTIVITY" | "COUNCIL_RESPONSE";
+  title: string;
+  detail: string | null;
+  timestamp: string;
+  status: string;
+  attributionStatus: string;
+  projectId: string | null;
+  taskId: string | null;
+  councilSessionId: string | null;
+  reportId: string | null;
+  usageRecordId: string | null;
+  traceId: string | null;
+  tokensUsed: number | null;
+  estimatedCostUSD: number | null;
+  provider: string | null;
+  model: string | null;
+  promptPreview: string | null;
+  responsePreview: string | null;
+  links: {
+    trace: string | null;
+    task: string | null;
+    council: string | null;
+    report: string | null;
+    project: string | null;
+    usageRecord: string | null;
+  };
+};
+
+export type LivingAgentProfileDto = {
+  agent: LivingAgentSummaryDto;
+  currentActivity: {
+    status: string;
+    activityType: string;
+    title: string;
+    detail: string | null;
+    providerName: string | null;
+    model: string | null;
+    startedAt: string | null;
+    isStale: boolean;
+  } | null;
+  usageSummary: {
+    totalCalls: number;
+    totalTokens: number;
+    totalEstimatedCostUSD: number;
+    tokensToday: number;
+    costToday: number;
+    callsToday: number;
+    byProvider: Array<{ provider: string; model: string; callCount: number; totalTokens: number; totalCostUSD: number }>;
+  };
+  traceSummary: {
+    trustedCount: number;
+    partialCount: number;
+    legacyUnattributedCount: number;
+    totalCount: number;
+  };
+  relatedProjects: Array<{ id: string; name: string }>;
+  relatedCouncilSessions: Array<{ id: string; taskId: string; status: string; createdAt: string }>;
+  relatedReports: Array<{ id: string; title: string; category: string; createdAt: string }>;
+  relatedMemories: Array<{ id: string; title: string; type: string; createdAt: string }>;
+  providerModelSummary: Array<{ provider: string; model: string; callCount: number; totalCostUSD: number }>;
+  auditSummary: Array<{ action: string; createdAt: string; metadata: unknown }>;
+  recentTimeline: LivingAgentTimelineItemDto[];
+};
+
+export type LivingAgentRelationsDto = {
+  nodes: {
+    agent: { id: string; slug: string; name: string; title: string; role: string };
+    projects: Array<{ id: string; name: string; status: string }>;
+    tasks: Array<{ id: string; title: string; mode: string; status: string }>;
+    councilSessions: Array<{ id: string; taskId: string; status: string; createdAt: string }>;
+    usageTraces: Array<{ id: string; traceId: string; operation: string; status: string; startedAt: string }>;
+    reports: Array<{ id: string; title: string; category: string; createdAt: string }>;
+    memories: Array<{ id: string; title: string; type: string; createdAt: string }>;
+    providers: Array<{ provider: string; model: string; callCount: number }>;
+  };
+  edges: Array<{ source: string; target: string; type: string; label: string }>;
+};
+
+export type LivingAgentTimelineFilters = {
+  sourceType?: string;
+  operation?: string;
+  projectId?: string;
+  attributionStatus?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  cursor?: string;
+};
+
 export type KingdomCharterDto = {
   id: string;
   version: string;

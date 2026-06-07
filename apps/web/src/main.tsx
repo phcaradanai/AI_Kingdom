@@ -28,6 +28,8 @@ import { ThroneRoomPage } from "@/pages/ThroneRoomPage";
 import { TreasuryPage } from "@/pages/TreasuryPage";
 import { UsageTracePage } from "@/pages/UsageTracePage";
 import { UsersPage } from "@/pages/UsersPage";
+import { LivingAgentsPage } from "@/pages/LivingAgentsPage";
+import { LivingAgentProfilePage } from "@/pages/LivingAgentProfilePage";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -59,6 +61,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/providers" element={<ProvidersPage />} />
           <Route path="/treasury" element={<TreasuryPage />} />
           <Route path="/usage-traces/:traceId" element={<UsageTracePage />} />
+          <Route path="/living-agents" element={<LivingAgentsPage />} />
+          <Route path="/living-agents/:agentId" element={<LivingAgentProfilePage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/charter" element={<CharterPage />} />
           <Route path="/vision" element={<VisionPage />} />
