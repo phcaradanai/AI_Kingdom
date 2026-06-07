@@ -76,3 +76,11 @@ Before council processing, the orchestrator injects compact project context when
 Local development uses `docker-compose.yml` for PostgreSQL and npm scripts for API/web dev servers. Staging uses `docker-compose.staging.yml` with internal PostgreSQL, backend, frontend Nginx static serving, persistent database volume, health checks, and no public database port.
 
 The staging backend entrypoint runs Prisma generate, `prisma migrate deploy`, and safe seed-if-empty. Backups and restores use `scripts/backup-postgres.sh` and `scripts/restore-postgres.sh` with `DATABASE_URL` supplied from the environment.
+
+## AI Kingdom is quality-first, not data-first.
+
+The system must not persist weak, duplicate, unclear, or non-actionable records.
+Generated data must pass a value gate before becoming Kingdom state.
+Low-confidence signals are preview-only or ephemeral.
+Agent learning requires provenance, deduplication, and approval.
+A smaller trusted Kingdom is better than a large polluted Kingdom.
