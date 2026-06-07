@@ -357,6 +357,8 @@ model Agent {
   costPreference String?
   temperature Float?
   maxTokens   Int?
+  parameterMode    String?  @default("ROLE_DEFAULT")
+  modelParameters  Json?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   responses    AgentResponse[]

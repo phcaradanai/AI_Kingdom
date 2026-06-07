@@ -18,6 +18,30 @@ export type AuthResponse = {
   user: PublicUser;
 };
 
+export type ReasoningConfig = {
+  enabled: boolean;
+  effort: "none" | "minimal" | "low" | "medium" | "high" | "xhigh";
+  max_tokens: number | null;
+  exclude: boolean;
+};
+
+export type ToolsConfig = {
+  enabled: boolean;
+  tool_choice: "auto" | "none" | "required";
+};
+
+export type ModelParameters = {
+  stream?: boolean;
+  temperature?: number | null;
+  max_tokens?: number | null;
+  top_p?: number | null;
+  seed?: number | null;
+  reasoning?: Partial<ReasoningConfig>;
+  tools?: Partial<ToolsConfig>;
+};
+
+export type ParameterMode = "MANUAL" | "ROLE_DEFAULT" | "PROVIDER_DEFAULT";
+
 export type AgentDto = {
   id: string;
   slug: string;
@@ -40,6 +64,8 @@ export type AgentDto = {
   costPreference: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature: number | null;
   maxTokens: number | null;
+  parameterMode: ParameterMode | null;
+  modelParameters: ModelParameters | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -85,6 +111,31 @@ export type AgentPayload = {
   costPreference?: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature?: number | null;
   maxTokens?: number | null;
+  parameterMode?: ParameterMode | null;
+  modelParameters?: ModelParameters | null;
+};
+
+export type EffectiveRequestPreviewDto = {
+  preview: {
+    provider: string;
+    model: string;
+    stream: boolean;
+    temperature?: number;
+    max_tokens?: number;
+    top_p?: number;
+    seed?: number;
+    reasoning?: {
+      enabled: boolean;
+      effort: string;
+      max_tokens: number | null;
+      exclude: boolean;
+    };
+    tools?: {
+      enabled: boolean;
+      tool_choice: string;
+    };
+  };
+  parameterMode: string;
 };
 
 export type AgentActivityStatus =

@@ -1,4 +1,5 @@
 import type { TaskMode } from "@prisma/client";
+import type { EffectiveParameters } from "./modelParameterResolver.js";
 
 export type GenerateAgentResponseInput = {
   command: string;
@@ -11,6 +12,7 @@ export type GenerateAgentResponseInput = {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  modelParameters?: EffectiveParameters;
   kingdomContext?: string;
   projectContext?: string;
   kingdomMemoryContext?: string;
@@ -24,6 +26,8 @@ export type TokenUsage = {
   // Cache-aware fields — populated only when the provider returns cache details
   inputCacheHitTokens?: number | null;
   inputCacheMissTokens?: number | null;
+  // Reasoning/thinking tokens — populated when provider returns them
+  reasoningTokens?: number | null;
 };
 
 export type AgentResponseResult = {

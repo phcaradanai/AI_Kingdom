@@ -1,6 +1,7 @@
 import type { Agent, Task, TaskMode } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
+import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
 import { prisma } from "../db/prisma.js";
 import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import type { AIProviderConfig } from "./aiProviderRegistry.js";
@@ -101,6 +102,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       let traceId: string | null = null;
       try {
         const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
+        const effectiveParams = resolveEffectiveParameters(agent, route.provider.type, defaultMaxTokens);
         const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders);
         const trace = await createAIUsageTrace({
           actorUserId: userId,
@@ -121,7 +123,16 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           providerName: route.provider.name,
           model: route.model,
           prompt: task.command,
-          metadata: { taskMode: task.mode, agentSlug: agent.slug },
+          metadata: {
+            taskMode: task.mode,
+            agentSlug: agent.slug,
+            modelParametersUsed: effectiveParams,
+            reasoningEnabled: effectiveParams.reasoning?.enabled ?? false,
+            reasoningEffort: effectiveParams.reasoning?.effort ?? null,
+            reasoningExcluded: effectiveParams.reasoning?.exclude ?? true,
+            streamEnabled: effectiveParams.stream,
+            parameterMode: effectiveParams.mode
+          },
           attributionStatus: "TRUSTED"
         });
         traceId = trace.traceId;
@@ -184,6 +195,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           responseStyle: agent.responseStyle,
           temperature: agent.temperature ?? undefined,
           maxTokens: agent.maxTokens ?? defaultMaxTokens,
+          modelParameters: effectiveParams,
           kingdomContext: kingdomContext || undefined,
           projectContext,
           kingdomMemoryContext,
@@ -255,7 +267,20 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
               requestLabel: `${agent.title} response for ${task.title}`,
               prompt: task.command,
               response: generated.response,
-              metadata: { taskMode: task.mode, agentSlug: agent.slug, pricingStatus: agentCost.pricingStatus }
+              metadata: {
+                taskMode: task.mode,
+                agentSlug: agent.slug,
+                pricingStatus: agentCost.pricingStatus,
+                reasoningTokens: generated.usage.reasoningTokens ?? null,
+                actualSentModel: generated.actualSentModel ?? generated.modelUsed,
+                responseModel: generated.responseModel ?? null,
+                modelParametersUsed: effectiveParams,
+                reasoningEnabled: effectiveParams.reasoning?.enabled ?? false,
+                reasoningEffort: effectiveParams.reasoning?.effort ?? null,
+                reasoningExcluded: effectiveParams.reasoning?.exclude ?? true,
+                streamEnabled: effectiveParams.stream,
+                parameterMode: effectiveParams.mode
+              }
             })
           }
         });
@@ -334,6 +359,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       throw new Error("Grand Vizier is not available");
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
+    const summaryEffectiveParams = resolveEffectiveParameters(grandVizier, summaryRoute.provider.type, defaultMaxTokens);
     const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders);
     const summaryTrace = await createAIUsageTrace({
       actorUserId: userId,
@@ -354,7 +380,16 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       providerName: summaryRoute.provider.name,
       model: summaryRoute.model,
       prompt: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n"),
-      metadata: { taskMode: task.mode, agentSlug: grandVizier.slug },
+      metadata: {
+        taskMode: task.mode,
+        agentSlug: grandVizier.slug,
+        modelParametersUsed: summaryEffectiveParams,
+        reasoningEnabled: summaryEffectiveParams.reasoning?.enabled ?? false,
+        reasoningEffort: summaryEffectiveParams.reasoning?.effort ?? null,
+        reasoningExcluded: summaryEffectiveParams.reasoning?.exclude ?? true,
+        streamEnabled: summaryEffectiveParams.stream,
+        parameterMode: summaryEffectiveParams.mode
+      },
       attributionStatus: "TRUSTED"
     });
     const summaryTraceContext = buildTraceContext({
@@ -416,6 +451,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         responseStyle: grandVizier.responseStyle,
         temperature: grandVizier.temperature ?? undefined,
         maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
+        modelParameters: summaryEffectiveParams,
         kingdomContext: kingdomContext || undefined,
         projectContext,
         kingdomMemoryContext,
@@ -476,7 +512,20 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           requestLabel: `Grand Vizier synthesis for ${task.title}`,
           prompt: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n"),
           response: generatedSummary.response,
-          metadata: { taskMode: task.mode, agentSlug: grandVizier.slug, pricingStatus: summaryCost.pricingStatus }
+          metadata: {
+            taskMode: task.mode,
+            agentSlug: grandVizier.slug,
+            pricingStatus: summaryCost.pricingStatus,
+            reasoningTokens: generatedSummary.usage.reasoningTokens ?? null,
+            actualSentModel: generatedSummary.actualSentModel ?? generatedSummary.modelUsed,
+            responseModel: generatedSummary.responseModel ?? null,
+            modelParametersUsed: summaryEffectiveParams,
+            reasoningEnabled: summaryEffectiveParams.reasoning?.enabled ?? false,
+            reasoningEffort: summaryEffectiveParams.reasoning?.effort ?? null,
+            reasoningExcluded: summaryEffectiveParams.reasoning?.exclude ?? true,
+            streamEnabled: summaryEffectiveParams.stream,
+            parameterMode: summaryEffectiveParams.mode
+          }
         })
       }
     });

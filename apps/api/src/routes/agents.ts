@@ -1,9 +1,11 @@
 import { Router } from "express";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { selectAIProviderRoute } from "../services/aiProviderRouter.js";
 import { listAIProviders } from "../services/aiProviderRegistry.js";
+import { resolveEffectiveParameters, buildRequestPreview } from "../ai/modelParameterResolver.js";
 
 const router = Router();
 
@@ -27,7 +29,25 @@ const agentSchema = z.object({
   routingPolicy: z.enum(["GLOBAL_ROUTING", "FIXED_PRIMARY", "FIXED_PRIMARY_WITH_FALLBACK", "SANDBOX_FREE_ONLY", "LOWEST_COST", "QUALITY_FIRST"]).optional().nullable(),
   costPreference: z.enum(["LOW", "BALANCED", "QUALITY"]).optional().nullable(),
   temperature: z.coerce.number().min(0).max(2).optional().nullable(),
-  maxTokens: z.coerce.number().int().min(64).max(8000).optional().nullable()
+  maxTokens: z.coerce.number().int().min(64).max(8000).optional().nullable(),
+  parameterMode: z.enum(["MANUAL", "ROLE_DEFAULT", "PROVIDER_DEFAULT"]).optional().nullable(),
+  modelParameters: z.object({
+    stream: z.boolean().optional(),
+    temperature: z.number().min(0).max(2).optional().nullable(),
+    max_tokens: z.number().int().min(64).max(32000).optional().nullable(),
+    top_p: z.number().min(0).max(1).optional().nullable(),
+    seed: z.number().int().optional().nullable(),
+    reasoning: z.object({
+      enabled: z.boolean().optional(),
+      effort: z.enum(["none", "minimal", "low", "medium", "high", "xhigh"]).optional(),
+      max_tokens: z.number().int().optional().nullable(),
+      exclude: z.boolean().optional()
+    }).optional(),
+    tools: z.object({
+      enabled: z.boolean().optional(),
+      tool_choice: z.enum(["auto", "none", "required"]).optional()
+    }).optional()
+  }).optional().nullable()
 });
 
 const agentPatchSchema = agentSchema.partial();
@@ -48,13 +68,15 @@ router.post("/", async (req, res, next) => {
   try {
     const payload = agentSchema.parse(req.body);
     const slug = payload.slug ?? slugify(payload.title);
+    const { modelParameters, ...restPayload } = payload;
     const agent = await prisma.agent.create({
       data: {
-        ...payload,
+        ...restPayload,
         slug,
         prompt: payload.prompt ?? payload.systemPrompt,
         specialty: payload.specialty,
-        skills: uniqueLower(payload.skills)
+        skills: uniqueLower(payload.skills),
+        modelParameters: modelParameters === null ? Prisma.JsonNull : (modelParameters as Prisma.InputJsonValue | undefined)
       }
     });
     await auditLog({
@@ -97,13 +119,15 @@ router.patch("/:id", async (req, res, next) => {
       return;
     }
 
+    const { modelParameters, ...restPayload } = payload;
     const agent = await prisma.agent.update({
       where: { id: existing.id },
       data: {
-        ...payload,
+        ...restPayload,
         ...(payload.systemPrompt ? { prompt: payload.prompt ?? payload.systemPrompt } : {}),
         ...(payload.fallbackProviderIds ? { fallbackProviderIds: uniqueLower(payload.fallbackProviderIds) } : {}),
-        ...(payload.skills ? { skills: uniqueLower(payload.skills) } : {})
+        ...(payload.skills ? { skills: uniqueLower(payload.skills) } : {}),
+        ...("modelParameters" in payload ? { modelParameters: modelParameters === null ? Prisma.JsonNull : (modelParameters as Prisma.InputJsonValue | undefined) } : {})
       }
     });
     await auditLog({
@@ -114,6 +138,36 @@ router.patch("/:id", async (req, res, next) => {
       metadata: { slug: agent.slug, isActive: agent.isActive }
     });
     res.json({ agent });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:id/effective-request-preview", async (req, res, next) => {
+  try {
+    const agent = await prisma.agent.findUnique({ where: { id: req.params.id } });
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    let providerType = "openrouter";
+    let providerName = "unknown";
+    let model = agent.defaultModel ?? "unknown";
+
+    try {
+      const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
+      providerType = route.provider.type;
+      providerName = route.provider.name;
+      model = route.model;
+    } catch {
+      // fall through with defaults
+    }
+
+    const effective = resolveEffectiveParameters(agent, providerType);
+    const preview = buildRequestPreview({ provider: providerName, model, effective });
+
+    res.json({ preview, parameterMode: effective.mode });
   } catch (error) {
     next(error);
   }

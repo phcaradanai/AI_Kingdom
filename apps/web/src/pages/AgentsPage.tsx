@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Shield, AlertTriangle, CheckCircle, XCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2 } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getProviderDisplayName } from "@/lib/providerDisplay";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, ProviderModelsDto } from "@/types/api";
+import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, ProviderModelsDto, ParameterMode, ModelParameters, EffectiveRequestPreviewDto } from "@/types/api";
 import { api } from "@/lib/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
@@ -31,6 +31,16 @@ const COST_POLICY_OPTIONS = [
   { value: "QUALITY", label: "Quality", description: "Prefer higher-quality providers even if more expensive." }
 ];
 
+const DEFAULT_MODEL_PARAMETERS: ModelParameters = {
+  stream: false,
+  temperature: null,
+  max_tokens: null,
+  top_p: null,
+  seed: null,
+  reasoning: { enabled: true, effort: "medium", max_tokens: null, exclude: true },
+  tools: { enabled: false, tool_choice: "auto" }
+};
+
 const blankAgent: AgentPayload = {
   name: "",
   title: "",
@@ -49,7 +59,9 @@ const blankAgent: AgentPayload = {
   routingPolicy: "GLOBAL_ROUTING",
   costPreference: null,
   temperature: null,
-  maxTokens: null
+  maxTokens: null,
+  parameterMode: "ROLE_DEFAULT",
+  modelParameters: null
 };
 
 function ProviderBadge({ label, variant }: { label: string; variant: "ok" | "warn" | "error" | "muted" }) {
@@ -82,6 +94,8 @@ export function AgentsPage() {
   const [routingPreview, setRoutingPreview] = useState<AgentRoutingPreviewDto | null>(null);
   const [providerModels, setProviderModels] = useState<ProviderModelsDto | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [effectivePreview, setEffectivePreview] = useState<EffectiveRequestPreviewDto | null>(null);
+  const [loadingEffectivePreview, setLoadingEffectivePreview] = useState(false);
   const [newFallbackProvider, setNewFallbackProvider] = useState("");
   const [newFallbackModel, setNewFallbackModel] = useState("");
 
@@ -102,8 +116,10 @@ export function AgentsPage() {
   useEffect(() => {
     if (selected?.id) {
       loadRoutingPreview(selected.id);
+      loadEffectivePreview(selected.id);
     } else {
       setRoutingPreview(null);
+      setEffectivePreview(null);
     }
   }, [selected?.id]);
 
@@ -129,11 +145,24 @@ export function AgentsPage() {
     }
   }
 
+  async function loadEffectivePreview(agentId: string) {
+    setLoadingEffectivePreview(true);
+    try {
+      const preview = await api.getAgentEffectiveRequestPreview(agentId);
+      setEffectivePreview(preview);
+    } catch {
+      setEffectivePreview(null);
+    } finally {
+      setLoadingEffectivePreview(false);
+    }
+  }
+
   function selectAgent(agent: AgentDto | null) {
     setSelected(agent);
     setDraft(agent ? toPayload(agent) : blankAgent);
     setError(null);
     setRoutingPreview(null);
+    setEffectivePreview(null);
     setProviderModels(null);
     setNewFallbackProvider("");
     setNewFallbackModel("");
@@ -147,10 +176,12 @@ export function AgentsPage() {
         const updated = await updateAgent(selected.id, cleanPayload(draft));
         setSelected(updated);
         loadRoutingPreview(updated.id);
+        loadEffectivePreview(updated.id);
       } else {
         const created = await createAgent(cleanPayload(draft));
         setSelected(created);
         loadRoutingPreview(created.id);
+        loadEffectivePreview(created.id);
       }
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "Unable to save agent");
@@ -519,6 +550,227 @@ export function AgentsPage() {
               </div>
             </div>
 
+            {/* Model Parameters Panel */}
+            <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Settings2 className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold text-sm text-foreground">Model Parameters</h3>
+              </div>
+              <p className="text-xs text-muted-foreground -mt-2">Controls how this agent calls the AI provider. Role Default uses pre-tuned values per agent type.</p>
+
+              {/* Parameter Mode */}
+              <FormField id="agent-param-mode" label="Parameter Mode">
+                <select
+                  id="agent-param-mode"
+                  className={selectCls}
+                  value={draft.parameterMode ?? "ROLE_DEFAULT"}
+                  onChange={(e) => setDraft({ ...draft, parameterMode: e.target.value as ParameterMode })}
+                >
+                  <option value="ROLE_DEFAULT">Role Default — pre-tuned values per agent type</option>
+                  <option value="MANUAL">Manual — King-configured values</option>
+                  <option value="PROVIDER_DEFAULT">Provider Default — send only model and max_tokens</option>
+                </select>
+              </FormField>
+
+              {draft.parameterMode === "MANUAL" && (
+                <>
+                  {/* Reasoning */}
+                  <div className="rounded border border-border/40 bg-background/40 p-3 space-y-3">
+                    <h4 className="text-xs font-semibold text-foreground">Reasoning</h4>
+                    <p className="text-xs text-muted-foreground -mt-2">Reasoning tokens may count as output tokens. Raw reasoning is excluded from response by default.</p>
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={draft.modelParameters?.reasoning?.enabled ?? true}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            modelParameters: {
+                              ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS),
+                              reasoning: { ...(draft.modelParameters?.reasoning ?? {}), enabled: e.target.checked }
+                            }
+                          })}
+                          className="rounded"
+                        />
+                        Reasoning enabled
+                      </label>
+                      <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={draft.modelParameters?.reasoning?.exclude ?? true}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            modelParameters: {
+                              ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS),
+                              reasoning: { ...(draft.modelParameters?.reasoning ?? {}), exclude: e.target.checked }
+                            }
+                          })}
+                          className="rounded"
+                        />
+                        Exclude reasoning from response
+                      </label>
+                    </div>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <FormField id="agent-reasoning-effort" label="Reasoning Effort">
+                        <select
+                          id="agent-reasoning-effort"
+                          className={cn(selectCls, "h-9 text-xs")}
+                          value={draft.modelParameters?.reasoning?.effort ?? "medium"}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            modelParameters: {
+                              ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS),
+                              reasoning: { ...(draft.modelParameters?.reasoning ?? {}), effort: e.target.value as "none" | "minimal" | "low" | "medium" | "high" | "xhigh" }
+                            }
+                          })}
+                        >
+                          {["none", "minimal", "low", "medium", "high", "xhigh"].map((e) => (
+                            <option key={e} value={e}>{e}</option>
+                          ))}
+                        </select>
+                      </FormField>
+                      <FormField id="agent-reasoning-max-tokens" label="Reasoning Max Tokens" description="Leave blank for no limit.">
+                        <Input
+                          id="agent-reasoning-max-tokens"
+                          type="number"
+                          className="h-9 text-xs"
+                          value={draft.modelParameters?.reasoning?.max_tokens ?? ""}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            modelParameters: {
+                              ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS),
+                              reasoning: { ...(draft.modelParameters?.reasoning ?? {}), max_tokens: e.target.value ? Number(e.target.value) : null }
+                            }
+                          })}
+                          placeholder="No limit"
+                        />
+                      </FormField>
+                    </div>
+                  </div>
+
+                  {/* Core sampling params */}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField id="mp-temperature" label="Temperature" description="0 = deterministic, 2 = creative.">
+                      <Input
+                        id="mp-temperature"
+                        type="number" step="0.05" min="0" max="2"
+                        value={draft.modelParameters?.temperature ?? draft.temperature ?? ""}
+                        onChange={(e) => setDraft({
+                          ...draft,
+                          modelParameters: { ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS), temperature: e.target.value ? Number(e.target.value) : null }
+                        })}
+                        placeholder="Role default"
+                      />
+                    </FormField>
+                    <FormField id="mp-max-tokens" label="Max Tokens">
+                      <Input
+                        id="mp-max-tokens"
+                        type="number" min="64" max="32000"
+                        value={draft.modelParameters?.max_tokens ?? draft.maxTokens ?? ""}
+                        onChange={(e) => setDraft({
+                          ...draft,
+                          modelParameters: { ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS), max_tokens: e.target.value ? Number(e.target.value) : null }
+                        })}
+                        placeholder="Global default"
+                      />
+                    </FormField>
+                    <FormField id="mp-top-p" label="Top P" description="Nucleus sampling. Leave blank for default.">
+                      <Input
+                        id="mp-top-p"
+                        type="number" step="0.01" min="0" max="1"
+                        value={draft.modelParameters?.top_p ?? ""}
+                        onChange={(e) => setDraft({
+                          ...draft,
+                          modelParameters: { ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS), top_p: e.target.value ? Number(e.target.value) : null }
+                        })}
+                        placeholder="Default"
+                      />
+                    </FormField>
+                    <FormField id="mp-seed" label="Seed" description="Leave blank for non-deterministic.">
+                      <Input
+                        id="mp-seed"
+                        type="number"
+                        value={draft.modelParameters?.seed ?? ""}
+                        onChange={(e) => setDraft({
+                          ...draft,
+                          modelParameters: { ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS), seed: e.target.value ? Number(e.target.value) : null }
+                        })}
+                        placeholder="Random"
+                      />
+                    </FormField>
+                  </div>
+
+                  {/* Stream */}
+                  <div className="rounded border border-yellow-500/20 bg-yellow-500/5 p-3">
+                    <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={draft.modelParameters?.stream ?? false}
+                        onChange={(e) => setDraft({
+                          ...draft,
+                          modelParameters: { ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS), stream: e.target.checked }
+                        })}
+                        className="rounded"
+                      />
+                      <span>Stream responses</span>
+                    </label>
+                    <p className="mt-1 text-xs text-yellow-500/80">Streaming requires SSE parser; currently off by default.</p>
+                  </div>
+
+                  {/* Tools */}
+                  <div className="rounded border border-border/40 bg-background/40 p-3 space-y-3">
+                    <h4 className="text-xs font-semibold text-foreground">Tools</h4>
+                    <div className="flex items-center gap-4">
+                      <label className="flex items-center gap-2 text-xs text-foreground cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={draft.modelParameters?.tools?.enabled ?? false}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            modelParameters: {
+                              ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS),
+                              tools: { ...(draft.modelParameters?.tools ?? {}), enabled: e.target.checked }
+                            }
+                          })}
+                          className="rounded"
+                        />
+                        Tools enabled
+                      </label>
+                      <FormField id="mp-tool-choice" label="Tool choice">
+                        <select
+                          id="mp-tool-choice"
+                          className={cn(selectCls, "h-9 text-xs")}
+                          value={draft.modelParameters?.tools?.tool_choice ?? "auto"}
+                          onChange={(e) => setDraft({
+                            ...draft,
+                            modelParameters: {
+                              ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS),
+                              tools: { ...(draft.modelParameters?.tools ?? {}), tool_choice: e.target.value as "auto" | "none" | "required" }
+                            }
+                          })}
+                        >
+                          {["auto", "none", "required"].map((tc) => (
+                            <option key={tc} value={tc}>{tc}</option>
+                          ))}
+                        </select>
+                      </FormField>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {draft.parameterMode === "ROLE_DEFAULT" && (
+                <div className="rounded border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
+                  Role defaults apply: temperature and reasoning effort are tuned per agent type. Switch to Manual to override.
+                </div>
+              )}
+              {draft.parameterMode === "PROVIDER_DEFAULT" && (
+                <div className="rounded border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground">
+                  Only model and max_tokens will be sent. Provider uses its own defaults for all other parameters.
+                </div>
+              )}
+            </div>
+
             {/* Effective Routing Preview */}
             {selected && (
               <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
@@ -590,6 +842,38 @@ export function AgentsPage() {
               </div>
             )}
 
+            {/* Effective Request Preview */}
+            {selected && (
+              <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold text-sm text-foreground">Effective Request Preview</h3>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-7 px-2 text-xs gap-1"
+                    onClick={() => loadEffectivePreview(selected.id)}
+                    disabled={loadingEffectivePreview}
+                  >
+                    <RefreshCw className={cn("h-3 w-3", loadingEffectivePreview && "animate-spin")} />
+                    Refresh
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground">Sanitized view of what the provider request will look like. API key and headers are never shown.</p>
+                {loadingEffectivePreview ? (
+                  <p className="text-xs text-muted-foreground">Loading…</p>
+                ) : effectivePreview ? (
+                  <div className="space-y-1.5">
+                    <div className="text-xs font-medium text-muted-foreground">Mode: <span className="text-foreground">{effectivePreview.parameterMode}</span></div>
+                    <pre className="rounded-md border border-border/40 bg-background/80 p-3 text-xs text-foreground font-mono overflow-x-auto whitespace-pre-wrap break-all">
+                      {JSON.stringify(effectivePreview.preview, null, 2)}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">No preview available.</p>
+                )}
+              </div>
+            )}
+
             {/* Advanced Parameters */}
             <div className="grid gap-3 sm:grid-cols-3">
               <FormField id="agent-priority" label="Priority">
@@ -631,7 +915,9 @@ function toPayload(agent: AgentDto): AgentPayload {
     routingPolicy: agent.routingPolicy ?? "GLOBAL_ROUTING",
     costPreference: agent.costPreference,
     temperature: agent.temperature,
-    maxTokens: agent.maxTokens
+    maxTokens: agent.maxTokens,
+    parameterMode: (agent.parameterMode as ParameterMode) ?? "ROLE_DEFAULT",
+    modelParameters: agent.modelParameters ?? null
   };
 }
 
@@ -645,6 +931,8 @@ function cleanPayload(payload: AgentPayload): AgentPayload {
     routingPolicy: payload.routingPolicy ?? "GLOBAL_ROUTING",
     costPreference: payload.costPreference ?? null,
     temperature: payload.temperature ?? null,
-    maxTokens: payload.maxTokens ?? null
+    maxTokens: payload.maxTokens ?? null,
+    parameterMode: payload.parameterMode ?? "ROLE_DEFAULT",
+    modelParameters: payload.parameterMode === "MANUAL" ? (payload.modelParameters ?? null) : null
   };
 }

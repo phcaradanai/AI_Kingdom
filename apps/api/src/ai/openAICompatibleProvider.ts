@@ -1,5 +1,6 @@
 import { env } from "../config/env.js";
 import type { AgentResponseResult, AIProvider, GenerateAgentResponseInput } from "./aiProvider.js";
+import { buildProviderRequestBody } from "./modelParameterResolver.js";
 
 type ChatCompletionUsage = {
   prompt_tokens?: number;
@@ -15,6 +16,11 @@ type ChatCompletionUsage = {
   prompt_tokens_details?: {
     cached_tokens?: number;
   };
+  // Reasoning/thinking tokens (OpenRouter / OpenAI o-series)
+  completion_tokens_details?: {
+    reasoning_tokens?: number;
+  };
+  reasoning_tokens?: number;
 };
 
 type ChatCompletionResponse = {
@@ -60,6 +66,22 @@ export class OpenAICompatibleProvider implements AIProvider {
 
     try {
       const url = this.baseUrl.endsWith("/chat/completions") ? this.baseUrl : `${this.baseUrl}/chat/completions`;
+      const messages = [
+        { role: "system", content: buildSystemPrompt(input) },
+        { role: "user", content: buildUserPrompt(input) }
+      ];
+      const model = input.model ?? this.model;
+
+      const requestBody = input.modelParameters
+        ? buildProviderRequestBody({ model, messages, effective: input.modelParameters })
+        : {
+            model,
+            messages,
+            stream: false,
+            max_tokens: input.maxTokens ?? env.AI_MAX_TOKENS,
+            temperature: input.temperature ?? 0.35
+          };
+
       const response = await fetch(url, {
         method: "POST",
         signal: controller.signal,
@@ -68,22 +90,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           "Content-Type": "application/json",
           ...this.headers
         },
-        body: JSON.stringify({
-          model: input.model ?? this.model,
-          max_tokens: input.maxTokens ?? env.AI_MAX_TOKENS,
-          temperature: input.temperature ?? 0.35,
-          stream: false,
-          messages: [
-            {
-              role: "system",
-              content: buildSystemPrompt(input)
-            },
-            {
-              role: "user",
-              content: buildUserPrompt(input)
-            }
-          ]
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
@@ -112,6 +119,7 @@ export class OpenAICompatibleProvider implements AIProvider {
       const u = payload.usage;
       let inputCacheHitTokens: number | null = null;
       let inputCacheMissTokens: number | null = null;
+      let reasoningTokens: number | null = null;
 
       if (u) {
         if (u.prompt_cache_hit_tokens !== undefined) {
@@ -124,11 +132,17 @@ export class OpenAICompatibleProvider implements AIProvider {
           inputCacheHitTokens = u.prompt_tokens_details.cached_tokens;
           inputCacheMissTokens = promptTokens - inputCacheHitTokens;
         }
+        // Extract reasoning tokens (OpenRouter / OpenAI o-series)
+        if (u.completion_tokens_details?.reasoning_tokens !== undefined) {
+          reasoningTokens = u.completion_tokens_details.reasoning_tokens;
+        } else if (u.reasoning_tokens !== undefined) {
+          reasoningTokens = u.reasoning_tokens;
+        }
       }
 
       return {
         response: content,
-        usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens },
+        usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens, reasoningTokens },
         responseModel: payload.model ?? null
       };
     } catch (error) {
