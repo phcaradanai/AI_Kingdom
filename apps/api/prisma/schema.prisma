@@ -260,6 +260,7 @@ model User {
   tasks         Task[]
   reports       Report[]
   memories      Memory[]
+  aiUsageTraces AIUsageTrace[]
   refreshTokens RefreshToken[]
   auditLogs     AuditLog[]
   workOrders    WorkOrder[]
@@ -312,6 +313,8 @@ model Agent {
   responses    AgentResponse[]
   usageRecords UsageRecord[]
   activities   AgentActivity[]
+  aiUsageTraces AIUsageTrace[]
+  aiUsageTraceSteps AIUsageTraceStep[]
 }
 
 model ExternalAgent {
@@ -356,6 +359,8 @@ model Project {
   memories          Memory[]
   usageRecords      UsageRecord[]
   agentActivities   AgentActivity[]
+  aiUsageTraces      AIUsageTrace[]
+  aiUsageTraceSteps  AIUsageTraceStep[]
   workOrders        WorkOrder[]
   implementationReports ImplementationReport[]
   handoffBriefs     HandoffBrief[]
@@ -554,6 +559,8 @@ model Task {
   reports       Report[]
   usageRecords  UsageRecord[]
   agentActivities AgentActivity[]
+  aiUsageTraces AIUsageTrace[]
+  aiUsageTraceSteps AIUsageTraceStep[]
 }
 
 model CouncilSession {
@@ -576,6 +583,8 @@ model CouncilSession {
   reports            Report[]
   usageRecords       UsageRecord[]
   agentActivities     AgentActivity[]
+  aiUsageTraces       AIUsageTrace[]
+  aiUsageTraceSteps   AIUsageTraceStep[]
 }
 
 model AgentResponse {
@@ -589,8 +598,105 @@ model AgentResponse {
   agent     Agent          @relation(fields: [agentId], references: [id], onDelete: Cascade)
 }
 
+model AIUsageTrace {
+  id               String   @id @default(cuid())
+  traceId          String   @unique
+  actorUserId      String?
+  actorRole        String?
+  triggerType      String
+  triggerRoute     String?
+  triggerLabel     String?
+  projectId        String?
+  taskId           String?
+  councilSessionId String?
+  agentId          String?
+  sourceType       String
+  sourceId         String?
+  operation        String
+  purpose          String
+  providerId       String?
+  providerType     String?
+  providerName     String?
+  model            String?
+  status           String
+  startedAt        DateTime @default(now())
+  completedAt      DateTime?
+  failedAt         DateTime?
+  promptPreview    String?
+  responsePreview  String?
+  errorMessage     String?
+  metadata         Json?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  actorUser        User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  project          Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  task             Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  councilSession   CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
+  agent            Agent?   @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  usageRecords     UsageRecord[]
+  agentActivities  AgentActivity[]
+  steps            AIUsageTraceStep[]
+
+  @@index([actorUserId])
+  @@index([projectId])
+  @@index([taskId])
+  @@index([councilSessionId])
+  @@index([agentId])
+  @@index([sourceType])
+  @@index([operation])
+  @@index([startedAt])
+}
+
+model AIUsageTraceStep {
+  id               String   @id @default(cuid())
+  traceId          String
+  parentStepId     String?
+  stepType         String
+  operation        String
+  title            String
+  detail           String?
+  status           String
+  sequence         Int
+  agentId          String?
+  providerId       String?
+  providerType     String?
+  providerName     String?
+  model            String?
+  usageRecordId    String?
+  taskId           String?
+  projectId        String?
+  councilSessionId String?
+  reportId         String?
+  tokensUsed       Int?
+  estimatedCostUSD Float?
+  promptPreview    String?
+  responsePreview  String?
+  errorMessage     String?
+  metadata         Json?
+  startedAt        DateTime @default(now())
+  endedAt          DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  trace            AIUsageTrace    @relation(fields: [traceId], references: [traceId], onDelete: Cascade)
+  agent            Agent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  usageRecord      UsageRecord?    @relation(fields: [usageRecordId], references: [id], onDelete: SetNull)
+  task             Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  project          Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  councilSession   CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
+  report           Report?         @relation(fields: [reportId], references: [id], onDelete: SetNull)
+
+  @@index([traceId])
+  @@index([agentId])
+  @@index([usageRecordId])
+  @@index([councilSessionId])
+  @@index([taskId])
+  @@index([sequence])
+}
+
 model UsageRecord {
   id                   String          @id @default(cuid())
+  traceId              String?
+  attributionStatus    String          @default("LEGACY_UNATTRIBUTED")
   projectId            String?
   taskId               String?
   councilSessionId     String?
@@ -620,11 +726,16 @@ model UsageRecord {
   responsePreview      String?
   metadata             Json?
   createdAt            DateTime        @default(now())
+  trace                AIUsageTrace?   @relation(fields: [traceId], references: [traceId], onDelete: SetNull)
   project              Project?        @relation(fields: [projectId], references: [id], onDelete: SetNull)
   task                 Task?           @relation(fields: [taskId], references: [id], onDelete: SetNull)
   councilSession       CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
   agent                Agent?          @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  agentActivities      AgentActivity[]
+  aiUsageTraceSteps    AIUsageTraceStep[]
 
+  @@index([traceId])
+  @@index([attributionStatus])
   @@index([projectId])
   @@index([sourceType])
   @@index([sourceId])
@@ -633,6 +744,8 @@ model UsageRecord {
 
 model AgentActivity {
   id               String   @id @default(cuid())
+  traceId          String?
+  attributionStatus String  @default("LEGACY_UNATTRIBUTED")
   agentId          String
   projectId        String?
   taskId           String?
@@ -645,6 +758,11 @@ model AgentActivity {
   providerName     String?
   model            String?
   operation        String?
+  sourceType       String?
+  sourceId         String?
+  requestLabel     String?
+  usageRecordId    String?
+  reportId         String?
   tokensUsed       Int      @default(0)
   estimatedCostUSD Float    @default(0)
   startedAt        DateTime @default(now())
@@ -654,11 +772,16 @@ model AgentActivity {
   metadata         Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
+  trace            AIUsageTrace? @relation(fields: [traceId], references: [traceId], onDelete: SetNull)
   agent            Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
   project          Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
   task             Task?    @relation(fields: [taskId], references: [id], onDelete: SetNull)
   councilSession   CouncilSession? @relation(fields: [councilSessionId], references: [id], onDelete: SetNull)
+  usageRecord      UsageRecord? @relation(fields: [usageRecordId], references: [id], onDelete: SetNull)
+  report           Report? @relation(fields: [reportId], references: [id], onDelete: SetNull)
 
+  @@index([traceId])
+  @@index([attributionStatus])
   @@index([agentId])
   @@index([projectId])
   @@index([taskId])
@@ -725,6 +848,8 @@ model Report {
   task                   Task?            @relation(fields: [sourceTaskId], references: [id], onDelete: SetNull)
   councilSession         CouncilSession?  @relation(fields: [sourceCouncilSessionId], references: [id], onDelete: SetNull)
   user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+  agentActivities        AgentActivity[]
+  aiUsageTraceSteps      AIUsageTraceStep[]
 }
 
 model Memory {

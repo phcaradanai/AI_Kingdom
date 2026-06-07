@@ -12,6 +12,18 @@ import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { buildUsageAttribution } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
+import {
+  addTraceStep,
+  attachUsageRecordStep,
+  buildTraceContext,
+  completeAIUsageTrace,
+  completeTraceStep,
+  createAIUsageTrace,
+  failAIUsageTrace,
+  failTraceStep,
+  startTraceStep,
+  updateTraceSource
+} from "./aiUsageTraceService.js";
 
 const AGENTS_BY_MODE: Record<TaskMode, string[]> = {
   ASK: ["grand-vizier", "royal-architect"],
@@ -24,7 +36,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
   const task = await prisma.task.findFirst({
     where: { id: taskId, createdBy: userId },
     include: {
-      sessions: true
+      sessions: true,
+      user: { select: { role: true } }
     }
   });
 
@@ -85,10 +98,45 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
 
     for (const agent of selectedAgents) {
       let activityId: string | null = null;
+      let traceId: string | null = null;
       try {
         const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
         const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders, agent.defaultModel);
+        const trace = await createAIUsageTrace({
+          actorUserId: userId,
+          actorRole: task.user.role,
+          triggerType: "USER_ACTION",
+          triggerRoute: "POST /api/tasks/:id/process",
+          triggerLabel: task.title,
+          projectId: task.projectId,
+          taskId: task.id,
+          councilSessionId: session.id,
+          agentId: agent.id,
+          sourceType: "AGENT_RESPONSE",
+          sourceId: session.id,
+          operation: "council_agent_response",
+          purpose: "Council agent response",
+          providerId: route.provider.id,
+          providerType: route.provider.type,
+          providerName: route.provider.name,
+          model: route.model,
+          prompt: task.command,
+          metadata: { taskMode: task.mode, agentSlug: agent.slug },
+          attributionStatus: "TRUSTED"
+        });
+        traceId = trace.traceId;
+        const traceContext = buildTraceContext({
+          traceId,
+          sourceType: "AGENT_RESPONSE",
+          sourceId: session.id,
+          operation: "council_agent_response",
+          purpose: "Council agent response",
+          triggerType: "USER_ACTION",
+          attributionStatus: "TRUSTED"
+        });
         const activity = await startAgentActivity({
+          traceId,
+          attributionStatus: "TRUSTED",
           agentId: agent.id,
           projectId: task.projectId,
           taskId: task.id,
@@ -101,9 +149,30 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           providerName: route.provider.name,
           model: route.model,
           operation: "council_agent_response",
+          sourceType: "AGENT_RESPONSE",
+          sourceId: session.id,
+          requestLabel: `${agent.title} response for ${task.title}`,
           metadata: { taskMode: task.mode }
         });
         activityId = activity.id;
+
+        // ── Timeline: PROVIDER_CALL step ──
+        const providerStep = await startTraceStep({
+          traceId,
+          stepType: "PROVIDER_CALL",
+          operation: "council_agent_response",
+          title: `${agent.title} provider call`,
+          detail: `${route.provider.name} · ${route.model}`,
+          agentId: agent.id,
+          providerId: route.provider.id,
+          providerType: route.provider.type,
+          providerName: route.provider.name,
+          model: route.model,
+          taskId: task.id,
+          projectId: task.projectId,
+          councilSessionId: session.id,
+          promptPreview: task.command
+        });
 
         const generated = await generateWithFallback(providerCalls, {
           command: task.command,
@@ -119,6 +188,13 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           projectContext,
           kingdomMemoryContext,
           previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
+        }, traceContext);
+
+        // ── Timeline: Complete PROVIDER_CALL step ──
+        await completeTraceStep(providerStep.id, {
+          responsePreview: generated.response,
+          tokensUsed: generated.usage.totalTokens,
+          metadata: { providerUsed: generated.providerName, modelUsed: generated.modelUsed }
         });
 
         await updateAgentActivity(activityId, {
@@ -142,14 +218,17 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
             response: generated.response
           }
         });
+        await updateTraceSource(traceId, { sourceId: agentResponse.id });
 
         const agentCost = await calculateCostUSDFromRegistry(
           generated.providerName,
           generated.modelUsed,
           generated.usage
         );
-        await prisma.usageRecord.create({
+        const usageRecord = await prisma.usageRecord.create({
           data: {
+            traceId,
+            attributionStatus: "TRUSTED",
             taskId: task.id,
             councilSessionId: session.id,
             agentId: agent.id,
@@ -181,17 +260,71 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           }
         });
 
+        // ── Timeline: USAGE_RECORDED step ──
+        await attachUsageRecordStep(traceId, {
+          id: usageRecord.id,
+          provider: generated.providerName,
+          providerId: generated.providerId ?? generated.providerName,
+          model: generated.modelUsed,
+          totalTokens: generated.usage.totalTokens,
+          estimatedCostUSD: agentCost.costUSD,
+          pricingStatus: agentCost.pricingStatus,
+          taskId: task.id,
+          projectId: task.projectId,
+          councilSessionId: session.id,
+          agentId: agent.id
+        });
+
+        // ── Timeline: AGENT_RESPONSE step ──
+        await addTraceStep({
+          traceId,
+          stepType: "AGENT_RESPONSE",
+          operation: "council_agent_response",
+          title: `${agent.title} counsel recorded`,
+          detail: task.title,
+          agentId: agent.id,
+          taskId: task.id,
+          projectId: task.projectId,
+          councilSessionId: session.id,
+          responsePreview: generated.response
+        });
+
         await completeAgentActivity(activityId, {
           tokensUsed: generated.usage.totalTokens,
           estimatedCostUSD: agentCost.costUSD,
           providerId: generated.providerId ?? generated.providerName,
           providerName: generated.providerName,
-          model: generated.modelUsed
+          model: generated.modelUsed,
+          sourceId: agentResponse.id,
+          usageRecordId: usageRecord.id
+        });
+
+        // ── Timeline: TRACE_COMPLETED step for agent trace ──
+        await addTraceStep({
+          traceId,
+          stepType: "TRACE_COMPLETED",
+          operation: "trace_completed",
+          title: `${agent.title} trace completed`,
+          taskId: task.id,
+          councilSessionId: session.id,
+          agentId: agent.id,
+          tokensUsed: generated.usage.totalTokens,
+          estimatedCostUSD: agentCost.costUSD
+        });
+
+        await completeAIUsageTrace(traceId, generated.response, {
+          attributionStatus: "TRUSTED",
+          usageRecordId: usageRecord.id,
+          tokensUsed: generated.usage.totalTokens,
+          estimatedCostUSD: agentCost.costUSD,
+          pricingStatus: agentCost.pricingStatus,
+          fallbackNotice: generated.fallbackNotice ?? null
         });
 
         generatedResponses.push({ agent, response: generated.response });
       } catch (error) {
         if (activityId) await failAgentActivity(activityId, error).catch(() => undefined);
+        if (traceId) await failAIUsageTrace(traceId, error).catch(() => undefined);
         throw error;
       }
     }
@@ -202,7 +335,40 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
     const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders, grandVizier.defaultModel);
+    const summaryTrace = await createAIUsageTrace({
+      actorUserId: userId,
+      actorRole: task.user.role,
+      triggerType: "USER_ACTION",
+      triggerRoute: "POST /api/tasks/:id/process",
+      triggerLabel: task.title,
+      projectId: task.projectId,
+      taskId: task.id,
+      councilSessionId: session.id,
+      agentId: grandVizier.id,
+      sourceType: "FINAL_COUNSEL",
+      sourceId: session.id,
+      operation: "final_counsel",
+      purpose: "Final council synthesis",
+      providerId: summaryRoute.provider.id,
+      providerType: summaryRoute.provider.type,
+      providerName: summaryRoute.provider.name,
+      model: summaryRoute.model,
+      prompt: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n"),
+      metadata: { taskMode: task.mode, agentSlug: grandVizier.slug },
+      attributionStatus: "TRUSTED"
+    });
+    const summaryTraceContext = buildTraceContext({
+      traceId: summaryTrace.traceId,
+      sourceType: "FINAL_COUNSEL",
+      sourceId: session.id,
+      operation: "final_counsel",
+      purpose: "Final council synthesis",
+      triggerType: "USER_ACTION",
+      attributionStatus: "TRUSTED"
+    });
     const summaryActivity = await startAgentActivity({
+      traceId: summaryTrace.traceId,
+      attributionStatus: "TRUSTED",
       agentId: grandVizier.id,
       projectId: task.projectId,
       taskId: task.id,
@@ -215,8 +381,29 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       providerName: summaryRoute.provider.name,
       model: summaryRoute.model,
       operation: "final_counsel",
+      sourceType: "FINAL_COUNSEL",
+      sourceId: session.id,
+      requestLabel: `Grand Vizier synthesis for ${task.title}`,
       metadata: { taskMode: task.mode }
     });
+
+    // ── Timeline: FINAL_COUNSEL provider call step ──
+    const summaryProviderStep = await startTraceStep({
+      traceId: summaryTrace.traceId,
+      stepType: "FINAL_COUNSEL",
+      operation: "final_counsel",
+      title: "Grand Vizier final counsel",
+      detail: `${summaryRoute.provider.name} · ${summaryRoute.model}`,
+      agentId: grandVizier.id,
+      providerId: summaryRoute.provider.id,
+      providerType: summaryRoute.provider.type,
+      providerName: summaryRoute.provider.name,
+      model: summaryRoute.model,
+      taskId: task.id,
+      projectId: task.projectId,
+      councilSessionId: session.id
+    });
+
     let generatedSummary: Awaited<ReturnType<typeof generateWithFallback>>;
     try {
       generatedSummary = await generateWithFallback(summaryProviderCalls, {
@@ -233,11 +420,20 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         projectContext,
         kingdomMemoryContext,
         previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
-      });
+      }, summaryTraceContext);
     } catch (error) {
+      await failTraceStep(summaryProviderStep.id, error).catch(() => undefined);
       await failAgentActivity(summaryActivity.id, error).catch(() => undefined);
+      await failAIUsageTrace(summaryTrace.traceId, error).catch(() => undefined);
       throw error;
     }
+
+    // ── Timeline: Complete FINAL_COUNSEL step ──
+    await completeTraceStep(summaryProviderStep.id, {
+      responsePreview: generatedSummary.response,
+      tokensUsed: generatedSummary.usage.totalTokens,
+      metadata: { providerUsed: generatedSummary.providerName, modelUsed: generatedSummary.modelUsed }
+    });
 
     if (generatedSummary.fallbackNotice) {
       fallbackNotices.push(generatedSummary.fallbackNotice);
@@ -250,8 +446,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       generatedSummary.modelUsed,
       generatedSummary.usage
     );
-    await prisma.usageRecord.create({
+    const summaryUsageRecord = await prisma.usageRecord.create({
       data: {
+        traceId: summaryTrace.traceId,
+        attributionStatus: "TRUSTED",
         taskId: task.id,
         councilSessionId: session.id,
         agentId: grandVizier.id,
@@ -283,12 +481,36 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       }
     });
 
+    // ── Timeline: USAGE_RECORDED step for final counsel ──
+    await attachUsageRecordStep(summaryTrace.traceId, {
+      id: summaryUsageRecord.id,
+      provider: generatedSummary.providerName,
+      providerId: generatedSummary.providerId ?? generatedSummary.providerName,
+      model: generatedSummary.modelUsed,
+      totalTokens: generatedSummary.usage.totalTokens,
+      estimatedCostUSD: summaryCost.costUSD,
+      pricingStatus: summaryCost.pricingStatus,
+      taskId: task.id,
+      projectId: task.projectId,
+      councilSessionId: session.id,
+      agentId: grandVizier.id
+    });
+
     await completeAgentActivity(summaryActivity.id, {
       tokensUsed: generatedSummary.usage.totalTokens,
       estimatedCostUSD: summaryCost.costUSD,
       providerId: generatedSummary.providerId ?? generatedSummary.providerName,
       providerName: generatedSummary.providerName,
-      model: generatedSummary.modelUsed
+      model: generatedSummary.modelUsed,
+      usageRecordId: summaryUsageRecord.id
+    });
+    await completeAIUsageTrace(summaryTrace.traceId, generatedSummary.response, {
+      attributionStatus: "TRUSTED",
+      usageRecordId: summaryUsageRecord.id,
+      tokensUsed: generatedSummary.usage.totalTokens,
+      estimatedCostUSD: summaryCost.costUSD,
+      pricingStatus: summaryCost.pricingStatus,
+      fallbackNotice: generatedSummary.fallbackNotice ?? null
     });
 
     const finalSummary = generatedSummary.response;
@@ -343,6 +565,21 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         })
       : [];
 
+    // ── Timeline: MEMORY_EXTRACTION step ──
+    if (savedMemories.length > 0) {
+      await addTraceStep({
+        traceId: summaryTrace.traceId,
+        stepType: "MEMORY_EXTRACTION",
+        operation: "memory_extraction",
+        title: `${savedMemories.length} memories saved`,
+        detail: savedMemories.map((m) => m.title).join(", "),
+        taskId: task.id,
+        projectId: task.projectId,
+        councilSessionId: session.id,
+        metadata: { memoryCount: savedMemories.length, memoryIds: savedMemories.map((m) => m.id) }
+      });
+    }
+
     const sessionWithMemories = await prisma.councilSession.update({
       where: { id: completedSession.id },
       data: {
@@ -358,12 +595,40 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     });
 
     if (autoGenerateReports) {
-      await generateRoyalReport({
+      const report = await generateRoyalReport({
         userId,
         session: sessionWithMemories,
         consultedMemories: relevantMemories
       });
+      await updateAgentActivity(summaryActivity.id, { reportId: report.id }).catch(() => undefined);
+
+      // ── Timeline: REPORT_GENERATION step ──
+      await addTraceStep({
+        traceId: summaryTrace.traceId,
+        stepType: "REPORT_GENERATION",
+        operation: "report_generation",
+        title: "Royal report generated",
+        detail: report.title,
+        reportId: report.id,
+        taskId: task.id,
+        projectId: task.projectId,
+        councilSessionId: session.id
+      });
     }
+
+    // ── Timeline: TRACE_COMPLETED step for final counsel ──
+    await addTraceStep({
+      traceId: summaryTrace.traceId,
+      stepType: "TRACE_COMPLETED",
+      operation: "trace_completed",
+      title: "Final counsel trace completed",
+      taskId: task.id,
+      projectId: task.projectId,
+      councilSessionId: session.id,
+      agentId: grandVizier.id,
+      tokensUsed: generatedSummary.usage.totalTokens,
+      estimatedCostUSD: summaryCost.costUSD
+    });
 
     return sessionWithMemories;
   } catch (error) {

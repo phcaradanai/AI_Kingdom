@@ -26,6 +26,7 @@ import { SecurityPage } from "@/pages/SecurityPage";
 import { SettingsPage } from "@/pages/SettingsPage";
 import { ThroneRoomPage } from "@/pages/ThroneRoomPage";
 import { TreasuryPage } from "@/pages/TreasuryPage";
+import { UsageTracePage } from "@/pages/UsageTracePage";
 import { UsersPage } from "@/pages/UsersPage";
 import "./styles.css";
 
@@ -57,6 +58,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/providers" element={<ProvidersPage />} />
           <Route path="/treasury" element={<TreasuryPage />} />
+          <Route path="/usage-traces/:traceId" element={<UsageTracePage />} />
           <Route path="/audit" element={<AuditPage />} />
           <Route path="/charter" element={<CharterPage />} />
           <Route path="/vision" element={<VisionPage />} />

@@ -31,6 +31,7 @@ import reportsRouter from "./routes/reports.js";
 import settingsRouter from "./routes/settings.js";
 import tasksRouter from "./routes/tasks.js";
 import treasuryRouter from "./routes/treasury.js";
+import usageTracesRouter from "./routes/usageTraces.js";
 import usersRouter from "./routes/users.js";
 import workOrdersRouter from "./routes/workOrders.js";
 import workSessionsRouter from "./routes/workSessions.js";
@@ -93,6 +94,7 @@ export function createApp() {
   app.use("/api/memory", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/memories", requireAuth, methodPermission("memory"), memoriesRouter);
   app.use("/api/treasury", requireAuth, requireRole("KING"), treasuryRouter);
+  app.use("/api/usage-traces", requireAuth, usageTracesRouter);
   app.use("/api/model-pricing", requireAuth, requireRole("KING"), modelPricingRouter);
   app.use("/api/audit", requireAuth, requireRole("KING"), auditRouter);
   app.use("/api/secretary", requireAuth, secretaryRouter);

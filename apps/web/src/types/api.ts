@@ -85,6 +85,13 @@ export type CurrentAgentActivityDto = {
   providerName: string | null;
   model: string | null;
   operation: string | null;
+  traceId: string | null;
+  attributionStatus: AttributionStatus;
+  sourceType: string | null;
+  sourceId: string | null;
+  requestLabel: string | null;
+  usageRecordId: string | null;
+  reportId: string | null;
   projectId: string | null;
   taskId: string | null;
   councilSessionId: string | null;
@@ -95,6 +102,16 @@ export type CurrentAgentActivityDto = {
   heartbeatAt: string | null;
   errorMessage: string | null;
   isStale: boolean;
+  displayTime: string | null;
+  displayTimeType: "started" | "heartbeat" | "ended" | "none";
+  attributionWarning: string | null;
+  links: {
+    trace: string | null;
+    project: string | null;
+    task: string | null;
+    council: string | null;
+    report: string | null;
+  };
 };
 
 export type SettingCategory = "AI" | "UI" | "SECURITY" | "SYSTEM";
@@ -140,7 +157,10 @@ export type CouncilResponseDto = {
   response: string;
   createdAt: string;
   agent: AgentDto;
+  traceId?: string | null;
 };
+
+export type AttributionStatus = "TRUSTED" | "PARTIAL" | "LEGACY_UNATTRIBUTED" | "UNKNOWN_SOURCE";
 
 export type TaskMode = "ASK" | "PLAN" | "RESEARCH" | "BUILD";
 export type TaskStatus = "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
@@ -286,6 +306,7 @@ export type CouncilSessionDto = {
   status: "PENDING" | "RUNNING" | "COMPLETED" | "FAILED";
   selectedAgentIds: string[];
   finalSummary: string | null;
+  finalTraceId?: string | null;
   providerName: string | null;
   modelUsed: string | null;
   fallbackNotice: string | null;
@@ -340,9 +361,29 @@ export type MemoryPayload = {
 
 export type UsageRecordDto = {
   id: string;
+  traceId: string | null;
+  attributionStatus: AttributionStatus;
+  projectId: string | null;
   taskId: string | null;
   councilSessionId: string | null;
   agentId: string | null;
+  purpose: string | null;
+  operation: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  requestLabel: string | null;
+  promptPreview: string | null;
+  responsePreview: string | null;
+  triggerType?: string | null;
+  triggerLabel?: string | null;
+  actorUserId?: string | null;
+  actorDisplayName?: string | null;
+  links?: {
+    trace: string | null;
+    project: string | null;
+    task: string | null;
+    council: string | null;
+  };
   provider: string;
   providerId: string | null;
   model: string;
@@ -359,6 +400,103 @@ export type UsageRecordDto = {
   createdAt: string;
   agent?: { name: string; title: string; slug: string } | null;
   task?: { id: string; title: string; mode: string } | null;
+};
+
+export type UsageTraceDetailsDto = {
+  trace: {
+    id: string;
+    traceId: string;
+    actorUserId: string | null;
+    actorRole: string | null;
+    actorDisplayName: string | null;
+    triggerType: string;
+    triggerRoute: string | null;
+    triggerLabel: string | null;
+    projectId: string | null;
+    taskId: string | null;
+    councilSessionId: string | null;
+    agentId: string | null;
+    sourceType: string;
+    sourceId: string | null;
+    operation: string;
+    purpose: string;
+    providerId: string | null;
+    providerType: string | null;
+    providerName: string | null;
+    model: string | null;
+    status: string;
+    startedAt: string;
+    completedAt: string | null;
+    failedAt: string | null;
+    promptPreview: string | null;
+    responsePreview: string | null;
+    errorMessage: string | null;
+    metadata: unknown;
+    createdAt: string;
+    updatedAt: string;
+  };
+  usageRecords: Array<Pick<UsageRecordDto, "id" | "provider" | "providerId" | "model" | "promptTokens" | "completionTokens" | "totalTokens" | "estimatedCostUSD" | "attributionStatus" | "createdAt"> & { pricingStatus?: string | null }>;
+  agentActivities: Array<{
+    id: string;
+    status: string;
+    activityType: string;
+    title: string;
+    detail: string | null;
+    attributionStatus: AttributionStatus;
+    usageRecordId: string | null;
+    reportId: string | null;
+    startedAt: string;
+    endedAt: string | null;
+    heartbeatAt: string;
+  }>;
+  steps: AIUsageTraceStepDto[];
+  hasTimelineSteps: boolean;
+  totals: {
+    totalTokens: number;
+    totalEstimatedCostUSD: number;
+    providerCallCount: number;
+    fallbackCount: number;
+    agentCount: number;
+    usageRecordCount: number;
+  };
+  links: {
+    project: { id: string; name: string } | null;
+    task: { id: string; title: string; mode: string; status: string } | null;
+    councilSession: { id: string; status: string; taskId: string; projectId: string | null } | null;
+    agent: { id: string; slug: string; name: string; title: string; role: string } | null;
+    reports: Array<{ id: string | null }>;
+  };
+};
+
+export type AIUsageTraceStepDto = {
+  id: string;
+  traceId: string;
+  parentStepId: string | null;
+  stepType: string;
+  operation: string;
+  title: string;
+  detail: string | null;
+  status: string;
+  sequence: number;
+  agentId: string | null;
+  providerId: string | null;
+  providerType: string | null;
+  providerName: string | null;
+  model: string | null;
+  usageRecordId: string | null;
+  taskId: string | null;
+  projectId: string | null;
+  councilSessionId: string | null;
+  reportId: string | null;
+  tokensUsed: number | null;
+  estimatedCostUSD: number | null;
+  promptPreview: string | null;
+  responsePreview: string | null;
+  errorMessage: string | null;
+  metadata: unknown;
+  startedAt: string;
+  endedAt: string | null;
+  agent: { id: string; slug: string; name: string; title: string } | null;
 };
 
 export type TreasuryBudgetStatus = {

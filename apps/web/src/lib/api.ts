@@ -47,6 +47,7 @@ import type {
   TreasuryProviderDto,
   TreasuryDailyDto,
   UsageRecordDto,
+  UsageTraceDetailsDto,
   WorkOrderDto,
   WorkOrderPayload,
   WorkSessionDto
@@ -289,6 +290,7 @@ export const api = {
   providerBalances: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances"),
   syncDeepSeekBalance: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances/deepseek/sync", { method: "POST" }),
   getCurrentAgentActivities: () => apiRequest<{ activities: CurrentAgentActivityDto[] }>("/agent-activities/current"),
+  usageTrace: (traceId: string) => apiRequest<UsageTraceDetailsDto>(`/usage-traces/${encodeURIComponent(traceId)}`),
   modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
   createModelPricing: (payload: ModelPricingPayload) =>
     apiRequest<{ record: ModelPricingDto }>("/model-pricing", { method: "POST", body: JSON.stringify(payload) }),

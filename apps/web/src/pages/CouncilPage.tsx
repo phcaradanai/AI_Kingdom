@@ -185,6 +185,11 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
               </h3>
             </div>
             <MarkdownDocument content={session.finalSummary} className="max-w-none" />
+            {session.finalTraceId && (
+              <Link to={`/usage-traces/${session.finalTraceId}`} className="mt-4 inline-flex text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+                View Synthesis Trace
+              </Link>
+            )}
           </div>
         )}
 
@@ -203,6 +208,11 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
                   </div>
                 </div>
                 <MarkdownDocument content={response.response} className="max-w-none text-xs" />
+                {response.traceId && (
+                  <Link to={`/usage-traces/${response.traceId}`} className="mt-3 inline-flex text-[11px] font-semibold uppercase tracking-wider text-primary hover:underline">
+                    View Response Trace
+                  </Link>
+                )}
               </div>
             ))}
           </div>

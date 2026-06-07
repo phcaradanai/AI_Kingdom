@@ -146,14 +146,33 @@ export async function getTreasuryByProvider() {
 }
 
 export async function getTreasuryUsage(limit = 100) {
-  return prisma.usageRecord.findMany({
+  const records = await prisma.usageRecord.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
     include: {
       agent: { select: { name: true, title: true, slug: true } },
-      task: { select: { id: true, title: true, mode: true } }
+      task: { select: { id: true, title: true, mode: true } },
+      trace: {
+        include: {
+          actorUser: { select: { id: true, displayName: true, role: true } }
+        }
+      }
     }
   });
+
+  return records.map((record) => ({
+    ...record,
+    triggerType: record.trace?.triggerType ?? (record.attributionStatus === "LEGACY_UNATTRIBUTED" ? "LEGACY" : null),
+    triggerLabel: record.trace?.triggerLabel ?? null,
+    actorUserId: record.trace?.actorUserId ?? null,
+    actorDisplayName: record.trace?.actorUser?.displayName ?? null,
+    links: {
+      trace: record.traceId ? `/usage-traces/${record.traceId}` : null,
+      project: record.projectId ? `/projects/${record.projectId}` : null,
+      task: record.taskId ? `/throne-room` : null,
+      council: record.councilSessionId ? `/council` : null
+    }
+  }));
 }
 
 export async function getPricingWarnings() {

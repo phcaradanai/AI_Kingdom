@@ -129,6 +129,13 @@ function buildIdleAgentActivity(agent: AgentDto): CurrentAgentActivityDto {
     providerName: null,
     model: null,
     operation: null,
+    traceId: null,
+    attributionStatus: "LEGACY_UNATTRIBUTED",
+    sourceType: null,
+    sourceId: null,
+    requestLabel: null,
+    usageRecordId: null,
+    reportId: null,
     projectId: null,
     taskId: null,
     councilSessionId: null,
@@ -138,7 +145,17 @@ function buildIdleAgentActivity(agent: AgentDto): CurrentAgentActivityDto {
     endedAt: null,
     heartbeatAt: null,
     errorMessage: null,
-    isStale: false
+    isStale: false,
+    displayTime: null,
+    displayTimeType: "none",
+    attributionWarning: null,
+    links: {
+      trace: null,
+      project: null,
+      task: null,
+      council: null,
+      report: null
+    }
   };
 }
 
@@ -157,16 +174,30 @@ function shortId(value: string) {
   return value.length > 10 ? value.slice(0, 8) : value;
 }
 
+function attributionLabel(status: CurrentAgentActivityDto["attributionStatus"]) {
+  if (status === "TRUSTED") return "Verified source";
+  if (status === "PARTIAL") return "Partial source";
+  if (status === "UNKNOWN_SOURCE") return "Unknown source";
+  return "Legacy / source unknown";
+}
+
+function humanLabel(value?: string | null) {
+  if (!value) return null;
+  return value.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function AgentOperationCard({ activity }: { activity: CurrentAgentActivityDto }) {
   const status = normalizeAgentStatus(activity.status);
   const meta = AGENT_STATUS_META[status];
   const StatusIcon = meta.Icon;
   const providerModel = [activity.providerName, activity.model].filter(Boolean).join(" / ");
   const detail = status === "FAILED" && activity.errorMessage ? activity.errorMessage : activity.detail;
+  const isTrusted = activity.attributionStatus === "TRUSTED";
   const links = [
-    activity.projectId ? { label: "Project", id: activity.projectId, to: `/projects/${activity.projectId}` } : null,
-    activity.taskId ? { label: "Task", id: activity.taskId, to: "/throne-room" } : null,
-    activity.councilSessionId ? { label: "Council", id: activity.councilSessionId, to: "/council" } : null
+    activity.projectId ? { label: "View Project", id: activity.projectId, to: `/projects/${activity.projectId}` } : null,
+    isTrusted && activity.taskId ? { label: "View Task", id: activity.taskId, to: "/throne-room" } : null,
+    isTrusted && activity.councilSessionId ? { label: "View Council", id: activity.councilSessionId, to: "/council" } : null,
+    activity.traceId ? { label: "View Trace", id: activity.traceId, to: `/usage-traces/${activity.traceId}` } : null
   ].filter(Boolean) as { label: string; id: string; to: string }[];
 
   return (
@@ -185,6 +216,12 @@ function AgentOperationCard({ activity }: { activity: CurrentAgentActivityDto })
               <StatusIcon className="h-3.5 w-3.5" aria-hidden="true" />
               <span>{meta.label}</span>
             </div>
+          </div>
+          <div className={cn(
+            "inline-flex w-fit items-center rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-wider",
+            isTrusted ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-300" : "border-amber-400/30 bg-amber-400/10 text-amber-300"
+          )}>
+            {isTrusted ? attributionLabel(activity.attributionStatus) : `Source not verified: ${attributionLabel(activity.attributionStatus)}`}
           </div>
 
           <div>
@@ -223,9 +260,9 @@ function AgentOperationCard({ activity }: { activity: CurrentAgentActivityDto })
           )}
 
           <div className="flex flex-wrap items-center justify-between gap-2 border-t border-primary/10 pt-3 text-[11px] uppercase tracking-widest text-muted-foreground">
-            <span>Last active: {formatLastActive(activity)}</span>
+            <span>{activity.displayTimeType === "ended" ? "Completed" : "Last active"}: {formatLastActive(activity)}</span>
             <div className="flex flex-wrap items-center gap-2">
-              {activity.operation && <span className="rounded-md border border-border/80 px-2 py-1">{activity.operation}</span>}
+              {activity.operation && <span className="rounded-md border border-border/80 px-2 py-1">{humanLabel(activity.operation)}</span>}
               {activity.isStale && <span className="rounded-md border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-amber-300">Stale heartbeat</span>}
             </div>
           </div>

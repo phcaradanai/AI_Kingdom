@@ -4,6 +4,20 @@ import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultAIProviders, listAIProviders, createAIProvider, deleteAIProvider } from "../services/aiProviderRegistry.js";
 import { requireRole } from "../middleware/rbac.js";
+import { createAIProviderFromConfig } from "../ai/providerFactory.js";
+import { generateWithFallback } from "../ai/generateWithFallback.js";
+import { calculateCostUSDFromRegistry } from "../services/modelPricingService.js";
+import {
+  addTraceStep,
+  attachUsageRecordStep,
+  buildTraceContext,
+  completeAIUsageTrace,
+  completeTraceStep,
+  createAIUsageTrace,
+  failAIUsageTrace,
+  startTraceStep
+} from "../services/aiUsageTraceService.js";
+import { buildUsageAttribution } from "../services/usageAttributionService.js";
 
 const router = Router();
 
@@ -33,6 +47,10 @@ const providerCreateSchema = z.object({
     .refine((val) => !val.startsWith("sk-") && !val.includes("-"), "Must be an environment variable name, not a literal secret key")
     .optional()
     .or(z.literal(""))
+});
+
+const providerTestSchema = z.object({
+  prompt: z.string().trim().min(1).max(1000).optional()
 });
 
 router.get("/", async (_req, res, next) => {
@@ -129,6 +147,168 @@ router.delete("/:id", requireRole("KING"), async (req, res, next) => {
 
     res.json({ success: true });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/test", requireRole("KING"), async (req, res, next) => {
+  let traceId: string | null = null;
+  try {
+    await ensureDefaultAIProviders();
+    const payload = providerTestSchema.parse(req.body);
+    const providers = await listAIProviders({ syncDefaults: false });
+    const provider = providers.find((item) => item.id === req.params.id);
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+
+    const prompt = payload.prompt ?? "Provider test call. Reply with a concise readiness confirmation.";
+    const trace = await createAIUsageTrace({
+      actorUserId: req.user?.id,
+      actorRole: req.user?.role,
+      triggerType: "PROVIDER_TEST",
+      triggerRoute: "POST /api/providers/:id/test",
+      triggerLabel: `Provider test: ${provider.name}`,
+      sourceType: "PROVIDER_TEST",
+      sourceId: provider.id,
+      operation: "provider_test_call",
+      purpose: "Provider test call",
+      providerId: provider.id,
+      providerType: provider.type,
+      providerName: provider.name,
+      model: provider.defaultModel,
+      prompt,
+      metadata: { providerId: provider.id },
+      attributionStatus: "TRUSTED"
+    });
+    traceId = trace.traceId;
+    const traceContext = buildTraceContext({
+      traceId,
+      triggerType: "PROVIDER_TEST",
+      sourceType: "PROVIDER_TEST",
+      sourceId: provider.id,
+      operation: "provider_test_call",
+      purpose: "Provider test call",
+      attributionStatus: "TRUSTED"
+    });
+
+    // Timeline: PROVIDER_CALL step
+    const providerTestStep = await startTraceStep({
+      traceId,
+      stepType: "PROVIDER_CALL",
+      operation: "provider_test_call",
+      title: `Provider test: ${provider.name}`,
+      detail: `${provider.name} · ${provider.defaultModel}`,
+      providerId: provider.id,
+      providerType: provider.type,
+      providerName: provider.name,
+      model: provider.defaultModel,
+      promptPreview: prompt
+    });
+
+    const generated = await generateWithFallback([
+      { provider: createAIProviderFromConfig(provider), model: provider.defaultModel }
+    ], {
+      command: prompt,
+      mode: "ASK",
+      agentName: "Provider Test",
+      agentRole: "Provider Test",
+      agentSkills: ["provider-readiness"],
+      systemPrompt: "You are testing provider connectivity. Do not include secrets.",
+      responseStyle: "concise",
+      maxTokens: 120
+    }, traceContext);
+
+    // Timeline: Complete PROVIDER_CALL step
+    await completeTraceStep(providerTestStep.id, {
+      responsePreview: generated.response,
+      tokensUsed: generated.usage.totalTokens,
+      metadata: { providerUsed: generated.providerName, modelUsed: generated.modelUsed }
+    });
+
+    const cost = await calculateCostUSDFromRegistry(generated.providerName, generated.modelUsed, generated.usage);
+    const usageRecord = await prisma.usageRecord.create({
+      data: {
+        traceId,
+        attributionStatus: "TRUSTED",
+        provider: generated.providerName,
+        providerId: generated.providerId ?? generated.providerName,
+        model: generated.modelUsed,
+        promptTokens: generated.usage.promptTokens,
+        completionTokens: generated.usage.completionTokens,
+        totalTokens: generated.usage.totalTokens,
+        inputCacheHitTokens: generated.usage.inputCacheHitTokens ?? null,
+        inputCacheMissTokens: generated.usage.inputCacheMissTokens ?? null,
+        estimatedCostUSD: cost.costUSD,
+        estimatedCostLocal: cost.costUSD,
+        currency: "USD",
+        pricingSource: cost.source,
+        pricingStatus: cost.pricingStatus,
+        pricingNotes: cost.pricingNotes ?? null,
+        ...buildUsageAttribution({
+          purpose: "Provider test call",
+          sourceType: "PROVIDER_TEST",
+          sourceId: provider.id,
+          operation: "provider_test_call",
+          requestLabel: `Provider test: ${provider.name}`,
+          prompt,
+          response: generated.response,
+          metadata: { providerId: provider.id, pricingStatus: cost.pricingStatus }
+        })
+      }
+    });
+
+    // Timeline: USAGE_RECORDED step
+    await attachUsageRecordStep(traceId, {
+      id: usageRecord.id,
+      provider: generated.providerName,
+      providerId: generated.providerId ?? generated.providerName,
+      model: generated.modelUsed,
+      totalTokens: generated.usage.totalTokens,
+      estimatedCostUSD: cost.costUSD,
+      pricingStatus: cost.pricingStatus
+    });
+
+    // Timeline: TRACE_COMPLETED step
+    await addTraceStep({
+      traceId,
+      stepType: "TRACE_COMPLETED",
+      operation: "trace_completed",
+      title: "Provider test completed",
+      providerId: provider.id,
+      providerName: generated.providerName,
+      model: generated.modelUsed,
+      tokensUsed: generated.usage.totalTokens,
+      estimatedCostUSD: cost.costUSD
+    });
+
+    await completeAIUsageTrace(traceId, generated.response, {
+      attributionStatus: "TRUSTED",
+      usageRecordId: usageRecord.id,
+      tokensUsed: generated.usage.totalTokens,
+      estimatedCostUSD: cost.costUSD,
+      fallbackNotice: generated.fallbackNotice ?? null
+    });
+
+    await auditLog({
+      userId: req.user?.id,
+      action: "test_ai_provider",
+      resourceType: "ai_provider",
+      resourceId: provider.id,
+      metadata: { traceId, usageRecordId: usageRecord.id }
+    });
+
+    res.json({
+      ok: true,
+      traceId,
+      usageRecordId: usageRecord.id,
+      provider: generated.providerName,
+      model: generated.modelUsed,
+      responsePreview: generated.response.slice(0, 500)
+    });
+  } catch (error) {
+    if (traceId) await failAIUsageTrace(traceId, error).catch(() => undefined);
     next(error);
   }
 });

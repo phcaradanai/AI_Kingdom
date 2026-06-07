@@ -1,4 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
+import { Fragment, FormEvent, useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { Plus, RefreshCw, Save, Trash2, X } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
@@ -11,6 +12,7 @@ import type {
   ModelPricingDto,
   ModelPricingPayload,
   PricingWarningsDto,
+  AttributionStatus,
   TreasuryOverviewDto,
   TreasuryAgentDto,
   TreasuryProviderDto,
@@ -322,7 +324,28 @@ function PricingStatusBadge({ status, notes }: { status?: string | null; notes?:
   );
 }
 
+function AttributionBadge({ status }: { status: AttributionStatus }) {
+  const meta = {
+    TRUSTED: { label: "Verified source", className: "border-emerald-400/35 bg-emerald-400/10 text-emerald-300" },
+    PARTIAL: { label: "Partial source", className: "border-amber-400/35 bg-amber-400/10 text-amber-300" },
+    LEGACY_UNATTRIBUTED: { label: "Legacy / source unknown", className: "border-muted-foreground/30 bg-muted/30 text-muted-foreground" },
+    UNKNOWN_SOURCE: { label: "Unknown source", className: "border-destructive/40 bg-destructive/10 text-destructive" }
+  }[status] ?? { label: "Unknown source", className: "border-destructive/40 bg-destructive/10 text-destructive" };
+
+  return (
+    <span className={cn("inline-flex rounded-md border px-2 py-1 text-[10px] font-bold uppercase tracking-wider", meta.className)}>
+      {meta.label}
+    </span>
+  );
+}
+
+function readableLabel(value?: string | null) {
+  if (!value) return "—";
+  return value.toLowerCase().replace(/_/g, " ").replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   if (records.length === 0)
     return <p className="py-8 text-center text-sm text-muted-foreground">No usage records yet.</p>;
 
@@ -333,29 +356,68 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
           <tr className="border-b border-border text-left text-xs text-muted-foreground">
             <th className="pb-2 pr-4 font-medium">When</th>
             <th className="pb-2 pr-4 font-medium">Agent</th>
+            <th className="pb-2 pr-4 font-medium">Attribution</th>
             <th className="pb-2 pr-4 font-medium">Model</th>
             <th className="pb-2 pr-4 text-right font-medium">Tokens</th>
             <th className="pb-2 text-right font-medium">Cost</th>
           </tr>
         </thead>
         <tbody>
-          {records.map((r) => (
-            <tr key={r.id} className="border-b border-border/40 last:border-0">
-              <td className="py-2 pr-4 text-xs text-muted-foreground">{formatDate(r.createdAt)}</td>
-              <td className="py-2 pr-4">
-                <div className="flex items-center gap-2">
-                  <AgentPortrait agent={r.agent} size="sm" status="COMPLETED" className="h-9 w-9" />
-                  <span className="text-xs">{r.agent?.name ?? "—"}</span>
-                </div>
-              </td>
-              <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{r.model}</td>
-              <td className="py-2 pr-4 text-right tabular-nums text-xs">{formatTokens(r.totalTokens)}</td>
-              <td className="py-2 text-right font-mono tabular-nums text-xs">
-                {formatCost(r.estimatedCostUSD)}
-                <PricingStatusBadge status={r.pricingStatus} notes={r.pricingNotes} />
-              </td>
-            </tr>
-          ))}
+          {records.map((r) => {
+            const expanded = expandedId === r.id;
+            return (
+              <Fragment key={r.id}>
+                <tr className={cn("border-b border-border/40 last:border-0", r.attributionStatus !== "TRUSTED" && "bg-muted/10 opacity-85")}>
+                  <td className="py-2 pr-4 text-xs text-muted-foreground">
+                    <button className="text-left hover:text-primary" onClick={() => setExpandedId(expanded ? null : r.id)}>
+                      {formatDate(r.createdAt)}
+                    </button>
+                  </td>
+                  <td className="py-2 pr-4">
+                    <div className="flex items-center gap-2">
+                      <AgentPortrait agent={r.agent} size="sm" status={r.attributionStatus === "TRUSTED" ? "COMPLETED" : "WAITING_PROVIDER"} className="h-9 w-9" />
+                      <span className="text-xs">{r.agent?.name ?? "—"}</span>
+                    </div>
+                  </td>
+                  <td className="py-2 pr-4">
+                    <AttributionBadge status={r.attributionStatus} />
+                  </td>
+                  <td className="py-2 pr-4 font-mono text-xs text-muted-foreground">{r.model}</td>
+                  <td className="py-2 pr-4 text-right tabular-nums text-xs">{formatTokens(r.totalTokens)}</td>
+                  <td className="py-2 text-right font-mono tabular-nums text-xs">
+                    {formatCost(r.estimatedCostUSD)}
+                    <PricingStatusBadge status={r.pricingStatus} notes={r.pricingNotes} />
+                  </td>
+                </tr>
+                {expanded && (
+                  <tr className="border-b border-border/40 bg-background/40">
+                    <td colSpan={6} className="px-3 py-3">
+                      <div className="grid gap-3 text-xs md:grid-cols-2">
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                          <div className="font-semibold uppercase tracking-wider text-primary/70">Trace</div>
+                          <div className="mt-2 space-y-1 text-muted-foreground">
+                            <div>Trace ID: <span className="font-mono text-foreground">{r.traceId ?? "No trusted trace"}</span></div>
+                            <div>Purpose: <span className="text-foreground">{r.purpose ?? "—"}</span></div>
+                            <div>Operation: <span className="text-foreground">{readableLabel(r.operation)}</span></div>
+                            <div>Trigger: <span className="text-foreground">{readableLabel(r.triggerType)}</span></div>
+                            <div>Actor: <span className="text-foreground">{r.actorDisplayName ?? r.actorUserId ?? "—"}</span></div>
+                            {r.traceId && <Link to={`/usage-traces/${r.traceId}`} className="inline-flex pt-1 text-primary hover:underline">View Trace</Link>}
+                          </div>
+                        </div>
+                        <div className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                          <div className="font-semibold uppercase tracking-wider text-primary/70">Safe Preview</div>
+                          <div className="mt-2 space-y-2 text-muted-foreground">
+                            <div><span className="text-foreground">Prompt:</span> {r.promptPreview ?? "No sanitized preview"}</div>
+                            <div><span className="text-foreground">Response:</span> {r.responsePreview ?? "No sanitized preview"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            );
+          })}
         </tbody>
       </table>
     </div>

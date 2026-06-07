@@ -28,7 +28,7 @@ router.get("/", async (req, res, next) => {
       orderBy: { createdAt: "desc" }
     });
 
-    res.json({ sessions });
+    res.json({ sessions: await attachCouncilTraceLinks(sessions) });
   } catch (error) {
     next(error);
   }
@@ -64,10 +64,51 @@ router.get("/:sessionId", async (req, res, next) => {
       return;
     }
 
-    res.json({ session });
+    const [sessionWithTraceLinks] = await attachCouncilTraceLinks([session]);
+    res.json({ session: sessionWithTraceLinks });
   } catch (error) {
     next(error);
   }
 });
 
 export default router;
+
+type CouncilSessionWithResponses = Awaited<ReturnType<typeof prisma.councilSession.findMany>>[number] & {
+  responses: Array<{ id: string }>;
+};
+
+async function attachCouncilTraceLinks<T extends CouncilSessionWithResponses>(sessions: T[]) {
+  const responseIds = sessions.flatMap((session) => session.responses.map((response) => response.id));
+  const sessionIds = sessions.map((session) => session.id);
+  const usageRecords = await prisma.usageRecord.findMany({
+    where: {
+      traceId: { not: null },
+      OR: [
+        { sourceType: "AGENT_RESPONSE", sourceId: { in: responseIds } },
+        { sourceType: "FINAL_COUNSEL", councilSessionId: { in: sessionIds } }
+      ]
+    },
+    select: { traceId: true, sourceType: true, sourceId: true, councilSessionId: true },
+    orderBy: { createdAt: "desc" }
+  });
+  const traceByResponse = new Map<string, string>();
+  const finalTraceBySession = new Map<string, string>();
+
+  for (const record of usageRecords) {
+    if (record.traceId && record.sourceType === "AGENT_RESPONSE" && record.sourceId && !traceByResponse.has(record.sourceId)) {
+      traceByResponse.set(record.sourceId, record.traceId);
+    }
+    if (record.traceId && record.sourceType === "FINAL_COUNSEL" && record.councilSessionId && !finalTraceBySession.has(record.councilSessionId)) {
+      finalTraceBySession.set(record.councilSessionId, record.traceId);
+    }
+  }
+
+  return sessions.map((session) => ({
+    ...session,
+    finalTraceId: finalTraceBySession.get(session.id) ?? null,
+    responses: session.responses.map((response) => ({
+      ...response,
+      traceId: traceByResponse.get(response.id) ?? null
+    }))
+  }));
+}

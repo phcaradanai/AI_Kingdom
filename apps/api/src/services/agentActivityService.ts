@@ -15,6 +15,8 @@ export type AgentActivityStatus =
   | "FAILED";
 
 type AgentActivityInput = {
+  traceId?: string | null;
+  attributionStatus?: string | null;
   agentId: string;
   projectId?: string | null;
   taskId?: string | null;
@@ -27,6 +29,11 @@ type AgentActivityInput = {
   providerName?: string | null;
   model?: string | null;
   operation?: string | null;
+  sourceType?: string | null;
+  sourceId?: string | null;
+  requestLabel?: string | null;
+  usageRecordId?: string | null;
+  reportId?: string | null;
   tokensUsed?: number;
   estimatedCostUSD?: number;
   metadata?: unknown;
@@ -56,6 +63,13 @@ export type CurrentAgentActivityDto = {
   providerName: string | null;
   model: string | null;
   operation: string | null;
+  traceId: string | null;
+  attributionStatus: string;
+  sourceType: string | null;
+  sourceId: string | null;
+  requestLabel: string | null;
+  usageRecordId: string | null;
+  reportId: string | null;
   projectId: string | null;
   taskId: string | null;
   councilSessionId: string | null;
@@ -66,6 +80,16 @@ export type CurrentAgentActivityDto = {
   heartbeatAt: Date | null;
   errorMessage: string | null;
   isStale: boolean;
+  displayTime: Date | null;
+  displayTimeType: "started" | "heartbeat" | "ended" | "none";
+  attributionWarning: string | null;
+  links: {
+    trace: string | null;
+    project: string | null;
+    task: string | null;
+    council: string | null;
+    report: string | null;
+  };
 };
 
 const ACTIVE_STATUSES = ["QUEUED", "THINKING", "WAITING_PROVIDER", "RESPONDING", "SUMMARIZING", "EXTRACTING_MEMORY", "GENERATING_REPORT"];
@@ -75,6 +99,8 @@ export async function startAgentActivity(input: AgentActivityInput): Promise<Age
   const now = new Date();
   return prisma.agentActivity.create({
     data: {
+      traceId: sanitizePreview(input.traceId, 160),
+      attributionStatus: sanitizePreview(input.attributionStatus, 80) ?? "LEGACY_UNATTRIBUTED",
       agentId: input.agentId,
       projectId: input.projectId ?? null,
       taskId: input.taskId ?? null,
@@ -87,6 +113,11 @@ export async function startAgentActivity(input: AgentActivityInput): Promise<Age
       providerName: sanitizePreview(input.providerName, 120),
       model: sanitizePreview(input.model, 200),
       operation: sanitizePreview(input.operation, 120),
+      sourceType: sanitizePreview(input.sourceType, 80),
+      sourceId: sanitizePreview(input.sourceId, 160),
+      requestLabel: sanitizePreview(input.requestLabel, 180),
+      usageRecordId: sanitizePreview(input.usageRecordId, 160),
+      reportId: sanitizePreview(input.reportId, 160),
       tokensUsed: input.tokensUsed ?? 0,
       estimatedCostUSD: input.estimatedCostUSD ?? 0,
       startedAt: now,
@@ -158,6 +189,8 @@ export async function getCurrentAgentActivities(): Promise<CurrentAgentActivityD
 
 function buildActivityUpdate(input: AgentActivityUpdateInput): Prisma.AgentActivityUpdateInput {
   return {
+    ...(input.traceId !== undefined ? { traceId: sanitizePreview(input.traceId, 160) } : {}),
+    ...(input.attributionStatus !== undefined ? { attributionStatus: sanitizePreview(input.attributionStatus, 80) ?? "LEGACY_UNATTRIBUTED" } : {}),
     ...(input.status ? { status: input.status } : {}),
     ...(input.activityType !== undefined ? { activityType: sanitizePreview(input.activityType, 120) ?? "AGENT_ACTIVITY" } : {}),
     ...(input.title !== undefined ? { title: sanitizePreview(input.title, 180) ?? "Agent activity" } : {}),
@@ -166,6 +199,11 @@ function buildActivityUpdate(input: AgentActivityUpdateInput): Prisma.AgentActiv
     ...(input.providerName !== undefined ? { providerName: sanitizePreview(input.providerName, 120) } : {}),
     ...(input.model !== undefined ? { model: sanitizePreview(input.model, 200) } : {}),
     ...(input.operation !== undefined ? { operation: sanitizePreview(input.operation, 120) } : {}),
+    ...(input.sourceType !== undefined ? { sourceType: sanitizePreview(input.sourceType, 80) } : {}),
+    ...(input.sourceId !== undefined ? { sourceId: sanitizePreview(input.sourceId, 160) } : {}),
+    ...(input.requestLabel !== undefined ? { requestLabel: sanitizePreview(input.requestLabel, 180) } : {}),
+    ...(input.usageRecordId !== undefined ? { usageRecordId: sanitizePreview(input.usageRecordId, 160) } : {}),
+    ...(input.reportId !== undefined ? { reportId: sanitizePreview(input.reportId, 160) } : {}),
     ...(input.tokensUsed !== undefined ? { tokensUsed: input.tokensUsed } : {}),
     ...(input.estimatedCostUSD !== undefined ? { estimatedCostUSD: input.estimatedCostUSD } : {}),
     ...(input.metadata !== undefined ? { metadata: sanitizeMetadata(input.metadata) } : {}),
@@ -190,6 +228,13 @@ function syntheticIdleActivity(agent: CurrentAgentActivityDto["agent"]): Current
     providerName: null,
     model: null,
     operation: null,
+    traceId: null,
+    attributionStatus: "LEGACY_UNATTRIBUTED",
+    sourceType: null,
+    sourceId: null,
+    requestLabel: null,
+    usageRecordId: null,
+    reportId: null,
     projectId: null,
     taskId: null,
     councilSessionId: null,
@@ -199,11 +244,23 @@ function syntheticIdleActivity(agent: CurrentAgentActivityDto["agent"]): Current
     endedAt: null,
     heartbeatAt: null,
     errorMessage: null,
-    isStale: false
+    isStale: false,
+    displayTime: null,
+    displayTimeType: "none",
+    attributionWarning: null,
+    links: {
+      trace: null,
+      project: null,
+      task: null,
+      council: null,
+      report: null
+    }
   };
 }
 
 function toCurrentActivityDto(agent: CurrentAgentActivityDto["agent"], activity: AgentActivity): CurrentAgentActivityDto {
+  const displayTime = activity.endedAt ?? activity.heartbeatAt ?? activity.startedAt ?? null;
+  const displayTimeType = activity.endedAt ? "ended" : activity.heartbeatAt ? "heartbeat" : activity.startedAt ? "started" : "none";
   return {
     id: activity.id,
     agent,
@@ -215,6 +272,13 @@ function toCurrentActivityDto(agent: CurrentAgentActivityDto["agent"], activity:
     providerName: activity.providerName,
     model: activity.model,
     operation: activity.operation,
+    traceId: activity.traceId,
+    attributionStatus: activity.attributionStatus,
+    sourceType: activity.sourceType,
+    sourceId: activity.sourceId,
+    requestLabel: activity.requestLabel,
+    usageRecordId: activity.usageRecordId,
+    reportId: activity.reportId,
     projectId: activity.projectId,
     taskId: activity.taskId,
     councilSessionId: activity.councilSessionId,
@@ -224,6 +288,16 @@ function toCurrentActivityDto(agent: CurrentAgentActivityDto["agent"], activity:
     endedAt: activity.endedAt,
     heartbeatAt: activity.heartbeatAt,
     errorMessage: activity.errorMessage,
-    isStale: !activity.endedAt && Date.now() - activity.heartbeatAt.getTime() > STALE_AFTER_MS
+    isStale: !activity.endedAt && Date.now() - activity.heartbeatAt.getTime() > STALE_AFTER_MS,
+    displayTime,
+    displayTimeType,
+    attributionWarning: activity.attributionStatus === "TRUSTED" ? null : "Source not verified",
+    links: {
+      trace: activity.traceId ? `/usage-traces/${activity.traceId}` : null,
+      project: activity.projectId ? `/projects/${activity.projectId}` : null,
+      task: activity.taskId ? "/throne-room" : null,
+      council: activity.councilSessionId ? "/council" : null,
+      report: activity.reportId ? "/reports" : null
+    }
   };
 }
