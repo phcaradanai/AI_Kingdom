@@ -32,7 +32,8 @@ export function createAIProviderByName(providerName: string): AIProvider {
       apiKey: env.OPENROUTER_API_KEY,
       baseUrl: env.OPENROUTER_BASE_URL,
       defaultModel: env.OPENROUTER_MODEL,
-      headers: openRouterHeaders()
+      headers: openRouterHeaders(),
+      timeoutMs: env.OPENROUTER_TIMEOUT_MS
     });
   }
 
@@ -66,7 +67,8 @@ export function createAIProviderFromConfig(config: ProviderRuntimeConfig): AIPro
       apiKey: env.OPENROUTER_API_KEY,
       baseUrl: config.baseUrl ?? env.OPENROUTER_BASE_URL,
       defaultModel: config.defaultModel,
-      headers: openRouterHeaders()
+      headers: openRouterHeaders(),
+      timeoutMs: env.OPENROUTER_TIMEOUT_MS
     });
   }
   if (config.id === "deepseek" || config.type === "deepseek") return createAIProviderByName("deepseek");

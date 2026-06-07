@@ -37,6 +37,7 @@ const envSchema = z.object({
   LOCAL_AI_BASE_URL: optionalUrl,
   LOCAL_AI_MODEL: z.string().default("llama3.1"),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
+  OPENROUTER_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
   AI_MAX_TOKENS: z.coerce.number().int().positive().default(700)
 }).superRefine((value, ctx) => {
   if (value.NODE_ENV === "production" && (value.JWT_SECRET === "development-secret-change-me" || value.JWT_SECRET.length < 32)) {

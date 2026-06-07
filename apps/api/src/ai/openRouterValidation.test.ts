@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { assertSafeTestDatabase } from "../test/testDb.js";
 import { prisma } from "../db/prisma.js";
+import type { AIProvider } from "./aiProvider.js";
 import { OpenAICompatibleProvider } from "./openAICompatibleProvider.js";
 import { generateWithFallback, normalizeModelIdForProvider } from "./generateWithFallback.js";
 import { createAIUsageTrace } from "../services/aiUsageTraceService.js";
@@ -304,6 +305,122 @@ test("normalizeModelIdForProvider: whitespace is trimmed for all provider types"
 test("normalizeModelIdForProvider: sandbox always returns local-sandbox-baseline", () => {
   assert.equal(normalizeModelIdForProvider("sandbox", "whatever"), "local-sandbox-baseline");
   assert.equal(normalizeModelIdForProvider("sandbox", ""), "local-sandbox-baseline");
+});
+
+test("OpenAICompatibleProvider sends stream: false in request body", async () => {
+  const provider = new OpenAICompatibleProvider({
+    providerId: "openrouter",
+    apiKey: "dummy-key",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "model-1"
+  });
+
+  const originalFetch = global.fetch;
+  let capturedBody: any = null;
+  global.fetch = (async (_url: string, init?: RequestInit) => {
+    capturedBody = JSON.parse(init?.body as string);
+    return {
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "ok" } }] })
+    } as any;
+  }) as any;
+
+  try {
+    await provider.generateAgentResponse({
+      command: "test",
+      mode: "ASK",
+      agentName: "test",
+      agentRole: "test",
+      agentSkills: [],
+      systemPrompt: "test",
+      responseStyle: "concise"
+    });
+    assert.equal(capturedBody?.stream, false, "stream must be false in request body");
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("OpenAICompatibleProvider classifies timeout as PROVIDER_TIMEOUT", async () => {
+  const provider = new OpenAICompatibleProvider({
+    providerId: "openrouter",
+    apiKey: "dummy-key",
+    baseUrl: "https://openrouter.ai/api/v1",
+    defaultModel: "model-1",
+    timeoutMs: 10
+  });
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () => new Promise(() => {})) as any;
+
+  try {
+    await assert.rejects(
+      async () => provider.generateAgentResponse({
+        command: "test",
+        mode: "ASK",
+        agentName: "test",
+        agentRole: "test",
+        agentSkills: [],
+        systemPrompt: "test",
+        responseStyle: "concise"
+      }),
+      (err: any) => {
+        assert.match(err.message, /PROVIDER_TIMEOUT/);
+        assert.equal(err.errorCode, "PROVIDER_TIMEOUT");
+        return true;
+      }
+    );
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
+test("generateWithFallback: primary timeout falls back without blocking next provider", async () => {
+  const traceId = `test-timeout-fallback-${Date.now()}`;
+  await createAIUsageTrace({
+    traceId,
+    triggerType: "TEST",
+    sourceType: "TEST",
+    operation: "test",
+    purpose: "test",
+    attributionStatus: "TRUSTED"
+  });
+
+  const timingOutProvider = new OpenAICompatibleProvider({
+    providerId: "timing-out-provider",
+    apiKey: "dummy-key",
+    baseUrl: "https://example.com/v1",
+    defaultModel: "slow-model",
+    timeoutMs: 10
+  });
+
+  let fallbackCalled = false;
+  const fallbackProvider: AIProvider = {
+    name: "fallback-prov",
+    model: "fallback-model",
+    async generateAgentResponse() {
+      fallbackCalled = true;
+      return { response: "fallback", usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 } };
+    }
+  };
+
+  const originalFetch = global.fetch;
+  global.fetch = (async () => new Promise(() => {})) as any;
+
+  try {
+    const result = await generateWithFallback(
+      [timingOutProvider, fallbackProvider],
+      { command: "test", mode: "ASK", agentName: "t", agentRole: "t", agentSkills: [], systemPrompt: "t", responseStyle: "concise" },
+      { traceId, attributionStatus: "TRUSTED", sourceType: "TEST", operation: "test", purpose: "test" }
+    );
+
+    assert.ok(fallbackCalled, "Fallback provider must still be called after primary timeout");
+    assert.equal(result.fallbackUsed, true);
+    assert.match(result.errorMessage ?? "", /PROVIDER_TIMEOUT/);
+  } finally {
+    global.fetch = originalFetch;
+    await prisma.aIUsageTrace.delete({ where: { traceId } }).catch(() => undefined);
+  }
 });
 
 test("OpenAICompatibleProvider sends exact model ID in request body", async () => {

@@ -29,6 +29,7 @@ export type OpenAICompatibleProviderOptions = {
   baseUrl: string;
   defaultModel: string;
   headers?: Record<string, string>;
+  timeoutMs?: number;
 };
 
 export class OpenAICompatibleProvider implements AIProvider {
@@ -37,6 +38,7 @@ export class OpenAICompatibleProvider implements AIProvider {
   private apiKey: string;
   private baseUrl: string;
   private headers: Record<string, string>;
+  private timeoutMs: number;
 
   constructor(options: OpenAICompatibleProviderOptions) {
     this.name = options.providerId;
@@ -44,6 +46,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.headers = options.headers ?? {};
+    this.timeoutMs = options.timeoutMs ?? env.AI_TIMEOUT_MS;
   }
 
   async generateAgentResponse(input: GenerateAgentResponseInput): Promise<AgentResponseResult> {
@@ -52,7 +55,8 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), env.AI_TIMEOUT_MS);
+    const timeoutMs = this.timeoutMs;
+    const timeout = setTimeout(() => controller.abort(new Error("PROVIDER_TIMEOUT")), timeoutMs);
 
     try {
       const url = this.baseUrl.endsWith("/chat/completions") ? this.baseUrl : `${this.baseUrl}/chat/completions`;
@@ -68,6 +72,7 @@ export class OpenAICompatibleProvider implements AIProvider {
           model: input.model ?? this.model,
           max_tokens: input.maxTokens ?? env.AI_MAX_TOKENS,
           temperature: input.temperature ?? 0.35,
+          stream: false,
           messages: [
             {
               role: "system",
@@ -126,6 +131,13 @@ export class OpenAICompatibleProvider implements AIProvider {
         usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens },
         responseModel: payload.model ?? null
       };
+    } catch (error) {
+      if (controller.signal.aborted) {
+        const timeoutErr = new Error(`PROVIDER_TIMEOUT: ${this.name} timed out after ${timeoutMs}ms`);
+        (timeoutErr as any).errorCode = "PROVIDER_TIMEOUT";
+        throw timeoutErr;
+      }
+      throw error;
     } finally {
       clearTimeout(timeout);
     }
