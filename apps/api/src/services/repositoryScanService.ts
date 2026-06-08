@@ -193,6 +193,70 @@ export async function getLatestSnapshot(projectId: string): Promise<RepositorySn
   return snapshot ? toDto(snapshot) : null;
 }
 
+function formatSnapshotList(items: string[]): string {
+  return items.length ? items.map((s) => `- ${s}`).join("\n") : "- None detected.";
+}
+
+export function formatRepositoryContextSection(snapshot: RepositorySnapshotDto | null): string {
+  if (!snapshot) {
+    return [
+      "## Repository Context",
+      "",
+      "Repository Snapshot: not available.",
+      "",
+      "Action required:",
+      "Run Scan Repository from the Project Workspace before assigning repository-aware implementation work."
+    ].join("\n");
+  }
+  return [
+    "## Repository Context",
+    `Snapshot generated at: ${snapshot.generatedAt}`,
+    `Repository URL: ${snapshot.repositoryUrl ?? "Not configured"}`,
+    `Branch: ${snapshot.branch ?? "Not detected"}`,
+    "",
+    "Framework:",
+    snapshot.framework ?? "Not detected",
+    "",
+    "Language:",
+    snapshot.language ?? "Not detected",
+    "",
+    "Package manager:",
+    snapshot.packageManager ?? "Not detected",
+    "",
+    "Prisma models:",
+    formatSnapshotList(snapshot.prismaModels),
+    "",
+    "Modules:",
+    formatSnapshotList(snapshot.modules),
+    "",
+    "Services:",
+    formatSnapshotList(snapshot.services),
+    "",
+    "API routes:",
+    formatSnapshotList(snapshot.apiRoutes),
+    "",
+    "Repository summary:",
+    snapshot.summary ?? "Not available"
+  ].join("\n");
+}
+
+export function buildContextSourceTrace(opts: {
+  hasProjectMetadata: boolean;
+  hasKingdomMemory: boolean;
+  snapshot: RepositorySnapshotDto | null;
+}): string {
+  const lines = [
+    "## Context Sources",
+    `- Project metadata: ${opts.hasProjectMetadata ? "loaded" : "missing"}`,
+    `- Kingdom memory: ${opts.hasKingdomMemory ? "loaded" : "missing"}`,
+    `- Repository snapshot: ${opts.snapshot ? "loaded" : "missing"}`
+  ];
+  if (opts.snapshot) {
+    lines.push(`- Repository snapshot generated at: ${opts.snapshot.generatedAt}`);
+  }
+  return lines.join("\n");
+}
+
 function toDto(snapshot: {
   id: string;
   projectId: string;

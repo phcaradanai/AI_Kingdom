@@ -5,6 +5,7 @@ import { prisma } from "../db/prisma.js";
 import { getCharter, getVision } from "./charterService.js";
 import { isSensitive } from "./memoryService.js";
 import { buildProjectContext } from "./projectContextService.js";
+import { buildContextSourceTrace, formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { createArtifact } from "./projectService.js";
 import { evaluateRecordValue } from "./dataValueGateService.js";
 
@@ -190,7 +191,10 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
   if (!workOrder) throw notFound("Work order not found");
   if (!externalAgent) throw notFound("External agent not found");
 
-  const driftContext = await preventContextDrift(workOrderId);
+  const [driftContext, snapshot] = await Promise.all([
+    preventContextDrift(workOrderId),
+    workOrder.projectId ? getLatestSnapshot(workOrder.projectId) : Promise.resolve(null)
+  ]);
   const decisions = workOrder.implementationReports.flatMap((report) => report.decisionsMade).filter(Boolean);
 
   return redact([
@@ -205,6 +209,8 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     driftContext.kingdomContext,
     "## Project Context",
     driftContext.projectContext,
+    formatRepositoryContextSection(snapshot),
+    buildContextSourceTrace({ hasProjectMetadata: !!workOrder.projectId, hasKingdomMemory: true, snapshot }),
     "## Objective",
     workOrder.objective,
     "## Scope",
@@ -281,12 +287,15 @@ export async function createHandoffBrief(workOrderId: string) {
 
   const latestSession = workOrder.workSessions[0] ?? null;
   const latestReport = workOrder.implementationReports[0] ?? null;
+  const snapshot = workOrder.projectId ? await getLatestSnapshot(workOrder.projectId) : null;
   const completedWork = latestReport ? [latestReport.summary] : [];
   const knownIssues = latestReport?.errors ?? [];
   const nextSteps = latestReport?.remainingWork.length ? latestReport.remainingWork : [latestReport?.nextRecommendedAction ?? "Review the work order and continue from the current status."];
   const handoffPrompt = redact([
     `# Handoff Brief: ${workOrder.title}`,
     `Current status: ${workOrder.status}`,
+    formatRepositoryContextSection(snapshot),
+    buildContextSourceTrace({ hasProjectMetadata: !!workOrder.projectId, hasKingdomMemory: true, snapshot }),
     "## Completed Work",
     formatList(completedWork.length ? completedWork : ["No implementation report has been submitted yet."]),
     "## Decisions Made",

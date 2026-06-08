@@ -160,6 +160,130 @@ test("implementation report can be submitted and handoff brief generated", async
   }
 });
 
+test("buildExternalAgentPrompt includes repository context when snapshot exists", async () => {
+  const { user } = await createUser("KING");
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const project = await prisma.project.create({
+    data: { name: `M15B Test Project ${suffix}`, status: "ACTIVE", priority: "MEDIUM" }
+  });
+  const snapshot = await prisma.repositorySnapshot.create({
+    data: {
+      projectId: project.id,
+      framework: "Express",
+      language: "TypeScript",
+      packageManager: "npm",
+      prismaModels: ["User", "WorkOrder", "Project"],
+      modules: ["src/routes"],
+      services: ["src/services/authService.ts"],
+      apiRoutes: ["GET /api/users -> src/routes/users.ts"],
+      summary: "Express + TypeScript project with 3 Prisma models."
+    }
+  });
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CODEX" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "M15B repo context test",
+      objective: "Verify repo context injection",
+      projectId: project.id,
+      createdByUserId: user.id,
+      status: "READY"
+    }
+  });
+
+  try {
+    const prompt = await buildExternalAgentPrompt(workOrder.id, externalAgent.id);
+    assert.match(prompt, /## Repository Context/);
+    assert.match(prompt, /Snapshot generated at:/);
+    assert.match(prompt, /Prisma models:/);
+    assert.match(prompt, /- User/);
+    assert.match(prompt, /- WorkOrder/);
+    assert.match(prompt, /## Context Sources/);
+    assert.match(prompt, /Repository snapshot: loaded/);
+    assert.match(prompt, /Project metadata: loaded/);
+  } finally {
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.repositorySnapshot.delete({ where: { id: snapshot.id } });
+    await prisma.project.delete({ where: { id: project.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("buildExternalAgentPrompt includes 'not available' note when no snapshot exists", async () => {
+  const { user } = await createUser("KING");
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const project = await prisma.project.create({
+    data: { name: `M15B No Snapshot Project ${suffix}`, status: "ACTIVE", priority: "MEDIUM" }
+  });
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CODEX" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "M15B no snapshot test",
+      objective: "Verify graceful fallback",
+      projectId: project.id,
+      createdByUserId: user.id,
+      status: "READY"
+    }
+  });
+
+  try {
+    const prompt = await buildExternalAgentPrompt(workOrder.id, externalAgent.id);
+    assert.match(prompt, /## Repository Context/);
+    assert.match(prompt, /Repository Snapshot: not available/);
+    assert.match(prompt, /## Context Sources/);
+    assert.match(prompt, /Repository snapshot: missing/);
+  } finally {
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.project.delete({ where: { id: project.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("handoff brief includes repository context when snapshot exists", async () => {
+  const { user } = await createUser("KING");
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const project = await prisma.project.create({
+    data: { name: `M15B Handoff Project ${suffix}`, status: "ACTIVE", priority: "MEDIUM" }
+  });
+  const snapshot = await prisma.repositorySnapshot.create({
+    data: {
+      projectId: project.id,
+      framework: "React",
+      language: "TypeScript",
+      packageManager: "npm",
+      prismaModels: ["Task", "Agent"],
+      modules: [],
+      services: [],
+      apiRoutes: [],
+      summary: "React TypeScript project."
+    }
+  });
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CODEX" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "M15B handoff repo test",
+      objective: "Test handoff repo context",
+      projectId: project.id,
+      assignedExternalAgentId: externalAgent.id,
+      createdByUserId: user.id,
+      status: "READY"
+    }
+  });
+
+  try {
+    const handoff = await createHandoffBrief(workOrder.id);
+    assert.match(handoff.handoffPrompt, /## Repository Context/);
+    assert.match(handoff.handoffPrompt, /Prisma models:/);
+    assert.match(handoff.handoffPrompt, /- Task/);
+    assert.match(handoff.handoffPrompt, /## Context Sources/);
+    assert.match(handoff.handoffPrompt, /Repository snapshot: loaded/);
+  } finally {
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.repositorySnapshot.delete({ where: { id: snapshot.id } });
+    await prisma.project.delete({ where: { id: project.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
 test("work order completion creates royal report summary", async () => {
   const { user, token } = await createUser("KING");
   const workOrder = await prisma.workOrder.create({
