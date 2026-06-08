@@ -5,6 +5,7 @@ function extractDisplayProfile(config: unknown): {
   displayName: string | null;
   displayTitle: string | null;
   avatarUrl: string | null;
+  avatarVersion: number;
   canonicalName: string | null;
   canonicalTitle: string | null;
   coreSlug: string | null;
@@ -14,10 +15,12 @@ function extractDisplayProfile(config: unknown): {
     ? raw.displayProfile as Record<string, unknown>
     : {};
   const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const n = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
   return {
     displayName: s(dp.displayName),
     displayTitle: s(dp.displayTitle),
     avatarUrl: s(dp.avatarUrl),
+    avatarVersion: n(dp.avatarVersion, 1),
     canonicalName: s(dp.canonicalName),
     canonicalTitle: s(dp.canonicalTitle),
     coreSlug: s(dp.coreSlug)
@@ -39,6 +42,7 @@ export type LivingAgentSummaryDto = {
   displayName: string | null;
   displayTitle: string | null;
   avatarUrl: string | null;
+  avatarVersion: number;
   canonicalName: string | null;
   canonicalTitle: string | null;
   coreSlug: string | null;

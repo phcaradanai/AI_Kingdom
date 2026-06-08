@@ -208,7 +208,12 @@ export type AgentActivityStatus =
 
 export type CurrentAgentActivityDto = {
   id: string;
-  agent: Pick<AgentDto, "id" | "slug" | "name" | "title" | "role" | "specialty" | "isActive">;
+  agent: Pick<AgentDto, "id" | "slug" | "name" | "title" | "role" | "specialty" | "isActive"> & {
+    displayName: string | null;
+    displayTitle: string | null;
+    avatarUrl: string | null;
+    avatarVersion: number;
+  };
   status: AgentActivityStatus | string;
   activityType: string;
   title: string;
@@ -585,7 +590,7 @@ export type UsageRecordDto = {
   pricingStatus?: string | null;
   pricingNotes?: string | null;
   createdAt: string;
-  agent?: { name: string; title: string; slug: string } | null;
+  agent?: { name: string; title: string; slug: string; displayName: string | null; displayTitle: string | null; avatarUrl: string | null } | null;
   task?: { id: string; title: string; mode: string } | null;
 };
 
@@ -740,7 +745,7 @@ export type TreasuryOverviewDto = {
 
 export type TreasuryAgentDto = {
   agentId: string | null;
-  agent: { id?: string; name: string; title: string; slug: string } | null;
+  agent: { id?: string; name: string; title: string; slug: string; displayName: string | null; displayTitle: string | null; avatarUrl: string | null; avatarVersion: number } | null;
   totalCostUSD: number;
   totalTokens: number;
   promptTokens: number;
@@ -1081,6 +1086,7 @@ export type LivingAgentSummaryDto = {
   displayName: string | null;
   displayTitle: string | null;
   avatarUrl: string | null;
+  avatarVersion: number;
   canonicalName: string | null;
   canonicalTitle: string | null;
   coreSlug: string | null;

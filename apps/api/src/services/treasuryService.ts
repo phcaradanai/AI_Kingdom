@@ -1,5 +1,25 @@
 import { prisma } from "../db/prisma.js";
 import { getSettingValue } from "./settingsService.js";
+
+function extractDisplayProfile(config: unknown): {
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarVersion: number;
+} {
+  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
+  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
+    ? raw.displayProfile as Record<string, unknown>
+    : {};
+  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const n = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
+  return {
+    displayName: s(dp.displayName),
+    displayTitle: s(dp.displayTitle),
+    avatarUrl: s(dp.avatarUrl),
+    avatarVersion: n(dp.avatarVersion, 1)
+  };
+}
 import { getModelPricing } from "./modelPricingService.js";
 import {
   getDeepSeekBalanceDelta,
@@ -110,19 +130,23 @@ export async function getTreasuryByAgent() {
   const agentIds = groups.map((g) => g.agentId).filter((id): id is string => id !== null);
   const agents = await prisma.agent.findMany({
     where: { id: { in: agentIds } },
-    select: { id: true, name: true, title: true, slug: true }
+    select: { id: true, name: true, title: true, slug: true, config: true }
   });
   const agentMap = new Map(agents.map((a) => [a.id, a]));
 
-  return groups.map((g) => ({
-    agentId: g.agentId,
-    agent: g.agentId ? (agentMap.get(g.agentId) ?? null) : null,
-    totalCostUSD: g._sum.estimatedCostUSD ?? 0,
-    totalTokens: g._sum.totalTokens ?? 0,
-    promptTokens: g._sum.promptTokens ?? 0,
-    completionTokens: g._sum.completionTokens ?? 0,
-    callCount: g._count.id
-  }));
+  return groups.map((g) => {
+    const raw = g.agentId ? (agentMap.get(g.agentId) ?? null) : null;
+    const agent = raw ? { id: raw.id, name: raw.name, title: raw.title, slug: raw.slug, ...extractDisplayProfile(raw.config) } : null;
+    return {
+      agentId: g.agentId,
+      agent,
+      totalCostUSD: g._sum.estimatedCostUSD ?? 0,
+      totalTokens: g._sum.totalTokens ?? 0,
+      promptTokens: g._sum.promptTokens ?? 0,
+      completionTokens: g._sum.completionTokens ?? 0,
+      callCount: g._count.id
+    };
+  });
 }
 
 export async function getTreasuryByProvider() {
@@ -150,7 +174,7 @@ export async function getTreasuryUsage(limit = 100) {
     orderBy: { createdAt: "desc" },
     take: limit,
     include: {
-      agent: { select: { name: true, title: true, slug: true } },
+      agent: { select: { name: true, title: true, slug: true, config: true } },
       task: { select: { id: true, title: true, mode: true } },
       trace: {
         include: {
@@ -160,19 +184,26 @@ export async function getTreasuryUsage(limit = 100) {
     }
   });
 
-  return records.map((record) => ({
-    ...record,
-    triggerType: record.trace?.triggerType ?? (record.attributionStatus === "LEGACY_UNATTRIBUTED" ? "LEGACY" : null),
-    triggerLabel: record.trace?.triggerLabel ?? null,
-    actorUserId: record.trace?.actorUserId ?? null,
-    actorDisplayName: record.trace?.actorUser?.displayName ?? null,
-    links: {
-      trace: record.traceId ? `/usage-traces/${record.traceId}` : null,
-      project: record.projectId ? `/projects/${record.projectId}` : null,
-      task: record.taskId ? `/throne-room` : null,
-      council: record.councilSessionId ? `/council` : null
-    }
-  }));
+  return records.map((record) => {
+    const rawAgent = record.agent;
+    const agent = rawAgent
+      ? { name: rawAgent.name, title: rawAgent.title, slug: rawAgent.slug, ...extractDisplayProfile(rawAgent.config) }
+      : null;
+    return {
+      ...record,
+      agent,
+      triggerType: record.trace?.triggerType ?? (record.attributionStatus === "LEGACY_UNATTRIBUTED" ? "LEGACY" : null),
+      triggerLabel: record.trace?.triggerLabel ?? null,
+      actorUserId: record.trace?.actorUserId ?? null,
+      actorDisplayName: record.trace?.actorUser?.displayName ?? null,
+      links: {
+        trace: record.traceId ? `/usage-traces/${record.traceId}` : null,
+        project: record.projectId ? `/projects/${record.projectId}` : null,
+        task: record.taskId ? `/throne-room` : null,
+        council: record.councilSessionId ? `/council` : null
+      }
+    };
+  });
 }
 
 export async function getPricingWarnings() {

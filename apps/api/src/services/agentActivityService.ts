@@ -44,6 +44,26 @@ type AgentActivityUpdateInput = Partial<Omit<AgentActivityInput, "agentId">> & {
   errorMessage?: string | null;
 };
 
+function extractDisplayProfile(config: unknown): {
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarVersion: number;
+} {
+  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
+  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
+    ? raw.displayProfile as Record<string, unknown>
+    : {};
+  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+  const n = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
+  return {
+    displayName: s(dp.displayName),
+    displayTitle: s(dp.displayTitle),
+    avatarUrl: s(dp.avatarUrl),
+    avatarVersion: n(dp.avatarVersion, 1)
+  };
+}
+
 export type CurrentAgentActivityDto = {
   id: string;
   agent: {
@@ -54,6 +74,10 @@ export type CurrentAgentActivityDto = {
     role: string;
     specialty: string;
     isActive: boolean;
+    displayName: string | null;
+    displayTitle: string | null;
+    avatarUrl: string | null;
+    avatarVersion: number;
   };
   status: AgentActivityStatus | string;
   activityType: string;
@@ -163,7 +187,7 @@ export async function failAgentActivity(id: string, error: unknown, input: Agent
 export async function getCurrentAgentActivities(): Promise<CurrentAgentActivityDto[]> {
   const agents = await prisma.agent.findMany({
     orderBy: [{ priority: "asc" }, { title: "asc" }],
-    select: { id: true, slug: true, name: true, title: true, role: true, specialty: true, isActive: true }
+    select: { id: true, slug: true, name: true, title: true, role: true, specialty: true, isActive: true, config: true }
   });
 
   const activities = await prisma.agentActivity.findMany({
@@ -180,7 +204,9 @@ export async function getCurrentAgentActivities(): Promise<CurrentAgentActivityD
     }
   }
 
-  return agents.map((agent) => {
+  return agents.map((rawAgent) => {
+    const { config, ...agentBase } = rawAgent;
+    const agent: CurrentAgentActivityDto["agent"] = { ...agentBase, ...extractDisplayProfile(config) };
     const activity = activeByAgent.get(agent.id) ?? latestByAgent.get(agent.id);
     if (!activity) return syntheticIdleActivity(agent);
     return toCurrentActivityDto(agent, activity);

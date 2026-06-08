@@ -120,7 +120,11 @@ function buildIdleAgentActivity(agent: AgentDto): CurrentAgentActivityDto {
       title: agent.title,
       role: agent.role,
       specialty: agent.specialty,
-      isActive: agent.isActive
+      isActive: agent.isActive,
+      displayName: agent.displayName ?? null,
+      displayTitle: agent.displayTitle ?? null,
+      avatarUrl: agent.avatarUrl ?? null,
+      avatarVersion: agent.avatarVersion ?? 1
     },
     status: "IDLE",
     activityType: "IDLE",

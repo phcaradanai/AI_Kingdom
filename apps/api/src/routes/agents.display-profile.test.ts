@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { prisma } from "../db/prisma.js";
+import { getCurrentAgentActivities } from "../services/agentActivityService.js";
+import { getLivingAgents } from "../services/livingAgentsService.js";
 
 const TEST_RUN_ID = `display-profile-test-${Date.now()}`;
 
@@ -127,5 +129,52 @@ test("display profile — agent with display profile change still has correct id
   });
 
   assert.equal(updated.id, originalId, "agent id unchanged — usage records referencing this id remain valid");
+  await cleanup();
+});
+
+test("cross-endpoint — dashboard getCurrentAgentActivities includes avatarUrl and avatarVersion from config", async () => {
+  const agent = await createTestAgent({
+    config: { displayProfile: { avatarUrl: "/uploads/agents/dash-cross.png", avatarVersion: 4 } }
+  });
+
+  const activities = await getCurrentAgentActivities();
+  const found = activities.find((a) => a.agent.id === agent.id);
+
+  assert.ok(found, "test agent must appear in getCurrentAgentActivities result");
+  assert.equal(found?.agent.avatarUrl, "/uploads/agents/dash-cross.png", "avatarUrl must propagate to dashboard agent DTO");
+  assert.equal(found?.agent.avatarVersion, 4, "avatarVersion must propagate to dashboard agent DTO");
+  assert.ok("displayName" in (found?.agent ?? {}), "agent DTO must expose displayName field");
+  assert.ok("displayTitle" in (found?.agent ?? {}), "agent DTO must expose displayTitle field");
+  await cleanup();
+});
+
+test("cross-endpoint — getLivingAgents includes avatarVersion field from config", async () => {
+  // Living agents filters isTestData=false, so query a real seeded agent
+  const living = await getLivingAgents();
+  if (living.length === 0) return; // skip if DB has no seeded agents
+
+  const first = living[0]!;
+  assert.ok("avatarVersion" in first, "LivingAgentSummaryDto must expose avatarVersion field");
+  assert.ok(typeof first.avatarVersion === "number", "avatarVersion must be a number, defaulting to 1");
+  assert.ok("avatarUrl" in first, "LivingAgentSummaryDto must expose avatarUrl field");
+  assert.ok("displayName" in first, "LivingAgentSummaryDto must expose displayName field");
+});
+
+test("cross-endpoint — updating avatarUrl in config propagates to dashboard DTO", async () => {
+  const agent = await createTestAgent({
+    config: { displayProfile: { avatarUrl: "/uploads/agents/original.png", avatarVersion: 1 } }
+  });
+
+  await prisma.agent.update({
+    where: { id: agent.id },
+    data: { config: { displayProfile: { avatarUrl: "/uploads/agents/updated.png", avatarVersion: 2 } } }
+  });
+
+  const activities = await getCurrentAgentActivities();
+  const found = activities.find((a) => a.agent.id === agent.id);
+
+  assert.ok(found, "updated agent must appear in activities");
+  assert.equal(found?.agent.avatarUrl, "/uploads/agents/updated.png", "updated avatarUrl must appear in dashboard DTO");
+  assert.equal(found?.agent.avatarVersion, 2, "updated avatarVersion must appear in dashboard DTO");
   await cleanup();
 });
