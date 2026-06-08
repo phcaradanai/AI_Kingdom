@@ -66,7 +66,16 @@ export function createApp() {
   );
   app.use(express.json({ limit: "1mb" }));
   app.use(morgan("dev"));
-  app.use("/uploads", express.static(uploadsDir));
+  app.use(
+    "/uploads",
+    express.static(uploadsDir, {
+      setHeaders(res) {
+        // Helmet sets Cross-Origin-Resource-Policy: same-origin globally, which blocks
+        // cross-origin <img> loads (frontend :5173 → API :4000). Override for public uploads only.
+        res.setHeader("Cross-Origin-Resource-Policy", "cross-origin");
+      }
+    })
+  );
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "api" });
