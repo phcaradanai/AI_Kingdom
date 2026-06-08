@@ -89,6 +89,16 @@ export type AgentDto = {
   retentionPolicy: string;
   parameterMode: ParameterMode | null;
   modelParameters: ModelParameters | null;
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarPrompt: string | null;
+  avatarStyle: string | null;
+  avatarVersion: number;
+  avatarUpdatedAt: string | null;
+  canonicalName: string | null;
+  canonicalTitle: string | null;
+  coreSlug: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -120,6 +130,14 @@ export type ProviderModelsDto = {
   fromCache: boolean;
   validationStatus: string | null;
   message?: string;
+};
+
+export type DisplayProfilePayload = {
+  displayName?: string | null;
+  displayTitle?: string | null;
+  avatarUrl?: string | null;
+  avatarPrompt?: string | null;
+  avatarStyle?: string | null;
 };
 
 export type AgentPayload = {
@@ -1060,6 +1078,12 @@ export type LivingAgentSummaryDto = {
   priority: number;
   preferredProviderId: string | null;
   defaultModel: string | null;
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  canonicalName: string | null;
+  canonicalTitle: string | null;
+  coreSlug: string | null;
   createdAt: string;
   updatedAt: string;
   currentStatus: string;

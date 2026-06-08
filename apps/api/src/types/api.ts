@@ -25,6 +25,16 @@ export type AgentDto = Pick<Agent, "id" | "slug" | "name" | "title" | "role" | "
   memoryRequiresApproval?: boolean;
   allowedMemoryCategories?: string[];
   retentionPolicy?: string;
+  displayName?: string | null;
+  displayTitle?: string | null;
+  avatarUrl?: string | null;
+  avatarPrompt?: string | null;
+  avatarStyle?: string | null;
+  avatarVersion?: number;
+  avatarUpdatedAt?: string | null;
+  canonicalName?: string | null;
+  canonicalTitle?: string | null;
+  coreSlug?: string | null;
 };
 
 export type CouncilResponseDto = AgentResponse & {

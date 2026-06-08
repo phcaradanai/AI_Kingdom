@@ -179,8 +179,8 @@ function AgentCard({ agent }: { agent: LivingAgentSummaryDto }) {
               {agent.currentStatus.replace("_", " ")}
             </span>
           </div>
-          <div className="mt-0.5 truncate font-display text-base font-semibold text-foreground">{agent.title}</div>
-          <div className="truncate text-xs text-muted-foreground">{agent.name} · {agent.role}</div>
+          <div className="mt-0.5 truncate font-display text-base font-semibold text-foreground">{agent.displayTitle ?? agent.canonicalTitle ?? agent.title}</div>
+          <div className="truncate text-xs text-muted-foreground">{agent.displayName ?? agent.canonicalName ?? agent.name} · {agent.role}</div>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import type {
   AgentDto,
   AgentPayload,
+  DisplayProfilePayload,
   AIProviderDto,
   ArtifactDto,
   ArtifactPayload,
@@ -133,6 +134,29 @@ export const api = {
     }),
   deleteAgent: async (id: string) => {
     await apiRequest<{ agent: AgentDto }>(`/agents/${id}`, { method: "DELETE" });
+  },
+  getAgentDisplayProfile: (id: string) =>
+    apiRequest<{ displayProfile: DisplayProfilePayload & { agentId: string; slug: string; avatarVersion: number; avatarUpdatedAt: string | null; canonicalName: string | null; canonicalTitle: string | null; coreSlug: string | null } }>(`/agents/${id}/display-profile`),
+  updateAgentDisplayProfile: (id: string, payload: DisplayProfilePayload) =>
+    apiRequest<{ displayProfile: DisplayProfilePayload & { agentId: string; slug: string } }>(`/agents/${id}/display-profile`, {
+      method: "PATCH",
+      body: JSON.stringify(payload)
+    }),
+  uploadAgentAvatar: async (id: string, file: File) => {
+    const token = localStorage.getItem("ai-kingdom-token");
+    const form = new FormData();
+    form.append("avatar", file);
+    const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
+    const response = await fetch(`${API_URL}/agents/${id}/avatar`, {
+      method: "POST",
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form
+    });
+    if (!response.ok) {
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(payload?.error ?? `Upload failed with ${response.status}`);
+    }
+    return response.json() as Promise<{ avatarUrl: string; displayProfile: DisplayProfilePayload & { agentId: string; slug: string } }>;
   },
   providers: () => apiRequest<{ providers: AIProviderDto[] }>("/providers"),
   updateProvider: (id: string, payload: Partial<Pick<AIProviderDto, "isActive" | "defaultModel" | "priority" | "costTier">>) =>

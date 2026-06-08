@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useState } from "react";
-import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2 } from "lucide-react";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2, Image, RotateCcw } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { getProviderDisplayName } from "@/lib/providerDisplay";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, ProviderModelsDto, ParameterMode, ModelParameters, EffectiveRequestPreviewDto } from "@/types/api";
+import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, DisplayProfilePayload, ProviderModelsDto, ParameterMode, ModelParameters, EffectiveRequestPreviewDto } from "@/types/api";
 import { api } from "@/lib/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
@@ -122,6 +122,11 @@ export function AgentsPage() {
   const [newFallbackProvider, setNewFallbackProvider] = useState("");
   const [newFallbackModel, setNewFallbackModel] = useState("");
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [displayDraft, setDisplayDraft] = useState<DisplayProfilePayload>(toDisplayPayload(selected));
+  const [displaySaving, setDisplaySaving] = useState(false);
+  const [displayError, setDisplayError] = useState<string | null>(null);
+  const [displaySuccess, setDisplaySuccess] = useState(false);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
 
   const selectedProvider = draft.preferredProviderId
     ? providers.find((p) => p.id === draft.preferredProviderId)
@@ -191,12 +196,68 @@ export function AgentsPage() {
   function selectAgent(agent: AgentDto | null) {
     setSelected(agent);
     setDraft(agent ? toPayload(agent) : blankAgent);
+    setDisplayDraft(toDisplayPayload(agent));
     setError(null);
+    setDisplayError(null);
+    setDisplaySuccess(false);
     setRoutingPreview(null);
     setEffectivePreview(null);
     setProviderModels(null);
     setNewFallbackProvider("");
     setNewFallbackModel("");
+  }
+
+  async function onSaveDisplayProfile() {
+    if (!selected) return;
+    setDisplaySaving(true);
+    setDisplayError(null);
+    setDisplaySuccess(false);
+    try {
+      await api.updateAgentDisplayProfile(selected.id, displayDraft);
+      const updatedAgents = await api.agents();
+      useKingdomStore.setState({ agents: updatedAgents.agents });
+      const refreshed = updatedAgents.agents.find((a) => a.id === selected.id) ?? null;
+      if (refreshed) {
+        setSelected(refreshed);
+        setDisplayDraft(toDisplayPayload(refreshed));
+      }
+      setDisplaySuccess(true);
+      setTimeout(() => setDisplaySuccess(false), 3000);
+    } catch (err) {
+      setDisplayError(err instanceof Error ? err.message : "Failed to save display profile");
+    } finally {
+      setDisplaySaving(false);
+    }
+  }
+
+  function onResetToCanonical() {
+    if (!selected) return;
+    setDisplayDraft({
+      ...displayDraft,
+      displayName: null,
+      displayTitle: null
+    });
+  }
+
+  async function onUploadAvatar(file: File) {
+    if (!selected) return;
+    setDisplaySaving(true);
+    setDisplayError(null);
+    try {
+      const result = await api.uploadAgentAvatar(selected.id, file);
+      setDisplayDraft({ ...displayDraft, avatarUrl: result.avatarUrl });
+      const updatedAgents = await api.agents();
+      useKingdomStore.setState({ agents: updatedAgents.agents });
+      const refreshed = updatedAgents.agents.find((a) => a.id === selected.id) ?? null;
+      if (refreshed) {
+        setSelected(refreshed);
+        setDisplayDraft(toDisplayPayload(refreshed));
+      }
+    } catch (err) {
+      setDisplayError(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setDisplaySaving(false);
+    }
   }
 
   async function onSubmit(event: FormEvent) {
@@ -294,8 +355,14 @@ export function AgentsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <h2 className="font-display text-xl">{agent.title}</h2>
-                        <p className="mt-1 text-sm text-muted-foreground">{agent.name} · priority {agent.priority}</p>
+                        <h2 className="font-display text-xl">{agent.displayTitle ?? agent.canonicalTitle ?? agent.title}</h2>
+                        <p className="mt-1 text-sm text-muted-foreground">
+                          {agent.displayName ?? agent.canonicalName ?? agent.name}
+                          {(agent.displayName || agent.displayTitle) && (
+                            <span className="ml-1 text-xs text-primary/60">· custom</span>
+                          )}
+                          {" "}· priority {agent.priority}
+                        </p>
                       </div>
                       <Shield className={cn("h-5 w-5 shrink-0", agent.isActive ? "text-primary" : "text-muted-foreground")} />
                     </div>
@@ -1118,6 +1185,131 @@ export function AgentsPage() {
             {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
             <Button>{selected ? "Save Agent" : "Create Agent"}</Button>
           </form>
+
+          {/* Display & Portrait — separate from core identity */}
+          {selected && (
+            <div className="mt-8 rounded-lg border border-border/60 bg-muted/10 p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Image className="h-4 w-4 text-muted-foreground" />
+                <h3 className="font-semibold text-sm text-foreground">Display &amp; Portrait</h3>
+              </div>
+              <div className="rounded border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
+                Display changes do not affect this agent&apos;s role, memory, permissions, routing, or relationships. The canonical identity is always preserved.
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField id="dp-display-name" label="Display Name" description="Overrides the canonical name in the UI only.">
+                  <Input
+                    id="dp-display-name"
+                    value={displayDraft.displayName ?? ""}
+                    onChange={(e) => setDisplayDraft({ ...displayDraft, displayName: e.target.value || null })}
+                    placeholder={selected.canonicalName ?? selected.name}
+                  />
+                </FormField>
+                <FormField id="dp-display-title" label="Display Title" description="Overrides the canonical title in the UI only.">
+                  <Input
+                    id="dp-display-title"
+                    value={displayDraft.displayTitle ?? ""}
+                    onChange={(e) => setDisplayDraft({ ...displayDraft, displayTitle: e.target.value || null })}
+                    placeholder={selected.canonicalTitle ?? selected.title}
+                  />
+                </FormField>
+              </div>
+
+              <FormField id="dp-avatar-url" label="Portrait Image URL" description="Custom portrait URL. Leave blank to use uploaded file or default portrait.">
+                <Input
+                  id="dp-avatar-url"
+                  value={displayDraft.avatarUrl ?? ""}
+                  onChange={(e) => setDisplayDraft({ ...displayDraft, avatarUrl: e.target.value || null })}
+                  placeholder="https://example.com/portrait.png"
+                />
+              </FormField>
+
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-1">Upload Portrait</label>
+                <p className="text-xs text-muted-foreground mb-2">JPEG, PNG, or WebP — max 5 MB. Replaces the current portrait and increments avatar version.</p>
+                <input
+                  ref={avatarFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) void onUploadAvatar(file);
+                    if (avatarFileRef.current) avatarFileRef.current.value = "";
+                  }}
+                />
+                <div className="flex items-center gap-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => avatarFileRef.current?.click()}
+                    disabled={displaySaving}
+                  >
+                    <Image className="h-4 w-4 mr-1.5" />
+                    Choose File
+                  </Button>
+                  {selected.avatarUrl && (
+                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{selected.avatarUrl}</span>
+                  )}
+                  {selected.avatarVersion > 1 && (
+                    <span className="text-xs text-muted-foreground">v{selected.avatarVersion}</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField id="dp-avatar-prompt" label="Portrait Prompt" description="Optional generative prompt used to create this portrait.">
+                  <Textarea
+                    id="dp-avatar-prompt"
+                    value={displayDraft.avatarPrompt ?? ""}
+                    onChange={(e) => setDisplayDraft({ ...displayDraft, avatarPrompt: e.target.value || null })}
+                    placeholder="A regal council figure in a medieval fantasy setting…"
+                  />
+                </FormField>
+                <FormField id="dp-avatar-style" label="Portrait Style">
+                  <Input
+                    id="dp-avatar-style"
+                    value={displayDraft.avatarStyle ?? ""}
+                    onChange={(e) => setDisplayDraft({ ...displayDraft, avatarStyle: e.target.value || null })}
+                    placeholder="oil painting, cinematic, photorealistic…"
+                  />
+                </FormField>
+              </div>
+
+              <div className="flex items-center gap-2 pt-1">
+                <Button type="button" onClick={() => void onSaveDisplayProfile()} disabled={displaySaving}>
+                  {displaySaving ? "Saving…" : "Save Display Profile"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onResetToCanonical}
+                  disabled={displaySaving}
+                  title="Clear displayName and displayTitle, reverting to canonical identity"
+                >
+                  <RotateCcw className="h-4 w-4 mr-1.5" />
+                  Reset to Canonical
+                </Button>
+              </div>
+
+              {displayError && (
+                <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{displayError}</div>
+              )}
+              {displaySuccess && (
+                <div className="rounded-md border border-green-400/30 bg-green-400/10 p-3 text-sm text-green-200">Display profile saved.</div>
+              )}
+
+              {(selected.canonicalName || selected.canonicalTitle || selected.coreSlug) && (
+                <div className="rounded border border-border/40 bg-background/40 p-3 text-xs text-muted-foreground space-y-1">
+                  <div className="font-medium text-foreground">Canonical Identity (stable)</div>
+                  {selected.canonicalName && <div>Name: <span className="text-foreground">{selected.canonicalName}</span></div>}
+                  {selected.canonicalTitle && <div>Title: <span className="text-foreground">{selected.canonicalTitle}</span></div>}
+                  {selected.coreSlug && <div>Slug: <span className="font-mono text-foreground">{selected.coreSlug}</span></div>}
+                </div>
+              )}
+            </div>
+          )}
         </Card>
       </div>
     </>
@@ -1210,4 +1402,14 @@ function cleanPayload(payload: AgentPayload): AgentPayload {
 
 function lines(value: string): string[] {
   return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+}
+
+function toDisplayPayload(agent: AgentDto | null): DisplayProfilePayload {
+  return {
+    displayName: agent?.displayName ?? null,
+    displayTitle: agent?.displayTitle ?? null,
+    avatarUrl: agent?.avatarUrl ?? null,
+    avatarPrompt: agent?.avatarPrompt ?? null,
+    avatarStyle: agent?.avatarStyle ?? null
+  };
 }

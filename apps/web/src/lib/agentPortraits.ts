@@ -2,9 +2,13 @@ type AgentPortraitInput = {
   slug?: string | null;
   name?: string | null;
   title?: string | null;
+  avatarUrl?: string | null;
+  avatarVersion?: number | null;
 };
 
 export const agentPortraitFallback: string | null = null;
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/api\/?$/, "");
 
 const portraitByKey = new Map<string, string>([
   ["aurelian", "/agents/aurelian.png"],
@@ -21,11 +25,26 @@ const portraitByKey = new Map<string, string>([
   ["royalresearcher", "/agents/elowen.png"],
   ["marcellus", "/agents/marcellus.png"],
   ["royal-treasurer", "/agents/marcellus.png"],
-  ["royaltreasurer", "/agents/marcellus.png"]
+  ["royaltreasurer", "/agents/marcellus.png"],
+  ["royal-promptsmith", "/agents/vaelion.png"],
+  ["royalpromptsmith", "/agents/vaelion.png"],
+  ["royal-archivist", "/agents/thaleon.png"],
+  ["royalarchivist", "/agents/thaleon.png"],
 ]);
+
+export function resolveAvatarUrl(avatarUrl: string | null | undefined, avatarVersion?: number | null): string | null {
+  if (!avatarUrl) return null;
+  const version = avatarVersion ?? 1;
+  if (/^https?:\/\//.test(avatarUrl)) return avatarUrl;
+  if (avatarUrl.startsWith("/uploads/")) return `${API_BASE}${avatarUrl}?v=${version}`;
+  return avatarUrl;
+}
 
 export function getAgentPortrait(agent?: AgentPortraitInput | null): string | null {
   if (!agent) return agentPortraitFallback;
+
+  const resolved = resolveAvatarUrl(agent.avatarUrl, agent.avatarVersion);
+  if (resolved) return resolved;
 
   const keys = [agent.slug, agent.name, agent.title].flatMap((value) => {
     const normalized = normalizeKey(value);
@@ -59,7 +78,7 @@ function normalizeKey(value?: string | null): string | null {
   return value
     .trim()
     .toLowerCase()
-    .replace(/['’]/g, "")
+    .replace(/['']/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }

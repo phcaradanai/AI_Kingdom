@@ -1,6 +1,29 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 
+function extractDisplayProfile(config: unknown): {
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  canonicalName: string | null;
+  canonicalTitle: string | null;
+  coreSlug: string | null;
+} {
+  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
+  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
+    ? raw.displayProfile as Record<string, unknown>
+    : {};
+  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
+  return {
+    displayName: s(dp.displayName),
+    displayTitle: s(dp.displayTitle),
+    avatarUrl: s(dp.avatarUrl),
+    canonicalName: s(dp.canonicalName),
+    canonicalTitle: s(dp.canonicalTitle),
+    coreSlug: s(dp.coreSlug)
+  };
+}
+
 export type LivingAgentSummaryDto = {
   id: string;
   slug: string;
@@ -13,6 +36,12 @@ export type LivingAgentSummaryDto = {
   priority: number;
   preferredProviderId: string | null;
   defaultModel: string | null;
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  canonicalName: string | null;
+  canonicalTitle: string | null;
+  coreSlug: string | null;
   createdAt: string;
   updatedAt: string;
   currentStatus: string;
@@ -284,6 +313,7 @@ export async function getLivingAgents(): Promise<LivingAgentSummaryDto[]> {
       priority: agent.priority,
       preferredProviderId: agent.preferredProviderId,
       defaultModel: agent.defaultModel,
+      ...extractDisplayProfile(agent.config),
       createdAt: agent.createdAt.toISOString(),
       updatedAt: agent.updatedAt.toISOString(),
       currentStatus,
@@ -489,6 +519,7 @@ export async function getLivingAgentProfile(agentId: string): Promise<LivingAgen
     priority: agent.priority,
     preferredProviderId: agent.preferredProviderId,
     defaultModel: agent.defaultModel,
+    ...extractDisplayProfile(agent.config),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
     currentStatus,

@@ -1,11 +1,40 @@
 import { Router } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
+import multer from "multer";
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { describeFallbackProviderReadiness, isSandboxFallbackModeActive, selectAIProviderRoute } from "../services/aiProviderRouter.js";
 import { listAIProviders } from "../services/aiProviderRegistry.js";
 import { resolveEffectiveParameters, buildProviderRequestBody } from "../ai/modelParameterResolver.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.resolve(__dirname, "../../../uploads/agents");
+fs.mkdirSync(uploadsDir, { recursive: true });
+
+const avatarStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (req, _file, cb) => {
+    const ext = path.extname(_file.originalname).toLowerCase() || ".png";
+    cb(null, `${req.params.id}-${Date.now()}${ext}`);
+  }
+});
+
+const avatarUpload = multer({
+  storage: avatarStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = ["image/jpeg", "image/png", "image/webp"];
+    if (allowed.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only JPEG, PNG, and WebP images are allowed"));
+    }
+  }
+});
 
 const router = Router();
 
@@ -74,6 +103,22 @@ const agentSchema = z.object({
 });
 
 const agentPatchSchema = agentSchema.partial();
+
+const displayProfilePatchSchema = z.object({
+  displayName: z.string().trim().max(120).nullable().optional(),
+  displayTitle: z.string().trim().max(120).nullable().optional(),
+  avatarUrl: z.string().trim().max(500).nullable().optional().refine(
+    (url) => {
+      if (!url) return true;
+      if (/^\/uploads\/agents\/[\w.\-]+$/.test(url)) return true;
+      if (/^https?:\/\//.test(url) && !/[<>"'`]/.test(url) && !/^javascript:/i.test(url) && !/^data:/i.test(url)) return true;
+      return false;
+    },
+    { message: "avatarUrl must be a local upload path or a valid http/https URL" }
+  ),
+  avatarPrompt: z.string().trim().max(2000).nullable().optional(),
+  avatarStyle: z.string().trim().max(200).nullable().optional()
+});
 
 router.get("/", async (_req, res, next) => {
   try {
@@ -325,6 +370,130 @@ router.get("/:id/routing-preview", async (req, res, next) => {
   }
 });
 
+router.get("/:id/display-profile", async (req, res, next) => {
+  try {
+    const agent = await prisma.agent.findUnique({ where: { id: req.params.id } });
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    const profile = normalizeAgentProfile(agent.config);
+    res.json({ displayProfile: { agentId: agent.id, slug: agent.slug, ...profile.displayProfile } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/:id/display-profile", async (req, res, next) => {
+  try {
+    const existing = await prisma.agent.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    const payload = displayProfilePatchSchema.parse(req.body);
+    const rawConfig = asRecord(existing.config);
+    const currentProfile = normalizeAgentProfile(existing.config);
+    const dp = currentProfile.displayProfile;
+
+    const canonicalName = dp.canonicalName ?? existing.name;
+    const canonicalTitle = dp.canonicalTitle ?? existing.title;
+    const coreSlug = dp.coreSlug ?? existing.slug;
+
+    const changedFields = Object.entries(payload)
+      .filter(([, v]) => v !== undefined)
+      .map(([k]) => k);
+
+    const isAvatarChange = "avatarUrl" in payload && payload.avatarUrl !== dp.avatarUrl;
+    const newAvatarVersion = isAvatarChange ? dp.avatarVersion + 1 : dp.avatarVersion;
+    const newAvatarUpdatedAt = isAvatarChange ? new Date().toISOString() : dp.avatarUpdatedAt;
+
+    const updatedDisplayProfile = {
+      ...dp,
+      canonicalName,
+      canonicalTitle,
+      coreSlug,
+      ...pickDefined(payload as Record<string, unknown>),
+      avatarVersion: newAvatarVersion,
+      ...(isAvatarChange ? { avatarUpdatedAt: newAvatarUpdatedAt } : {})
+    };
+
+    const updatedConfig = {
+      ...rawConfig,
+      displayProfile: updatedDisplayProfile
+    };
+
+    const agent = await prisma.agent.update({
+      where: { id: existing.id },
+      data: { config: updatedConfig as Prisma.InputJsonObject }
+    });
+
+    await auditLog({
+      userId: req.user?.id,
+      action: "update_agent_display_profile",
+      resourceType: "agent",
+      resourceId: agent.id,
+      metadata: { slug: agent.slug, changedFields }
+    });
+
+    const updated = normalizeAgentProfile(agent.config);
+    res.json({ displayProfile: { agentId: agent.id, slug: agent.slug, ...updated.displayProfile } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/avatar", avatarUpload.single("avatar"), async (req, res, next) => {
+  try {
+    const existing = await prisma.agent.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      if (req.file) fs.unlinkSync(req.file.path);
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: "No file uploaded" });
+      return;
+    }
+
+    const avatarUrl = `/uploads/agents/${req.file.filename}`;
+    const rawConfig = asRecord(existing.config);
+    const currentProfile = normalizeAgentProfile(existing.config);
+    const dp = currentProfile.displayProfile;
+
+    const updatedDisplayProfile = {
+      ...dp,
+      canonicalName: dp.canonicalName ?? existing.name,
+      canonicalTitle: dp.canonicalTitle ?? existing.title,
+      coreSlug: dp.coreSlug ?? existing.slug,
+      avatarUrl,
+      avatarVersion: dp.avatarVersion + 1,
+      avatarUpdatedAt: new Date().toISOString()
+    };
+
+    const updatedConfig = { ...rawConfig, displayProfile: updatedDisplayProfile };
+    const agent = await prisma.agent.update({
+      where: { id: existing.id },
+      data: { config: updatedConfig as Prisma.InputJsonObject }
+    });
+
+    await auditLog({
+      userId: req.user?.id,
+      action: "update_agent_display_profile",
+      resourceType: "agent",
+      resourceId: agent.id,
+      metadata: { slug: agent.slug, changedFields: ["avatarUrl"] }
+    });
+
+    const updated = normalizeAgentProfile(agent.config);
+    res.json({ avatarUrl, displayProfile: { agentId: agent.id, slug: agent.slug, ...updated.displayProfile } });
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.delete("/:id", async (req, res, next) => {
   try {
     const existing = await prisma.agent.findUnique({ where: { id: req.params.id } });
@@ -413,7 +582,8 @@ function toAgentDto(agent: any) {
     ...agent,
     ...profile.identity,
     ...profile.authority,
-    ...profile.memoryPolicy
+    ...profile.memoryPolicy,
+    ...profile.displayProfile
   };
 }
 
@@ -422,6 +592,7 @@ function normalizeAgentProfile(config: unknown) {
   const identity = asRecord(raw.royalIdentity);
   const authority = asRecord(raw.authority);
   const memoryPolicy = asRecord(raw.memoryPolicy);
+  const dp = asRecord(raw.displayProfile);
   return {
     identity: {
       personalDetail: stringValue(identity.personalDetail),
@@ -441,6 +612,18 @@ function normalizeAgentProfile(config: unknown) {
       memoryRequiresApproval: booleanValue(memoryPolicy.memoryRequiresApproval, DEFAULT_MEMORY_POLICY.memoryRequiresApproval),
       allowedMemoryCategories: stringArray(memoryPolicy.allowedMemoryCategories),
       retentionPolicy: stringValue(memoryPolicy.retentionPolicy, DEFAULT_MEMORY_POLICY.retentionPolicy)
+    },
+    displayProfile: {
+      displayName: stringOrNull(dp.displayName),
+      displayTitle: stringOrNull(dp.displayTitle),
+      avatarUrl: stringOrNull(dp.avatarUrl),
+      avatarPrompt: stringOrNull(dp.avatarPrompt),
+      avatarStyle: stringOrNull(dp.avatarStyle),
+      avatarVersion: numberValue(dp.avatarVersion, 1),
+      avatarUpdatedAt: stringOrNull(dp.avatarUpdatedAt),
+      canonicalName: stringOrNull(dp.canonicalName),
+      canonicalTitle: stringOrNull(dp.canonicalTitle),
+      coreSlug: stringOrNull(dp.coreSlug)
     }
   };
 }
@@ -483,6 +666,14 @@ function buildAgentConfig(existingConfig: unknown, payload: AgentPayloadInput): 
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringOrNull(value: unknown): string | null {
+  return typeof value === "string" && value !== "" ? value : null;
+}
+
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
 }
 
 function stringValue(value: unknown, fallback = ""): string {

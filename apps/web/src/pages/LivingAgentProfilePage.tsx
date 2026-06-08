@@ -262,8 +262,8 @@ export function LivingAgentProfilePage() {
                 <span className="rounded-full border border-muted-foreground/30 bg-muted/30 px-2 py-0.5 text-[10px] text-muted-foreground">Inactive</span>
               )}
             </div>
-            <h1 className="font-display text-2xl font-bold text-foreground">{agent.title}</h1>
-            <div className="text-sm text-muted-foreground">{agent.name} · {agent.specialty}</div>
+            <h1 className="font-display text-2xl font-bold text-foreground">{agent.displayTitle ?? agent.canonicalTitle ?? agent.title}</h1>
+            <div className="text-sm text-muted-foreground">{agent.displayName ?? agent.canonicalName ?? agent.name} · {agent.specialty}</div>
 
             <div className="mt-4 flex flex-wrap gap-3">
               <div className="flex items-center gap-1.5 text-sm">

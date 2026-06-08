@@ -1,6 +1,8 @@
 import cors from "cors";
 import express from "express";
 import helmet from "helmet";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import morgan from "morgan";
 import { env } from "./config/env.js";
 import { prisma } from "./db/prisma.js";
@@ -39,6 +41,9 @@ import usersRouter from "./routes/users.js";
 import workOrdersRouter from "./routes/workOrders.js";
 import workSessionsRouter from "./routes/workSessions.js";
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const uploadsDir = path.resolve(__dirname, "../../uploads");
+
 export function createApp() {
   const app = express();
   const allowedOrigins = (env.CORS_ALLOWED_ORIGINS ?? env.CORS_ORIGIN)
@@ -61,6 +66,7 @@ export function createApp() {
   );
   app.use(express.json({ limit: "1mb" }));
   app.use(morgan("dev"));
+  app.use("/uploads", express.static(uploadsDir));
 
   app.get("/health", (_req, res) => {
     res.json({ ok: true, service: "api" });

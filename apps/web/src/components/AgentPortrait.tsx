@@ -6,6 +6,8 @@ type AgentPortraitInput = {
   slug?: string | null;
   name?: string | null;
   title?: string | null;
+  avatarUrl?: string | null;
+  avatarVersion?: number | null;
 };
 
 type AgentPortraitProps = {
