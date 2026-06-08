@@ -376,7 +376,7 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
                   </td>
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-2">
-                      <AgentPortrait agent={r.agent} size="sm" status={r.attributionStatus === "TRUSTED" ? "COMPLETED" : "WAITING_PROVIDER"} className="h-9 w-9" />
+                      <AgentPortrait agent={r.agent} size="sm" status={r.attributionStatus === "TRUSTED" ? "COMPLETED" : "WAITING_PROVIDER"} />
                       <span className="text-xs">{r.agent?.name ?? "—"}</span>
                     </div>
                   </td>

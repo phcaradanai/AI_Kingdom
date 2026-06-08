@@ -254,7 +254,7 @@ export function LivingAgentProfilePage() {
       {/* Header card */}
       <div className="rounded-2xl border border-border/60 bg-card/60 p-6 backdrop-blur-sm">
         <div className="flex flex-col sm:flex-row gap-6 items-start">
-          <AgentPortrait agent={agent} size="xl" status={portraitStatus} showStatusRing />
+          <AgentPortrait agent={agent} size="hero" shape="portrait-card" status={portraitStatus} showStatusRing clickToView />
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="text-[11px] uppercase tracking-widest text-muted-foreground font-bold">{agent.role}</span>

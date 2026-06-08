@@ -179,7 +179,7 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
         {session.finalSummary && (
           <div className="rounded-xl border border-primary/30 bg-primary/10 p-6 shadow-[inset_0_0_20px_rgba(214,170,87,0.05)]">
             <div className="mb-4 flex items-center gap-3">
-              <AgentPortrait agent={{ name: "Aurelian", title: "Grand Vizier" }} size="md" status="SUMMARIZING" />
+              <AgentPortrait agent={{ name: "Aurelian", title: "Grand Vizier" }} size="lg" status="SUMMARIZING" />
               <h3 className="text-lg font-display text-primary flex items-center gap-2">
                  <Sparkles className="h-5 w-5" />
                  Grand Vizier's Synthesis
@@ -202,7 +202,7 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
             {session.responses.map((response) => (
               <div key={response.id} className="rounded-xl border border-border/50 bg-muted/10 p-5 hover:bg-muted/20 transition-colors">
                 <div className="flex items-center gap-3 mb-3">
-                  <AgentPortrait agent={response.agent} size="sm" status="COMPLETED" />
+                  <AgentPortrait agent={response.agent} size="md" status="COMPLETED" />
                   <div>
                     <div className="text-sm font-bold text-foreground">{response.role}</div>
                     <div className="text-[10px] uppercase tracking-wider text-primary/70">{response.agent.specialty}</div>

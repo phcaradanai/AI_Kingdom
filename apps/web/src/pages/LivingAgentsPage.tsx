@@ -171,7 +171,7 @@ function AgentCard({ agent }: { agent: LivingAgentSummaryDto }) {
     <div className="group relative flex flex-col gap-4 rounded-2xl border border-border/60 bg-card/60 p-5 backdrop-blur-sm transition-all hover:border-primary/30 hover:bg-card/80">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <AgentPortrait agent={agent} size="md" status={portraitStatus} showStatusRing />
+        <AgentPortrait agent={agent} size="lg" status={portraitStatus} showStatusRing />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <StatusDot status={agent.currentStatus} />

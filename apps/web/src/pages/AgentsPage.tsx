@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2, Image, RotateCcw } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2, Image, RotateCcw, ExternalLink } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -239,6 +239,28 @@ export function AgentsPage() {
     });
   }
 
+  async function onResetPortrait() {
+    if (!selected) return;
+    setDisplaySaving(true);
+    setDisplayError(null);
+    try {
+      await api.updateAgentDisplayProfile(selected.id, { avatarUrl: null });
+      const updatedAgents = await api.agents();
+      useKingdomStore.setState({ agents: updatedAgents.agents });
+      const refreshed = updatedAgents.agents.find((a) => a.id === selected.id) ?? null;
+      if (refreshed) {
+        setSelected(refreshed);
+        setDisplayDraft(toDisplayPayload(refreshed));
+      }
+      setDisplaySuccess(true);
+      setTimeout(() => setDisplaySuccess(false), 3000);
+    } catch (err) {
+      setDisplayError(err instanceof Error ? err.message : "Failed to reset portrait");
+    } finally {
+      setDisplaySaving(false);
+    }
+  }
+
   async function onUploadAvatar(file: File) {
     if (!selected) return;
     setDisplaySaving(true);
@@ -351,7 +373,7 @@ export function AgentsPage() {
             <Card key={agent.id} className={cn("transition", selected?.id === agent.id && "border-primary/60 bg-primary/10")}>
               <button className="w-full text-left" onClick={() => selectAgent(agent)}>
                 <div className="flex items-start gap-4">
-                  <AgentPortrait agent={agent} size="md" status={agent.isActive ? "IDLE" : "COMPLETED"} />
+                  <AgentPortrait agent={agent} size="lg" status={agent.isActive ? "IDLE" : "COMPLETED"} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
@@ -382,7 +404,7 @@ export function AgentsPage() {
 
         <Card>
           <div className="flex flex-col gap-4 border-b border-border/50 pb-5 sm:flex-row sm:items-center">
-            <AgentPortrait agent={selected ?? draft} size="xl" status={selected?.isActive === false ? "COMPLETED" : "IDLE"} />
+            <AgentPortrait agent={selected ?? draft} size="hero" shape="portrait-card" status={selected?.isActive === false ? "COMPLETED" : "IDLE"} clickToView />
             <div>
               <h2 className="font-display text-2xl">{selected ? `Edit ${selected.title}` : "Create Agent"}</h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
@@ -1188,73 +1210,104 @@ export function AgentsPage() {
 
           {/* Display & Portrait — separate from core identity */}
           {selected && (
-            <div className="mt-8 rounded-lg border border-border/60 bg-muted/10 p-4 space-y-4">
+            <div className="mt-8 rounded-lg border border-border/60 bg-muted/10 p-4 space-y-5">
               <div className="flex items-center gap-2">
                 <Image className="h-4 w-4 text-muted-foreground" />
                 <h3 className="font-semibold text-sm text-foreground">Display &amp; Portrait</h3>
               </div>
               <div className="rounded border border-amber-500/20 bg-amber-500/5 p-3 text-xs text-amber-200">
-                Display changes do not affect this agent&apos;s role, memory, permissions, routing, or relationships. The canonical identity is always preserved.
+                Portrait changes affect display only. Agent role, memory, routing, and relationships remain unchanged.
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <FormField id="dp-display-name" label="Display Name" description="Overrides the canonical name in the UI only.">
-                  <Input
-                    id="dp-display-name"
-                    value={displayDraft.displayName ?? ""}
-                    onChange={(e) => setDisplayDraft({ ...displayDraft, displayName: e.target.value || null })}
-                    placeholder={selected.canonicalName ?? selected.name}
+              {/* Portrait preview */}
+              <div className="flex flex-col sm:flex-row gap-5 items-start">
+                <div className="shrink-0">
+                  <AgentPortrait
+                    agent={selected}
+                    size="hero"
+                    shape="portrait-card"
+                    status="IDLE"
+                    showStatusRing={false}
+                    clickToView
+                    className="w-[200px]"
                   />
-                </FormField>
-                <FormField id="dp-display-title" label="Display Title" description="Overrides the canonical title in the UI only.">
-                  <Input
-                    id="dp-display-title"
-                    value={displayDraft.displayTitle ?? ""}
-                    onChange={(e) => setDisplayDraft({ ...displayDraft, displayTitle: e.target.value || null })}
-                    placeholder={selected.canonicalTitle ?? selected.title}
-                  />
-                </FormField>
-              </div>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      onClick={() => {
+                        const portrait = selected.avatarUrl;
+                        if (portrait) window.open(portrait, "_blank", "noopener");
+                      }}
+                      disabled={!selected.avatarUrl}
+                    >
+                      <ExternalLink className="h-3 w-3" /> View Full
+                    </button>
+                    {selected.avatarVersion > 1 && (
+                      <span className="text-xs text-muted-foreground">v{selected.avatarVersion}</span>
+                    )}
+                  </div>
+                </div>
 
-              <FormField id="dp-avatar-url" label="Portrait Image URL" description="Custom portrait URL. Leave blank to use uploaded file or default portrait.">
-                <Input
-                  id="dp-avatar-url"
-                  value={displayDraft.avatarUrl ?? ""}
-                  onChange={(e) => setDisplayDraft({ ...displayDraft, avatarUrl: e.target.value || null })}
-                  placeholder="https://example.com/portrait.png"
-                />
-              </FormField>
+                <div className="flex-1 space-y-4 min-w-0">
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <FormField id="dp-display-name" label="Display Name" description="Overrides the canonical name in the UI only.">
+                      <Input
+                        id="dp-display-name"
+                        value={displayDraft.displayName ?? ""}
+                        onChange={(e) => setDisplayDraft({ ...displayDraft, displayName: e.target.value || null })}
+                        placeholder={selected.canonicalName ?? selected.name}
+                      />
+                    </FormField>
+                    <FormField id="dp-display-title" label="Display Title" description="Overrides the canonical title in the UI only.">
+                      <Input
+                        id="dp-display-title"
+                        value={displayDraft.displayTitle ?? ""}
+                        onChange={(e) => setDisplayDraft({ ...displayDraft, displayTitle: e.target.value || null })}
+                        placeholder={selected.canonicalTitle ?? selected.title}
+                      />
+                    </FormField>
+                  </div>
 
-              <div>
-                <label className="block text-sm font-medium text-foreground mb-1">Upload Portrait</label>
-                <p className="text-xs text-muted-foreground mb-2">JPEG, PNG, or WebP — max 5 MB. Replaces the current portrait and increments avatar version.</p>
-                <input
-                  ref={avatarFileRef}
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void onUploadAvatar(file);
-                    if (avatarFileRef.current) avatarFileRef.current.value = "";
-                  }}
-                />
-                <div className="flex items-center gap-3">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => avatarFileRef.current?.click()}
-                    disabled={displaySaving}
-                  >
-                    <Image className="h-4 w-4 mr-1.5" />
-                    Choose File
-                  </Button>
-                  {selected.avatarUrl && (
-                    <span className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">{selected.avatarUrl}</span>
-                  )}
-                  {selected.avatarVersion > 1 && (
-                    <span className="text-xs text-muted-foreground">v{selected.avatarVersion}</span>
-                  )}
+                  <FormField id="dp-avatar-url" label="Portrait Image URL" description="Custom portrait URL. Leave blank to use uploaded file or default portrait.">
+                    <Input
+                      id="dp-avatar-url"
+                      value={displayDraft.avatarUrl ?? ""}
+                      onChange={(e) => setDisplayDraft({ ...displayDraft, avatarUrl: e.target.value || null })}
+                      placeholder="https://example.com/portrait.png"
+                    />
+                  </FormField>
+
+                  {/* Upload dropzone */}
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Upload Portrait</label>
+                    <p className="text-xs text-muted-foreground mb-2">
+                      JPEG, PNG, or WebP — max 5 MB. Recommended: 1024 × 1280 px (portrait) or 1254 × 1254 px (square).
+                    </p>
+                    <input
+                      ref={avatarFileRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) void onUploadAvatar(file);
+                        if (avatarFileRef.current) avatarFileRef.current.value = "";
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => avatarFileRef.current?.click()}
+                      disabled={displaySaving}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border/60 bg-muted/10 px-4 py-5 text-sm text-muted-foreground transition hover:border-primary/40 hover:bg-muted/20 hover:text-foreground disabled:opacity-50"
+                    >
+                      <Image className="h-5 w-5" />
+                      Click to choose file
+                    </button>
+                    {selected.avatarUrl && (
+                      <span className="mt-1.5 block text-xs text-muted-foreground font-mono truncate">{selected.avatarUrl}</span>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1277,9 +1330,19 @@ export function AgentsPage() {
                 </FormField>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
+              <div className="flex flex-wrap items-center gap-2 pt-1">
                 <Button type="button" onClick={() => void onSaveDisplayProfile()} disabled={displaySaving}>
                   {displaySaving ? "Saving…" : "Save Display Profile"}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => void onResetPortrait()}
+                  disabled={displaySaving || !selected.avatarUrl}
+                  title="Remove custom portrait, reverting to default"
+                >
+                  <Image className="h-4 w-4 mr-1.5" />
+                  Reset Portrait
                 </Button>
                 <Button
                   type="button"
