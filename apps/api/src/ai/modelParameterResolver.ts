@@ -90,6 +90,7 @@ const ROLE_DEFAULTS: Record<string, RoleDefaults> = {
   "royal-researcher": { temperature: 0.35, reasoning: { ...DEFAULT_REASONING, effort: "high" } },
   "royal-treasurer": { temperature: 0.1, reasoning: { ...DEFAULT_REASONING, effort: "low" } },
   "royal-archivist": { temperature: 0.1, reasoning: { ...DEFAULT_REASONING, effort: "low" } },
+  "royal-promptsmith": { temperature: 0.3, reasoning: { ...DEFAULT_REASONING, effort: "low" } },
   "prompt-agent": { temperature: 0.3, reasoning: { ...DEFAULT_REASONING, effort: "medium" } }
 };
 

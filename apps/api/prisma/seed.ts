@@ -6,138 +6,232 @@ import { ensureDefaultAIProviders } from "../src/services/aiProviderRegistry.js"
 import { ensureDefaultExternalAgents } from "../src/services/externalAgentWorkOrderService.js";
 import { ensureDefaultProjects } from "../src/services/projectService.js";
 import { ensureDefaultModelPricing } from "../src/services/modelPricingService.js";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
 
 const prisma = new PrismaClient();
 
-const providerDefaultsBySlug: Record<string, { defaultModel: string; fallbackProviderIds: string[] }> = {
-  "grand-vizier": {
-    defaultModel: "nvidia/nemotron-3-ultra-550b-a55b:free",
-    fallbackProviderIds: ["openrouter/owl-alpha", "nvidia/nemotron-3-super-120b-a12b:free", "local-sandbox-baseline"]
-  },
-  "royal-architect": {
-    defaultModel: "poolside/laguna-m.1:free",
-    fallbackProviderIds: ["poolside/laguna-xs.2:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
-  },
-  "royal-general": {
-    defaultModel: "nvidia/nemotron-3-super-120b-a12b:free",
-    fallbackProviderIds: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free", "local-sandbox-baseline"]
-  },
-  "royal-researcher": {
-    defaultModel: "google/gemma-4-31b-it:free",
-    fallbackProviderIds: ["google/gemma-4-26b-a4b-it:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
-  },
-  "royal-treasurer": {
-    defaultModel: "google/gemma-4-26b-a4b-it:free",
-    fallbackProviderIds: ["google/gemma-4-31b-it:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
-  },
-  "royal-archivist": {
-    defaultModel: "openrouter/owl-alpha",
-    fallbackProviderIds: ["poolside/laguna-xs.2:free", "google/gemma-4-26b-a4b-it:free", "local-sandbox-baseline"]
-  },
-  "prompt-agent": {
-    defaultModel: "poolside/laguna-xs.2:free",
-    fallbackProviderIds: ["google/gemma-4-26b-a4b-it:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
-  }
-};
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const profilesDir = path.resolve(__dirname, "../../../ai_kingdom_agent_profiles");
 
-const agents = [
-  {
-    slug: "grand-vizier",
+const PROFILE_FILES = [
+  "grand-vizier.json",
+  "royal-architect.json",
+  "royal-general.json",
+  "royal-researcher.json",
+  "royal-treasurer.json",
+  "royal-promptsmith.json",
+  "royal-archivist.json"
+];
+
+const OLD_DEFAULTS: Record<string, Record<string, any>> = {
+  "grand-vizier": {
     name: "Aurelian",
     title: "Grand Vizier",
     role: "Orchestrator",
     specialty: "Task routing, council synthesis, final royal counsel",
     description: "Orchestrates council selection, summarizes agent advice, and delivers final counsel.",
-    prompt:
-      "You are Aurelian, the Grand Vizier of an AI Kingdom. You orchestrate specialized royal agents, synthesize their counsel, identify tradeoffs, and present a final concise answer to the King.",
-    systemPrompt:
-      "You are Aurelian, the Grand Vizier of an AI Kingdom. Convene the council, synthesize specialist counsel, identify tradeoffs, and present decisive guidance to the King.",
+    systemPrompt: "You are Aurelian, the Grand Vizier of an AI Kingdom. Convene the council, synthesize specialist counsel, identify tradeoffs, and present decisive guidance to the King.",
+    prompt: "You are Aurelian, the Grand Vizier of an AI Kingdom. Convene the council, synthesize specialist counsel, identify tradeoffs, and present decisive guidance to the King.",
     skills: ["orchestration", "synthesis", "decision framing", "risk balancing"],
     responseStyle: "authoritative, concise, structured, and practical",
-    priority: 1,
     preferredProviderId: "openrouter-free",
-    ...providerDefaultsBySlug["grand-vizier"]
+    defaultModel: "nvidia/nemotron-3-ultra-550b-a55b:free",
+    fallbackProviderIds: ["openrouter/owl-alpha", "nvidia/nemotron-3-super-120b-a12b:free", "local-sandbox-baseline"]
   },
-  {
-    slug: "royal-architect",
+  "royal-architect": {
     name: "Seraphine",
     title: "Royal Architect",
     role: "Systems Designer",
     specialty: "Software architecture, platform design, technical plans",
     description: "Advises on architecture, systems, technical tradeoffs, and implementation boundaries.",
-    prompt:
-      "You are Seraphine, the Royal Architect. Advise on software architecture, system design, data models, integration boundaries, reliability, and technical tradeoffs.",
-    systemPrompt:
-      "You are Seraphine, the Royal Architect. Evaluate architecture, data models, APIs, platform boundaries, reliability, and technical tradeoffs.",
+    systemPrompt: "You are Seraphine, the Royal Architect. Evaluate architecture, data models, APIs, platform boundaries, reliability, and technical tradeoffs.",
+    prompt: "You are Seraphine, the Royal Architect. Evaluate architecture, data models, APIs, platform boundaries, reliability, and technical tradeoffs.",
     skills: ["software architecture", "system design", "data modeling", "API contracts", "reliability"],
     responseStyle: "clear, technical, implementation-ready, with tradeoffs",
-    priority: 20,
     preferredProviderId: "openrouter-free",
-    ...providerDefaultsBySlug["royal-architect"]
+    defaultModel: "poolside/laguna-m.1:free",
+    fallbackProviderIds: ["poolside/laguna-xs.2:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
   },
-  {
-    slug: "royal-general",
+  "royal-general": {
     name: "Cassian",
     title: "Royal General",
     role: "Execution Strategist",
     specialty: "Roadmaps, plans, milestones, operational execution",
     description: "Turns strategic goals into milestones, risks, owners, and execution plans.",
-    prompt:
-      "You are Cassian, the Royal General. Convert strategy into action plans, milestones, risks, owners, sequencing, and pragmatic execution guidance.",
-    systemPrompt:
-      "You are Cassian, the Royal General. Convert royal strategy into milestones, owners, risks, sequencing, and execution checkpoints.",
+    systemPrompt: "You are Cassian, the Royal General. Convert royal strategy into milestones, owners, risks, sequencing, and execution checkpoints.",
+    prompt: "You are Cassian, the Royal General. Convert royal strategy into milestones, owners, risks, sequencing, and execution checkpoints.",
     skills: ["roadmaps", "milestones", "execution planning", "risk management", "operating cadence"],
     responseStyle: "direct, tactical, milestone-oriented, and measurable",
-    priority: 30,
     preferredProviderId: "openrouter-free",
-    ...providerDefaultsBySlug["royal-general"]
+    defaultModel: "nvidia/nemotron-3-super-120b-a12b:free",
+    fallbackProviderIds: ["nvidia/nemotron-3-ultra-550b-a55b:free", "google/gemma-4-31b-it:free", "local-sandbox-baseline"]
   },
-  {
-    slug: "royal-researcher",
+  "royal-researcher": {
     name: "Elowen",
     title: "Royal Researcher",
     role: "Analyst",
     specialty: "Research, synthesis, market and competitive intelligence",
     description: "Analyzes evidence, assumptions, alternatives, and unknowns.",
-    prompt:
-      "You are Elowen, the Royal Researcher. Analyze evidence, surface unknowns, compare alternatives, and separate facts from assumptions.",
-    systemPrompt:
-      "You are Elowen, the Royal Researcher. Analyze available evidence, surface unknowns, compare alternatives, and clearly separate facts from assumptions.",
+    systemPrompt: "You are Elowen, the Royal Researcher. Analyze available evidence, surface unknowns, compare alternatives, and clearly separate facts from assumptions.",
+    prompt: "You are Elowen, the Royal Researcher. Analyze available evidence, surface unknowns, compare alternatives, and clearly separate facts from assumptions.",
     skills: ["research synthesis", "competitive analysis", "assumption mapping", "evidence evaluation"],
     responseStyle: "careful, analytical, evidence-aware, with explicit unknowns",
-    priority: 40,
     preferredProviderId: "openrouter-free",
-    ...providerDefaultsBySlug["royal-researcher"]
+    defaultModel: "google/gemma-4-31b-it:free",
+    fallbackProviderIds: ["google/gemma-4-26b-a4b-it:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
   },
-  {
-    slug: "royal-treasurer",
+  "royal-treasurer": {
     name: "Marcellus",
     title: "Royal Treasurer",
     role: "Financial Advisor",
     specialty: "Budget, cost, ROI, pricing, resource allocation",
     description: "Evaluates budget, ROI, resource allocation, and financial risk.",
-    prompt:
-      "You are Marcellus, the Royal Treasurer. Evaluate costs, budgets, ROI, pricing, recurring spend, and financial risks with practical recommendations.",
-    systemPrompt:
-      "You are Marcellus, the Royal Treasurer. Evaluate budget, cost, ROI, pricing, recurring spend, and resource allocation risk.",
+    systemPrompt: "You are Marcellus, the Royal Treasurer. Evaluate budget, cost, ROI, pricing, recurring spend, and resource allocation risk.",
+    prompt: "You are Marcellus, the Royal Treasurer. Evaluate budget, cost, ROI, pricing, recurring spend, and resource allocation risk.",
     skills: ["budgeting", "cost analysis", "ROI", "pricing", "resource allocation"],
     responseStyle: "financially disciplined, concrete, and risk-aware",
-    priority: 50,
     preferredProviderId: "openrouter-free",
-    ...providerDefaultsBySlug["royal-treasurer"]
-  }
-];
-
-const extraAgentProviderDefaults = [
-  {
-    where: [{ slug: "royal-archivist" }, { title: "Royal Archivist" }, { name: "Royal Archivist" }],
-    defaults: providerDefaultsBySlug["royal-archivist"]
+    defaultModel: "google/gemma-4-26b-a4b-it:free",
+    fallbackProviderIds: ["google/gemma-4-31b-it:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
   },
-  {
-    where: [{ slug: "prompt-agent" }, { title: "Prompt Agent" }, { name: "Prompt Agent" }],
-    defaults: providerDefaultsBySlug["prompt-agent"]
+  "prompt-agent": {
+    name: "Prompt Agent",
+    title: "Prompt Agent",
+    preferredProviderId: "openrouter-free",
+    defaultModel: "poolside/laguna-xs.2:free",
+    fallbackProviderIds: ["google/gemma-4-26b-a4b-it:free", "openrouter/owl-alpha", "local-sandbox-baseline"]
+  },
+  "royal-archivist": {
+    name: "Royal Archivist",
+    title: "Royal Archivist",
+    preferredProviderId: "openrouter-free",
+    defaultModel: "openrouter/owl-alpha",
+    fallbackProviderIds: ["poolside/laguna-xs.2:free", "google/gemma-4-26b-a4b-it:free", "local-sandbox-baseline"]
   }
-];
+};
+
+function mapProviderNameToId(name: string): string {
+  if (name === "OpenRouter Free Sandbox") return "openrouter-free";
+  if (name === "Local Sandbox Baseline") return "local-sandbox-baseline";
+  return name;
+}
+
+function loadAgentProfile(filename: string): any {
+  const filepath = path.join(profilesDir, filename);
+  const raw = fs.readFileSync(filepath, "utf8");
+  const json = JSON.parse(raw);
+
+  const skills = typeof json.skills === "string"
+    ? json.skills.split(",").map((s: string) => s.trim()).filter(Boolean)
+    : (Array.isArray(json.skills) ? json.skills : []);
+
+  const preferredProviderId = json.preferredProvider ? mapProviderNameToId(json.preferredProvider) : null;
+  const fallbackProviderIds = Array.isArray(json.fallbackProviders)
+    ? json.fallbackProviders.map(mapProviderNameToId)
+    : [];
+
+  const config = {
+    royalIdentity: {
+      personalDetail: json.personalDetail || "",
+      personality: json.personality || "",
+      relationshipWithKing: json.relationshipWithKing || "",
+      relationshipWithCouncil: json.relationshipWithCouncil || ""
+    },
+    authority: {
+      roleBoundaries: json.roleBoundaries || "",
+      allowedActions: json.allowedActions || [],
+      forbiddenActions: json.forbiddenActions || [],
+      approvalRequiredFor: json.approvalRequiredFor || []
+    },
+    memoryPolicy: {
+      canProposeMemoryCandidates: json.memoryPolicy?.canProposeMemoryCandidates ?? true,
+      canAutoSaveTrustedMemory: json.memoryPolicy?.canAutoSaveTrustedMemory ?? false,
+      memoryRequiresApproval: json.memoryPolicy?.memoryRequiresApproval ?? true,
+      allowedMemoryCategories: json.memoryPolicy?.allowedMemoryCategories ?? [],
+      retentionPolicy: json.memoryPolicy?.retentionPolicy || ""
+    }
+  };
+
+  return {
+    slug: json.slug,
+    name: json.name,
+    title: json.title,
+    role: json.role,
+    specialty: json.specialty,
+    description: json.description || "",
+    systemPrompt: json.systemPrompt || "",
+    prompt: json.systemPrompt || "",
+    skills,
+    responseStyle: json.responseStyle || "",
+    preferredProviderId,
+    defaultModel: json.primaryModel || null,
+    fallbackProviderIds,
+    fallbackModels: json.fallbackModels || [],
+    routingPolicy: json.routingPolicy || null,
+    temperature: json.temperature ?? null,
+    maxTokens: json.max_tokens ?? null,
+    parameterMode: "MANUAL",
+    modelParameters: json.modelParameters || null,
+    config
+  };
+}
+
+function isValueCustomized(currentDbValue: any, oldDefaultValue: any): boolean {
+  if (currentDbValue === null || currentDbValue === undefined) return false;
+  if (typeof currentDbValue === "string" && currentDbValue.trim() === "") return false;
+  if (Array.isArray(currentDbValue) && currentDbValue.length === 0) return false;
+  if (typeof currentDbValue === "object" && Object.keys(currentDbValue).length === 0) return false;
+
+  if (oldDefaultValue === undefined) {
+    return false;
+  }
+
+  return JSON.stringify(currentDbValue) !== JSON.stringify(oldDefaultValue);
+}
+
+function mergeAgentData(dbAgent: any, profileAgent: any, oldDefaults: any): any {
+  const updatedData: any = {};
+  const allKeys = new Set([
+    ...Object.keys(profileAgent).filter(k => k !== "config" && k !== "slug")
+  ]);
+
+  for (const key of allKeys) {
+    const dbVal = dbAgent[key];
+    const profileVal = profileAgent[key];
+    const oldDefault = oldDefaults ? oldDefaults[key] : undefined;
+
+    if (isValueCustomized(dbVal, oldDefault)) {
+      updatedData[key] = dbVal;
+    } else {
+      updatedData[key] = profileVal;
+    }
+  }
+
+  const dbConfig = dbAgent.config && typeof dbAgent.config === "object" ? dbAgent.config : {};
+  const profileConfig = profileAgent.config || {};
+  const mergedConfig: any = { ...dbConfig };
+
+  for (const section of ["royalIdentity", "authority", "memoryPolicy"]) {
+    mergedConfig[section] = mergedConfig[section] || {};
+    const dbSection = dbConfig[section] || {};
+    const profileSection = profileConfig[section] || {};
+
+    for (const key of Object.keys(profileSection)) {
+      const dbVal = dbSection[key];
+      const profileVal = profileSection[key];
+
+      if (dbVal === null || dbVal === undefined || (typeof dbVal === "string" && dbVal.trim() === "") || (Array.isArray(dbVal) && dbVal.length === 0)) {
+        mergedConfig[section][key] = profileVal;
+      }
+    }
+  }
+
+  updatedData.config = mergedConfig;
+  return updatedData;
+}
 
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 12);
@@ -154,23 +248,41 @@ async function main() {
     }
   });
 
-  for (const agent of agents) {
-    await prisma.agent.upsert({
-      where: { slug: agent.slug },
-      update: agent,
-      create: agent
-    });
+  // Migrate prompt-agent slug to royal-promptsmith to prevent duplicates
+  const promptAgent = await prisma.agent.findUnique({ where: { slug: "prompt-agent" } });
+  if (promptAgent) {
+    const promptsmithAgent = await prisma.agent.findUnique({ where: { slug: "royal-promptsmith" } });
+    if (promptsmithAgent) {
+      await prisma.agent.delete({ where: { slug: "prompt-agent" } });
+      console.log("Deleted duplicate prompt-agent slug.");
+    } else {
+      await prisma.agent.update({
+        where: { slug: "prompt-agent" },
+        data: { slug: "royal-promptsmith" }
+      });
+      console.log("Renamed prompt-agent slug to royal-promptsmith.");
+    }
   }
 
-  for (const entry of extraAgentProviderDefaults) {
-    await prisma.agent.updateMany({
-      where: { OR: entry.where },
-      data: {
-        preferredProviderId: "openrouter-free",
-        defaultModel: entry.defaults!.defaultModel,
-        fallbackProviderIds: entry.defaults!.fallbackProviderIds
-      }
-    });
+  // Load and upsert profiles
+  for (const file of PROFILE_FILES) {
+    const profile = loadAgentProfile(file);
+    const dbAgent = await prisma.agent.findUnique({ where: { slug: profile.slug } });
+
+    if (!dbAgent) {
+      await prisma.agent.create({ data: profile });
+      console.log(`Created new agent: ${profile.slug} (${profile.name})`);
+    } else {
+      const oldDefaultsKey = profile.slug === "royal-promptsmith" ? "prompt-agent" : profile.slug;
+      const oldDefaults = OLD_DEFAULTS[oldDefaultsKey];
+      const merged = mergeAgentData(dbAgent, profile, oldDefaults);
+
+      await prisma.agent.update({
+        where: { slug: profile.slug },
+        data: merged
+      });
+      console.log(`Updated existing agent: ${profile.slug} (${profile.name})`);
+    }
   }
 
   for (const setting of DEFAULT_SETTINGS) {
