@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, FolderKanban } from "lucide-react";
+import { Download, FolderKanban, ScanSearch } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
-import type { ArtifactDto, MatterDto, MemoryDto, ObsidianExportDto, ProjectOverviewDto, ReportDto, TaskDto, WorkOrderDto } from "@/types/api";
+import type { ArtifactDto, MatterDto, MemoryDto, ObsidianExportDto, ProjectOverviewDto, RepositorySnapshotDto, ReportDto, TaskDto, WorkOrderDto } from "@/types/api";
 
 type WorkspaceData = {
   overview: ProjectOverviewDto;
@@ -23,6 +23,9 @@ export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [data, setData] = useState<WorkspaceData | null>(null);
   const [exportPayload, setExportPayload] = useState<ObsidianExportDto | null>(null);
+  const [repoSnapshot, setRepoSnapshot] = useState<RepositorySnapshotDto | null>(null);
+  const [scanError, setScanError] = useState<string | null>(null);
+  const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const project = data?.overview.project ?? null;
@@ -30,14 +33,15 @@ export function ProjectDetailPage() {
 
   async function load() {
     if (!id) return;
-    const [overview, tasks, matters, workOrders, reports, memories, artifacts] = await Promise.all([
+    const [overview, tasks, matters, workOrders, reports, memories, artifacts, repoResult] = await Promise.all([
       api.projectOverview(id),
       api.projectTasks(id),
       api.projectMatters(id),
       api.projectWorkOrders(id),
       api.projectReports(id),
       api.projectMemories(id),
-      api.projectArtifacts(id)
+      api.projectArtifacts(id),
+      api.getProjectRepositorySnapshot(id).catch(() => ({ snapshot: null }))
     ]);
     setData({
       overview,
@@ -48,6 +52,21 @@ export function ProjectDetailPage() {
       memories: memories.memories,
       artifacts: artifacts.artifacts
     });
+    setRepoSnapshot(repoResult.snapshot);
+  }
+
+  async function scanRepository() {
+    if (!id) return;
+    setScanning(true);
+    setScanError(null);
+    try {
+      const result = await api.scanProjectRepository(id);
+      setRepoSnapshot(result.snapshot);
+    } catch (err) {
+      setScanError(err instanceof Error ? err.message : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
   }
 
   useEffect(() => {
@@ -124,6 +143,57 @@ export function ProjectDetailPage() {
         </Card>
       ) : null}
 
+      <Card className="mt-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg">Repository Intelligence</h2>
+            {repoSnapshot ? (
+              <p className="mt-1 text-xs text-muted-foreground">Generated: {formatDate(repoSnapshot.generatedAt)}</p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">No snapshot yet. Click Scan Repository to generate one.</p>
+            )}
+          </div>
+          <Button variant="outline" onClick={() => void scanRepository()} disabled={scanning}>
+            <ScanSearch className="h-4 w-4" />
+            {scanning ? "Scanning…" : "Scan Repository"}
+          </Button>
+        </div>
+        {scanError ? <p className="mt-3 text-sm text-red-400">{scanError}</p> : null}
+        {repoSnapshot ? (
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <RepoField label="Framework" value={repoSnapshot.framework} />
+            <RepoField label="Runtime" value={repoSnapshot.language} />
+            <RepoField label="Package Manager" value={repoSnapshot.packageManager} />
+            <div className="sm:col-span-2 lg:col-span-3">
+              <h3 className="text-sm font-semibold">Prisma Models</h3>
+              {repoSnapshot.prismaModels.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {repoSnapshot.prismaModels.map((model) => (
+                    <span key={model} className="rounded-full border border-border bg-muted/30 px-2 py-0.5 text-xs text-muted-foreground">{model}</span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-sm text-muted-foreground">None detected.</p>
+              )}
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Modules</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{repoSnapshot.modules.length > 0 ? repoSnapshot.modules.join(", ") : "—"}</p>
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold">Services</h3>
+              <p className="mt-1 text-sm text-muted-foreground">{repoSnapshot.services.length > 0 ? repoSnapshot.services.join(", ") : "—"}</p>
+            </div>
+            {repoSnapshot.summary ? (
+              <div className="sm:col-span-2 lg:col-span-3">
+                <h3 className="text-sm font-semibold">Repository Summary</h3>
+                <p className="mt-1 text-sm text-muted-foreground">{repoSnapshot.summary}</p>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Card>
+
       <div className="mt-5 flex flex-wrap gap-2">
         <Link to="/project-inbox"><Button variant="outline">Review Project Inbox</Button></Link>
         <Link to="/artifacts"><Button variant="outline">Create Artifact</Button></Link>
@@ -163,5 +233,14 @@ function ListCard({ title, items }: { title: string; items: string[] }) {
         ))}
       </div>
     </Card>
+  );
+}
+
+function RepoField({ label, value }: { label: string; value: string | null }) {
+  return (
+    <div>
+      <h3 className="text-sm font-semibold">{label}</h3>
+      <p className="mt-1 text-sm text-muted-foreground">{value ?? "—"}</p>
+    </div>
   );
 }

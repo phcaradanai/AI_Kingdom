@@ -62,7 +62,8 @@ import type {
   WorkSessionDto,
   AgentRoutingPreviewDto,
   ProviderModelsDto,
-  EffectiveRequestPreviewDto
+  EffectiveRequestPreviewDto,
+  RepositorySnapshotDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -204,6 +205,8 @@ export const api = {
   projectMemories: (id: string) => apiRequest<{ memories: MemoryDto[] }>(`/projects/${id}/memories`),
   projectArtifacts: (id: string) => apiRequest<{ artifacts: ArtifactDto[] }>(`/projects/${id}/artifacts`),
   exportProjectObsidian: (id: string) => apiRequest<ObsidianExportDto>(`/projects/${id}/export/obsidian`, { method: "POST" }),
+  getProjectRepositorySnapshot: (id: string) => apiRequest<{ snapshot: RepositorySnapshotDto | null }>(`/projects/${id}/repository`),
+  scanProjectRepository: (id: string) => apiRequest<{ snapshot: RepositorySnapshotDto }>(`/projects/${id}/repository/scan`, { method: "POST" }),
   projectInbox: (params?: { status?: string; dataQuality?: DataQuality; includeTestData?: boolean; includeDebug?: boolean; routingQuality?: string; confidenceMin?: number; confidenceMax?: number; sourceType?: string; suggestedProjectId?: string }) => {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);

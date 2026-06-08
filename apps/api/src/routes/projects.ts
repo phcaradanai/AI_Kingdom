@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js";
 import { requireRole } from "../middleware/rbac.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultProjects, exportProjectObsidian, getProjectOverview } from "../services/projectService.js";
+import { getLatestSnapshot, scanAndSaveSnapshot } from "../services/repositoryScanService.js";
 
 const router = Router();
 
@@ -131,6 +132,29 @@ router.get("/:id/work-orders", listProjectRows("workOrder", "workOrders"));
 router.get("/:id/reports", listProjectRows("report", "reports"));
 router.get("/:id/memories", listProjectRows("memory", "memories"));
 router.get("/:id/artifacts", listProjectRows("artifact", "artifacts"));
+
+router.get("/:id/repository", async (req, res, next) => {
+  try {
+    const snapshot = await getLatestSnapshot(req.params.id);
+    res.json({ snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/repository/scan", async (req, res, next) => {
+  try {
+    const snapshot = await scanAndSaveSnapshot(req.params.id);
+    await auditLog({ userId: req.user?.id, action: "scan_repository", resourceType: "project", resourceId: req.params.id });
+    res.status(201).json({ snapshot });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
 
 router.post("/:id/export/obsidian", async (req, res, next) => {
   try {

@@ -418,6 +418,28 @@ model Project {
   handoffBriefs     HandoffBrief[]
   artifacts         Artifact[]
   routingCandidates ProjectRoutingCandidate[]
+  repositorySnapshots RepositorySnapshot[]
+}
+
+model RepositorySnapshot {
+  id             String   @id @default(cuid())
+  projectId      String
+  generatedAt    DateTime @default(now())
+  repositoryUrl  String?
+  branch         String?
+  framework      String?
+  language       String?
+  packageManager String?
+  prismaModels   Json     @default("[]")
+  modules        Json     @default("[]")
+  services       Json     @default("[]")
+  apiRoutes      Json     @default("[]")
+  summary        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
 }
 
 model ProjectRoutingCandidate {

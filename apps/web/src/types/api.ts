@@ -455,6 +455,24 @@ export type ObsidianExportDto = {
   files: Record<string, string>;
 };
 
+export type RepositorySnapshotDto = {
+  id: string;
+  projectId: string;
+  generatedAt: string;
+  repositoryUrl: string | null;
+  branch: string | null;
+  framework: string | null;
+  language: string | null;
+  packageManager: string | null;
+  prismaModels: string[];
+  modules: string[];
+  services: string[];
+  apiRoutes: string[];
+  summary: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
 export type ReportDto = {
   id: string;
   title: string;
