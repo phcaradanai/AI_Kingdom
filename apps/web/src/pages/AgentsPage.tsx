@@ -37,6 +37,16 @@ const DEFAULT_MODEL_PARAMETERS: ModelParameters = {
   max_tokens: null,
   top_p: null,
   seed: null,
+  response_format: "none",
+  stop: null,
+  frequency_penalty: null,
+  presence_penalty: null,
+  repetition_penalty: null,
+  top_k: null,
+  min_p: null,
+  openrouter_route: "none",
+  openrouter_provider_preferences: null,
+  plugins: null,
   reasoning: { enabled: true, effort: "medium", max_tokens: null, exclude: true },
   tools: { enabled: false, tool_choice: "auto" }
 };
@@ -60,6 +70,19 @@ const blankAgent: AgentPayload = {
   costPreference: null,
   temperature: null,
   maxTokens: null,
+  personalDetail: "",
+  personality: "",
+  relationshipWithKing: "",
+  relationshipWithCouncil: "",
+  roleBoundaries: "",
+  allowedActions: [],
+  forbiddenActions: [],
+  approvalRequiredFor: [],
+  canProposeMemoryCandidates: true,
+  canAutoSaveTrustedMemory: false,
+  memoryRequiresApproval: true,
+  allowedMemoryCategories: [],
+  retentionPolicy: "approved durable memories only; raw reasoning must never be stored as memory",
   parameterMode: "ROLE_DEFAULT",
   modelParameters: null
 };
@@ -98,6 +121,7 @@ export function AgentsPage() {
   const [loadingEffectivePreview, setLoadingEffectivePreview] = useState(false);
   const [newFallbackProvider, setNewFallbackProvider] = useState("");
   const [newFallbackModel, setNewFallbackModel] = useState("");
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   const selectedProvider = draft.preferredProviderId
     ? providers.find((p) => p.id === draft.preferredProviderId)
@@ -112,6 +136,13 @@ export function AgentsPage() {
   );
 
   const openRouterModelList: string[] = selectedProvider?.config?.openRouterModels ?? providerModels?.models ?? [];
+  const primaryModelValidationState: "Valid" | "Invalid" | "Not checked" = isModelInvalid
+    ? "Invalid"
+    : selectedProvider?.modelValidationStatus === "VALID"
+      ? "Valid"
+      : selectedProvider?.modelValidationStatus === "INVALID_MODEL"
+        ? "Invalid"
+        : "Not checked";
 
   useEffect(() => {
     if (selected?.id) {
@@ -235,6 +266,16 @@ export function AgentsPage() {
     setDraft({ ...draft, fallbackModels: list });
   }
 
+  function updateModelParameters(patch: Partial<ModelParameters>) {
+    setDraft({ ...draft, modelParameters: { ...(draft.modelParameters ?? DEFAULT_MODEL_PARAMETERS), ...patch } });
+  }
+
+  function togglePlugin(plugin: NonNullable<ModelParameters["plugins"]>[number], enabled: boolean) {
+    const current = draft.modelParameters?.plugins ?? [];
+    const next = enabled ? [...new Set([...current, plugin])] : current.filter((item) => item !== plugin);
+    updateModelParameters({ plugins: next.length > 0 ? next : null });
+  }
+
   return (
     <>
       <PageHeader
@@ -304,6 +345,24 @@ export function AgentsPage() {
               <Textarea id="agent-description" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Describe what this agent does and when it's consulted." />
             </FormField>
 
+            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-4">
+              <h3 className="font-semibold text-sm text-foreground">Royal Identity</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField id="agent-personal-detail" label="Personal Detail">
+                  <Textarea id="agent-personal-detail" value={draft.personalDetail ?? ""} onChange={(e) => setDraft({ ...draft, personalDetail: e.target.value })} placeholder="Persistent personal details, history, and presentation." />
+                </FormField>
+                <FormField id="agent-personality" label="Personality">
+                  <Textarea id="agent-personality" value={draft.personality ?? ""} onChange={(e) => setDraft({ ...draft, personality: e.target.value })} placeholder="Temperament, voice, and decision posture." />
+                </FormField>
+                <FormField id="agent-king-relationship" label="Relationship with the King">
+                  <Textarea id="agent-king-relationship" value={draft.relationshipWithKing ?? ""} onChange={(e) => setDraft({ ...draft, relationshipWithKing: e.target.value })} placeholder="How this agent serves, challenges, and reports to the King." />
+                </FormField>
+                <FormField id="agent-council-relationship" label="Relationship with the Council">
+                  <Textarea id="agent-council-relationship" value={draft.relationshipWithCouncil ?? ""} onChange={(e) => setDraft({ ...draft, relationshipWithCouncil: e.target.value })} placeholder="How this agent collaborates with other royal officials." />
+                </FormField>
+              </div>
+            </div>
+
             <FormField id="agent-system-prompt" label="System Prompt">
               <Textarea id="agent-system-prompt" className="min-h-44" value={draft.systemPrompt} onChange={(e) => setDraft({ ...draft, systemPrompt: e.target.value })} placeholder="You are a royal advisor…" />
             </FormField>
@@ -315,6 +374,53 @@ export function AgentsPage() {
             <FormField id="agent-skills" label="Skills">
               <Input id="agent-skills" value={draft.skills.join(", ")} onChange={(e) => setDraft({ ...draft, skills: e.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} placeholder="Comma-separated: planning, risk analysis, strategy" />
             </FormField>
+
+            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-4">
+              <h3 className="font-semibold text-sm text-foreground">Authority &amp; Boundaries</h3>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField id="agent-allowed-actions" label="Allowed Actions">
+                  <Textarea id="agent-allowed-actions" value={(draft.allowedActions ?? []).join("\n")} onChange={(e) => setDraft({ ...draft, allowedActions: lines(e.target.value) })} placeholder="One action per line." />
+                </FormField>
+                <FormField id="agent-forbidden-actions" label="Forbidden Actions">
+                  <Textarea id="agent-forbidden-actions" value={(draft.forbiddenActions ?? []).join("\n")} onChange={(e) => setDraft({ ...draft, forbiddenActions: lines(e.target.value) })} placeholder="One forbidden action per line." />
+                </FormField>
+                <FormField id="agent-approval-required" label="Requires King Approval For">
+                  <Textarea id="agent-approval-required" value={(draft.approvalRequiredFor ?? []).join("\n")} onChange={(e) => setDraft({ ...draft, approvalRequiredFor: lines(e.target.value) })} placeholder="One approval boundary per line." />
+                </FormField>
+                <FormField id="agent-role-boundaries" label="Role Boundaries">
+                  <Textarea id="agent-role-boundaries" value={draft.roleBoundaries ?? ""} onChange={(e) => setDraft({ ...draft, roleBoundaries: e.target.value })} placeholder="Scope limits, handoff rules, and escalation behavior." />
+                </FormField>
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-border/60 bg-muted/15 p-4 space-y-4">
+              <h3 className="font-semibold text-sm text-foreground">Memory &amp; Learning Policy</h3>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <label className="flex items-center gap-2 rounded border border-border/40 bg-background/40 p-3 text-xs text-foreground cursor-pointer">
+                  <input type="checkbox" checked={draft.canProposeMemoryCandidates ?? true} onChange={(e) => setDraft({ ...draft, canProposeMemoryCandidates: e.target.checked })} />
+                  Can propose memory candidates
+                </label>
+                <label className="flex items-center gap-2 rounded border border-border/40 bg-background/40 p-3 text-xs text-foreground cursor-pointer">
+                  <input type="checkbox" checked={draft.canAutoSaveTrustedMemory ?? false} onChange={(e) => setDraft({ ...draft, canAutoSaveTrustedMemory: e.target.checked })} />
+                  Can auto-save trusted memory
+                </label>
+                <label className="flex items-center gap-2 rounded border border-border/40 bg-background/40 p-3 text-xs text-foreground cursor-pointer">
+                  <input type="checkbox" checked={draft.memoryRequiresApproval ?? true} onChange={(e) => setDraft({ ...draft, memoryRequiresApproval: e.target.checked })} />
+                  Memory requires approval
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField id="agent-memory-categories" label="Allowed Memory Categories">
+                  <Textarea id="agent-memory-categories" value={(draft.allowedMemoryCategories ?? []).join("\n")} onChange={(e) => setDraft({ ...draft, allowedMemoryCategories: lines(e.target.value) })} placeholder="PROJECT_FACT&#10;USER_PREFERENCE&#10;WORKFLOW_RULE" />
+                </FormField>
+                <FormField id="agent-retention-policy" label="Retention Policy">
+                  <Textarea id="agent-retention-policy" value={draft.retentionPolicy ?? ""} onChange={(e) => setDraft({ ...draft, retentionPolicy: e.target.value })} placeholder="Approved durable memories only; raw reasoning must never be stored as memory." />
+                </FormField>
+              </div>
+              <div className="rounded border border-yellow-500/20 bg-yellow-500/5 p-3 text-xs text-yellow-200">
+                Raw reasoning must never be stored as memory.
+              </div>
+            </div>
 
             {/* Agent Routing Profile */}
             <div className="rounded-lg border border-border/60 bg-muted/20 p-4 space-y-4">
@@ -404,6 +510,10 @@ export function AgentsPage() {
                     <span>Model "{draft.defaultModel}" is not in the validated registry for {selectedProvider?.name}. This may cause a 404 at runtime.</span>
                   </div>
                 )}
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <span>Primary model:</span>
+                  <ValidationBadge state={primaryModelValidationState} />
+                </div>
               </FormField>
 
               {/* Fallback Models */}
@@ -417,7 +527,7 @@ export function AgentsPage() {
                       return (
                         <div key={model} className="flex items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1 text-xs">
                           <span className="flex-1 font-mono text-foreground truncate">{model}</span>
-                          {isInvalid && <span title="Not in validated registry"><AlertTriangle className="h-3 w-3 text-yellow-500 shrink-0" /></span>}
+                          {isInvalid ? <ValidationBadge state="Invalid" /> : <ValidationBadge state={openRouterModelList.length > 0 ? "Valid" : "Not checked"} />}
                           <button type="button" onClick={() => moveFallbackModel(i, -1)} disabled={i === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
                             <ChevronUp className="h-3 w-3" />
                           </button>
@@ -475,14 +585,20 @@ export function AgentsPage() {
                           : prov.environmentMode === "DISABLED"
                             ? "Disabled"
                             : null;
+                      const readiness = routingPreview?.fallbackProviderDetails?.find((item) => item?.id === id)?.readiness;
                       return (
                         <div key={id} className="flex items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1 text-xs">
                           <span className="flex-1 min-w-0">
                             <span className="font-medium text-foreground">{prov?.name ?? id}</span>
                             {prov && <span className="ml-1 text-muted-foreground">· {prov.environmentMode}</span>}
                           </span>
-                          {warning && <span title={warning}><AlertTriangle className="h-3 w-3 text-yellow-500 shrink-0" /></span>}
-                          {!warning && prov && <CheckCircle className="h-3 w-3 text-green-400 shrink-0" />}
+                          {readiness ? (
+                            <ValidationBadge state={readiness.label as "Ready" | "Disabled" | "Insufficient balance" | "Production blocked in sandbox"} />
+                          ) : warning ? (
+                            <span title={warning}><AlertTriangle className="h-3 w-3 text-yellow-500 shrink-0" /></span>
+                          ) : prov ? (
+                            <CheckCircle className="h-3 w-3 text-green-400 shrink-0" />
+                          ) : null}
                           <button type="button" onClick={() => moveFallbackProvider(i, -1)} disabled={i === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
                             <ChevronUp className="h-3 w-3" />
                           </button>
@@ -756,6 +872,78 @@ export function AgentsPage() {
                       </FormField>
                     </div>
                   </div>
+
+                  <details className="rounded border border-border/40 bg-background/40 p-3 space-y-4" open={advancedOpen} onToggle={(e) => setAdvancedOpen(e.currentTarget.open)}>
+                    <summary className="cursor-pointer text-xs font-semibold text-foreground">Advanced Parameters</summary>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <FormField id="mp-response-format" label="response_format">
+                        <select
+                          id="mp-response-format"
+                          className={cn(selectCls, "h-9 text-xs")}
+                          value={draft.modelParameters?.response_format ?? "none"}
+                          onChange={(e) => updateModelParameters({ response_format: e.target.value as ModelParameters["response_format"] })}
+                        >
+                          <option value="none">none</option>
+                          <option value="json_object">json_object</option>
+                          <option value="json_schema">json_schema</option>
+                        </select>
+                      </FormField>
+                      <FormField id="mp-openrouter-route" label="OpenRouter route">
+                        <select
+                          id="mp-openrouter-route"
+                          className={cn(selectCls, "h-9 text-xs")}
+                          value={draft.modelParameters?.openrouter_route ?? "none"}
+                          onChange={(e) => updateModelParameters({ openrouter_route: e.target.value as ModelParameters["openrouter_route"] })}
+                        >
+                          <option value="none">none</option>
+                          <option value="fallback">fallback</option>
+                        </select>
+                      </FormField>
+                      <FormField id="mp-stop" label="Stop Sequences">
+                        <Textarea
+                          id="mp-stop"
+                          value={(draft.modelParameters?.stop ?? []).join("\n")}
+                          onChange={(e) => updateModelParameters({ stop: lines(e.target.value) })}
+                          placeholder="One sequence per line"
+                        />
+                      </FormField>
+                      <FormField id="mp-provider-preferences" label="OpenRouter Provider Preferences">
+                        <Textarea
+                          id="mp-provider-preferences"
+                          value={(draft.modelParameters?.openrouter_provider_preferences ?? []).join("\n")}
+                          onChange={(e) => updateModelParameters({ openrouter_provider_preferences: lines(e.target.value) })}
+                          placeholder="Provider slug, one per line"
+                        />
+                      </FormField>
+                      <FormField id="mp-frequency-penalty" label="frequency_penalty">
+                        <Input id="mp-frequency-penalty" type="number" step="0.1" min="-2" max="2" value={draft.modelParameters?.frequency_penalty ?? ""} onChange={(e) => updateModelParameters({ frequency_penalty: e.target.value ? Number(e.target.value) : null })} />
+                      </FormField>
+                      <FormField id="mp-presence-penalty" label="presence_penalty">
+                        <Input id="mp-presence-penalty" type="number" step="0.1" min="-2" max="2" value={draft.modelParameters?.presence_penalty ?? ""} onChange={(e) => updateModelParameters({ presence_penalty: e.target.value ? Number(e.target.value) : null })} />
+                      </FormField>
+                      <FormField id="mp-repetition-penalty" label="repetition_penalty">
+                        <Input id="mp-repetition-penalty" type="number" step="0.05" min="0" max="2" value={draft.modelParameters?.repetition_penalty ?? ""} onChange={(e) => updateModelParameters({ repetition_penalty: e.target.value ? Number(e.target.value) : null })} />
+                      </FormField>
+                      <FormField id="mp-top-k" label="top_k">
+                        <Input id="mp-top-k" type="number" min="0" max="1000" value={draft.modelParameters?.top_k ?? ""} onChange={(e) => updateModelParameters({ top_k: e.target.value ? Number(e.target.value) : null })} />
+                      </FormField>
+                      <FormField id="mp-min-p" label="min_p">
+                        <Input id="mp-min-p" type="number" step="0.01" min="0" max="1" value={draft.modelParameters?.min_p ?? ""} onChange={(e) => updateModelParameters({ min_p: e.target.value ? Number(e.target.value) : null })} />
+                      </FormField>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {(["web", "file-parser", "response-healing", "context-compression"] as const).map((plugin) => (
+                        <label key={plugin} className="flex items-center gap-2 rounded border border-border/40 bg-background/60 p-2 text-xs text-foreground cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={(draft.modelParameters?.plugins ?? []).includes(plugin)}
+                            onChange={(e) => togglePlugin(plugin, e.target.checked)}
+                          />
+                          {plugin}
+                        </label>
+                      ))}
+                    </div>
+                  </details>
                 </>
               )}
 
@@ -822,6 +1010,30 @@ export function AgentsPage() {
                       </div>
                     )}
 
+                    {routingPreview.sandboxFallbackMode && (
+                      <div className="rounded border border-yellow-500/20 bg-yellow-500/5 p-2">
+                        <span className="text-yellow-200">Sandbox fallback mode: </span>
+                        <span className="text-muted-foreground">production fallbacks are blocked unless explicitly enabled.</span>
+                      </div>
+                    )}
+
+                    {routingPreview.blockedFallbackProviderDetails?.length ? (
+                      <div>
+                        <span className="text-muted-foreground">Skipped/blocked providers: </span>
+                        <span className="text-foreground">
+                          {routingPreview.blockedFallbackProviderDetails
+                            .filter((item) => item.readiness.state !== "READY")
+                            .map((item, i) => (
+                              <span key={item.id}>
+                                {i > 0 && <span className="text-muted-foreground">, </span>}
+                                <span className="font-medium">{item.name}</span>
+                                <span className="text-muted-foreground"> ({item.readiness.label})</span>
+                              </span>
+                            ))}
+                        </span>
+                      </div>
+                    ) : null}
+
                     {routingPreview.latestUsage && (
                       <div className="mt-1 pt-2 border-t border-border/40">
                         <span className="text-muted-foreground">Latest actual call: </span>
@@ -862,10 +1074,26 @@ export function AgentsPage() {
                 {loadingEffectivePreview ? (
                   <p className="text-xs text-muted-foreground">Loading…</p>
                 ) : effectivePreview ? (
-                  <div className="space-y-1.5">
+                  <div className="space-y-3">
                     <div className="text-xs font-medium text-muted-foreground">Mode: <span className="text-foreground">{effectivePreview.parameterMode}</span></div>
+                    <div className="grid gap-2 text-xs sm:grid-cols-2">
+                      <PreviewField label="configuredProvider" value={effectivePreview.preview.configuredProvider} />
+                      <PreviewField label="configuredModel" value={effectivePreview.preview.configuredModel ?? "provider default"} />
+                      <PreviewField label="actualSentModel" value={effectivePreview.preview.actualSentModel} />
+                      <PreviewField label="finalResponseModel" value={effectivePreview.preview.finalResponseModel ?? "not available"} />
+                      <PreviewField label="streamEnabled" value={String(effectivePreview.preview.streamEnabled)} />
+                      <PreviewField label="reasoningEnabled" value={String(effectivePreview.preview.reasoningEnabled)} />
+                      <PreviewField label="reasoningEffort" value={effectivePreview.preview.reasoningEffort ?? "none"} />
+                      <PreviewField label="reasoningExcluded" value={String(effectivePreview.preview.reasoningExcluded)} />
+                      <PreviewField label="response_format" value={effectivePreview.preview.response_format ?? "none"} />
+                    </div>
+                    <div className="rounded-md border border-border/40 bg-background/60 p-3 text-xs">
+                      <div className="mb-2 font-medium text-muted-foreground">Provider/model validation state</div>
+                      <pre className="font-mono text-foreground whitespace-pre-wrap break-all">{JSON.stringify(effectivePreview.preview.validationState, null, 2)}</pre>
+                    </div>
+                    <div className="text-xs font-medium text-muted-foreground">Actual Sent Body Preview</div>
                     <pre className="rounded-md border border-border/40 bg-background/80 p-3 text-xs text-foreground font-mono overflow-x-auto whitespace-pre-wrap break-all">
-                      {JSON.stringify(effectivePreview.preview, null, 2)}
+                      {JSON.stringify(effectivePreview.preview.actualSentBodyPreview, null, 2)}
                     </pre>
                   </div>
                 ) : (
@@ -896,6 +1124,23 @@ export function AgentsPage() {
   );
 }
 
+function ValidationBadge({ state }: { state: "Valid" | "Invalid" | "Not checked" | "Ready" | "Disabled" | "Insufficient balance" | "Production blocked in sandbox" }) {
+  const variant =
+    state === "Valid" || state === "Ready" ? "ok" :
+      state === "Invalid" || state === "Disabled" ? "error" :
+        "warn";
+  return <ProviderBadge label={state} variant={variant} />;
+}
+
+function PreviewField({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded border border-border/40 bg-background/60 p-2">
+      <div className="text-muted-foreground">{label}</div>
+      <div className="mt-1 font-mono text-foreground break-all">{value}</div>
+    </div>
+  );
+}
+
 function toPayload(agent: AgentDto): AgentPayload {
   return {
     name: agent.name,
@@ -916,6 +1161,19 @@ function toPayload(agent: AgentDto): AgentPayload {
     costPreference: agent.costPreference,
     temperature: agent.temperature,
     maxTokens: agent.maxTokens,
+    personalDetail: agent.personalDetail ?? "",
+    personality: agent.personality ?? "",
+    relationshipWithKing: agent.relationshipWithKing ?? "",
+    relationshipWithCouncil: agent.relationshipWithCouncil ?? "",
+    roleBoundaries: agent.roleBoundaries ?? "",
+    allowedActions: agent.allowedActions ?? [],
+    forbiddenActions: agent.forbiddenActions ?? [],
+    approvalRequiredFor: agent.approvalRequiredFor ?? [],
+    canProposeMemoryCandidates: agent.canProposeMemoryCandidates ?? true,
+    canAutoSaveTrustedMemory: agent.canAutoSaveTrustedMemory ?? false,
+    memoryRequiresApproval: agent.memoryRequiresApproval ?? true,
+    allowedMemoryCategories: agent.allowedMemoryCategories ?? [],
+    retentionPolicy: agent.retentionPolicy ?? "approved durable memories only; raw reasoning must never be stored as memory",
     parameterMode: (agent.parameterMode as ParameterMode) ?? "ROLE_DEFAULT",
     modelParameters: agent.modelParameters ?? null
   };
@@ -932,7 +1190,24 @@ function cleanPayload(payload: AgentPayload): AgentPayload {
     costPreference: payload.costPreference ?? null,
     temperature: payload.temperature ?? null,
     maxTokens: payload.maxTokens ?? null,
+    personalDetail: payload.personalDetail ?? "",
+    personality: payload.personality ?? "",
+    relationshipWithKing: payload.relationshipWithKing ?? "",
+    relationshipWithCouncil: payload.relationshipWithCouncil ?? "",
+    roleBoundaries: payload.roleBoundaries ?? "",
+    allowedActions: payload.allowedActions ?? [],
+    forbiddenActions: payload.forbiddenActions ?? [],
+    approvalRequiredFor: payload.approvalRequiredFor ?? [],
+    canProposeMemoryCandidates: payload.canProposeMemoryCandidates ?? true,
+    canAutoSaveTrustedMemory: payload.canAutoSaveTrustedMemory ?? false,
+    memoryRequiresApproval: payload.memoryRequiresApproval ?? true,
+    allowedMemoryCategories: payload.allowedMemoryCategories ?? [],
+    retentionPolicy: payload.retentionPolicy ?? "approved durable memories only; raw reasoning must never be stored as memory",
     parameterMode: payload.parameterMode ?? "ROLE_DEFAULT",
     modelParameters: payload.parameterMode === "MANUAL" ? (payload.modelParameters ?? null) : null
   };
+}
+
+function lines(value: string): string[] {
+  return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
 }

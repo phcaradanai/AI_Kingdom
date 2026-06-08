@@ -12,12 +12,26 @@ export type ToolsConfig = {
   tool_choice: "auto" | "none" | "required";
 };
 
+export type ResponseFormatConfig = "none" | "json_object" | "json_schema";
+export type OpenRouterRouteConfig = "none" | "fallback";
+export type PluginConfig = "web" | "file-parser" | "response-healing" | "context-compression";
+
 export type ModelParameters = {
   stream: boolean;
   temperature: number | null;
   max_tokens: number | null;
   top_p: number | null;
   seed: number | null;
+  response_format: ResponseFormatConfig | null;
+  stop: string[] | null;
+  frequency_penalty: number | null;
+  presence_penalty: number | null;
+  repetition_penalty: number | null;
+  top_k: number | null;
+  min_p: number | null;
+  openrouter_route: OpenRouterRouteConfig | null;
+  openrouter_provider_preferences: string[] | null;
+  plugins: PluginConfig[] | null;
   reasoning: ReasoningConfig;
   tools: ToolsConfig;
 };
@@ -28,6 +42,16 @@ export type EffectiveParameters = {
   max_tokens: number | null;
   top_p: number | null;
   seed: number | null;
+  response_format: ResponseFormatConfig | null;
+  stop: string[] | null;
+  frequency_penalty: number | null;
+  presence_penalty: number | null;
+  repetition_penalty: number | null;
+  top_k: number | null;
+  min_p: number | null;
+  openrouter_route: OpenRouterRouteConfig | null;
+  openrouter_provider_preferences: string[] | null;
+  plugins: PluginConfig[] | null;
   reasoning: ReasoningConfig | null;
   tools: ToolsConfig | null;
   mode: ParameterMode;
@@ -92,6 +116,16 @@ export function resolveEffectiveParameters(
       max_tokens: defaultMaxTokens ?? null,
       top_p: null,
       seed: null,
+      response_format: null,
+      stop: null,
+      frequency_penalty: null,
+      presence_penalty: null,
+      repetition_penalty: null,
+      top_k: null,
+      min_p: null,
+      openrouter_route: null,
+      openrouter_provider_preferences: null,
+      plugins: null,
       reasoning: null,
       tools: null,
       mode
@@ -108,6 +142,16 @@ export function resolveEffectiveParameters(
       max_tokens: stored?.max_tokens ?? agent.maxTokens ?? defaultMaxTokens ?? null,
       top_p: stored?.top_p ?? null,
       seed: stored?.seed ?? null,
+      response_format: stored?.response_format ?? null,
+      stop: stored?.stop ?? null,
+      frequency_penalty: stored?.frequency_penalty ?? null,
+      presence_penalty: stored?.presence_penalty ?? null,
+      repetition_penalty: stored?.repetition_penalty ?? null,
+      top_k: stored?.top_k ?? null,
+      min_p: stored?.min_p ?? null,
+      openrouter_route: stored?.openrouter_route ?? null,
+      openrouter_provider_preferences: stored?.openrouter_provider_preferences ?? null,
+      plugins: stored?.plugins ?? null,
       reasoning: supportsReasoning ? (stored?.reasoning ?? DEFAULT_REASONING) : null,
       tools: stored?.tools ?? DEFAULT_TOOLS,
       mode
@@ -124,6 +168,16 @@ export function resolveEffectiveParameters(
     max_tokens: agent.maxTokens ?? stored?.max_tokens ?? defaultMaxTokens ?? null,
     top_p: stored?.top_p ?? null,
     seed: null,
+    response_format: stored?.response_format ?? null,
+    stop: stored?.stop ?? null,
+    frequency_penalty: stored?.frequency_penalty ?? null,
+    presence_penalty: stored?.presence_penalty ?? null,
+    repetition_penalty: stored?.repetition_penalty ?? null,
+    top_k: stored?.top_k ?? null,
+    min_p: stored?.min_p ?? null,
+    openrouter_route: stored?.openrouter_route ?? null,
+    openrouter_provider_preferences: stored?.openrouter_provider_preferences ?? null,
+    plugins: stored?.plugins ?? null,
     reasoning: supportsReasoning ? (stored?.reasoning ?? roleDefaults.reasoning) : null,
     tools: DEFAULT_TOOLS,
     mode
@@ -145,6 +199,22 @@ export function buildProviderRequestBody(params: {
   if (effective.temperature !== null) body.temperature = effective.temperature;
   if (effective.top_p !== null) body.top_p = effective.top_p;
   if (effective.seed !== null) body.seed = effective.seed;
+  if (effective.stop !== null && effective.stop.length > 0) body.stop = effective.stop;
+  if (effective.frequency_penalty !== null) body.frequency_penalty = effective.frequency_penalty;
+  if (effective.presence_penalty !== null) body.presence_penalty = effective.presence_penalty;
+  if (effective.repetition_penalty !== null) body.repetition_penalty = effective.repetition_penalty;
+  if (effective.top_k !== null) body.top_k = effective.top_k;
+  if (effective.min_p !== null) body.min_p = effective.min_p;
+  if (effective.response_format && effective.response_format !== "none") {
+    body.response_format = effective.response_format === "json_object"
+      ? { type: "json_object" }
+      : { type: "json_schema", json_schema: { name: "agent_response", schema: { type: "object", additionalProperties: true } } };
+  }
+  if (effective.openrouter_route && effective.openrouter_route !== "none") body.route = effective.openrouter_route;
+  if (effective.openrouter_provider_preferences && effective.openrouter_provider_preferences.length > 0) {
+    body.provider = { order: effective.openrouter_provider_preferences };
+  }
+  if (effective.plugins && effective.plugins.length > 0) body.plugins = effective.plugins.map((id) => ({ id }));
 
   if (effective.reasoning) {
     const r = effective.reasoning;
@@ -181,6 +251,22 @@ export function buildRequestPreview(params: {
   if (effective.temperature !== null) preview.temperature = effective.temperature;
   if (effective.top_p !== null) preview.top_p = effective.top_p;
   if (effective.seed !== null) preview.seed = effective.seed;
+  if (effective.stop !== null && effective.stop.length > 0) preview.stop = effective.stop;
+  if (effective.frequency_penalty !== null) preview.frequency_penalty = effective.frequency_penalty;
+  if (effective.presence_penalty !== null) preview.presence_penalty = effective.presence_penalty;
+  if (effective.repetition_penalty !== null) preview.repetition_penalty = effective.repetition_penalty;
+  if (effective.top_k !== null) preview.top_k = effective.top_k;
+  if (effective.min_p !== null) preview.min_p = effective.min_p;
+  if (effective.response_format && effective.response_format !== "none") {
+    preview.response_format = effective.response_format === "json_object"
+      ? { type: "json_object" }
+      : { type: "json_schema", json_schema: { name: "agent_response", schema: { type: "object", additionalProperties: true } } };
+  }
+  if (effective.openrouter_route && effective.openrouter_route !== "none") preview.route = effective.openrouter_route;
+  if (effective.openrouter_provider_preferences && effective.openrouter_provider_preferences.length > 0) {
+    preview.provider = { order: effective.openrouter_provider_preferences };
+  }
+  if (effective.plugins && effective.plugins.length > 0) preview.plugins = effective.plugins.map((id) => ({ id }));
   if (effective.reasoning) {
     preview.reasoning = {
       enabled: effective.reasoning.enabled,
@@ -207,6 +293,16 @@ function parseModelParameters(raw: unknown): ModelParameters | null {
     max_tokens: typeof p.max_tokens === "number" ? p.max_tokens : null,
     top_p: typeof p.top_p === "number" ? p.top_p : null,
     seed: typeof p.seed === "number" ? p.seed : null,
+    response_format: isValidResponseFormat(p.response_format) ? p.response_format : null,
+    stop: parseStringArray(p.stop),
+    frequency_penalty: typeof p.frequency_penalty === "number" ? p.frequency_penalty : null,
+    presence_penalty: typeof p.presence_penalty === "number" ? p.presence_penalty : null,
+    repetition_penalty: typeof p.repetition_penalty === "number" ? p.repetition_penalty : null,
+    top_k: typeof p.top_k === "number" ? p.top_k : null,
+    min_p: typeof p.min_p === "number" ? p.min_p : null,
+    openrouter_route: isValidOpenRouterRoute(p.openrouter_route) ? p.openrouter_route : null,
+    openrouter_provider_preferences: parseStringArray(p.openrouter_provider_preferences),
+    plugins: parsePlugins(p.plugins),
     reasoning: parseReasoningConfig(p.reasoning),
     tools: parseToolsConfig(p.tools)
   };
@@ -240,4 +336,27 @@ function isValidEffort(v: unknown): v is ReasoningConfig["effort"] {
 const VALID_TOOL_CHOICES = new Set(["auto", "none", "required"]);
 function isValidToolChoice(v: unknown): v is ToolsConfig["tool_choice"] {
   return typeof v === "string" && VALID_TOOL_CHOICES.has(v);
+}
+
+const VALID_RESPONSE_FORMATS = new Set(["none", "json_object", "json_schema"]);
+function isValidResponseFormat(v: unknown): v is ResponseFormatConfig {
+  return typeof v === "string" && VALID_RESPONSE_FORMATS.has(v);
+}
+
+const VALID_OPENROUTER_ROUTES = new Set(["none", "fallback"]);
+function isValidOpenRouterRoute(v: unknown): v is OpenRouterRouteConfig {
+  return typeof v === "string" && VALID_OPENROUTER_ROUTES.has(v);
+}
+
+const VALID_PLUGINS = new Set(["web", "file-parser", "response-healing", "context-compression"]);
+function parsePlugins(value: unknown): PluginConfig[] | null {
+  if (!Array.isArray(value)) return null;
+  const plugins = value.filter((item): item is PluginConfig => typeof item === "string" && VALID_PLUGINS.has(item));
+  return plugins.length > 0 ? [...new Set(plugins)] : null;
+}
+
+function parseStringArray(value: unknown): string[] | null {
+  if (!Array.isArray(value)) return null;
+  const list = value.filter((item): item is string => typeof item === "string" && item.trim().length > 0).map((item) => item.trim());
+  return list.length > 0 ? [...new Set(list)] : null;
 }

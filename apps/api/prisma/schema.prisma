@@ -359,6 +359,7 @@ model Agent {
   maxTokens   Int?
   parameterMode    String?  @default("ROLE_DEFAULT")
   modelParameters  Json?
+  config       Json?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   responses    AgentResponse[]

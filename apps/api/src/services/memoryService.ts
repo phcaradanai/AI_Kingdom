@@ -1,5 +1,6 @@
 import type { AgentResponse, CouncilSession, Memory, MemoryImportance, MemoryType, Task } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { isForbiddenMemoryContent } from "./memorySafety.js";
 
 export type MemoryCandidate = {
   type: MemoryType;
@@ -51,7 +52,7 @@ export async function autoSaveMemories(input: {
   const saved: Memory[] = [];
 
   for (const candidate of candidates) {
-    if (isSensitive(candidate.title) || isSensitive(candidate.content)) {
+    if (isSensitive(candidate.title) || isSensitive(candidate.content) || isForbiddenMemoryContent(candidate.title, candidate.content)) {
       continue;
     }
     if (isDuplicate(candidate, existing) || isDuplicate(candidate, saved)) {
@@ -127,7 +128,10 @@ export function extractMemoryCandidates(task: Task, session: CouncilSession, res
     importance: "LOW"
   });
 
-  return candidates.filter((candidate) => isMeaningful(candidate.content)).slice(0, 5);
+  return candidates
+    .filter((candidate) => isMeaningful(candidate.content))
+    .filter((candidate) => !isForbiddenMemoryContent(candidate.title, candidate.content))
+    .slice(0, 5);
 }
 
 export function isDuplicate(candidate: MemoryCandidate, existing: Array<Pick<Memory, "title" | "content">>): boolean {

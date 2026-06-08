@@ -11,7 +11,21 @@ export type AuthResponse = {
   user: PublicUser;
 };
 
-export type AgentDto = Pick<Agent, "id" | "slug" | "name" | "title" | "role" | "specialty" | "isActive">;
+export type AgentDto = Pick<Agent, "id" | "slug" | "name" | "title" | "role" | "specialty" | "isActive"> & {
+  personalDetail?: string;
+  personality?: string;
+  relationshipWithKing?: string;
+  relationshipWithCouncil?: string;
+  roleBoundaries?: string;
+  allowedActions?: string[];
+  forbiddenActions?: string[];
+  approvalRequiredFor?: string[];
+  canProposeMemoryCandidates?: boolean;
+  canAutoSaveTrustedMemory?: boolean;
+  memoryRequiresApproval?: boolean;
+  allowedMemoryCategories?: string[];
+  retentionPolicy?: string;
+};
 
 export type CouncilResponseDto = AgentResponse & {
   agent: AgentDto;

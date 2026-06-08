@@ -28,7 +28,8 @@ const TASK_MODE_PROVIDER_ORDER: Record<TaskMode, string[]> = {
   BUILD: [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID]
 };
 
-const DEFAULT_FALLBACK_CHAIN = [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID];
+const DEFAULT_FALLBACK_CHAIN = [OPENROUTER_FREE_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_ID];
+const PRODUCTION_FALLBACK_CHAIN = [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID];
 
 export async function selectAIProviderRoute(input: {
   agent: Agent;
@@ -47,8 +48,8 @@ export async function selectAIProviderRoute(input: {
       ? input.fallbackProviderIds
       : input.agent.fallbackProviderIds.length
         ? input.agent.fallbackProviderIds
-        : DEFAULT_FALLBACK_CHAIN;
-    const fallbackProviders = resolveFallbackProviders(fallbackIds, agentProvider, capableProviders);
+        : await getDefaultFallbackChain();
+    const fallbackProviders = await resolveFallbackProviders(fallbackIds, agentProvider, capableProviders);
     return {
       provider: agentProvider,
       model: input.agent.defaultModel ?? agentProvider.defaultModel,
@@ -73,7 +74,7 @@ export async function selectAIProviderRoute(input: {
   if (dbRoute?.preferredProviderId) {
     const preferred = capableProviders.find((provider) => provider.id === dbRoute.preferredProviderId);
     if (preferred) {
-      const fallbackProviders = resolveFallbackProviders(dbRoute.fallbackProviderIds, preferred, capableProviders);
+      const fallbackProviders = await resolveFallbackProviders(dbRoute.fallbackProviderIds, preferred, capableProviders);
       return {
         provider: preferred,
         model: input.agent.defaultModel ?? dbRoute.preferredModel ?? preferred.defaultModel,
@@ -94,8 +95,8 @@ export async function selectAIProviderRoute(input: {
     ? input.fallbackProviderIds
     : input.agent.fallbackProviderIds.length
       ? input.agent.fallbackProviderIds
-      : DEFAULT_FALLBACK_CHAIN;
-  const fallbackProviders = resolveFallbackProviders(fallbackIds, provider, capableProviders);
+      : await getDefaultFallbackChain();
+  const fallbackProviders = await resolveFallbackProviders(fallbackIds, provider, capableProviders);
 
   if (!fallbackProviders.some((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID)) {
     const sandbox = providers.find((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID) ?? providers.find((candidate) => candidate.id === LEGACY_MOCK_PROVIDER_ID);
@@ -151,11 +152,59 @@ function costModeRank(provider: AIProviderConfig, costMode: AICostMode): number 
   return Math.abs(costRank - 2);
 }
 
-function resolveFallbackProviders(fallbackIds: string[], primaryProvider: AIProviderConfig, capableProviders: AIProviderConfig[]): AIProviderConfig[] {
+export async function isSandboxFallbackModeActive(): Promise<boolean> {
+  if (env.NODE_ENV === "production") return false;
+  const override = await getSettingValue("ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", "false");
+  return override.toLowerCase() !== "true";
+}
+
+async function getDefaultFallbackChain(): Promise<string[]> {
+  return await isSandboxFallbackModeActive() ? DEFAULT_FALLBACK_CHAIN : PRODUCTION_FALLBACK_CHAIN;
+}
+
+function isProductionFallbackBlocked(provider: AIProviderConfig, sandboxFallbackMode: boolean): boolean {
+  return sandboxFallbackMode && provider.environmentMode === "PRODUCTION" && !provider.isFreeTier;
+}
+
+export async function describeFallbackProviderReadiness(provider: AIProviderConfig): Promise<{
+  state: "READY" | "DISABLED" | "INSUFFICIENT_BALANCE" | "PRODUCTION_BLOCKED_IN_SANDBOX";
+  label: string;
+  active: boolean;
+}> {
+  if (!provider.isActive || provider.environmentMode === "DISABLED") {
+    return { state: "DISABLED", label: "Disabled", active: false };
+  }
+  const sandboxFallbackMode = await isSandboxFallbackModeActive();
+  if (isProductionFallbackBlocked(provider, sandboxFallbackMode)) {
+    return { state: "PRODUCTION_BLOCKED_IN_SANDBOX", label: "Production blocked in sandbox", active: false };
+  }
+  if (provider.id === "deepseek") {
+    const latest = await prisma.providerBalanceSnapshot.findFirst({
+      where: { providerType: "deepseek" },
+      orderBy: { fetchedAt: "desc" }
+    });
+    const balance = latest?.totalBalance;
+    if (!provider.hasCredentials || (balance != null && balance <= 0)) {
+      return { state: "INSUFFICIENT_BALANCE", label: "Insufficient balance", active: false };
+    }
+  }
+  if (!provider.hasCredentials && provider.environmentMode !== "SANDBOX") {
+    return { state: "DISABLED", label: "Disabled", active: false };
+  }
+  return { state: "READY", label: "Ready", active: true };
+}
+
+async function resolveFallbackProviders(fallbackIds: string[], primaryProvider: AIProviderConfig, capableProviders: AIProviderConfig[]): Promise<AIProviderConfig[]> {
   const resolved: AIProviderConfig[] = [];
+  const sandboxFallbackMode = await isSandboxFallbackModeActive();
   for (const id of fallbackIds) {
     const provider = capableProviders.find((candidate) => candidate.id === id || (id === LEGACY_MOCK_PROVIDER_ID && candidate.id === LOCAL_SANDBOX_PROVIDER_ID));
     if (provider) {
+      if (isProductionFallbackBlocked(provider, sandboxFallbackMode)) continue;
+      if (provider.id === "deepseek") {
+        const readiness = await describeFallbackProviderReadiness(provider);
+        if (!readiness.active) continue;
+      }
       if (provider.id !== primaryProvider.id) resolved.push(provider);
       continue;
     }

@@ -3,9 +3,9 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
-import { selectAIProviderRoute } from "../services/aiProviderRouter.js";
+import { describeFallbackProviderReadiness, isSandboxFallbackModeActive, selectAIProviderRoute } from "../services/aiProviderRouter.js";
 import { listAIProviders } from "../services/aiProviderRegistry.js";
-import { resolveEffectiveParameters, buildRequestPreview } from "../ai/modelParameterResolver.js";
+import { resolveEffectiveParameters, buildProviderRequestBody } from "../ai/modelParameterResolver.js";
 
 const router = Router();
 
@@ -30,6 +30,19 @@ const agentSchema = z.object({
   costPreference: z.enum(["LOW", "BALANCED", "QUALITY"]).optional().nullable(),
   temperature: z.coerce.number().min(0).max(2).optional().nullable(),
   maxTokens: z.coerce.number().int().min(64).max(8000).optional().nullable(),
+  personalDetail: z.string().trim().max(2000).default(""),
+  personality: z.string().trim().max(2000).default(""),
+  relationshipWithKing: z.string().trim().max(2000).default(""),
+  relationshipWithCouncil: z.string().trim().max(2000).default(""),
+  roleBoundaries: z.string().trim().max(2000).default(""),
+  allowedActions: z.array(z.string().trim().min(1).max(240)).max(40).default([]),
+  forbiddenActions: z.array(z.string().trim().min(1).max(240)).max(40).default([]),
+  approvalRequiredFor: z.array(z.string().trim().min(1).max(240)).max(40).default([]),
+  canProposeMemoryCandidates: z.boolean().default(true),
+  canAutoSaveTrustedMemory: z.boolean().default(false),
+  memoryRequiresApproval: z.boolean().default(true),
+  allowedMemoryCategories: z.array(z.string().trim().min(1).max(80)).max(30).default([]),
+  retentionPolicy: z.string().trim().max(1000).default("approved durable memories only; raw reasoning must never be stored as memory"),
   parameterMode: z.enum(["MANUAL", "ROLE_DEFAULT", "PROVIDER_DEFAULT"]).optional().nullable(),
   modelParameters: z.object({
     stream: z.boolean().optional(),
@@ -37,6 +50,16 @@ const agentSchema = z.object({
     max_tokens: z.number().int().min(64).max(32000).optional().nullable(),
     top_p: z.number().min(0).max(1).optional().nullable(),
     seed: z.number().int().optional().nullable(),
+    response_format: z.enum(["none", "json_object", "json_schema"]).optional().nullable(),
+    stop: z.array(z.string().min(1).max(120)).max(8).optional().nullable(),
+    frequency_penalty: z.number().min(-2).max(2).optional().nullable(),
+    presence_penalty: z.number().min(-2).max(2).optional().nullable(),
+    repetition_penalty: z.number().min(0).max(2).optional().nullable(),
+    top_k: z.number().int().min(0).max(1000).optional().nullable(),
+    min_p: z.number().min(0).max(1).optional().nullable(),
+    openrouter_route: z.enum(["none", "fallback"]).optional().nullable(),
+    openrouter_provider_preferences: z.array(z.string().trim().min(1).max(120)).max(20).optional().nullable(),
+    plugins: z.array(z.enum(["web", "file-parser", "response-healing", "context-compression"])).max(10).optional().nullable(),
     reasoning: z.object({
       enabled: z.boolean().optional(),
       effort: z.enum(["none", "minimal", "low", "medium", "high", "xhigh"]).optional(),
@@ -58,7 +81,7 @@ router.get("/", async (_req, res, next) => {
       where: { isTestData: false },
       orderBy: [{ isActive: "desc" }, { priority: "asc" }, { createdAt: "asc" }]
     });
-    res.json({ agents });
+    res.json({ agents: agents.map(toAgentDto) });
   } catch (error) {
     next(error);
   }
@@ -68,14 +91,31 @@ router.post("/", async (req, res, next) => {
   try {
     const payload = agentSchema.parse(req.body);
     const slug = payload.slug ?? slugify(payload.title);
-    const { modelParameters, ...restPayload } = payload;
+    const { modelParameters } = payload;
     const agent = await prisma.agent.create({
       data: {
-        ...restPayload,
         slug,
-        prompt: payload.prompt ?? payload.systemPrompt,
+        name: payload.name,
+        title: payload.title,
+        role: payload.role,
         specialty: payload.specialty,
+        description: payload.description,
+        prompt: payload.prompt ?? payload.systemPrompt,
+        systemPrompt: payload.systemPrompt,
         skills: uniqueLower(payload.skills),
+        responseStyle: payload.responseStyle,
+        isActive: payload.isActive,
+        priority: payload.priority,
+        preferredProviderId: payload.preferredProviderId,
+        defaultModel: payload.defaultModel,
+        fallbackProviderIds: uniqueLower(payload.fallbackProviderIds),
+        fallbackModels: payload.fallbackModels,
+        routingPolicy: payload.routingPolicy,
+        costPreference: payload.costPreference,
+        temperature: payload.temperature,
+        maxTokens: payload.maxTokens,
+        parameterMode: payload.parameterMode,
+        config: buildAgentConfig(null, payload) as Prisma.InputJsonObject,
         modelParameters: modelParameters === null ? Prisma.JsonNull : (modelParameters as Prisma.InputJsonValue | undefined)
       }
     });
@@ -86,7 +126,7 @@ router.post("/", async (req, res, next) => {
       resourceId: agent.id,
       metadata: { slug: agent.slug, title: agent.title }
     });
-    res.status(201).json({ agent });
+    res.status(201).json({ agent: toAgentDto(agent) });
   } catch (error) {
     next(error);
   }
@@ -99,7 +139,7 @@ router.get("/:id", async (req, res, next) => {
       res.status(404).json({ error: "Agent not found" });
       return;
     }
-    res.json({ agent });
+    res.json({ agent: toAgentDto(agent) });
   } catch (error) {
     next(error);
   }
@@ -119,7 +159,7 @@ router.patch("/:id", async (req, res, next) => {
       return;
     }
 
-    const { modelParameters, ...restPayload } = payload;
+    const { modelParameters, ...restPayload } = stripProfileFields(payload);
     const agent = await prisma.agent.update({
       where: { id: existing.id },
       data: {
@@ -127,6 +167,7 @@ router.patch("/:id", async (req, res, next) => {
         ...(payload.systemPrompt ? { prompt: payload.prompt ?? payload.systemPrompt } : {}),
         ...(payload.fallbackProviderIds ? { fallbackProviderIds: uniqueLower(payload.fallbackProviderIds) } : {}),
         ...(payload.skills ? { skills: uniqueLower(payload.skills) } : {}),
+        config: buildAgentConfig(existing.config, payload) as Prisma.InputJsonObject,
         ...("modelParameters" in payload ? { modelParameters: modelParameters === null ? Prisma.JsonNull : (modelParameters as Prisma.InputJsonValue | undefined) } : {})
       }
     });
@@ -137,7 +178,7 @@ router.patch("/:id", async (req, res, next) => {
       resourceId: agent.id,
       metadata: { slug: agent.slug, isActive: agent.isActive }
     });
-    res.json({ agent });
+    res.json({ agent: toAgentDto(agent) });
   } catch (error) {
     next(error);
   }
@@ -153,21 +194,66 @@ router.get("/:id/effective-request-preview", async (req, res, next) => {
 
     let providerType = "openrouter";
     let providerName = "unknown";
-    let model = agent.defaultModel ?? "unknown";
+    let configuredProvider = agent.preferredProviderId ?? "global-routing";
+    const configuredModel = agent.defaultModel ?? null;
+    let actualSentModel = agent.defaultModel ?? "unknown";
+    let validationState: Record<string, unknown> = { primaryModel: "Not checked" };
 
     try {
       const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
       providerType = route.provider.type;
       providerName = route.provider.name;
-      model = route.model;
+      configuredProvider = route.provider.id;
+      actualSentModel = route.model;
+      validationState = {
+        primaryModel: providerValidationLabel(route.provider.modelValidationStatus),
+        fallbackProviders: await Promise.all(route.fallbackProviders.map(async (provider) => ({
+          id: provider.id,
+          name: provider.name,
+          ...(await describeFallbackProviderReadiness(provider))
+        })))
+      };
     } catch {
       // fall through with defaults
     }
 
     const effective = resolveEffectiveParameters(agent, providerType);
-    const preview = buildRequestPreview({ provider: providerName, model, effective });
+    const latestTrace = await prisma.aIUsageTrace.findFirst({
+      where: { agentId: agent.id },
+      orderBy: { createdAt: "desc" },
+      select: { model: true, metadata: true }
+    });
+    const latestUsage = await prisma.usageRecord.findFirst({
+      where: { agentId: agent.id },
+      orderBy: { createdAt: "desc" },
+      select: { metadata: true, model: true }
+    });
+    const finalResponseModel = readMetadataString(latestUsage?.metadata, "responseModel") ?? latestUsage?.model ?? latestTrace?.model ?? null;
+    const actualSentBodyPreview = buildProviderRequestBody({
+      model: actualSentModel,
+      messages: [
+        { role: "system", content: "[omitted: safe-preview disabled]" },
+        { role: "user", content: "[omitted: safe-preview disabled]" }
+      ],
+      effective
+    });
 
-    res.json({ preview, parameterMode: effective.mode });
+    res.json({
+      preview: {
+        configuredProvider,
+        configuredModel,
+        actualSentModel,
+        finalResponseModel,
+        streamEnabled: effective.stream,
+        reasoningEnabled: effective.reasoning?.enabled ?? false,
+        reasoningEffort: effective.reasoning?.effort ?? null,
+        reasoningExcluded: effective.reasoning?.exclude ?? true,
+        response_format: effective.response_format ?? null,
+        validationState,
+        actualSentBodyPreview
+      },
+      parameterMode: effective.mode
+    });
   } catch (error) {
     next(error);
   }
@@ -218,14 +304,20 @@ router.get("/:id/routing-preview", async (req, res, next) => {
       select: { provider: true, providerId: true, model: true, totalTokens: true, estimatedCostUSD: true, createdAt: true }
     });
 
-    const fallbackProviderDetails = agent.fallbackProviderIds
+    const fallbackProviderDetails = await Promise.all(agent.fallbackProviderIds
       .map((id) => allProviders.find((p) => p.id === id))
       .filter(Boolean)
-      .map((p) => p && ({ id: p.id, name: p.name, type: p.type, environmentMode: p.environmentMode, hasCredentials: p.hasCredentials, costTier: p.costTier, isActive: p.isActive }));
+      .map(async (p) => p && ({ id: p.id, name: p.name, type: p.type, environmentMode: p.environmentMode, hasCredentials: p.hasCredentials, costTier: p.costTier, isActive: p.isActive, readiness: await describeFallbackProviderReadiness(p) })));
+    const sandboxFallbackMode = await isSandboxFallbackModeActive();
+    const blockedFallbackProviderDetails = await Promise.all(allProviders
+      .filter((provider) => provider.environmentMode === "PRODUCTION" && !provider.isFreeTier)
+      .map(async (provider) => ({ id: provider.id, name: provider.name, type: provider.type, environmentMode: provider.environmentMode, hasCredentials: provider.hasCredentials, costTier: provider.costTier, isActive: provider.isActive, readiness: await describeFallbackProviderReadiness(provider) })));
 
     res.json({
       effectiveRoute,
       fallbackProviderDetails,
+      blockedFallbackProviderDetails,
+      sandboxFallbackMode,
       latestUsage: latestUsage ?? null
     });
   } catch (error) {
@@ -256,7 +348,7 @@ router.delete("/:id", async (req, res, next) => {
       resourceId: agent.id,
       metadata: { slug: agent.slug }
     });
-    res.json({ agent });
+    res.json({ agent: toAgentDto(agent) });
   } catch (error) {
     next(error);
   }
@@ -271,3 +363,152 @@ function uniqueLower(values: string[]): string[] {
 }
 
 export default router;
+
+type AgentPayloadInput = z.infer<typeof agentPatchSchema>;
+
+const DEFAULT_MEMORY_POLICY = {
+  canProposeMemoryCandidates: true,
+  canAutoSaveTrustedMemory: false,
+  memoryRequiresApproval: true,
+  allowedMemoryCategories: [] as string[],
+  retentionPolicy: "approved durable memories only; raw reasoning must never be stored as memory"
+};
+
+function stripProfileFields<T extends Record<string, unknown>>(payload: T): { modelParameters?: unknown } & Record<string, unknown> {
+  const {
+    personalDetail,
+    personality,
+    relationshipWithKing,
+    relationshipWithCouncil,
+    roleBoundaries,
+    allowedActions,
+    forbiddenActions,
+    approvalRequiredFor,
+    canProposeMemoryCandidates,
+    canAutoSaveTrustedMemory,
+    memoryRequiresApproval,
+    allowedMemoryCategories,
+    retentionPolicy,
+    ...rest
+  } = payload;
+  void personalDetail;
+  void personality;
+  void relationshipWithKing;
+  void relationshipWithCouncil;
+  void roleBoundaries;
+  void allowedActions;
+  void forbiddenActions;
+  void approvalRequiredFor;
+  void canProposeMemoryCandidates;
+  void canAutoSaveTrustedMemory;
+  void memoryRequiresApproval;
+  void allowedMemoryCategories;
+  void retentionPolicy;
+  return rest;
+}
+
+function toAgentDto(agent: any) {
+  const profile = normalizeAgentProfile(agent.config);
+  return {
+    ...agent,
+    ...profile.identity,
+    ...profile.authority,
+    ...profile.memoryPolicy
+  };
+}
+
+function normalizeAgentProfile(config: unknown) {
+  const raw = asRecord(config);
+  const identity = asRecord(raw.royalIdentity);
+  const authority = asRecord(raw.authority);
+  const memoryPolicy = asRecord(raw.memoryPolicy);
+  return {
+    identity: {
+      personalDetail: stringValue(identity.personalDetail),
+      personality: stringValue(identity.personality),
+      relationshipWithKing: stringValue(identity.relationshipWithKing),
+      relationshipWithCouncil: stringValue(identity.relationshipWithCouncil)
+    },
+    authority: {
+      roleBoundaries: stringValue(authority.roleBoundaries),
+      allowedActions: stringArray(authority.allowedActions),
+      forbiddenActions: stringArray(authority.forbiddenActions),
+      approvalRequiredFor: stringArray(authority.approvalRequiredFor)
+    },
+    memoryPolicy: {
+      canProposeMemoryCandidates: booleanValue(memoryPolicy.canProposeMemoryCandidates, DEFAULT_MEMORY_POLICY.canProposeMemoryCandidates),
+      canAutoSaveTrustedMemory: booleanValue(memoryPolicy.canAutoSaveTrustedMemory, DEFAULT_MEMORY_POLICY.canAutoSaveTrustedMemory),
+      memoryRequiresApproval: booleanValue(memoryPolicy.memoryRequiresApproval, DEFAULT_MEMORY_POLICY.memoryRequiresApproval),
+      allowedMemoryCategories: stringArray(memoryPolicy.allowedMemoryCategories),
+      retentionPolicy: stringValue(memoryPolicy.retentionPolicy, DEFAULT_MEMORY_POLICY.retentionPolicy)
+    }
+  };
+}
+
+function buildAgentConfig(existingConfig: unknown, payload: AgentPayloadInput): Record<string, unknown> {
+  const raw = asRecord(existingConfig);
+  const existing = normalizeAgentProfile(existingConfig);
+  return {
+    ...raw,
+    royalIdentity: {
+      ...existing.identity,
+      ...pickDefined({
+        personalDetail: payload.personalDetail,
+        personality: payload.personality,
+        relationshipWithKing: payload.relationshipWithKing,
+        relationshipWithCouncil: payload.relationshipWithCouncil
+      })
+    },
+    authority: {
+      ...existing.authority,
+      ...pickDefined({
+        roleBoundaries: payload.roleBoundaries,
+        allowedActions: payload.allowedActions,
+        forbiddenActions: payload.forbiddenActions,
+        approvalRequiredFor: payload.approvalRequiredFor
+      })
+    },
+    memoryPolicy: {
+      ...existing.memoryPolicy,
+      ...pickDefined({
+        canProposeMemoryCandidates: payload.canProposeMemoryCandidates,
+        canAutoSaveTrustedMemory: payload.canAutoSaveTrustedMemory,
+        memoryRequiresApproval: payload.memoryRequiresApproval,
+        allowedMemoryCategories: payload.allowedMemoryCategories,
+        retentionPolicy: payload.retentionPolicy
+      })
+    }
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function stringValue(value: unknown, fallback = ""): string {
+  return typeof value === "string" ? value : fallback;
+}
+
+function booleanValue(value: unknown, fallback: boolean): boolean {
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function pickDefined(values: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(values).filter(([, value]) => value !== undefined));
+}
+
+function providerValidationLabel(status: string | null | undefined): "Valid" | "Invalid" | "Not checked" {
+  if (status === "VALID") return "Valid";
+  if (status === "INVALID_MODEL") return "Invalid";
+  return "Not checked";
+}
+
+function readMetadataString(metadata: unknown, key: string): string | null {
+  const raw = asRecord(metadata);
+  const value = raw[key];
+  return typeof value === "string" && value ? value : null;
+}

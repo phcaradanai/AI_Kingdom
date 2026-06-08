@@ -36,6 +36,16 @@ export type ModelParameters = {
   max_tokens?: number | null;
   top_p?: number | null;
   seed?: number | null;
+  response_format?: "none" | "json_object" | "json_schema" | null;
+  stop?: string[] | null;
+  frequency_penalty?: number | null;
+  presence_penalty?: number | null;
+  repetition_penalty?: number | null;
+  top_k?: number | null;
+  min_p?: number | null;
+  openrouter_route?: "none" | "fallback" | null;
+  openrouter_provider_preferences?: string[] | null;
+  plugins?: Array<"web" | "file-parser" | "response-healing" | "context-compression"> | null;
   reasoning?: Partial<ReasoningConfig>;
   tools?: Partial<ToolsConfig>;
 };
@@ -64,6 +74,19 @@ export type AgentDto = {
   costPreference: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature: number | null;
   maxTokens: number | null;
+  personalDetail: string;
+  personality: string;
+  relationshipWithKing: string;
+  relationshipWithCouncil: string;
+  roleBoundaries: string;
+  allowedActions: string[];
+  forbiddenActions: string[];
+  approvalRequiredFor: string[];
+  canProposeMemoryCandidates: boolean;
+  canAutoSaveTrustedMemory: boolean;
+  memoryRequiresApproval: boolean;
+  allowedMemoryCategories: string[];
+  retentionPolicy: string;
   parameterMode: ParameterMode | null;
   modelParameters: ModelParameters | null;
   createdAt: string;
@@ -78,8 +101,16 @@ export type AgentRoutingPreviewDto = {
     model: string;
     fallbackProviders: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string }>;
   } | null;
-  fallbackProviderDetails: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; isActive: boolean } | null>;
+  fallbackProviderDetails: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; isActive: boolean; readiness?: ProviderReadinessDto } | null>;
+  blockedFallbackProviderDetails?: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; isActive: boolean; readiness: ProviderReadinessDto }>;
+  sandboxFallbackMode?: boolean;
   latestUsage: { provider: string; providerId: string | null; model: string; totalTokens: number; estimatedCostUSD: number; createdAt: string } | null;
+};
+
+export type ProviderReadinessDto = {
+  state: "READY" | "DISABLED" | "INSUFFICIENT_BALANCE" | "PRODUCTION_BLOCKED_IN_SANDBOX";
+  label: string;
+  active: boolean;
 };
 
 export type ProviderModelsDto = {
@@ -111,29 +142,36 @@ export type AgentPayload = {
   costPreference?: "LOW" | "BALANCED" | "QUALITY" | null;
   temperature?: number | null;
   maxTokens?: number | null;
+  personalDetail?: string;
+  personality?: string;
+  relationshipWithKing?: string;
+  relationshipWithCouncil?: string;
+  roleBoundaries?: string;
+  allowedActions?: string[];
+  forbiddenActions?: string[];
+  approvalRequiredFor?: string[];
+  canProposeMemoryCandidates?: boolean;
+  canAutoSaveTrustedMemory?: boolean;
+  memoryRequiresApproval?: boolean;
+  allowedMemoryCategories?: string[];
+  retentionPolicy?: string;
   parameterMode?: ParameterMode | null;
   modelParameters?: ModelParameters | null;
 };
 
 export type EffectiveRequestPreviewDto = {
   preview: {
-    provider: string;
-    model: string;
-    stream: boolean;
-    temperature?: number;
-    max_tokens?: number;
-    top_p?: number;
-    seed?: number;
-    reasoning?: {
-      enabled: boolean;
-      effort: string;
-      max_tokens: number | null;
-      exclude: boolean;
-    };
-    tools?: {
-      enabled: boolean;
-      tool_choice: string;
-    };
+    configuredProvider: string;
+    configuredModel: string | null;
+    actualSentModel: string;
+    finalResponseModel: string | null;
+    streamEnabled: boolean;
+    reasoningEnabled: boolean;
+    reasoningEffort: string | null;
+    reasoningExcluded: boolean;
+    response_format: "none" | "json_object" | "json_schema" | null;
+    validationState: Record<string, unknown>;
+    actualSentBodyPreview: Record<string, unknown>;
   };
   parameterMode: string;
 };

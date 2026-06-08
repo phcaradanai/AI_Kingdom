@@ -151,3 +151,48 @@ test("legacy agent temperature field is used in ROLE_DEFAULT when set", () => {
   assert.equal(effective.temperature, 0.9, "agent.temperature should override role default in ROLE_DEFAULT mode");
   assert.equal(effective.max_tokens, 1234, "agent.maxTokens should be used");
 });
+
+test("advanced params omit null values", () => {
+  const effective = resolveEffectiveParameters(
+    {
+      ...baseAgent,
+      parameterMode: "MANUAL",
+      modelParameters: {
+        stream: false,
+        temperature: null,
+        max_tokens: 1000,
+        top_p: null,
+        seed: null,
+        response_format: "none",
+        stop: [],
+        frequency_penalty: null,
+        presence_penalty: null,
+        repetition_penalty: null,
+        top_k: null,
+        min_p: null,
+        openrouter_route: "none",
+        openrouter_provider_preferences: [],
+        plugins: [],
+        reasoning: { enabled: true, effort: "medium", max_tokens: null, exclude: true },
+        tools: { enabled: false, tool_choice: "auto" }
+      }
+    },
+    "openrouter"
+  );
+  const body = buildProviderRequestBody({ model: "openrouter/owl-alpha", messages: [{ role: "user", content: "test" }], effective });
+  assert.equal(body.max_tokens, 1000);
+  assert.ok(!("frequency_penalty" in body));
+  assert.ok(!("presence_penalty" in body));
+  assert.ok(!("response_format" in body));
+  assert.ok(!("stop" in body));
+});
+
+test("response_format json_object is included only when configured", () => {
+  const withoutJson = resolveEffectiveParameters({ ...baseAgent, parameterMode: "MANUAL", modelParameters: { response_format: "none" } }, "openrouter");
+  const withoutBody = buildProviderRequestBody({ model: "openrouter/owl-alpha", messages: [{ role: "user", content: "test" }], effective: withoutJson });
+  assert.ok(!("response_format" in withoutBody));
+
+  const withJson = resolveEffectiveParameters({ ...baseAgent, parameterMode: "MANUAL", modelParameters: { response_format: "json_object" } }, "openrouter");
+  const withBody = buildProviderRequestBody({ model: "openrouter/owl-alpha", messages: [{ role: "user", content: "test" }], effective: withJson });
+  assert.deepEqual(withBody.response_format, { type: "json_object" });
+});

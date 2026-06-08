@@ -3,6 +3,7 @@ import type { KnowledgeCategory, KnowledgeCandidateStatus } from "@prisma/client
 import { prisma } from "../db/prisma.js";
 import { redactSecrets } from "./usageAttributionService.js";
 import { evaluateRecordValue, shouldPersistRecord } from "./dataValueGateService.js";
+import { isForbiddenMemoryContent } from "./memorySafety.js";
 
 // ---------- Types ----------
 
@@ -183,7 +184,7 @@ export async function extractKnowledgeCandidatesFromTrace(traceId: string): Prom
 export async function proposeKnowledgeCandidate(
   input: ProposeKnowledgeCandidateInput
 ): Promise<KnowledgeCandidateDto | null> {
-  if (isSensitive(input.title) || isSensitive(input.content)) return null;
+  if (isSensitive(input.title) || isSensitive(input.content) || isForbiddenMemoryContent(input.title, input.content)) return null;
 
   const fingerprint = buildFingerprint(input.title, input.content);
 
