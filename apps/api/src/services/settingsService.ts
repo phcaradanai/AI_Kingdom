@@ -3,20 +3,20 @@ import { env } from "../config/env.js";
 import { prisma } from "../db/prisma.js";
 
 export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: SettingsCategory; description: string }> = [
-  { key: "AI_PROVIDER", value: env.AI_PROVIDER, category: "AI", description: "Legacy default provider hint. Routing policy can override this per task or agent." },
   { key: "AI_COST_MODE", value: env.AI_COST_MODE, category: "AI", description: "Provider routing cost preference: low, balanced, or quality." },
-  { key: "OPENAI_MODEL", value: env.OPENAI_MODEL, category: "AI", description: "Default OpenAI-compatible model for agents without overrides." },
   { key: "AI_TIMEOUT_MS", value: String(env.AI_TIMEOUT_MS), category: "AI", description: "Request timeout for AI calls in milliseconds." },
   { key: "AI_MAX_TOKENS", value: String(env.AI_MAX_TOKENS), category: "AI", description: "Default maximum output tokens for AI calls." },
-  { key: "DEFAULT_TASK_MODE", value: "ASK", category: "SYSTEM", description: "Default task mode in the Throne Room." },
-  { key: "AUTO_PROCESS_TASKS", value: "false", category: "SYSTEM", description: "Automatically send new tasks to the Grand Vizier." },
   { key: "AUTO_SAVE_MEMORY", value: "true", category: "SYSTEM", description: "Automatically save concise memories after council completion." },
   { key: "AUTO_GENERATE_REPORTS", value: "true", category: "SYSTEM", description: "Automatically generate Royal Reports after council completion." },
-  { key: "DAILY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "Daily spend limit in USD. Empty string disables the limit." },
-  { key: "MONTHLY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "Monthly spend limit in USD. Empty string disables the limit." },
+  { key: "AUTO_PLAN_WORK_ORDERS", value: "false", category: "SYSTEM", description: "Automatically run the Planner Agent after each completed council session to generate draft work orders for King review." },
   { key: "ROUTING_DEBUG_MODE", value: "false", category: "SYSTEM", description: "When enabled, low-confidence and debug-only routing decisions are stored as inbox items (hidden by default) for admin review." },
-  { key: "AUTO_PLAN_WORK_ORDERS", value: "false", category: "SYSTEM", description: "Automatically run the Planner Agent after each completed council session to generate draft work orders for King review." }
+  { key: "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", value: "false", category: "SYSTEM", description: "Allow production provider calls when running outside production mode. Keep disabled unless actively testing production routes." },
+  { key: "DAILY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "Daily spend limit in USD. Leave empty to disable the limit." },
+  { key: "MONTHLY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "Monthly spend limit in USD. Leave empty to disable the limit." }
 ];
+
+// Keys that were removed from active settings and should be cleaned up from existing databases.
+const DEPRECATED_SETTING_KEYS = ["AI_PROVIDER", "OPENAI_MODEL", "DEFAULT_TASK_MODE", "AUTO_PROCESS_TASKS"];
 
 export async function ensureDefaultSettings() {
   for (const setting of DEFAULT_SETTINGS) {
@@ -25,6 +25,9 @@ export async function ensureDefaultSettings() {
       update: {},
       create: setting
     });
+  }
+  if (DEPRECATED_SETTING_KEYS.length > 0) {
+    await prisma.setting.deleteMany({ where: { key: { in: DEPRECATED_SETTING_KEYS } } });
   }
 }
 

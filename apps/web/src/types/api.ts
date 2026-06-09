@@ -257,6 +257,7 @@ export type SettingDto = {
   id: string;
   key: string;
   value: string;
+  defaultValue: string | null;
   category: SettingCategory;
   description: string | null;
   updatedAt: string;

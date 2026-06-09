@@ -10,7 +10,6 @@ import {
   isGenericKeyword,
   shouldCreateInboxItem
 } from "./routingQualityGate.js";
-import { getBooleanSetting } from "./settingsService.js";
 import { evaluateRecordValue, shouldPersistRecord } from "./dataValueGateService.js";
 
 export type ProjectClassificationInput = {

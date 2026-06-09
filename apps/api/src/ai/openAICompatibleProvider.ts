@@ -1,4 +1,5 @@
 import { env } from "../config/env.js";
+import { getNumberSetting } from "../services/settingsService.js";
 import type { AgentResponseResult, AIProvider, GenerateAgentResponseInput } from "./aiProvider.js";
 import { buildProviderRequestBody } from "./modelParameterResolver.js";
 
@@ -61,7 +62,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
 
     const controller = new AbortController();
-    const timeoutMs = this.timeoutMs;
+    const timeoutMs = await getNumberSetting("AI_TIMEOUT_MS", this.timeoutMs);
     const timeout = setTimeout(() => controller.abort(new Error("PROVIDER_TIMEOUT")), timeoutMs);
 
     try {

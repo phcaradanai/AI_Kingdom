@@ -8,7 +8,13 @@ import { getModelDisplayName, getProviderDisplayName, getProviderModeBadge } fro
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { SettingDto } from "@/types/api";
 
-const behaviorKeys = ["AUTO_PROCESS_TASKS", "AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS"];
+const BOOLEAN_SETTING_KEYS = new Set([
+  "AUTO_SAVE_MEMORY",
+  "AUTO_GENERATE_REPORTS",
+  "AUTO_PLAN_WORK_ORDERS",
+  "ROUTING_DEBUG_MODE",
+  "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX"
+]);
 
 export function SettingsPage() {
   const settings = useKingdomStore((state) => state.settings);
@@ -89,6 +95,9 @@ export function SettingsPage() {
           <p className="mt-4 text-sm leading-6 text-muted-foreground">
             API keys are never returned by the settings or providers APIs. Configure secrets only in the server `.env`.
           </p>
+          <p className="mt-2 text-sm leading-6 text-muted-foreground">
+            Provider selection, model names, and per-provider timeouts are also configured in `.env` and the Provider Registry.
+          </p>
         </Card>
       </div>
     </>
@@ -110,47 +119,45 @@ function SettingsCard({ icon, title, settings, onUpdate }: { icon: ReactNode; ti
 }
 
 function SettingRow({ setting, onUpdate }: { setting: SettingDto; onUpdate: (key: string, value: string) => Promise<void> }) {
-  const isToggle = behaviorKeys.includes(setting.key);
+  const isToggle = BOOLEAN_SETTING_KEYS.has(setting.key);
   const inputId = `setting-${setting.key}`;
+  const isModified = setting.defaultValue !== null && setting.value !== setting.defaultValue;
 
   return (
     <div className="rounded-lg border border-border bg-muted/30 p-3">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           {isToggle ? (
             <div className="text-sm font-semibold">{setting.key}</div>
           ) : (
             <label htmlFor={inputId} className="block text-sm font-semibold">{setting.key}</label>
           )}
           {setting.description ? <div className="mt-1 text-xs text-muted-foreground">{setting.description}</div> : null}
+          <div className="mt-1.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
+            {setting.defaultValue !== null ? (
+              <span>
+                default: <span className="font-mono">{setting.defaultValue === "" ? "empty" : setting.defaultValue}</span>
+              </span>
+            ) : null}
+            {isModified ? <span className="text-amber-500">modified</span> : null}
+            <span>updated {new Date(setting.updatedAt).toLocaleDateString()}</span>
+          </div>
         </div>
-        {isToggle ? (
-          <Button variant={setting.value === "true" ? "primary" : "outline"} onClick={() => void onUpdate(setting.key, setting.value === "true" ? "false" : "true")}>
-            {setting.value === "true" ? "Enabled" : "Disabled"}
-          </Button>
-        ) : setting.key === "AI_PROVIDER" ? (
-          <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
-            {setting.value === "mock" && <option value="mock">Local Sandbox Baseline (legacy)</option>}
-            <option value="local-sandbox-baseline">Local Sandbox Baseline</option>
-            <option value="openrouter-free">OpenRouter Free Sandbox</option>
-            <option value="openai-compatible">openai-compatible</option>
-            <option value="openai">openai</option>
-            <option value="openrouter">openrouter</option>
-            <option value="deepseek">deepseek</option>
-          </select>
-        ) : setting.key === "AI_COST_MODE" ? (
-          <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
-            <option value="low">low</option>
-            <option value="balanced">balanced</option>
-            <option value="quality">quality</option>
-          </select>
-        ) : setting.key === "DEFAULT_TASK_MODE" ? (
-          <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
-            {["ASK", "PLAN", "RESEARCH", "BUILD"].map((mode) => <option key={mode} value={mode}>{mode}</option>)}
-          </select>
-        ) : (
-          <Input id={inputId} className="sm:w-56" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)} />
-        )}
+        <div className="shrink-0">
+          {isToggle ? (
+            <Button variant={setting.value === "true" ? "primary" : "outline"} onClick={() => void onUpdate(setting.key, setting.value === "true" ? "false" : "true")}>
+              {setting.value === "true" ? "Enabled" : "Disabled"}
+            </Button>
+          ) : setting.key === "AI_COST_MODE" ? (
+            <select id={inputId} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)}>
+              <option value="low">low</option>
+              <option value="balanced">balanced</option>
+              <option value="quality">quality</option>
+            </select>
+          ) : (
+            <Input id={inputId} className="sm:w-56" value={setting.value} onChange={(e) => void onUpdate(setting.key, e.target.value)} />
+          )}
+        </div>
       </div>
     </div>
   );

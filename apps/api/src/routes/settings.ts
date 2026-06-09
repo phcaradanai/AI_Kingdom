@@ -2,15 +2,17 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
-import { ensureDefaultSettings } from "../services/settingsService.js";
+import { DEFAULT_SETTINGS, ensureDefaultSettings } from "../services/settingsService.js";
 import { ensureDefaultAIProviders } from "../services/aiProviderRegistry.js";
 
 const router = Router();
 
 const settingPatchSchema = z.object({
-  value: z.string().trim().min(1).max(1000),
+  value: z.string().trim().max(1000),
   description: z.string().trim().max(500).optional()
 });
+
+const DEFAULT_VALUE_MAP = Object.fromEntries(DEFAULT_SETTINGS.map((s) => [s.key, s.value]));
 
 router.get("/", async (_req, res, next) => {
   try {
@@ -19,7 +21,8 @@ router.get("/", async (_req, res, next) => {
     const settings = await prisma.setting.findMany({
       orderBy: [{ category: "asc" }, { key: "asc" }]
     });
-    res.json({ settings });
+    const enriched = settings.map((s) => ({ ...s, defaultValue: DEFAULT_VALUE_MAP[s.key] ?? null }));
+    res.json({ settings: enriched });
   } catch (error) {
     next(error);
   }
@@ -64,11 +67,11 @@ router.patch("/:key", async (req, res, next) => {
   }
 });
 
+const BOOLEAN_SETTING_KEYS = ["AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS", "AUTO_PLAN_WORK_ORDERS", "ROUTING_DEBUG_MODE", "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX"];
+
 function validateSettingValue(key: string, value: string): string | null {
-  if (key === "AI_PROVIDER" && !["local-sandbox-baseline", "openrouter-free", "mock", "openai-compatible", "openai", "openrouter", "deepseek"].includes(value)) return "AI_PROVIDER must be a supported provider id";
   if (key === "AI_COST_MODE" && !["low", "balanced", "quality"].includes(value)) return "AI_COST_MODE must be low, balanced, or quality";
-  if (key === "DEFAULT_TASK_MODE" && !["ASK", "PLAN", "RESEARCH", "BUILD"].includes(value)) return "DEFAULT_TASK_MODE is invalid";
-  if (["AUTO_PROCESS_TASKS", "AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS"].includes(key) && !["true", "false"].includes(value)) return `${key} must be true or false`;
+  if (BOOLEAN_SETTING_KEYS.includes(key) && !["true", "false"].includes(value)) return `${key} must be true or false`;
   if (key === "AI_TIMEOUT_MS" && (!Number.isFinite(Number(value)) || Number(value) < 1000 || Number(value) > 120000)) return "AI_TIMEOUT_MS must be between 1000 and 120000";
   if (key === "AI_MAX_TOKENS" && (!Number.isFinite(Number(value)) || Number(value) < 64 || Number(value) > 8000)) return "AI_MAX_TOKENS must be between 64 and 8000";
   return null;
