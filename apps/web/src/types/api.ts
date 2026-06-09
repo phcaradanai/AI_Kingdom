@@ -734,6 +734,48 @@ export type ProviderBalanceSnapshotDto = {
   status?: "OK" | "PROVIDER_API_ERROR";
 };
 
+export type ProviderAccountSnapshotDto = {
+  id: string;
+  providerType: string;
+  providerId: string | null;
+  creditsRemaining: number | null;
+  creditsUsed: number | null;
+  isFreeTier: boolean;
+  rateLimit: Record<string, unknown> | null;
+  status: string;
+  syncedAt: string;
+  createdAt: string;
+};
+
+export type ProviderModelSnapshotDto = {
+  id: string;
+  providerType: string;
+  modelId: string;
+  modelName: string | null;
+  contextWindow: number | null;
+  inputPricePerMillion: number | null;
+  outputPricePerMillion: number | null;
+  isAvailable: boolean;
+  syncedAt: string;
+  createdAt: string;
+};
+
+export type ProviderHealthStatus = "HEALTHY" | "DEGRADED" | "DOWN" | "UNKNOWN";
+
+export type ProviderHealthSnapshotDto = {
+  id: string;
+  providerType: string;
+  providerId: string | null;
+  lastSuccessAt: string | null;
+  failureRate: number | null;
+  timeoutRate: number | null;
+  avgDurationMs: number | null;
+  sampleSize: number;
+  healthStatus: ProviderHealthStatus;
+  computedAt: string;
+  createdAt: string;
+};
+
 export type TreasuryReconciliationStatus = "NO_BALANCE_SNAPSHOT" | "OK" | "ESTIMATE_ONLY" | "PROVIDER_API_ERROR";
 
 export type ProviderBalanceDeltaDto = {
@@ -743,6 +785,12 @@ export type ProviderBalanceDeltaDto = {
   balanceDelta: number;
   previousFetchedAt: string;
   latestFetchedAt: string;
+};
+
+export type TreasuryProviderTelemetryDto = {
+  accountSnapshots: ProviderAccountSnapshotDto[];
+  healthSnapshots: ProviderHealthSnapshotDto[];
+  lastModelSyncedAt: string | null;
 };
 
 export type TreasuryOverviewDto = {
@@ -763,6 +811,7 @@ export type TreasuryOverviewDto = {
   reconciliationStatus: TreasuryReconciliationStatus;
   balanceDelta: ProviderBalanceDeltaDto | null;
   budgetStatus: TreasuryBudgetStatus;
+  providerTelemetry: TreasuryProviderTelemetryDto;
 };
 
 export type TreasuryAgentDto = {

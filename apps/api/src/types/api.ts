@@ -69,6 +69,48 @@ export type ProviderBalanceSnapshotDto = Omit<ProviderBalanceSnapshot, "raw"> & 
   status?: "OK" | "PROVIDER_API_ERROR";
 };
 
+export type ProviderAccountSnapshotDto = {
+  id: string;
+  providerType: string;
+  providerId: string | null;
+  creditsRemaining: number | null;
+  creditsUsed: number | null;
+  isFreeTier: boolean;
+  rateLimit: Record<string, unknown> | null;
+  status: string;
+  syncedAt: Date;
+  createdAt: Date;
+};
+
+export type ProviderModelSnapshotDto = {
+  id: string;
+  providerType: string;
+  modelId: string;
+  modelName: string | null;
+  contextWindow: number | null;
+  inputPricePerMillion: number | null;
+  outputPricePerMillion: number | null;
+  isAvailable: boolean;
+  syncedAt: Date;
+  createdAt: Date;
+};
+
+export type ProviderHealthStatus = "HEALTHY" | "DEGRADED" | "DOWN" | "UNKNOWN";
+
+export type ProviderHealthSnapshotDto = {
+  id: string;
+  providerType: string;
+  providerId: string | null;
+  lastSuccessAt: Date | null;
+  failureRate: number | null;
+  timeoutRate: number | null;
+  avgDurationMs: number | null;
+  sampleSize: number;
+  healthStatus: ProviderHealthStatus;
+  computedAt: Date;
+  createdAt: Date;
+};
+
 export type TreasuryReconciliationStatus = "NO_BALANCE_SNAPSHOT" | "OK" | "ESTIMATE_ONLY" | "PROVIDER_API_ERROR";
 
 export type TaskStatusDto = TaskStatus;

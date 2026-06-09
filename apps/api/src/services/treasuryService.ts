@@ -27,6 +27,9 @@ import {
   getLatestDeepSeekBalanceSnapshot,
   listLatestProviderBalanceSnapshots
 } from "./providerBalanceService.js";
+import { listLatestProviderAccountSnapshots } from "./providerAccountSyncService.js";
+import { getLatestProviderHealthSnapshots } from "./providerHealthSnapshotService.js";
+import { getLastModelSyncTime } from "./providerModelSyncService.js";
 
 function startOfToday(): Date {
   const d = new Date();
@@ -80,6 +83,9 @@ export async function getTreasuryOverview() {
   const latestProviderBalances = await listLatestProviderBalanceSnapshots();
   const latestDeepSeekBalance = await getLatestDeepSeekBalanceSnapshot();
   const latestDeepSeekBalanceError = await getLatestDeepSeekBalanceErrorSnapshot();
+  const latestProviderAccounts = await listLatestProviderAccountSnapshots();
+  const latestProviderHealth = await getLatestProviderHealthSnapshots();
+  const lastModelSyncedAt = await getLastModelSyncTime();
 
   const costToday = todayAgg._sum.estimatedCostUSD ?? 0;
   const costThisMonth = monthAgg._sum.estimatedCostUSD ?? 0;
@@ -115,6 +121,11 @@ export async function getTreasuryOverview() {
       monthlyLimit,
       dailyWarning: dailyLimit !== null && costToday >= dailyLimit,
       monthlyWarning: monthlyLimit !== null && costThisMonth >= monthlyLimit
+    },
+    providerTelemetry: {
+      accountSnapshots: latestProviderAccounts,
+      healthSnapshots: latestProviderHealth,
+      lastModelSyncedAt
     }
   };
 }

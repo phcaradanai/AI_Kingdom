@@ -175,9 +175,8 @@ test("getTreasuryByMonth: buckets usage records by month", async () => {
     }
   });
 
-  const thisMonth = new Date();
-  thisMonth.setDate(1);
-  const monthKey = thisMonth.toISOString().slice(0, 7);
+  const now = new Date();
+  const monthKey = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
 
   await prisma.usageRecord.createMany({
     data: [

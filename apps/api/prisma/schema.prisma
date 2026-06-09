@@ -941,6 +941,60 @@ model ProviderBalanceSnapshot {
   @@index([fetchedAt])
 }
 
+model ProviderAccountSnapshot {
+  id               String   @id @default(cuid())
+  providerType     String
+  providerId       String?
+  creditsRemaining Float?
+  creditsUsed      Float?
+  isFreeTier       Boolean  @default(false)
+  rateLimit        Json?
+  status           String   @default("ACTIVE")
+  raw              Json?
+  syncedAt         DateTime @default(now())
+  createdAt        DateTime @default(now())
+
+  @@index([providerType])
+  @@index([providerId])
+  @@index([syncedAt])
+}
+
+model ProviderModelSnapshot {
+  id                    String   @id @default(cuid())
+  providerType          String
+  modelId               String
+  modelName             String?
+  contextWindow         Int?
+  inputPricePerMillion  Float?
+  outputPricePerMillion Float?
+  isAvailable           Boolean  @default(true)
+  raw                   Json?
+  syncedAt              DateTime @default(now())
+  createdAt             DateTime @default(now())
+
+  @@index([providerType])
+  @@index([modelId])
+  @@index([syncedAt])
+}
+
+model ProviderHealthSnapshot {
+  id            String    @id @default(cuid())
+  providerType  String
+  providerId    String?
+  lastSuccessAt DateTime?
+  failureRate   Float?
+  timeoutRate   Float?
+  avgDurationMs Int?
+  sampleSize    Int       @default(0)
+  healthStatus  String    @default("UNKNOWN")
+  computedAt    DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+
+  @@index([providerType])
+  @@index([providerId])
+  @@index([computedAt])
+}
+
 model Budget {
   id           String   @id @default(cuid())
   name         String   @unique

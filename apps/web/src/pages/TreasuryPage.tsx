@@ -21,7 +21,8 @@ import type {
   TreasuryMonthlyDto,
   TreasuryModelDto,
   TreasuryFallbackAnalyticsDto,
-  UsageRecordDto
+  UsageRecordDto,
+  ProviderHealthStatus
 } from "@/types/api";
 
 function formatCost(usd: number): string {
@@ -134,6 +135,145 @@ function ProviderBalanceSection({
           Last synced: {overview.balanceLastFetchedAt ? formatDate(overview.balanceLastFetchedAt) : "Never"}
         </div>
       </Card>
+    </section>
+  );
+}
+
+function healthStatusColor(status: ProviderHealthStatus): string {
+  if (status === "HEALTHY") return "text-emerald-400";
+  if (status === "DEGRADED") return "text-amber-400";
+  if (status === "DOWN") return "text-red-400";
+  return "text-muted-foreground";
+}
+
+function ProviderTelemetrySection({
+  overview,
+  onSyncAccount,
+  onSyncModels,
+  onComputeHealth,
+  syncingAccount,
+  syncingModels,
+  computingHealth,
+  syncError
+}: {
+  overview: TreasuryOverviewDto;
+  onSyncAccount: () => Promise<void>;
+  onSyncModels: () => Promise<void>;
+  onComputeHealth: () => Promise<void>;
+  syncingAccount: boolean;
+  syncingModels: boolean;
+  computingHealth: boolean;
+  syncError: string | null;
+}) {
+  const { providerTelemetry } = overview;
+  const openRouterAccount = providerTelemetry.accountSnapshots.find((s) => s.providerType === "openrouter");
+  const healthSnapshots = providerTelemetry.healthSnapshots;
+
+  return (
+    <section>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Provider Intelligence</h2>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => void onSyncAccount()} disabled={syncingAccount}>
+            <RefreshCw className={cn("h-4 w-4", syncingAccount && "animate-spin")} />
+            {syncingAccount ? "Syncing…" : "Sync OpenRouter Account"}
+          </Button>
+          <Button variant="outline" onClick={() => void onSyncModels()} disabled={syncingModels}>
+            <RefreshCw className={cn("h-4 w-4", syncingModels && "animate-spin")} />
+            {syncingModels ? "Syncing…" : "Sync OpenRouter Models"}
+          </Button>
+          <Button variant="outline" onClick={() => void onComputeHealth()} disabled={computingHealth}>
+            <RefreshCw className={cn("h-4 w-4", computingHealth && "animate-spin")} />
+            {computingHealth ? "Computing…" : "Compute Health"}
+          </Button>
+        </div>
+      </div>
+
+      {syncError && (
+        <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+          {syncError}
+        </div>
+      )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="p-5">
+          <div className="mb-3 text-sm font-semibold">OpenRouter Account</div>
+          {openRouterAccount ? (
+            <div className="space-y-2 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <span className={cn("font-medium", openRouterAccount.status === "ACTIVE" ? "text-emerald-400" : "text-red-400")}>
+                  {openRouterAccount.status}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Credits remaining</span>
+                <span className="font-mono font-semibold">
+                  {openRouterAccount.creditsRemaining != null ? `$${openRouterAccount.creditsRemaining.toFixed(4)}` : "Unlimited / Unknown"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Credits used</span>
+                <span className="font-mono tabular-nums">
+                  {openRouterAccount.creditsUsed != null ? `$${openRouterAccount.creditsUsed.toFixed(4)}` : "—"}
+                </span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Free tier</span>
+                <span>{openRouterAccount.isFreeTier ? "Yes" : "No"}</span>
+              </div>
+              <div className="mt-3 text-xs text-muted-foreground">Last synced: {formatDate(openRouterAccount.syncedAt)}</div>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+              No account snapshot yet. Click "Sync OpenRouter Account".
+            </div>
+          )}
+        </Card>
+
+        <Card className="p-5">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="text-sm font-semibold">Provider Health</div>
+            {providerTelemetry.lastModelSyncedAt && (
+              <div className="text-xs text-muted-foreground">Model catalog: {formatDate(providerTelemetry.lastModelSyncedAt)}</div>
+            )}
+          </div>
+          {healthSnapshots.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                    <th className="pb-2 pr-4 font-medium">Provider</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Status</th>
+                    <th className="pb-2 pr-4 text-right font-medium">Failure %</th>
+                    <th className="pb-2 text-right font-medium">Avg ms</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {healthSnapshots.map((h) => (
+                    <tr key={h.id} className="border-b border-border/40 last:border-0">
+                      <td className="py-2 pr-4 font-medium">{getProviderDisplayName(h.providerId ?? h.providerType)}</td>
+                      <td className={cn("py-2 pr-4 text-right text-xs font-semibold", healthStatusColor(h.healthStatus))}>
+                        {h.healthStatus}
+                      </td>
+                      <td className="py-2 pr-4 text-right tabular-nums text-xs">
+                        {h.failureRate != null ? `${(h.failureRate * 100).toFixed(1)}%` : "—"}
+                      </td>
+                      <td className="py-2 text-right tabular-nums text-xs text-muted-foreground">
+                        {h.avgDurationMs != null ? `${h.avgDurationMs}` : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <div className="rounded-md border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+              No health snapshots yet. Click "Compute Health".
+            </div>
+          )}
+        </Card>
+      </div>
     </section>
   );
 }
@@ -722,6 +862,10 @@ export function TreasuryPage() {
   const [error, setError] = useState<string | null>(null);
   const [syncingBalance, setSyncingBalance] = useState(false);
   const [balanceSyncError, setBalanceSyncError] = useState<string | null>(null);
+  const [syncingOpenRouterAccount, setSyncingOpenRouterAccount] = useState(false);
+  const [syncingOpenRouterModels, setSyncingOpenRouterModels] = useState(false);
+  const [computingHealth, setComputingHealth] = useState(false);
+  const [telemetrySyncError, setTelemetrySyncError] = useState<string | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -768,6 +912,54 @@ export function TreasuryPage() {
       if (ov) setOverview(ov);
     } finally {
       setSyncingBalance(false);
+    }
+  }
+
+  async function syncOpenRouterAccount() {
+    setSyncingOpenRouterAccount(true);
+    setTelemetrySyncError(null);
+    try {
+      await api.syncOpenRouterAccount();
+      const ov = await api.treasuryOverview();
+      setOverview(ov);
+    } catch (err) {
+      setTelemetrySyncError(err instanceof Error ? err.message : "OpenRouter account sync failed");
+      const ov = await api.treasuryOverview().catch(() => null);
+      if (ov) setOverview(ov);
+    } finally {
+      setSyncingOpenRouterAccount(false);
+    }
+  }
+
+  async function syncOpenRouterModels() {
+    setSyncingOpenRouterModels(true);
+    setTelemetrySyncError(null);
+    try {
+      await api.syncOpenRouterModels();
+      const ov = await api.treasuryOverview();
+      setOverview(ov);
+    } catch (err) {
+      setTelemetrySyncError(err instanceof Error ? err.message : "OpenRouter models sync failed");
+      const ov = await api.treasuryOverview().catch(() => null);
+      if (ov) setOverview(ov);
+    } finally {
+      setSyncingOpenRouterModels(false);
+    }
+  }
+
+  async function computeProviderHealth() {
+    setComputingHealth(true);
+    setTelemetrySyncError(null);
+    try {
+      await api.computeProviderHealth();
+      const ov = await api.treasuryOverview();
+      setOverview(ov);
+    } catch (err) {
+      setTelemetrySyncError(err instanceof Error ? err.message : "Health compute failed");
+      const ov = await api.treasuryOverview().catch(() => null);
+      if (ov) setOverview(ov);
+    } finally {
+      setComputingHealth(false);
     }
   }
 
@@ -830,6 +1022,17 @@ export function TreasuryPage() {
             onSync={syncDeepSeekBalance}
             syncing={syncingBalance}
             syncError={balanceSyncError}
+          />
+
+          <ProviderTelemetrySection
+            overview={overview}
+            onSyncAccount={syncOpenRouterAccount}
+            onSyncModels={syncOpenRouterModels}
+            onComputeHealth={computeProviderHealth}
+            syncingAccount={syncingOpenRouterAccount}
+            syncingModels={syncingOpenRouterModels}
+            computingHealth={computingHealth}
+            syncError={telemetrySyncError}
           />
 
           <ReconciliationSection overview={overview} />
