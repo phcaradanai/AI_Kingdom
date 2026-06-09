@@ -790,6 +790,7 @@ model AIUsageTraceStep {
   reportId         String?
   tokensUsed       Int?
   estimatedCostUSD Float?
+  durationMs       Int?
   promptPreview    String?
   responsePreview  String?
   errorMessage     String?

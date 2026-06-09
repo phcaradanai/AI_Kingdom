@@ -703,6 +703,7 @@ export type AIUsageTraceStepDto = {
   reportId: string | null;
   tokensUsed: number | null;
   estimatedCostUSD: number | null;
+  durationMs: number | null;
   promptPreview: string | null;
   responsePreview: string | null;
   errorMessage: string | null;
@@ -790,6 +791,46 @@ export type TreasuryDailyDto = {
   totalCostUSD: number;
   totalTokens: number;
   callCount: number;
+};
+
+export type TreasuryMonthlyDto = {
+  month: string;
+  totalCostUSD: number;
+  totalTokens: number;
+  callCount: number;
+};
+
+export type TreasuryModelDto = {
+  model: string;
+  provider: string;
+  providerId: string | null;
+  totalCostUSD: number;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  callCount: number;
+};
+
+export type TreasuryFallbackAnalyticsDto = {
+  providerId: string;
+  providerName: string | null;
+  model: string | null;
+  successCount: number;
+  failureCount: number;
+  timeoutCount: number;
+  avgDurationMs: number | null;
+  totalCalls: number;
+};
+
+export type BudgetStatusDetailDto = {
+  dailyExceeded: boolean;
+  monthlyExceeded: boolean;
+  dailySpent: number;
+  monthlySpent: number;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  dailyRemaining: number | null;
+  monthlyRemaining: number | null;
 };
 
 export type AuditLogDto = {

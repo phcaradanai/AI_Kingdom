@@ -186,6 +186,7 @@ export type TraceStepInput = {
   reportId?: string | null;
   tokensUsed?: number | null;
   estimatedCostUSD?: number | null;
+  durationMs?: number | null;
   promptPreview?: unknown;
   responsePreview?: unknown;
   errorMessage?: string | null;
@@ -226,6 +227,7 @@ export async function addTraceStep(input: TraceStepInput) {
       reportId: input.reportId ?? null,
       tokensUsed: input.tokensUsed ?? null,
       estimatedCostUSD: input.estimatedCostUSD ?? null,
+      durationMs: input.durationMs ?? null,
       promptPreview: sanitizePreview(input.promptPreview),
       responsePreview: sanitizePreview(input.responsePreview),
       errorMessage: sanitizeShortField(input.errorMessage, 240),
@@ -270,7 +272,7 @@ export async function startTraceStep(input: TraceStepInput) {
 
 export async function completeTraceStep(
   stepId: string,
-  output?: { responsePreview?: unknown; tokensUsed?: number | null; estimatedCostUSD?: number | null; metadata?: unknown }
+  output?: { responsePreview?: unknown; tokensUsed?: number | null; estimatedCostUSD?: number | null; durationMs?: number | null; metadata?: unknown }
 ) {
   const metadata = output?.metadata !== undefined ? sanitizeJsonForStorage(output.metadata) : undefined;
   return prisma.aIUsageTraceStep.update({
@@ -281,6 +283,7 @@ export async function completeTraceStep(
       responsePreview: sanitizePreview(output?.responsePreview),
       tokensUsed: output?.tokensUsed ?? undefined,
       estimatedCostUSD: output?.estimatedCostUSD ?? undefined,
+      durationMs: output?.durationMs ?? undefined,
       ...(metadata === undefined ? {} : { metadata })
     }
   });
@@ -400,6 +403,7 @@ export async function getAIUsageTraceDetails(traceId: string) {
           reportId: true,
           tokensUsed: true,
           estimatedCostUSD: true,
+          durationMs: true,
           promptPreview: true,
           responsePreview: true,
           errorMessage: true,

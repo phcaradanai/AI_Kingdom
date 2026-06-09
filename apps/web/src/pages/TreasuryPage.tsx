@@ -18,6 +18,9 @@ import type {
   TreasuryAgentDto,
   TreasuryProviderDto,
   TreasuryDailyDto,
+  TreasuryMonthlyDto,
+  TreasuryModelDto,
+  TreasuryFallbackAnalyticsDto,
   UsageRecordDto
 } from "@/types/api";
 
@@ -272,6 +275,119 @@ function ProviderTable({ providers }: { providers: TreasuryProviderDto[] }) {
               <td className="py-2.5 text-right tabular-nums font-mono text-xs">{formatCost(p.totalCostUSD)}</td>
             </tr>
           ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function ModelTable({ models }: { models: TreasuryModelDto[] }) {
+  if (models.length === 0)
+    return <p className="py-8 text-center text-sm text-muted-foreground">No model usage recorded yet.</p>;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+            <th className="pb-2 pr-4 font-medium">Model</th>
+            <th className="pb-2 pr-4 text-right font-medium">Calls</th>
+            <th className="pb-2 pr-4 text-right font-medium">Input</th>
+            <th className="pb-2 pr-4 text-right font-medium">Output</th>
+            <th className="pb-2 text-right font-medium">Cost (USD)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {models.map((m) => (
+            <tr key={`${m.provider}:${m.model}`} className="border-b border-border/40 last:border-0">
+              <td className="py-2.5 pr-4">
+                <div className="font-medium">{getModelDisplayName(m.model)}</div>
+                <div className="text-xs text-muted-foreground">{getProviderDisplayName(m.providerId ?? m.provider)}</div>
+              </td>
+              <td className="py-2.5 pr-4 text-right tabular-nums">{m.callCount}</td>
+              <td className="py-2.5 pr-4 text-right tabular-nums text-xs">{formatTokens(m.promptTokens)}</td>
+              <td className="py-2.5 pr-4 text-right tabular-nums text-xs">{formatTokens(m.completionTokens)}</td>
+              <td className="py-2.5 text-right tabular-nums font-mono text-xs">{formatCost(m.totalCostUSD)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function MonthlyChart({ monthly }: { monthly: TreasuryMonthlyDto[] }) {
+  if (monthly.length === 0)
+    return <p className="py-8 text-center text-sm text-muted-foreground">No monthly data available.</p>;
+
+  const maxCost = Math.max(...monthly.map((m) => m.totalCostUSD), 0.00001);
+
+  return (
+    <div className="space-y-1">
+      {monthly
+        .slice()
+        .reverse()
+        .map((m) => {
+          const pct = (m.totalCostUSD / maxCost) * 100;
+          return (
+            <div key={m.month} className="flex items-center gap-3 text-xs">
+              <span className="w-20 shrink-0 text-muted-foreground">{m.month}</span>
+              <div className="flex-1 rounded bg-muted/30">
+                <div
+                  className="h-4 rounded bg-primary/60 transition-all"
+                  style={{ width: `${Math.max(pct, 0.5)}%` }}
+                />
+              </div>
+              <span className="w-20 shrink-0 text-right font-mono tabular-nums">{formatCost(m.totalCostUSD)}</span>
+              <span className="w-14 shrink-0 text-right text-muted-foreground">{m.callCount} calls</span>
+            </div>
+          );
+        })}
+    </div>
+  );
+}
+
+function FallbackAnalyticsTable({ analytics }: { analytics: TreasuryFallbackAnalyticsDto[] }) {
+  if (analytics.length === 0)
+    return <p className="py-8 text-center text-sm text-muted-foreground">No fallback analytics yet. Run council sessions to generate traces.</p>;
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+            <th className="pb-2 pr-4 font-medium">Provider / Model</th>
+            <th className="pb-2 pr-4 text-right font-medium">Success</th>
+            <th className="pb-2 pr-4 text-right font-medium">Failure</th>
+            <th className="pb-2 pr-4 text-right font-medium">Timeout</th>
+            <th className="pb-2 pr-4 text-right font-medium">Total</th>
+            <th className="pb-2 text-right font-medium">Avg Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          {analytics.map((a) => {
+            const successRate = a.totalCalls > 0 ? Math.round((a.successCount / a.totalCalls) * 100) : 0;
+            return (
+              <tr key={`${a.providerId}:${a.model}`} className="border-b border-border/40 last:border-0">
+                <td className="py-2.5 pr-4">
+                  <div className="font-medium">{getProviderDisplayName(a.providerId)}</div>
+                  {a.model && <div className="text-xs text-muted-foreground">{getModelDisplayName(a.model)}</div>}
+                </td>
+                <td className="py-2.5 pr-4 text-right tabular-nums text-emerald-400">{a.successCount}</td>
+                <td className="py-2.5 pr-4 text-right tabular-nums text-red-400">{a.failureCount}</td>
+                <td className="py-2.5 pr-4 text-right tabular-nums text-amber-400">{a.timeoutCount}</td>
+                <td className="py-2.5 pr-4 text-right tabular-nums text-xs">
+                  {a.totalCalls}
+                  <span className={cn("ml-1 text-[10px]", successRate >= 80 ? "text-emerald-400" : successRate >= 50 ? "text-amber-400" : "text-red-400")}>
+                    ({successRate}%)
+                  </span>
+                </td>
+                <td className="py-2.5 text-right tabular-nums text-xs text-muted-foreground">
+                  {a.avgDurationMs != null ? `${a.avgDurationMs}ms` : "—"}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -597,7 +713,10 @@ export function TreasuryPage() {
   const [overview, setOverview] = useState<TreasuryOverviewDto | null>(null);
   const [agents, setAgents] = useState<TreasuryAgentDto[]>([]);
   const [providers, setProviders] = useState<TreasuryProviderDto[]>([]);
+  const [models, setModels] = useState<TreasuryModelDto[]>([]);
   const [daily, setDaily] = useState<TreasuryDailyDto[]>([]);
+  const [monthly, setMonthly] = useState<TreasuryMonthlyDto[]>([]);
+  const [fallbackAnalytics, setFallbackAnalytics] = useState<TreasuryFallbackAnalyticsDto[]>([]);
   const [records, setRecords] = useState<UsageRecordDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -609,17 +728,23 @@ export function TreasuryPage() {
       setLoading(true);
       setError(null);
       try {
-        const [ov, ag, pr, rp, us] = await Promise.all([
+        const [ov, ag, pr, md, rp, mo, fa, us] = await Promise.all([
           api.treasuryOverview(),
           api.treasuryByAgent(),
           api.treasuryByProvider(),
+          api.treasuryByModel(),
           api.treasuryReports(30),
+          api.treasuryMonthly(12),
+          api.treasuryFallbackAnalytics(),
           api.treasuryUsage(50)
         ]);
         setOverview(ov);
         setAgents(ag.agents);
         setProviders(pr.providers);
+        setModels(md.models);
         setDaily(rp.daily);
+        setMonthly(mo.monthly);
+        setFallbackAnalytics(fa.analytics);
         setRecords(us.records);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load treasury data");
@@ -735,6 +860,15 @@ export function TreasuryPage() {
                         }}
                       />
                     </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Remaining:{" "}
+                      <span className={cn("font-mono font-semibold", overview.budgetStatus.dailyWarning ? "text-yellow-400" : "text-foreground")}>
+                        {formatCost(Math.max(0, overview.budgetStatus.dailyLimit - overview.costToday))}
+                      </span>
+                      {overview.budgetStatus.dailyWarning && (
+                        <span className="ml-2 font-semibold text-yellow-400">⚠ Limit reached — expensive providers blocked</span>
+                      )}
+                    </div>
                   </Card>
                 )}
                 {overview.budgetStatus.monthlyLimit !== null && (
@@ -755,6 +889,15 @@ export function TreasuryPage() {
                           width: `${Math.min((overview.costThisMonth / overview.budgetStatus.monthlyLimit) * 100, 100)}%`
                         }}
                       />
+                    </div>
+                    <div className="mt-2 text-xs text-muted-foreground">
+                      Remaining:{" "}
+                      <span className={cn("font-mono font-semibold", overview.budgetStatus.monthlyWarning ? "text-yellow-400" : "text-foreground")}>
+                        {formatCost(Math.max(0, overview.budgetStatus.monthlyLimit - overview.costThisMonth))}
+                      </span>
+                      {overview.budgetStatus.monthlyWarning && (
+                        <span className="ml-2 font-semibold text-yellow-400">⚠ Limit reached — expensive providers blocked</span>
+                      )}
                     </div>
                   </Card>
                 )}
@@ -782,6 +925,16 @@ export function TreasuryPage() {
             </Card>
           </section>
 
+          {/* Model Spending */}
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Model Spending
+            </h2>
+            <Card className="p-5">
+              <ModelTable models={models} />
+            </Card>
+          </section>
+
           {/* Daily Cost — last 30 days */}
           <section>
             <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
@@ -789,6 +942,26 @@ export function TreasuryPage() {
             </h2>
             <Card className="p-5">
               <DailyChart daily={daily} />
+            </Card>
+          </section>
+
+          {/* Monthly Cost */}
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Monthly Cost — Last 12 Months
+            </h2>
+            <Card className="p-5">
+              <MonthlyChart monthly={monthly} />
+            </Card>
+          </section>
+
+          {/* Fallback Analytics */}
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+              Routing Fallback Analytics
+            </h2>
+            <Card className="p-5">
+              <FallbackAnalyticsTable analytics={fallbackAnalytics} />
             </Card>
           </section>
 

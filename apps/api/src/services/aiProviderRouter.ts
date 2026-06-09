@@ -4,6 +4,7 @@ import { prisma } from "../db/prisma.js";
 import type { AIProviderConfig, AICostMode, AICostPreference } from "./aiProviderRegistry.js";
 import { getAIProvider, listAIProviders } from "./aiProviderRegistry.js";
 import { LEGACY_MOCK_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_ID, OPENROUTER_FREE_PROVIDER_ID } from "./aiProviderRegistry.js";
+import { checkBudgetStatus, filterProvidersForBudget, logBudgetEvents } from "./budgetGuardService.js";
 import { getSettingValue } from "./settingsService.js";
 
 export type RequiredAICapabilities = {
@@ -19,6 +20,8 @@ export type AIProviderRouteSelection = {
   fallbackProviders: AIProviderConfig[];
   attemptedProviderIds: string[];
   costMode: AICostMode;
+  budgetBlocked?: boolean;
+  blockedProviderIds?: string[];
 };
 
 const TASK_MODE_PROVIDER_ORDER: Record<TaskMode, string[]> = {
@@ -50,13 +53,13 @@ export async function selectAIProviderRoute(input: {
         ? buildAgentFallbackIds(input.agent)
         : await getDefaultFallbackChain();
     const fallbackProviders = await resolveFallbackProviders(fallbackIds, agentProvider, capableProviders);
-    return {
+    return applyBudgetGuard({
       provider: agentProvider,
       model: input.agent.defaultModel ?? agentProvider.defaultModel,
       fallbackProviders,
       attemptedProviderIds: [agentProvider.id, ...fallbackProviders.map((provider) => provider.id)],
       costMode
-    };
+    }, providers);
   }
 
   const dbRoute = await prisma.aIProviderRoute.findFirst({
@@ -75,13 +78,13 @@ export async function selectAIProviderRoute(input: {
     const preferred = capableProviders.find((provider) => provider.id === dbRoute.preferredProviderId);
     if (preferred) {
       const fallbackProviders = await resolveFallbackProviders(dbRoute.fallbackProviderIds, preferred, capableProviders);
-      return {
+      return applyBudgetGuard({
         provider: preferred,
         model: input.agent.defaultModel ?? dbRoute.preferredModel ?? preferred.defaultModel,
         fallbackProviders,
         attemptedProviderIds: [preferred.id, ...fallbackProviders.map((provider) => provider.id)],
         costMode
-      };
+      }, providers);
     }
   }
 
@@ -103,12 +106,57 @@ export async function selectAIProviderRoute(input: {
     if (sandbox && sandbox.id !== provider.id) fallbackProviders.push(sandbox);
   }
 
-  return {
+  return applyBudgetGuard({
     provider,
     model: input.agent.defaultModel ?? provider.defaultModel,
     fallbackProviders,
     attemptedProviderIds: [provider.id, ...fallbackProviders.map((candidate) => candidate.id)],
     costMode
+  }, providers);
+}
+
+async function applyBudgetGuard(
+  selection: AIProviderRouteSelection,
+  allProviders: AIProviderConfig[]
+): Promise<AIProviderRouteSelection> {
+  const budgetStatus = await checkBudgetStatus();
+  if (!budgetStatus.dailyExceeded && !budgetStatus.monthlyExceeded) {
+    return selection;
+  }
+
+  const allCandidates = [selection.provider, ...selection.fallbackProviders];
+  const { allowed, blocked } = filterProvidersForBudget(allCandidates, budgetStatus);
+
+  // Log budget events asynchronously — must not crash the session
+  logBudgetEvents(budgetStatus, blocked).catch(() => undefined);
+
+  if (allowed.length === 0) {
+    // All candidates blocked — ensure sandbox is available as last resort
+    const sandbox = allProviders.find((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID);
+    if (sandbox) {
+      return {
+        ...selection,
+        provider: sandbox,
+        model: sandbox.defaultModel,
+        fallbackProviders: [],
+        attemptedProviderIds: [sandbox.id],
+        budgetBlocked: true,
+        blockedProviderIds: blocked.map((p) => p.id)
+      };
+    }
+    return selection;
+  }
+
+  const newPrimary = allowed[0]!;
+  const newFallbacks = allowed.slice(1);
+  return {
+    ...selection,
+    provider: newPrimary,
+    model: newPrimary.id === selection.provider.id ? selection.model : newPrimary.defaultModel,
+    fallbackProviders: newFallbacks,
+    attemptedProviderIds: [newPrimary.id, ...newFallbacks.map((p) => p.id)],
+    budgetBlocked: blocked.length > 0,
+    blockedProviderIds: blocked.length > 0 ? blocked.map((p) => p.id) : undefined
   };
 }
 

@@ -97,6 +97,7 @@ export async function generateWithFallback(
     const actualSentModel = normalizeModelIdForProvider(providerType, configuredModel ?? "");
     const meta = providerTraceMeta(candidate.name, actualSentModel);
     attemptedProviders.push(meta.providerId);
+    const callStartedAt = Date.now();
     try {
       // Online validation (Part 2)
       if (meta.providerType === "openrouter" && actualSentModel) {
@@ -185,6 +186,7 @@ export async function generateWithFallback(
         providerName: meta.providerName,
         model: meta.model,
         tokensUsed: result.usage?.totalTokens ?? null,
+        durationMs: Date.now() - callStartedAt,
         metadata: {
           providerId: meta.providerId,
           providerName: meta.providerName,
@@ -236,6 +238,7 @@ export async function generateWithFallback(
         providerName: meta.providerName,
         model: meta.model,
         errorMessage: msg.slice(0, 240),
+        durationMs: Date.now() - callStartedAt,
         metadata: {
           providerId: meta.providerId,
           providerName: meta.providerName,
@@ -259,6 +262,7 @@ export async function generateWithFallback(
     providerName: sandboxMeta.providerName,
     model: sandboxMeta.model
   });
+  const sandboxCallStartedAt = Date.now();
   const mockResult = await mockProvider.generateAgentResponse(input);
   await markTraceFallbackUsed(traceContext.traceId, {
     attributionStatus: traceContext.attributionStatus,
@@ -301,6 +305,7 @@ export async function generateWithFallback(
     providerName: sandboxMeta.providerName,
     model: sandboxMeta.model,
     tokensUsed: mockResult.usage?.totalTokens ?? null,
+    durationMs: Date.now() - sandboxCallStartedAt,
     metadata: {
       providerId: sandboxMeta.providerId,
       providerName: sandboxMeta.providerName,

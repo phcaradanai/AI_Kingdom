@@ -102,7 +102,9 @@ function stepTypeBgColor(stepType: string) {
 function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const hasPreview = Boolean(step.promptPreview || step.responsePreview);
-  const dur = duration(step.startedAt, step.endedAt);
+  const dur = step.durationMs != null
+    ? (step.durationMs < 1000 ? `${step.durationMs}ms` : `${(step.durationMs / 1000).toFixed(1)}s`)
+    : duration(step.startedAt, step.endedAt);
 
   return (
     <div className="flex gap-3">
@@ -241,6 +243,23 @@ export function UsageTracePage() {
   const trace = details?.trace;
   const attributionStatus = (trace?.metadata as { attributionStatus?: AttributionStatus } | null)?.attributionStatus ?? "PARTIAL";
 
+  const finalResolution = details ? (() => {
+    const successSteps = details.steps.filter((s) => s.stepType === "PROVIDER_CALL_SUCCESS");
+    const lastSuccess = successSteps[successSteps.length - 1] ?? null;
+    const totalDurationMs = details.steps
+      .filter((s) => s.stepType === "PROVIDER_CALL_SUCCESS" || s.stepType === "PROVIDER_CALL_FAILED")
+      .reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
+    return {
+      finalProvider: lastSuccess?.providerName ? getProviderDisplayName(lastSuccess.providerId ?? lastSuccess.providerName) : (trace?.providerName ? getProviderDisplayName(trace.providerId ?? trace.providerName) : null),
+      finalModel: lastSuccess?.model ? getModelDisplayName(lastSuccess.model) : (trace?.model ? getModelDisplayName(trace.model) : null),
+      finalCost: details.totals.totalEstimatedCostUSD,
+      finalTokens: details.totals.totalTokens,
+      totalDurationMs,
+      fallbackCount: details.totals.fallbackCount,
+      attemptCount: successSteps.length + details.steps.filter((s) => s.stepType === "PROVIDER_CALL_FAILED").length
+    };
+  })() : null;
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -317,6 +336,47 @@ export function UsageTracePage() {
               <div className="mt-1 text-lg font-bold">{details.totals.agentCount}</div>
             </Card>
           </div>
+
+          {/* Final Resolution Summary */}
+          {finalResolution && (
+            <Card className="p-5 border-primary/30">
+              <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Final Resolution</h3>
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+                <div>
+                  <div className="text-xs text-muted-foreground">Final Provider</div>
+                  <div className="mt-1 font-medium text-sm">{finalResolution.finalProvider ?? "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Final Model</div>
+                  <div className="mt-1 font-medium text-xs font-mono">{finalResolution.finalModel ?? "—"}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Final Cost</div>
+                  <div className="mt-1 font-bold font-mono text-sm">${finalResolution.finalCost.toFixed(4)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Final Tokens</div>
+                  <div className="mt-1 font-bold text-sm">{finalResolution.finalTokens.toLocaleString()}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Total Route Time</div>
+                  <div className="mt-1 font-medium text-sm">
+                    {finalResolution.totalDurationMs > 0
+                      ? finalResolution.totalDurationMs < 1000
+                        ? `${finalResolution.totalDurationMs}ms`
+                        : `${(finalResolution.totalDurationMs / 1000).toFixed(1)}s`
+                      : "—"}
+                  </div>
+                </div>
+              </div>
+              {finalResolution.fallbackCount > 0 && (
+                <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  {finalResolution.fallbackCount} fallback{finalResolution.fallbackCount > 1 ? "s" : ""} used across {finalResolution.attemptCount} attempt{finalResolution.attemptCount !== 1 ? "s" : ""}
+                </div>
+              )}
+            </Card>
+          )}
 
           {/* Related Records */}
           <Card className="p-5">

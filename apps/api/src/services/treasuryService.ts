@@ -268,3 +268,128 @@ export async function getTreasuryDailyReport(days = 30) {
 
   return Array.from(buckets.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
+
+export async function getTreasuryByMonth(months = 12) {
+  const since = new Date();
+  since.setMonth(since.getMonth() - months + 1);
+  since.setDate(1);
+  since.setHours(0, 0, 0, 0);
+
+  const records = await prisma.usageRecord.findMany({
+    where: { createdAt: { gte: since } },
+    select: { estimatedCostUSD: true, totalTokens: true, createdAt: true },
+    orderBy: { createdAt: "asc" }
+  });
+
+  const buckets = new Map<
+    string,
+    { month: string; totalCostUSD: number; totalTokens: number; callCount: number }
+  >();
+
+  for (const r of records) {
+    const month = r.createdAt.toISOString().slice(0, 7);
+    const existing = buckets.get(month) ?? { month, totalCostUSD: 0, totalTokens: 0, callCount: 0 };
+    existing.totalCostUSD += r.estimatedCostUSD;
+    existing.totalTokens += r.totalTokens;
+    existing.callCount += 1;
+    buckets.set(month, existing);
+  }
+
+  return Array.from(buckets.values()).sort((a, b) => a.month.localeCompare(b.month));
+}
+
+export async function getTreasuryByModel() {
+  const groups = await prisma.usageRecord.groupBy({
+    by: ["model", "provider", "providerId"],
+    _sum: { estimatedCostUSD: true, totalTokens: true, promptTokens: true, completionTokens: true },
+    _count: { id: true },
+    orderBy: { _sum: { estimatedCostUSD: "desc" } }
+  });
+
+  return groups.map((g) => ({
+    model: g.model,
+    provider: g.provider,
+    providerId: g.providerId,
+    totalCostUSD: g._sum.estimatedCostUSD ?? 0,
+    totalTokens: g._sum.totalTokens ?? 0,
+    promptTokens: g._sum.promptTokens ?? 0,
+    completionTokens: g._sum.completionTokens ?? 0,
+    callCount: g._count.id
+  }));
+}
+
+export async function getTreasuryFallbackAnalytics() {
+  const steps = await prisma.aIUsageTraceStep.findMany({
+    where: {
+      stepType: { in: ["PROVIDER_CALL_SUCCESS", "PROVIDER_CALL_FAILED"] },
+      providerId: { not: null }
+    },
+    select: {
+      stepType: true,
+      providerId: true,
+      providerName: true,
+      model: true,
+      durationMs: true,
+      errorMessage: true,
+      metadata: true
+    }
+  });
+
+  type ProviderStats = {
+    providerId: string;
+    providerName: string | null;
+    model: string | null;
+    successCount: number;
+    failureCount: number;
+    timeoutCount: number;
+    totalDurationMs: number;
+    durationSampleCount: number;
+  };
+
+  const statsMap = new Map<string, ProviderStats>();
+
+  for (const step of steps) {
+    const key = `${step.providerId ?? ""}:${step.model ?? ""}`;
+    const existing = statsMap.get(key) ?? {
+      providerId: step.providerId ?? "",
+      providerName: step.providerName,
+      model: step.model,
+      successCount: 0,
+      failureCount: 0,
+      timeoutCount: 0,
+      totalDurationMs: 0,
+      durationSampleCount: 0
+    };
+
+    if (step.stepType === "PROVIDER_CALL_SUCCESS") {
+      existing.successCount += 1;
+    } else {
+      existing.failureCount += 1;
+      const msg = step.errorMessage?.toLowerCase() ?? "";
+      const meta = step.metadata && typeof step.metadata === "object" ? step.metadata as Record<string, unknown> : {};
+      if (msg.includes("timeout") || msg.includes("timed out") || String(meta.statusCode) === "408" || String(meta.statusCode) === "504") {
+        existing.timeoutCount += 1;
+      }
+    }
+
+    if (step.durationMs != null) {
+      existing.totalDurationMs += step.durationMs;
+      existing.durationSampleCount += 1;
+    }
+
+    statsMap.set(key, existing);
+  }
+
+  return Array.from(statsMap.values())
+    .sort((a, b) => (b.successCount + b.failureCount) - (a.successCount + a.failureCount))
+    .map((s) => ({
+      providerId: s.providerId,
+      providerName: s.providerName,
+      model: s.model,
+      successCount: s.successCount,
+      failureCount: s.failureCount,
+      timeoutCount: s.timeoutCount,
+      avgDurationMs: s.durationSampleCount > 0 ? Math.round(s.totalDurationMs / s.durationSampleCount) : null,
+      totalCalls: s.successCount + s.failureCount
+    }));
+}

@@ -1,5 +1,6 @@
 import { Router } from "express";
-import { getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview, getTreasuryUsage, getPricingWarnings } from "../services/treasuryService.js";
+import { getTreasuryByAgent, getTreasuryByModel, getTreasuryByMonth, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryFallbackAnalytics, getTreasuryOverview, getTreasuryUsage, getPricingWarnings } from "../services/treasuryService.js";
+import { checkBudgetStatus } from "../services/budgetGuardService.js";
 
 const router = Router();
 
@@ -53,6 +54,43 @@ router.get("/reports", async (req, res, next) => {
 router.get("/pricing-warnings", async (_req, res, next) => {
   try {
     res.json(await getPricingWarnings());
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/models", async (_req, res, next) => {
+  try {
+    const models = await getTreasuryByModel();
+    res.json({ models });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/monthly", async (req, res, next) => {
+  try {
+    const months = Math.min(Number(req.query.months ?? 12), 36);
+    const monthly = await getTreasuryByMonth(Number.isFinite(months) ? months : 12);
+    res.json({ monthly });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/fallback-analytics", async (_req, res, next) => {
+  try {
+    const analytics = await getTreasuryFallbackAnalytics();
+    res.json({ analytics });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/budget-status", async (_req, res, next) => {
+  try {
+    const status = await checkBudgetStatus();
+    res.json(status);
   } catch (error) {
     next(error);
   }
