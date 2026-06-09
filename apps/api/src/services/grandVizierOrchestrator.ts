@@ -13,6 +13,7 @@ import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { buildUsageAttribution } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
+import { runPlannerAgent } from "./plannerAgentService.js";
 import {
   addTraceStep,
   attachUsageRecordStep,
@@ -678,6 +679,11 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       tokensUsed: generatedSummary.usage.totalTokens,
       estimatedCostUSD: summaryCost.costUSD
     });
+
+    // ── Planner Agent: best-effort draft work order generation ──
+    await runPlannerAgent(sessionWithMemories, task, userId).catch((err) =>
+      console.warn("[PlannerAgent] Skipped:", err instanceof Error ? err.message : String(err))
+    );
 
     return sessionWithMemories;
   } catch (error) {

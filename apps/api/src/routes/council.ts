@@ -1,5 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../db/prisma.js";
+import { requireRole } from "../middleware/rbac.js";
+import { planFromSession } from "../services/plannerAgentService.js";
 
 const router = Router();
 
@@ -67,6 +69,25 @@ router.get("/:sessionId", async (req, res, next) => {
     const [sessionWithTraceLinks] = await attachCouncilTraceLinks([session]);
     res.json({ session: sessionWithTraceLinks });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:sessionId/plan-work-orders", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const { sessionId } = req.params as { sessionId: string };
+    const result = await planFromSession(sessionId, userId);
+    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });
