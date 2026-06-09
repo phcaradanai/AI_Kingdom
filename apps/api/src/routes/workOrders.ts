@@ -30,6 +30,9 @@ const workOrderSchema = z.object({
   sourceType: z.string().trim().max(80).optional().nullable(),
   sourceId: z.string().trim().max(120).optional().nullable(),
   assignedExternalAgentId: z.string().trim().max(120).optional().nullable(),
+  assignedAgentId: z.string().trim().max(120).optional().nullable(),
+  assignedAgentReason: z.string().trim().max(500).optional().nullable(),
+  assignedAgentConfidence: z.number().min(0).max(1).optional().nullable(),
   status: z.enum(["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"]).default("DRAFT"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
   dataQuality: z.string().trim().max(80).optional().nullable(),
@@ -40,6 +43,7 @@ const workOrderSchema = z.object({
 
 const include = {
   assignedExternalAgent: true,
+  assignedAgent: { select: { id: true, slug: true, name: true, title: true } },
   workSessions: { orderBy: { createdAt: "desc" } as const },
   implementationReports: { orderBy: { createdAt: "desc" } as const },
   handoffBriefs: { orderBy: { createdAt: "desc" } as const }
@@ -167,6 +171,19 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
     });
     if (payload.status === "COMPLETED") {
       await createWorkOrderCompletionReport(workOrder.id);
+    }
+    if ("assignedAgentId" in payload) {
+      await auditLog({
+        userId: req.user?.id,
+        action: "override_work_order_assignment",
+        resourceType: "work_order",
+        resourceId: workOrder.id,
+        metadata: {
+          previousAgentId: existing.assignedAgentId,
+          newAgentId: payload.assignedAgentId ?? null,
+          reason: payload.assignedAgentReason ?? "Manual override"
+        }
+      });
     }
     await auditLog({ userId: req.user?.id, action: "update_work_order", resourceType: "work_order", resourceId: workOrder.id, metadata: { status: workOrder.status } });
     res.json({ workOrder });

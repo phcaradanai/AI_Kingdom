@@ -16,6 +16,7 @@ import { prisma } from "../db/prisma.js";
 import { buildProjectContext } from "./projectContextService.js";
 import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
 
 export interface PlannerDraft {
   title: string;
@@ -383,7 +384,7 @@ export async function createDraftWorkOrders(
       `[TASK]\n${task.title}: ${task.command.slice(0, 300)}`
     ].join("\n\n");
 
-    await prisma.workOrder.create({
+    const created = await prisma.workOrder.create({
       data: {
         title: draft.title,
         objective: draft.objective,
@@ -413,6 +414,10 @@ export async function createDraftWorkOrders(
         dataQuality: "REVIEW_REQUIRED",
         workQuality: "ACTIONABLE"
       }
+    });
+    // Auto-assign an internal agent; failure never blocks draft creation
+    await assignWorkOrderAgent(created.id).catch((err) => {
+      console.warn(`[PlannerAgent] Auto-assignment failed for work order ${created.id}:`, err instanceof Error ? err.message : String(err));
     });
     drafted++;
   }

@@ -978,6 +978,10 @@ export type WorkOrderDto = {
   sourceType: string | null;
   sourceId: string | null;
   assignedExternalAgentId: string | null;
+  assignedAgentId: string | null;
+  assignedAgentReason: string | null;
+  assignedAgentConfidence: number | null;
+  assignedAgent?: { id: string; slug: string; name: string; title: string } | null;
   status: WorkOrderStatus;
   priority: WorkOrderPriority;
   createdByUserId: string | null;
@@ -1015,6 +1019,9 @@ export type WorkOrderPayload = {
   sourceType?: string | null;
   sourceId?: string | null;
   assignedExternalAgentId?: string | null;
+  assignedAgentId?: string | null;
+  assignedAgentReason?: string | null;
+  assignedAgentConfidence?: number | null;
   status?: WorkOrderStatus;
   priority?: WorkOrderPriority;
   dataQuality?: string | null;

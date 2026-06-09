@@ -367,6 +367,7 @@ model Agent {
   activities   AgentActivity[]
   aiUsageTraces AIUsageTrace[]
   aiUsageTraceSteps AIUsageTraceStep[]
+  assignedWorkOrders WorkOrder[]
 }
 
 model ExternalAgent {
@@ -523,6 +524,9 @@ model WorkOrder {
   sourceType              String?
   sourceId                String?
   assignedExternalAgentId String?
+  assignedAgentId         String?
+  assignedAgentReason     String?
+  assignedAgentConfidence Float?
   status                  WorkOrderStatus        @default(DRAFT)
   priority                WorkOrderPriority      @default(MEDIUM)
   createdByUserId         String?
@@ -539,6 +543,7 @@ model WorkOrder {
   updatedAt               DateTime               @updatedAt
   project                 Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
   assignedExternalAgent   ExternalAgent?         @relation(fields: [assignedExternalAgentId], references: [id], onDelete: SetNull)
+  assignedAgent           Agent?                 @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
   createdByUser           User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
   workSessions            WorkSession[]
   implementationReports   ImplementationReport[]
