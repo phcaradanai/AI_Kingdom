@@ -46,8 +46,8 @@ export async function selectAIProviderRoute(input: {
   if (agentProvider?.isActive && supportsRequiredCapabilities(agentProvider, input.requiredCapabilities)) {
     const fallbackIds = input.fallbackProviderIds?.length
       ? input.fallbackProviderIds
-      : input.agent.fallbackProviderIds.length
-        ? input.agent.fallbackProviderIds
+      : buildAgentFallbackIds(input.agent).length
+        ? buildAgentFallbackIds(input.agent)
         : await getDefaultFallbackChain();
     const fallbackProviders = await resolveFallbackProviders(fallbackIds, agentProvider, capableProviders);
     return {
@@ -93,8 +93,8 @@ export async function selectAIProviderRoute(input: {
 
   const fallbackIds = input.fallbackProviderIds?.length
     ? input.fallbackProviderIds
-    : input.agent.fallbackProviderIds.length
-      ? input.agent.fallbackProviderIds
+    : buildAgentFallbackIds(input.agent).length
+      ? buildAgentFallbackIds(input.agent)
       : await getDefaultFallbackChain();
   const fallbackProviders = await resolveFallbackProviders(fallbackIds, provider, capableProviders);
 
@@ -218,4 +218,10 @@ async function resolveFallbackProviders(fallbackIds: string[], primaryProvider: 
 
 function isModelFallback(value: string): boolean {
   return value.includes("/") || value.includes(":");
+}
+
+// Merge model-level fallbacks before provider-level fallbacks so model variants are
+// tried first (same provider, different model) before switching to a different provider.
+function buildAgentFallbackIds(agent: { fallbackModels: string[]; fallbackProviderIds: string[] }): string[] {
+  return [...agent.fallbackModels, ...agent.fallbackProviderIds];
 }

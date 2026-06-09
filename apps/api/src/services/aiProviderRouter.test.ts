@@ -114,3 +114,83 @@ test("quality cost mode prefers higher tier providers", () => {
   );
   assert.equal(ordered[0]?.id, "openai");
 });
+
+test("routing includes fallbackModels as model fallbacks before provider fallbacks", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const agent = await prisma.agent.create({
+    data: {
+      slug: `fallback-models-${suffix}`,
+      name: "Fallback Models Test Agent",
+      title: "Test Agent",
+      role: "Tester",
+      specialty: "Routing",
+      prompt: "test",
+      systemPrompt: "test",
+      skills: [],
+      responseStyle: "concise",
+      preferredProviderId: OPENROUTER_FREE_PROVIDER_ID,
+      defaultModel: "nvidia/nemotron-3-super-120b-a12b:free",
+      fallbackModels: ["openai/gpt-oss-120b:free", "openrouter/owl-alpha"],
+      fallbackProviderIds: []
+    }
+  });
+
+  try {
+    const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
+    assert.equal(route.provider.id, OPENROUTER_FREE_PROVIDER_ID);
+    assert.equal(route.model, "nvidia/nemotron-3-super-120b-a12b:free");
+
+    const fallbackModels = route.fallbackProviders.map((p) => p.defaultModel);
+    assert.ok(
+      fallbackModels.includes("openai/gpt-oss-120b:free"),
+      `Expected openai/gpt-oss-120b:free in fallback providers, got: ${JSON.stringify(fallbackModels)}`
+    );
+    assert.ok(
+      fallbackModels.includes("openrouter/owl-alpha"),
+      `Expected openrouter/owl-alpha in fallback providers, got: ${JSON.stringify(fallbackModels)}`
+    );
+
+    // Model fallbacks must appear before local-sandbox
+    const firstModelFallbackIndex = route.fallbackProviders.findIndex(
+      (p) => p.defaultModel === "openai/gpt-oss-120b:free"
+    );
+    const sandboxIndex = route.fallbackProviders.findIndex((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID);
+    assert.ok(
+      sandboxIndex === -1 || firstModelFallbackIndex < sandboxIndex,
+      "Model fallbacks must be ordered before the local sandbox fallback"
+    );
+  } finally {
+    await prisma.agent.delete({ where: { id: agent.id } });
+  }
+});
+
+test("routing uses default fallback chain when agent has no fallbackModels or fallbackProviderIds", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const agent = await prisma.agent.create({
+    data: {
+      slug: `no-fallbacks-${suffix}`,
+      name: "No Fallback Agent",
+      title: "Test Agent",
+      role: "Tester",
+      specialty: "Routing",
+      prompt: "test",
+      systemPrompt: "test",
+      skills: [],
+      responseStyle: "concise",
+      preferredProviderId: OPENROUTER_FREE_PROVIDER_ID,
+      defaultModel: "openrouter/owl-alpha",
+      fallbackModels: [],
+      fallbackProviderIds: []
+    }
+  });
+
+  try {
+    const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
+    assert.equal(route.provider.id, OPENROUTER_FREE_PROVIDER_ID);
+    // When both arrays are empty, local sandbox must appear in the fallback chain as final safety net
+    const hasSandbox = route.fallbackProviders.some((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID);
+    assert.ok(hasSandbox, "Default fallback chain must include local sandbox");
+  } finally {
+    await prisma.agent.delete({ where: { id: agent.id } });
+  }
+});

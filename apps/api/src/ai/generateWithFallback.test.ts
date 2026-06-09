@@ -127,6 +127,206 @@ test("generateWithFallback rejects missing trace context", async () => {
   );
 });
 
+test("primary provider succeeds without triggering fallback", async () => {
+  const successProvider: AIProvider = {
+    name: "openrouter-free",
+    model: "nvidia/nemotron-3-super-120b-a12b:free",
+    async generateAgentResponse() {
+      return {
+        response: "Primary counsel response",
+        usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15 }
+      };
+    }
+  };
+
+  const traceContext = await createTestTrace(`primary-success-${Date.now()}`);
+  const result = await generateWithFallback(successProvider, {
+    command: "Advise on kingdom growth",
+    mode: "ASK",
+    agentName: "Aurelian",
+    agentRole: "Grand Vizier",
+    agentSkills: ["counsel"],
+    systemPrompt: "You are the Grand Vizier.",
+    responseStyle: "concise"
+  }, traceContext);
+
+  assert.equal(result.fallbackUsed, false);
+  assert.equal(result.fallbackNotice, undefined);
+  assert.equal(result.response, "Primary counsel response");
+  assert.equal(result.providerId, "openrouter-free");
+
+  const fallbackStep = await prisma.aIUsageTraceStep.findFirst({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_FALLBACK" }
+  });
+  assert.equal(fallbackStep, null);
+});
+
+test("primary timeout triggers fallback to configured model before local sandbox", async () => {
+  const timeoutProvider: AIProvider = {
+    name: "openrouter-free",
+    model: "nvidia/nemotron-3-super-120b-a12b:free",
+    async generateAgentResponse() {
+      const err = new Error("PROVIDER_TIMEOUT: openrouter-free timed out after 20000ms");
+      (err as any).errorCode = "PROVIDER_TIMEOUT";
+      throw err;
+    }
+  };
+  const fallbackModelProvider: AIProvider = {
+    name: "openrouter-free",
+    model: "openai/gpt-oss-120b:free",
+    async generateAgentResponse() {
+      return {
+        response: "Fallback model counsel",
+        usage: { promptTokens: 8, completionTokens: 4, totalTokens: 12 }
+      };
+    }
+  };
+
+  const traceContext = await createTestTrace(`timeout-model-fallback-${Date.now()}`);
+  const result = await generateWithFallback([timeoutProvider, fallbackModelProvider], {
+    command: "Advise on kingdom growth",
+    mode: "ASK",
+    agentName: "Aurelian",
+    agentRole: "Grand Vizier",
+    agentSkills: ["counsel"],
+    systemPrompt: "You are the Grand Vizier.",
+    responseStyle: "concise"
+  }, traceContext);
+
+  assert.equal(result.fallbackUsed, true);
+  assert.equal(result.response, "Fallback model counsel");
+  assert.match(result.fallbackNotice ?? "", /PROVIDER_TIMEOUT/);
+
+  const failedStep = await prisma.aIUsageTraceStep.findFirst({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_CALL_FAILED" }
+  });
+  assert.ok(failedStep, "trace must record failed primary attempt");
+  assert.match(failedStep.errorMessage ?? "", /PROVIDER_TIMEOUT/);
+
+  const fallbackStep = await prisma.aIUsageTraceStep.findFirst({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_FALLBACK" }
+  });
+  assert.ok(fallbackStep, "trace must record fallback transition");
+});
+
+test("multiple fallback model failures before reaching local sandbox", async () => {
+  function failingProvider(name: string, model: string): AIProvider {
+    return {
+      name,
+      model,
+      async generateAgentResponse() {
+        throw new Error(`${name}/${model} failed`);
+      }
+    };
+  }
+
+  const traceContext = await createTestTrace(`multi-fallback-${Date.now()}`);
+  const result = await generateWithFallback(
+    [
+      failingProvider("openrouter-free", "nvidia/nemotron-3-super-120b-a12b:free"),
+      failingProvider("openrouter-free", "openai/gpt-oss-120b:free"),
+      failingProvider("openrouter-free", "deepseek/deepseek-v4-flash")
+    ],
+    {
+      command: "Advise on kingdom stability",
+      mode: "ASK",
+      agentName: "Aurelian",
+      agentRole: "Grand Vizier",
+      agentSkills: ["counsel"],
+      systemPrompt: "You are the Grand Vizier.",
+      responseStyle: "concise"
+    },
+    traceContext
+  );
+
+  assert.equal(result.providerName, LOCAL_SANDBOX_PROVIDER_NAME);
+  assert.equal(result.finalModel, LOCAL_SANDBOX_MODEL);
+  assert.equal(result.fallbackUsed, true);
+
+  const failedSteps = await prisma.aIUsageTraceStep.findMany({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_CALL_FAILED" }
+  });
+  assert.equal(failedSteps.length, 3, "trace must record all three provider failures");
+});
+
+test("provider fallback activates after model fallbacks exhausted", async () => {
+  const primaryProvider: AIProvider = {
+    name: "openrouter-free",
+    model: "nvidia/nemotron-3-super-120b-a12b:free",
+    async generateAgentResponse() {
+      throw new Error("primary model timeout");
+    }
+  };
+  const providerFallback: AIProvider = {
+    name: "deepseek",
+    model: "deepseek-chat",
+    async generateAgentResponse() {
+      return {
+        response: "DeepSeek provider fallback counsel",
+        usage: { promptTokens: 12, completionTokens: 6, totalTokens: 18 }
+      };
+    }
+  };
+
+  const traceContext = await createTestTrace(`provider-fallback-${Date.now()}`);
+  const result = await generateWithFallback([primaryProvider, providerFallback], {
+    command: "Advise on strategic priorities",
+    mode: "PLAN",
+    agentName: "Seraphine",
+    agentRole: "Royal Architect",
+    agentSkills: ["planning"],
+    systemPrompt: "You are the Royal Architect.",
+    responseStyle: "structured"
+  }, traceContext);
+
+  assert.equal(result.providerName, "DeepSeek");
+  assert.equal(result.fallbackUsed, true);
+  assert.match(result.fallbackNotice ?? "", /primary model timeout/);
+  assert.deepEqual(result.attemptedProviders, ["openrouter-free", "deepseek"]);
+});
+
+test("local sandbox is final fallback when all providers fail", async () => {
+  const traceContext = await createTestTrace(`sandbox-final-${Date.now()}`);
+  const result = await generateWithFallback(
+    [
+      {
+        name: "openrouter-free",
+        model: "bad-model-1",
+        async generateAgentResponse() { throw new Error("model 1 failed"); }
+      },
+      {
+        name: "deepseek",
+        model: "deepseek-chat",
+        async generateAgentResponse() { throw new Error("provider failed"); }
+      }
+    ],
+    {
+      command: "Final fallback test",
+      mode: "ASK",
+      agentName: "Aurelian",
+      agentRole: "Grand Vizier",
+      agentSkills: [],
+      systemPrompt: "You are the Grand Vizier.",
+      responseStyle: "concise"
+    },
+    traceContext
+  );
+
+  assert.equal(result.providerName, LOCAL_SANDBOX_PROVIDER_NAME);
+  assert.equal(result.providerId, LOCAL_SANDBOX_PROVIDER_ID);
+  assert.equal(result.modelUsed, LOCAL_SANDBOX_MODEL);
+  assert.equal(result.fallbackUsed, true);
+  assert.ok(result.response.length > 0);
+
+  const steps = await prisma.aIUsageTraceStep.findMany({
+    where: { traceId: traceContext.traceId }
+  });
+  const stepTypes = steps.map((s) => s.stepType);
+  assert.ok(stepTypes.includes("PROVIDER_CALL_FAILED"), "trace must show failures");
+  assert.ok(stepTypes.includes("PROVIDER_FALLBACK"), "trace must show fallback transition");
+  assert.ok(stepTypes.includes("PROVIDER_CALL_SUCCESS"), "trace must show final success");
+});
+
 test.after(async () => {
   await prisma.aIUsageTrace.deleteMany({ where: { operation: "generate_with_fallback_test" } });
 });
