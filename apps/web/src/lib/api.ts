@@ -306,7 +306,7 @@ export const api = {
     }),
   tasks: () => apiRequest<{ tasks: TaskDto[] }>("/tasks"),
   createTask: (payload: { command: string; mode: TaskMode; title?: string; projectId?: string | null }) =>
-    apiRequest<{ task: TaskDto }>("/tasks", {
+    apiRequest<{ task: TaskDto; session?: CouncilSessionDto }>("/tasks", {
       method: "POST",
       body: JSON.stringify(payload)
     }),

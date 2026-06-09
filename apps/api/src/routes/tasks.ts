@@ -4,7 +4,6 @@ import { prisma } from "../db/prisma.js";
 import { getTaskForUser } from "../services/orchestrator.js";
 import { processTaskWithGrandVizier } from "../services/grandVizierOrchestrator.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
-import { getBooleanSetting } from "../services/settingsService.js";
 
 const router = Router();
 
@@ -57,15 +56,9 @@ router.post("/", async (req, res, next) => {
     if (!projectId) {
       await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id }).catch(() => undefined);
     }
-    if (await getBooleanSetting("AUTO_PROCESS_TASKS", false)) {
-      const session = await processTaskWithGrandVizier(task.id, userId);
-      const processedTask = await getTaskForUser(userId, task.id);
-      res.status(201).json({ task: processedTask, session });
-      return;
-    }
-
-    const routedTask = await getTaskForUser(userId, task.id);
-    res.status(201).json({ task: routedTask });
+    const session = await processTaskWithGrandVizier(task.id, userId);
+    const processedTask = await getTaskForUser(userId, task.id);
+    res.status(201).json({ task: processedTask, session });
   } catch (error) {
     next(error);
   }

@@ -10,7 +10,7 @@ import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
 import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { TaskDto, TaskMode } from "@/types/api";
+import type { TaskMode } from "@/types/api";
 
 const modes: Array<{ value: TaskMode; label: string; description: string }> = [
   { value: "ASK", label: "Ask", description: "Clarify a question or decision." },
@@ -23,13 +23,11 @@ export function ThroneRoomPage() {
   const [command, setCommand] = useState("");
   const [mode, setMode] = useState<TaskMode>("ASK");
   const [error, setError] = useState<string | null>(null);
-  const [lastProcessedTaskId, setLastProcessedTaskId] = useState<string | null>(null);
   const submitCommand = useKingdomStore((state) => state.submitCommand);
-  const processTask = useKingdomStore((state) => state.processTask);
   const isLoading = useKingdomStore((state) => state.isLoading);
   const isProcessing = useKingdomStore((state) => state.isProcessing);
   const tasks = useKingdomStore((state) => state.tasks);
-  
+
   const latestTask = tasks[0];
   const latestSession = latestTask?.sessions[0];
 
@@ -41,21 +39,10 @@ export function ThroneRoomPage() {
       return;
     }
     try {
-      const task = await submitCommand(command, mode);
-      setLastProcessedTaskId(task.id);
+      await submitCommand(command, mode);
       setCommand("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "The throne room could not record the decree");
-    }
-  }
-
-  async function onProcess(task: TaskDto) {
-    setError(null);
-    try {
-      await processTask(task.id);
-      setLastProcessedTaskId(task.id);
-    } catch (processError) {
-      setError(processError instanceof Error ? processError.message : "Grand Vizier could not convene the council");
     }
   }
 
@@ -64,7 +51,7 @@ export function ThroneRoomPage() {
       <PageHeader
         eyebrow="Royal Command Terminal"
         title="Issue a royal decree"
-        description="Capture your command, then send the decree to the Grand Vizier for deterministic council synthesis."
+        description="Capture your command and issue a decree. The Grand Vizier will automatically convene the council."
       />
 
       <SectionCard contentClassName="p-6">
@@ -114,9 +101,9 @@ export function ThroneRoomPage() {
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
               Mode: <span className="rounded-md bg-primary/10 px-2 py-1 text-primary">{mode}</span>
             </div>
-            <Button className="w-full sm:w-auto h-12 px-8 text-sm tracking-wide" disabled={isLoading || !command.trim()}>
+            <Button className="w-full sm:w-auto h-12 px-8 text-sm tracking-wide" disabled={isLoading || isProcessing || !command.trim()}>
               <Send className="mr-2 h-4 w-4" />
-              {isLoading ? "Recording decree..." : "Issue Decree"}
+              {isProcessing ? "Convening Council..." : isLoading ? "Recording decree..." : "Issue Decree"}
             </Button>
           </div>
         </form>
@@ -144,20 +131,10 @@ export function ThroneRoomPage() {
               <p className="mt-2 text-sm text-foreground/70 leading-relaxed">
                 {latestTask.status === "COMPLETED"
                   ? "Council has convened and delivered its counsel."
-                  : "Send this decree to the Grand Vizier to convene the council."}
+                  : latestTask.status === "RUNNING"
+                  ? "Grand Vizier is convening the council..."
+                  : "Decree received. Awaiting council."}
               </p>
-            </div>
-            
-            <div className="shrink-0">
-              <Button
-                variant={latestTask.status === "COMPLETED" ? "outline" : "primary"}
-                className={cn("h-11 shadow-md", latestTask.status !== "COMPLETED" && "animate-pulse shadow-primary/20")}
-                disabled={isProcessing || latestTask.status === "COMPLETED"}
-                onClick={() => void onProcess(latestTask)}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                {isProcessing && lastProcessedTaskId === latestTask.id ? "Convening Council..." : "Send to Grand Vizier"}
-              </Button>
             </div>
           </div>
           
@@ -229,16 +206,8 @@ export function ThroneRoomPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="mt-5 flex justify-end">
-                    <Button
-                      variant="outline"
-                      className="h-9 text-xs"
-                      disabled={isProcessing || task.status === "COMPLETED"}
-                      onClick={() => void onProcess(task)}
-                    >
-                      <Sparkles className="mr-2 h-3.5 w-3.5" />
-                      {isProcessing && lastProcessedTaskId === task.id ? "Convening..." : "Send to Vizier"}
-                    </Button>
+                  <div className="mt-4 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+                    {task.status === "RUNNING" ? "Grand Vizier convening..." : "Awaiting council."}
                   </div>
                 )}
               </SectionCard>

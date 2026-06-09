@@ -467,7 +467,9 @@ export type RepositorySnapshotDto = {
   prismaModels: string[];
   modules: string[];
   services: string[];
+  controllers: string[];
   apiRoutes: string[];
+  frontendPages: string[];
   summary: string | null;
   createdAt: string;
   updatedAt: string;

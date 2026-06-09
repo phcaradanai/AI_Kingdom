@@ -433,7 +433,9 @@ model RepositorySnapshot {
   prismaModels   Json     @default("[]")
   modules        Json     @default("[]")
   services       Json     @default("[]")
+  controllers    Json     @default("[]")
   apiRoutes      Json     @default("[]")
+  frontendPages  Json     @default("[]")
   summary        String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

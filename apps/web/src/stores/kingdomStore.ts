@@ -85,17 +85,20 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
     }
   },
   submitCommand: async (command, mode) => {
-    set({ isLoading: true, error: null });
+    set({ isLoading: true, isProcessing: true, error: null });
     try {
       const response = await api.createTask({ command, mode });
+      const newSession = response.session;
       set({
         tasks: [response.task, ...get().tasks.filter((task) => task.id !== response.task.id)],
-        isLoading: false
+        ...(newSession ? { councilSessions: [newSession, ...get().councilSessions.filter((s) => s.id !== newSession.id)] } : {}),
+        isLoading: false,
+        isProcessing: false
       });
       await get().refresh();
       return response.task;
     } catch (error) {
-      set({ error: error instanceof Error ? error.message : "Unable to submit command", isLoading: false });
+      set({ error: error instanceof Error ? error.message : "Unable to submit command", isLoading: false, isProcessing: false });
       throw error;
     }
   },
