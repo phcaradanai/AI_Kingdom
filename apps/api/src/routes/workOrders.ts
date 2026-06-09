@@ -22,8 +22,8 @@ const workOrderSchema = z.object({
   context: z.string().trim().max(10000).default(""),
   instructions: z.string().trim().max(10000).default(""),
   constraints: z.string().trim().max(5000).default(""),
-  acceptanceCriteria: z.array(z.string().trim().min(1).max(500)).max(50).default([]),
-  validationCommands: z.array(z.string().trim().min(1).max(300)).max(20).default([]),
+  acceptanceCriteria: z.array(z.string().trim().min(1).max(500)).max(500).default([]),
+  validationCommands: z.array(z.string().trim().min(1).max(300)).max(250).default([]),
   projectId: z.string().trim().max(120).optional().nullable(),
   targetProject: z.string().trim().max(200).optional().nullable(),
   targetRepository: z.string().trim().max(500).optional().nullable(),
@@ -152,7 +152,7 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
       return;
     }
     const payload = workOrderSchema.partial().parse(req.body);
-    
+
     // Update dataQuality and workQuality concepts, archive properties if marked ARCHIVED
     const finalStatus = payload.status ?? existing.status;
     const archivedAt = finalStatus === "ARCHIVED" ? (existing.archivedAt ?? new Date()) : existing.archivedAt;
