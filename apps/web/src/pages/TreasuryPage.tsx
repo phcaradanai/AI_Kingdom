@@ -24,7 +24,8 @@ import type {
   UsageRecordDto,
   ProviderHealthStatus,
   ProviderRegistryDto,
-  CostSource
+  CostSource,
+  ProviderReconciliationSnapshotDto
 } from "@/types/api";
 
 function formatCost(usd: number): string {
@@ -57,7 +58,7 @@ function StatCard({ label, value, sub, warn }: { label: string; value: string; s
   );
 }
 
-function ProviderBalanceSection({
+function DeepSeekBalanceCard({
   overview,
   onSync,
   syncing,
@@ -69,75 +70,54 @@ function ProviderBalanceSection({
   syncError: string | null;
 }) {
   const balances = overview.latestProviderBalances.filter((item) => item.providerType === "deepseek" && item.currency !== "UNKNOWN");
-  const balance = overview.latestDeepSeekBalance;
   const providerError = overview.reconciliationStatus === "PROVIDER_API_ERROR";
 
   return (
-    <section>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Provider Balance</h2>
-        <Button variant="outline" onClick={() => void onSync()} disabled={syncing}>
-          <RefreshCw className={cn("h-4 w-4", syncing && "animate-spin")} />
-          {syncing ? "Syncing" : "Sync DeepSeek Balance"}
+    <Card className="p-5">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="text-sm font-semibold">DeepSeek Balance</div>
+        <Button variant="outline" className="h-7 text-xs" onClick={() => void onSync()} disabled={syncing}>
+          <RefreshCw className={cn("h-3.5 w-3.5", syncing && "animate-spin")} />
+          {syncing ? "Syncing" : "Sync"}
         </Button>
       </div>
-      <Card className="p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="text-sm font-semibold text-foreground">DeepSeek</div>
-            <div className="mt-1 text-xs text-muted-foreground">
-              {balances.length > 0
-                ? balances.some((item) => item.isAvailable) ? "Balance available for API calls" : "Balance unavailable for API calls"
-                : "No provider balance snapshot yet"}
-            </div>
-            {syncError && (
-              <div className="mt-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
-                {syncError}
-              </div>
-            )}
-            {!syncError && providerError && (
-              <div className="mt-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
-                DeepSeek balance API was unavailable during the last sync attempt.
-              </div>
-            )}
-          </div>
-
-          {balances.length > 0 ? (
-            <div className="w-full overflow-x-auto lg:max-w-2xl">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs text-muted-foreground">
-                    <th className="pb-2 pr-4 font-medium">Currency</th>
-                    <th className="pb-2 pr-4 font-medium">Availability</th>
-                    <th className="pb-2 pr-4 text-right font-medium">Total</th>
-                    <th className="pb-2 pr-4 text-right font-medium">Granted</th>
-                    <th className="pb-2 text-right font-medium">Topped-up</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {balances.map((item) => (
-                    <tr key={item.id} className="border-b border-border/40 last:border-0">
-                      <td className="py-2.5 pr-4 font-mono text-xs font-semibold">{item.currency}</td>
-                      <td className="py-2.5 pr-4 text-xs">{item.isAvailable ? "Available" : "Unavailable"}</td>
-                      <td className="py-2.5 pr-4 text-right font-mono text-xs">{formatBalance(item.totalBalance, item.currency)}</td>
-                      <td className="py-2.5 pr-4 text-right font-mono text-xs">{formatBalance(item.grantedBalance, item.currency)}</td>
-                      <td className="py-2.5 text-right font-mono text-xs">{formatBalance(item.toppedUpBalance, item.currency)}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="w-full rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground lg:max-w-md">
-              Sync DeepSeek balance to create the first backend snapshot.
-            </div>
-          )}
+      {(syncError || (!syncError && providerError)) && (
+        <div className="mb-3 rounded-md border border-yellow-500/40 bg-yellow-500/10 px-3 py-2 text-xs text-yellow-200">
+          {syncError ?? "DeepSeek balance API was unavailable during the last sync attempt."}
         </div>
-        <div className="mt-4 text-xs text-muted-foreground">
-          Last synced: {overview.balanceLastFetchedAt ? formatDate(overview.balanceLastFetchedAt) : "Never"}
+      )}
+      {balances.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                <th className="pb-2 pr-4 font-medium">Currency</th>
+                <th className="pb-2 pr-4 font-medium">Available</th>
+                <th className="pb-2 pr-4 text-right font-medium">Total</th>
+                <th className="pb-2 text-right font-medium">Topped-up</th>
+              </tr>
+            </thead>
+            <tbody>
+              {balances.map((item) => (
+                <tr key={item.id} className="border-b border-border/40 last:border-0">
+                  <td className="py-2 pr-4 font-mono text-xs font-semibold">{item.currency}</td>
+                  <td className="py-2 pr-4 text-xs">{item.isAvailable ? "Yes" : "No"}</td>
+                  <td className="py-2 pr-4 text-right font-mono text-xs">{formatBalance(item.totalBalance, item.currency)}</td>
+                  <td className="py-2 text-right font-mono text-xs">{formatBalance(item.toppedUpBalance, item.currency)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-      </Card>
-    </section>
+      ) : (
+        <div className="rounded-md border border-dashed border-border px-4 py-5 text-center text-sm text-muted-foreground">
+          No balance snapshot yet. Click "Sync" to fetch.
+        </div>
+      )}
+      <div className="mt-3 text-xs text-muted-foreground">
+        Last synced: {overview.balanceLastFetchedAt ? formatDate(overview.balanceLastFetchedAt) : "Never"}
+      </div>
+    </Card>
   );
 }
 
@@ -153,19 +133,25 @@ function ProviderTelemetrySection({
   onSyncAccount,
   onSyncModels,
   onComputeHealth,
+  onSyncBalance,
   syncingAccount,
   syncingModels,
   computingHealth,
-  syncError
+  syncingBalance,
+  syncError,
+  balanceSyncError
 }: {
   overview: TreasuryOverviewDto;
   onSyncAccount: () => Promise<void>;
   onSyncModels: () => Promise<void>;
   onComputeHealth: () => Promise<void>;
+  onSyncBalance: () => Promise<void>;
   syncingAccount: boolean;
   syncingModels: boolean;
   computingHealth: boolean;
+  syncingBalance: boolean;
   syncError: string | null;
+  balanceSyncError: string | null;
 }) {
   const { providerTelemetry } = overview;
   const openRouterAccount = providerTelemetry.accountSnapshots.find((s) => s.providerType === "openrouter");
@@ -197,7 +183,7 @@ function ProviderTelemetrySection({
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <Card className="p-5">
           <div className="mb-3 text-sm font-semibold">OpenRouter Account</div>
           {openRouterAccount ? (
@@ -275,51 +261,84 @@ function ProviderTelemetrySection({
             </div>
           )}
         </Card>
+
+        <DeepSeekBalanceCard
+          overview={overview}
+          onSync={onSyncBalance}
+          syncing={syncingBalance}
+          syncError={balanceSyncError}
+        />
       </div>
     </section>
   );
 }
 
-function ReconciliationSection({ overview }: { overview: TreasuryOverviewDto }) {
-  const balance = overview.latestDeepSeekBalance;
-  const delta = overview.balanceDelta;
-
+function ReconciliationSection({
+  reconciliation,
+  onRunReconciliation,
+  reconciling
+}: {
+  reconciliation: ProviderReconciliationSnapshotDto | null;
+  onRunReconciliation: () => void;
+  reconciling: boolean;
+}) {
   return (
     <section>
-      <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Reconciliation</h2>
-      <Card className="p-5">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div>
-            <div className="text-xs text-muted-foreground">Estimated DeepSeek spend today</div>
-            <div className="mt-1 font-mono text-lg font-semibold">{formatCost(overview.deepseekEstimatedSpendToday)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Estimated DeepSeek spend this month</div>
-            <div className="mt-1 font-mono text-lg font-semibold">{formatCost(overview.deepseekEstimatedSpendThisMonth)}</div>
-          </div>
-          <div>
-            <div className="text-xs text-muted-foreground">DeepSeek latest balance</div>
-            <div className="mt-1 font-mono text-lg font-semibold">
-              {balance ? formatBalance(balance.totalBalance, balance.currency) : "No snapshot"}
+      <div className="mb-3 flex items-center justify-between">
+        <h2 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Billing Reconciliation</h2>
+        <Button variant="outline" className="h-8 text-xs" onClick={onRunReconciliation} disabled={reconciling}>
+          <RefreshCw className={cn("h-3.5 w-3.5", reconciling && "animate-spin")} />
+          {reconciling ? "Running…" : "Run Reconciliation"}
+        </Button>
+      </div>
+      {reconciliation ? (
+        <Card className="p-5">
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <div className="text-xs text-muted-foreground">Estimated Spend</div>
+              <div className="mt-1 font-mono text-lg font-semibold text-amber-400">{formatCost(reconciliation.estimatedSpendUSD)}</div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">from {reconciliation.recordCount} records</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Provider Spend</div>
+              <div className="mt-1 font-mono text-lg font-semibold text-blue-400">
+                {reconciliation.providerReportedSpendUSD != null ? formatCost(reconciliation.providerReportedSpendUSD) : "—"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">OpenRouter reported</div>
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Variance</div>
+              <div className={cn("mt-1 font-mono text-lg font-semibold", reconciliation.variancePercent != null && reconciliation.variancePercent > 20 ? "text-red-400" : reconciliation.variancePercent != null && reconciliation.variancePercent > 5 ? "text-amber-400" : "text-emerald-400")}>
+                {reconciliation.variancePercent != null ? `${reconciliation.variancePercent.toFixed(1)}%` : "—"}
+              </div>
+              {reconciliation.varianceAmount != null && (
+                <div className="text-[10px] text-muted-foreground mt-0.5">{formatCost(reconciliation.varianceAmount)} difference</div>
+              )}
+            </div>
+            <div>
+              <div className="text-xs text-muted-foreground">Confidence</div>
+              <div className={cn("mt-1 font-mono text-lg font-semibold", reconciliation.confidenceScore != null && reconciliation.confidenceScore >= 0.9 ? "text-emerald-400" : reconciliation.confidenceScore != null && reconciliation.confidenceScore >= 0.7 ? "text-amber-400" : "text-red-400")}>
+                {reconciliation.confidenceScore != null ? `${Math.round(reconciliation.confidenceScore * 100)}%` : "—"}
+              </div>
+              <div className="text-[10px] text-muted-foreground mt-0.5">{reconciliation.knownPricingCount}/{reconciliation.recordCount} with known pricing</div>
             </div>
           </div>
-          <div>
-            <div className="text-xs text-muted-foreground">Reconciliation status</div>
-            <div className="mt-1 text-sm font-semibold">{overview.reconciliationStatus.replaceAll("_", " ")}</div>
+          {reconciliation.notes && (
+            <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+              {reconciliation.notes}
+            </div>
+          )}
+          <div className="mt-3 text-[10px] text-muted-foreground">
+            Last reconciled: {formatDate(reconciliation.reconciledAt)} · Period: {reconciliation.periodLabel ?? "All-time"}
           </div>
-        </div>
-        {delta && (
-          <div className="mt-4 rounded-md border border-border/70 bg-muted/20 px-4 py-3 text-sm">
-            <span className="font-medium">Observed provider balance decrease:</span>{" "}
-            <span className="font-mono">{formatBalance(delta.balanceDelta, delta.currency)}</span>
-            <span className="text-muted-foreground"> approximate, based on the last two snapshots.</span>
+        </Card>
+      ) : (
+        <Card className="p-5">
+          <div className="text-center text-sm text-muted-foreground py-4">
+            No reconciliation snapshot yet. Press "Run Reconciliation" to compare estimated vs provider-reported spend.
           </div>
-        )}
-        <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-          Estimated spend is calculated from AI Kingdom token usage. Provider balance is the actual account balance from DeepSeek.
-          They may differ due to external usage, cache pricing, rounding, or delayed billing.
-        </p>
-      </Card>
+        </Card>
+      )}
     </section>
   );
 }
@@ -732,6 +751,11 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
                   <td className="py-2 text-right font-mono tabular-nums text-xs">
                     {formatCost(r.estimatedCostUSD)}
                     <CostSourceBadge source={r.costSource} />
+                    {r.costConfidence != null && r.costSource !== "FREE" && (
+                      <span className={cn("ml-1 text-[10px]", r.costConfidence >= 0.9 ? "text-emerald-400" : r.costConfidence >= 0.7 ? "text-amber-400" : "text-muted-foreground")}>
+                        {Math.round(r.costConfidence * 100)}%
+                      </span>
+                    )}
                     <PricingStatusBadge status={r.pricingStatus} notes={r.pricingNotes} />
                   </td>
                 </tr>
@@ -956,6 +980,8 @@ export function TreasuryPage() {
   const [syncingOpenRouterModels, setSyncingOpenRouterModels] = useState(false);
   const [computingHealth, setComputingHealth] = useState(false);
   const [telemetrySyncError, setTelemetrySyncError] = useState<string | null>(null);
+  const [reconciliation, setReconciliation] = useState<ProviderReconciliationSnapshotDto | null>(null);
+  const [reconciling, setReconciling] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -982,6 +1008,7 @@ export function TreasuryPage() {
         setMonthly(mo.monthly);
         setFallbackAnalytics(fa.analytics);
         setRecords(us.records);
+        api.latestReconciliation().then((r) => setReconciliation(r.snapshot)).catch(() => undefined);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load treasury data");
       } finally {
@@ -1055,6 +1082,18 @@ export function TreasuryPage() {
     }
   }
 
+  async function runReconciliation() {
+    setReconciling(true);
+    try {
+      const result = await api.runReconciliation();
+      setReconciliation(result.snapshot);
+    } catch (err) {
+      console.error("Reconciliation failed:", err);
+    } finally {
+      setReconciling(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -1117,25 +1156,25 @@ export function TreasuryPage() {
             </Card>
           </section>
 
-          <ProviderBalanceSection
-            overview={overview}
-            onSync={syncDeepSeekBalance}
-            syncing={syncingBalance}
-            syncError={balanceSyncError}
-          />
-
           <ProviderTelemetrySection
             overview={overview}
             onSyncAccount={syncOpenRouterAccount}
             onSyncModels={syncOpenRouterModels}
             onComputeHealth={computeProviderHealth}
+            onSyncBalance={syncDeepSeekBalance}
             syncingAccount={syncingOpenRouterAccount}
             syncingModels={syncingOpenRouterModels}
             computingHealth={computingHealth}
+            syncingBalance={syncingBalance}
             syncError={telemetrySyncError}
+            balanceSyncError={balanceSyncError}
           />
 
-          <ReconciliationSection overview={overview} />
+          <ReconciliationSection
+            reconciliation={reconciliation}
+            onRunReconciliation={() => void runReconciliation()}
+            reconciling={reconciling}
+          />
 
           {/* Budget Status */}
           {(overview.budgetStatus.dailyLimit !== null || overview.budgetStatus.monthlyLimit !== null) && (

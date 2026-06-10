@@ -613,6 +613,7 @@ export type UsageRecordDto = {
   pricingStatus?: string | null;
   pricingNotes?: string | null;
   costSource?: CostSource | null;
+  costConfidence?: number | null;
   createdAt: string;
   agent?: { name: string; title: string; slug: string; displayName: string | null; displayTitle: string | null; avatarUrl: string | null } | null;
   task?: { id: string; title: string; mode: string } | null;
@@ -777,6 +778,22 @@ export type ProviderHealthSnapshotDto = {
   healthStatus: ProviderHealthStatus;
   windowKind?: string | null;
   computedAt: string;
+  createdAt: string;
+};
+
+export type ProviderReconciliationSnapshotDto = {
+  id: string;
+  providerType: string;
+  periodLabel: string | null;
+  estimatedSpendUSD: number;
+  providerReportedSpendUSD: number | null;
+  varianceAmount: number | null;
+  variancePercent: number | null;
+  confidenceScore: number | null;
+  recordCount: number;
+  knownPricingCount: number;
+  notes: string | null;
+  reconciledAt: string;
   createdAt: string;
 };
 

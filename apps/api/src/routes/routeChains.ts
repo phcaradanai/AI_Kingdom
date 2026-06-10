@@ -6,7 +6,8 @@ import {
   getRouteChain,
   createRouteChain,
   updateRouteChain,
-  deleteRouteChain
+  deleteRouteChain,
+  duplicateRouteChain
 } from "../services/routeChainService.js";
 
 const router = Router();
@@ -69,6 +70,13 @@ router.delete("/:id", requireRole("KING"), async (req, res, next) => {
   try {
     await deleteRouteChain(req.params.id!);
     res.json({ ok: true });
+  } catch (err) { next(err); }
+});
+
+router.post("/:id/duplicate", requireRole("KING"), async (req, res, next) => {
+  try {
+    const chain = await duplicateRouteChain(req.params.id!);
+    res.status(201).json({ routeChain: chain });
   } catch (err) { next(err); }
 });
 

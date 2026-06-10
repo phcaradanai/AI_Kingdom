@@ -73,7 +73,8 @@ import type {
   AgentRoutingPreviewDto,
   ProviderModelsDto,
   EffectiveRequestPreviewDto,
-  RepositorySnapshotDto
+  RepositorySnapshotDto,
+  ProviderReconciliationSnapshotDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -391,6 +392,9 @@ export const api = {
   providerHealth: () => apiRequest<{ health: ProviderHealthSnapshotDto[] }>("/provider-balances/health"),
   computeProviderHealth: () => apiRequest<{ result: { snapshots: ProviderHealthSnapshotDto[]; computedAt: string } }>("/provider-balances/health/compute", { method: "POST" }),
   providerIntelligence: () => apiRequest<{ intelligence: { availability: ProviderAccountSnapshotDto[]; health: ProviderHealthSnapshotDto[]; lastHealthComputedAt: string | null; lastModelSyncedAt: string | null } }>("/provider-balances/intelligence"),
+  latestReconciliation: () => apiRequest<{ snapshot: ProviderReconciliationSnapshotDto | null }>("/provider-balances/reconciliation"),
+  reconciliationHistory: () => apiRequest<{ history: ProviderReconciliationSnapshotDto[] }>("/provider-balances/reconciliation/history"),
+  runReconciliation: () => apiRequest<{ snapshot: ProviderReconciliationSnapshotDto }>("/provider-balances/reconciliation/run", { method: "POST" }),
   getCurrentAgentActivities: () => apiRequest<{ activities: CurrentAgentActivityDto[] }>("/agent-activities/current"),
   getLivingAgents: () => apiRequest<{ agents: LivingAgentSummaryDto[] }>("/living-agents"),
   getLivingAgentProfile: (agentId: string) => apiRequest<{ profile: LivingAgentProfileDto }>(`/living-agents/${encodeURIComponent(agentId)}`),
@@ -419,6 +423,7 @@ export const api = {
   updateRouteChain: (id: string, payload: { name?: string; isActive?: boolean; description?: string | null; entries?: { providerId: string; model: string; isEnabled?: boolean; notes?: string | null }[] }) =>
     apiRequest<{ routeChain: RouteChainDto }>(`/route-chains/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteRouteChain: (id: string) => apiRequest<{ ok: boolean }>(`/route-chains/${id}`, { method: "DELETE" }),
+  duplicateRouteChain: (id: string) => apiRequest<{ routeChain: RouteChainDto }>(`/route-chains/${id}/duplicate`, { method: "POST" }),
   modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
   createModelPricing: (payload: ModelPricingPayload) =>
     apiRequest<{ record: ModelPricingDto }>("/model-pricing", { method: "POST", body: JSON.stringify(payload) }),

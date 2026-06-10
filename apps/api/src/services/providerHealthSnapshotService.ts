@@ -24,7 +24,7 @@ export type ProviderHealthComputeResult = {
 };
 
 const FAILURE_RATE_DEGRADED = 0.1;
-const FAILURE_RATE_DOWN = 0.5;
+const FAILURE_RATE_DOWN = 0.3;
 const MIN_SAMPLE_SIZE = 3;
 
 function classifyHealth(failureRate: number | null, sampleSize: number): ProviderHealthStatus {
@@ -33,6 +33,10 @@ function classifyHealth(failureRate: number | null, sampleSize: number): Provide
   if (failureRate >= FAILURE_RATE_DOWN) return "DOWN";
   if (failureRate >= FAILURE_RATE_DEGRADED) return "DEGRADED";
   return "HEALTHY";
+}
+
+export function classifyHealthFromRate(failureRate: number | null, sampleSize: number): ProviderHealthStatus {
+  return classifyHealth(failureRate, sampleSize);
 }
 
 type Stats = {

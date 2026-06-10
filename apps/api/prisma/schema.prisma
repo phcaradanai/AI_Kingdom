@@ -841,6 +841,7 @@ model UsageRecord {
   pricingNotes         String?
   // Cost source classification: where did the cost figure come from?
   costSource           String?  // FREE | ESTIMATED | PROVIDER_REPORTED
+  costConfidence       Float?   // 0.0–1.0: confidence in the cost estimate
   purpose              String?
   sourceType           String?
   sourceId             String?
@@ -1041,6 +1042,25 @@ model AIRouteChainEntry {
 
   @@index([chainId])
   @@index([sequence])
+}
+
+model ProviderReconciliationSnapshot {
+  id                       String   @id @default(cuid())
+  providerType             String   @default("openrouter")
+  periodLabel              String?
+  estimatedSpendUSD        Float    @default(0)
+  providerReportedSpendUSD Float?
+  varianceAmount           Float?
+  variancePercent          Float?
+  confidenceScore          Float?
+  recordCount              Int      @default(0)
+  knownPricingCount        Int      @default(0)
+  notes                    String?
+  reconciledAt             DateTime @default(now())
+  createdAt                DateTime @default(now())
+
+  @@index([providerType])
+  @@index([reconciledAt])
 }
 
 model Report {

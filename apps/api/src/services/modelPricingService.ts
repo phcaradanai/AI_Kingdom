@@ -80,6 +80,7 @@ export type CostCalculationResult = {
   pricingStatus: PricingStatus;
   source: PricingSource;
   costSource: CostSource;
+  costConfidence: number;
   pricingNotes?: string;
 };
 
@@ -159,11 +160,11 @@ export async function calculateCostUSDFromRegistry(
   const isFreeProvider = isKnownFreeProvider(providerType, model);
 
   if (pricing.pricingStatus === "UNKNOWN") {
-    return { costUSD: 0, pricingStatus: "UNKNOWN", source: pricing.source, costSource: isFreeProvider ? "FREE" : "ESTIMATED" };
+    return { costUSD: 0, pricingStatus: "UNKNOWN", source: pricing.source, costSource: isFreeProvider ? "FREE" : "ESTIMATED", costConfidence: isFreeProvider ? 1.0 : 0.0 };
   }
 
   if (isFreeProvider) {
-    return { costUSD: 0, pricingStatus: "KNOWN", source: pricing.source, costSource: "FREE" };
+    return { costUSD: 0, pricingStatus: "KNOWN", source: pricing.source, costSource: "FREE", costConfidence: 1.0 };
   }
 
   const { promptTokens, completionTokens, inputCacheHitTokens, inputCacheMissTokens } = usage;
@@ -181,7 +182,7 @@ export async function calculateCostUSDFromRegistry(
           inputCacheMissTokens * missPrice +
           completionTokens * outPrice) /
         1_000_000;
-      return { costUSD, pricingStatus: "KNOWN", source: pricing.source, costSource: "ESTIMATED" };
+      return { costUSD, pricingStatus: "KNOWN", source: pricing.source, costSource: "ESTIMATED", costConfidence: 0.95 };
     } else {
       // Cache pricing exists but provider did not return cache breakdown — use miss rate conservatively
       const costUSD = (promptTokens * missPrice + completionTokens * outPrice) / 1_000_000;
@@ -190,6 +191,7 @@ export async function calculateCostUSDFromRegistry(
         pricingStatus: "ESTIMATED",
         source: pricing.source,
         costSource: "ESTIMATED",
+        costConfidence: 0.75,
         pricingNotes: "Cache details unavailable; input estimated as cache miss."
       };
     }
@@ -198,7 +200,7 @@ export async function calculateCostUSDFromRegistry(
   // Legacy simple pricing path (inputPerMillion always present in static table or older DB rows)
   const inputRate = pricing.inputPerMillion ?? 0;
   const costUSD = (promptTokens * inputRate + completionTokens * pricing.outputPerMillion) / 1_000_000;
-  return { costUSD, pricingStatus: "KNOWN", source: pricing.source, costSource: "ESTIMATED" };
+  return { costUSD, pricingStatus: "KNOWN", source: pricing.source, costSource: "ESTIMATED", costConfidence: 0.85 };
 }
 
 function isKnownFreeProvider(providerType: string, model: string): boolean {
@@ -216,7 +218,7 @@ export async function calculateCostFromRegistry(
   model: string,
   promptTokens: number,
   completionTokens: number
-): Promise<{ costUSD: number; pricingStatus: PricingStatus; source: PricingSource; costSource: CostSource }> {
+): Promise<{ costUSD: number; pricingStatus: PricingStatus; source: PricingSource; costSource: CostSource; costConfidence: number }> {
   return calculateCostUSDFromRegistry(providerType, model, {
     promptTokens,
     completionTokens,

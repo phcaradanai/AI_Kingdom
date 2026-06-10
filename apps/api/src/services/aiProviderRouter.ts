@@ -142,6 +142,12 @@ async function buildSelectionFromChain(
   const skippedProviderIds: string[] = [];
   const skippedReasons: Record<string, string> = {};
 
+  const disabledEntries = chain!.entries.filter((e) => !e.isEnabled);
+  for (const e of disabledEntries) {
+    skippedProviderIds.push(e.providerId);
+    skippedReasons[e.providerId] = `CHAIN_SKIPPED: step ${e.sequence} is disabled`;
+  }
+
   const enabledEntries = chain!.entries.filter((e) => e.isEnabled);
 
   let primary: AIProviderConfig | null = null;

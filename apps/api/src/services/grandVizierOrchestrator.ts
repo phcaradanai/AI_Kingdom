@@ -106,12 +106,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         const effectiveParams = resolveEffectiveParameters(agent, route.provider.type, defaultMaxTokens);
         const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders);
 
-        // Emit preliminary trace for route chain health/budget skips (before trace exists, buffer and emit after)
-        const pendingRouteEvents: Array<{ providerId: string; reason: string; kind: "HEALTH_BLOCKED" | "BUDGET_BLOCKED" }> = [];
+        // Emit preliminary trace for route chain health/budget/chain skips (before trace exists, buffer and emit after)
+        const pendingRouteEvents: Array<{ providerId: string; reason: string; kind: "HEALTH_BLOCKED" | "BUDGET_BLOCKED" | "CHAIN_SKIPPED" }> = [];
         if (route.skippedProviderIds?.length) {
           for (const pid of route.skippedProviderIds) {
             const reason = route.skippedReasons?.[pid] ?? "Provider skipped by route intelligence";
-            const kind = reason.includes("HEALTH_BLOCKED") ? "HEALTH_BLOCKED" : "BUDGET_BLOCKED";
+            const kind = reason.includes("HEALTH_BLOCKED") ? "HEALTH_BLOCKED"
+              : reason.includes("CHAIN_SKIPPED") ? "CHAIN_SKIPPED"
+              : "BUDGET_BLOCKED";
             pendingRouteEvents.push({ providerId: pid, reason, kind });
           }
         }
@@ -156,13 +158,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         });
         traceId = trace.traceId;
 
-        // Emit HEALTH_BLOCKED / BUDGET_BLOCKED steps for skipped providers
+        // Emit HEALTH_BLOCKED / BUDGET_BLOCKED / CHAIN_SKIPPED steps for skipped providers
         for (const evt of pendingRouteEvents) {
+          const titleMap = { HEALTH_BLOCKED: "Provider health-blocked", BUDGET_BLOCKED: "Provider budget-blocked", CHAIN_SKIPPED: "Chain step skipped" };
           await addTraceStep({
             traceId,
             stepType: evt.kind,
             operation: "route_intelligence",
-            title: `Provider ${evt.kind === "HEALTH_BLOCKED" ? "health-blocked" : "budget-blocked"}`,
+            title: titleMap[evt.kind],
             detail: evt.reason,
             status: evt.kind,
             providerId: evt.providerId,
@@ -293,6 +296,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
             pricingStatus: agentCost.pricingStatus,
             pricingNotes: agentCost.pricingNotes ?? null,
             costSource: agentCost.costSource,
+            costConfidence: agentCost.costConfidence,
             ...buildUsageAttribution({
               projectId: task.projectId,
               purpose: "Council agent response",
@@ -539,6 +543,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         pricingStatus: summaryCost.pricingStatus,
         pricingNotes: summaryCost.pricingNotes ?? null,
         costSource: summaryCost.costSource,
+        costConfidence: summaryCost.costConfidence,
         ...buildUsageAttribution({
           projectId: task.projectId,
           purpose: "Final council synthesis",

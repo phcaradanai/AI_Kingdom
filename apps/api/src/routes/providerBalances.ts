@@ -23,6 +23,11 @@ import {
   getLatestProviderHealthSnapshots
 } from "../services/providerHealthSnapshotService.js";
 import { getProviderIntelligenceSummary } from "../services/providerIntelligenceService.js";
+import {
+  runOpenRouterReconciliation,
+  getLatestReconciliationSnapshot,
+  listReconciliationHistory
+} from "../services/providerReconciliationService.js";
 
 const router = Router();
 
@@ -156,6 +161,36 @@ router.get("/intelligence", async (_req, res, next) => {
   try {
     const intelligence = await getProviderIntelligenceSummary();
     res.json({ intelligence });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Reconciliation: latest snapshot
+router.get("/reconciliation", async (_req, res, next) => {
+  try {
+    const snapshot = await getLatestReconciliationSnapshot();
+    res.json({ snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Reconciliation: history
+router.get("/reconciliation/history", async (_req, res, next) => {
+  try {
+    const history = await listReconciliationHistory();
+    res.json({ history });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Reconciliation: run (manual trigger)
+router.post("/reconciliation/run", async (_req, res, next) => {
+  try {
+    const snapshot = await runOpenRouterReconciliation();
+    res.json({ snapshot });
   } catch (error) {
     next(error);
   }

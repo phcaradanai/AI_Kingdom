@@ -287,8 +287,8 @@ test("computeAndPersistHealthSnapshots materializes health from trace steps", as
     assert.ok(mySnapshot.failureRate != null);
     assert.ok(Math.abs(mySnapshot.failureRate - (1 / 3)) < 0.01);
     assert.equal(mySnapshot.avgDurationMs, 500);
-    // 2 successes, 1 failure out of 3 = 33% failure => DEGRADED (>10%)
-    assert.equal(mySnapshot.healthStatus, "DEGRADED");
+    // 2 successes, 1 failure out of 3 = 33% failure => DOWN (>= 30% per M17A threshold)
+    assert.equal(mySnapshot.healthStatus, "DOWN");
   } finally {
     if (createdSnapshotIds.length) await prisma.providerHealthSnapshot.deleteMany({ where: { id: { in: createdSnapshotIds } } }).catch(() => undefined);
     await prisma.aIUsageTraceStep.deleteMany({ where: { id: { in: [step1.id, step2.id, step3.id] } } }).catch(() => undefined);

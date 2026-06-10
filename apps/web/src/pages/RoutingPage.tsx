@@ -1,5 +1,5 @@
 import { useEffect, useState, FormEvent } from "react";
-import { ArrowDown, ArrowUp, Plus, Save, Trash2, X, RefreshCw, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Save, Trash2, X, RefreshCw, ChevronDown, ChevronRight, Copy } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -124,12 +124,14 @@ function RouteChainCard({
   chain,
   providers,
   onUpdated,
-  onDeleted
+  onDeleted,
+  onDuplicated
 }: {
   chain: RouteChainDto;
   providers: ProviderRegistryDto[];
   onUpdated: (c: RouteChainDto) => void;
   onDeleted: (id: string) => void;
+  onDuplicated: (c: RouteChainDto) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -185,6 +187,11 @@ function RouteChainCard({
     onDeleted(chain.id);
   }
 
+  async function handleDuplicate() {
+    const copy = await api.duplicateRouteChain(chain.id);
+    onDuplicated(copy.routeChain);
+  }
+
   const activeProv = providers.filter((p) => chain.entries.some((e) => e.providerId === p.id));
 
   return (
@@ -210,7 +217,10 @@ function RouteChainCard({
             {chain.isActive ? "Disable" : "Enable"}
           </Button>
           <Button variant="ghost" className="h-7 px-2 text-xs" onClick={() => { setEditing(true); setExpanded(true); }}>Edit</Button>
-          <Button variant="ghost" className="h-7 px-2 text-xs text-destructive hover:text-destructive" onClick={() => void handleDelete()}>
+          <Button variant="ghost" className="h-7 w-7 p-0" title="Duplicate chain" onClick={() => void handleDuplicate()}>
+            <Copy className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="ghost" className="h-7 w-7 p-0 text-destructive hover:text-destructive" onClick={() => void handleDelete()}>
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
         </div>
@@ -504,6 +514,10 @@ export function RoutingPage() {
     setShowNewForm(false);
   }
 
+  function handleDuplicated(chain: RouteChainDto) {
+    setChains([...chains, chain]);
+  }
+
   const allProviders = providers;
 
   return (
@@ -552,6 +566,7 @@ export function RoutingPage() {
                     providers={allProviders}
                     onUpdated={handleUpdated}
                     onDeleted={handleDeleted}
+                    onDuplicated={handleDuplicated}
                   />
                 ))}
               </div>

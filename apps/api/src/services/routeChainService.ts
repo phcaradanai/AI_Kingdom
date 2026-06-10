@@ -63,6 +63,7 @@ export async function createRouteChain(payload: {
   taskMode?: TaskMode | null;
   agentId?: string | null;
   scope?: string;
+  isActive?: boolean;
   description?: string | null;
   entries: { providerId: string; model: string; isEnabled?: boolean; notes?: string | null }[];
 }): Promise<RouteChainDto> {
@@ -72,6 +73,7 @@ export async function createRouteChain(payload: {
       taskMode: payload.taskMode ?? null,
       agentId: payload.agentId ?? null,
       scope: payload.scope ?? "GLOBAL",
+      isActive: payload.isActive ?? true,
       description: payload.description ?? null,
       entries: {
         create: ensureSandboxTerminator(payload.entries).map((e, i) => ({
@@ -119,6 +121,34 @@ export async function updateRouteChain(id: string, payload: {
 
 export async function deleteRouteChain(id: string): Promise<void> {
   await prisma.aIRouteChain.delete({ where: { id } });
+}
+
+export async function duplicateRouteChain(id: string): Promise<RouteChainDto> {
+  const source = await prisma.aIRouteChain.findUniqueOrThrow({
+    where: { id },
+    include: { entries: { orderBy: { sequence: "asc" } } }
+  });
+  const copy = await prisma.aIRouteChain.create({
+    data: {
+      name: `${source.name} (copy)`,
+      taskMode: source.taskMode as TaskMode | null,
+      agentId: source.agentId,
+      scope: source.scope,
+      isActive: false,
+      description: source.description,
+      entries: {
+        create: source.entries.map((e) => ({
+          sequence: e.sequence,
+          providerId: e.providerId,
+          model: e.model,
+          isEnabled: e.isEnabled,
+          notes: e.notes
+        }))
+      }
+    },
+    include: { entries: { orderBy: { sequence: "asc" } } }
+  });
+  return toDto(copy);
 }
 
 function ensureSandboxTerminator(

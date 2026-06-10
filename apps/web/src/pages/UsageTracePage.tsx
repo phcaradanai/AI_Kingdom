@@ -68,6 +68,7 @@ function stepStatusIcon(status: string) {
     case "FALLBACK_USED": return <RefreshCw className="h-4 w-4 text-amber-400" />;
     case "HEALTH_BLOCKED": return <XCircle className="h-4 w-4 text-orange-400" />;
     case "BUDGET_BLOCKED": return <XCircle className="h-4 w-4 text-yellow-400" />;
+    case "CHAIN_SKIPPED": return <MinusCircle className="h-4 w-4 text-slate-400" />;
     default: return <Activity className="h-4 w-4 text-muted-foreground" />;
   }
 }
@@ -99,6 +100,7 @@ function stepTypeBgColor(stepType: string) {
     case "TRACE_FAILED": return "bg-red-500/15 text-red-300 border-red-500/30";
     case "HEALTH_BLOCKED": return "bg-orange-500/15 text-orange-300 border-orange-500/30";
     case "BUDGET_BLOCKED": return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
+    case "CHAIN_SKIPPED": return "bg-slate-500/15 text-slate-400 border-slate-500/30";
     default: return "bg-muted/20 text-muted-foreground border-border";
   }
 }
@@ -172,9 +174,11 @@ function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean
             {step.errorMessage}
           </div>
         )}
-        {(step.stepType === "HEALTH_BLOCKED" || step.stepType === "BUDGET_BLOCKED") && step.detail && (
+        {(step.stepType === "HEALTH_BLOCKED" || step.stepType === "BUDGET_BLOCKED" || step.stepType === "CHAIN_SKIPPED") && step.detail && (
           <div className={cn("mt-2 rounded-md border px-3 py-2 text-xs",
-            step.stepType === "HEALTH_BLOCKED" ? "border-orange-500/30 bg-orange-500/10 text-orange-300" : "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
+            step.stepType === "HEALTH_BLOCKED" ? "border-orange-500/30 bg-orange-500/10 text-orange-300"
+            : step.stepType === "BUDGET_BLOCKED" ? "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
+            : "border-slate-500/30 bg-slate-500/10 text-slate-400"
           )}>
             <span className="font-semibold">Skip reason: </span>{step.detail}
           </div>
@@ -260,6 +264,11 @@ export function UsageTracePage() {
     const totalDurationMs = details.steps
       .filter((s) => s.stepType === "PROVIDER_CALL_SUCCESS" || s.stepType === "PROVIDER_CALL_FAILED")
       .reduce((sum, s) => sum + (s.durationMs ?? 0), 0);
+    const costSources = details.usageRecords.map((r) => (r as { costSource?: string | null }).costSource).filter(Boolean);
+    const dominantCostSource = costSources.includes("PROVIDER_REPORTED") ? "PROVIDER_REPORTED"
+      : costSources.includes("FREE") && costSources.every((s) => s === "FREE") ? "FREE"
+      : costSources.length > 0 ? "ESTIMATED"
+      : null;
     return {
       finalProvider: lastSuccess?.providerName ? getProviderDisplayName(lastSuccess.providerId ?? lastSuccess.providerName) : (trace?.providerName ? getProviderDisplayName(trace.providerId ?? trace.providerName) : null),
       finalModel: lastSuccess?.model ? getModelDisplayName(lastSuccess.model) : (trace?.model ? getModelDisplayName(trace.model) : null),
@@ -267,7 +276,8 @@ export function UsageTracePage() {
       finalTokens: details.totals.totalTokens,
       totalDurationMs,
       fallbackCount: details.totals.fallbackCount,
-      attemptCount: successSteps.length + details.steps.filter((s) => s.stepType === "PROVIDER_CALL_FAILED").length
+      attemptCount: successSteps.length + details.steps.filter((s) => s.stepType === "PROVIDER_CALL_FAILED").length,
+      costSource: dominantCostSource
     };
   })() : null;
 
@@ -352,7 +362,7 @@ export function UsageTracePage() {
           {finalResolution && (
             <Card className="p-5 border-primary/30">
               <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Final Resolution</h3>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-6">
                 <div>
                   <div className="text-xs text-muted-foreground">Final Provider</div>
                   <div className="mt-1 font-medium text-sm">{finalResolution.finalProvider ?? "—"}</div>
@@ -362,21 +372,31 @@ export function UsageTracePage() {
                   <div className="mt-1 font-medium text-xs font-mono">{finalResolution.finalModel ?? "—"}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Final Cost</div>
+                  <div className="text-xs text-muted-foreground">Total Cost</div>
                   <div className="mt-1 font-bold font-mono text-sm">${finalResolution.finalCost.toFixed(4)}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Final Tokens</div>
+                  <div className="text-xs text-muted-foreground">Total Tokens</div>
                   <div className="mt-1 font-bold text-sm">{finalResolution.finalTokens.toLocaleString()}</div>
                 </div>
                 <div>
-                  <div className="text-xs text-muted-foreground">Total Route Time</div>
+                  <div className="text-xs text-muted-foreground">Total Duration</div>
                   <div className="mt-1 font-medium text-sm">
                     {finalResolution.totalDurationMs > 0
                       ? finalResolution.totalDurationMs < 1000
                         ? `${finalResolution.totalDurationMs}ms`
                         : `${(finalResolution.totalDurationMs / 1000).toFixed(1)}s`
                       : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Cost Source</div>
+                  <div className={cn("mt-1 text-xs font-semibold",
+                    finalResolution.costSource === "FREE" ? "text-emerald-400"
+                    : finalResolution.costSource === "PROVIDER_REPORTED" ? "text-blue-400"
+                    : "text-amber-400"
+                  )}>
+                    {finalResolution.costSource ?? "—"}
                   </div>
                 </div>
               </div>

@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Cpu, Power, Save, Plus, Edit2, X, Trash } from "lucide-react";
+import { Cpu, Power, Save, Plus, Edit2, X, Trash, ChevronDown, ChevronRight, Activity } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -8,7 +8,22 @@ import { api } from "@/lib/api";
 import { getModelDisplayName, getProviderDisplayName, getProviderModeBadge, isLocalSandboxProvider } from "@/lib/providerDisplay";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { AIProviderDto, ModelPricingDto } from "@/types/api";
+import type { AIProviderDto, ModelPricingDto, ProviderHealthSnapshotDto, ProviderAccountSnapshotDto, ProviderModelSnapshotDto } from "@/types/api";
+
+function HealthBadge({ status }: { status: string | null | undefined }) {
+  const colors: Record<string, string> = {
+    HEALTHY: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
+    DEGRADED: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+    DOWN: "bg-red-500/15 text-red-400 border-red-500/30",
+    UNKNOWN: "bg-muted/20 text-muted-foreground border-border"
+  };
+  const key = status ?? "UNKNOWN";
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider", colors[key] ?? colors["UNKNOWN"])}>
+      <Activity className="h-2.5 w-2.5" />{key}
+    </span>
+  );
+}
 
 export function ProvidersPage() {
   const providers = useKingdomStore((state) => state.providers);
@@ -17,6 +32,10 @@ export function ProvidersPage() {
   const deleteProvider = useKingdomStore((state) => state.deleteProvider);
   const refresh = useKingdomStore((state) => state.refresh);
   const [pricingRecords, setPricingRecords] = useState<ModelPricingDto[]>([]);
+  const [healthSnapshots, setHealthSnapshots] = useState<ProviderHealthSnapshotDto[]>([]);
+  const [accountSnapshots, setAccountSnapshots] = useState<ProviderAccountSnapshotDto[]>([]);
+  const [modelSnapshots, setModelSnapshots] = useState<ProviderModelSnapshotDto[]>([]);
+  const [expandedModels, setExpandedModels] = useState<Record<string, boolean>>({});
   const [isValidating, setIsValidating] = useState(false);
 
   async function handleValidateModels() {
@@ -33,6 +52,9 @@ export function ProvidersPage() {
 
   useEffect(() => {
     api.modelPricing().then((r) => setPricingRecords(r.modelPricing)).catch(() => undefined);
+    api.providerHealth().then((r) => setHealthSnapshots(r.health)).catch(() => undefined);
+    api.providerAccounts().then((r) => setAccountSnapshots(r.accounts)).catch(() => undefined);
+    api.providerModels("openrouter").then((r) => setModelSnapshots(r.models)).catch(() => undefined);
   }, []);
 
   function isPricingKnown(provider: AIProviderDto): boolean {
@@ -84,6 +106,25 @@ export function ProvidersPage() {
       name: "", type: "custom", baseUrl: "", defaultModel: "", priority: 100, costTier: "MEDIUM", credentialEnvKey: "",
       capabilities: { supportsChat: true, supportsTools: false, supportsVision: false, supportsJsonMode: false }
     });
+  }
+
+  function getHealth(provider: AIProviderDto): ProviderHealthSnapshotDto | null {
+    return healthSnapshots.find((h) => h.providerType === provider.type || h.providerId === provider.id) ?? null;
+  }
+
+  function getAccount(provider: AIProviderDto): ProviderAccountSnapshotDto | null {
+    return accountSnapshots.find((a) => a.providerType === provider.type) ?? null;
+  }
+
+  function getModelCount(provider: AIProviderDto): number {
+    if (provider.type === "openrouter") {
+      return modelSnapshots.filter((m) => m.providerType === "openrouter" || m.providerType === provider.type).length;
+    }
+    return 0;
+  }
+
+  function getProviderModels(provider: AIProviderDto): ProviderModelSnapshotDto[] {
+    return modelSnapshots.filter((m) => m.providerType === provider.type || m.providerType === "openrouter");
   }
 
   function getReadinessBadge(provider: AIProviderDto) {
@@ -194,6 +235,12 @@ export function ProvidersPage() {
           const isEditing = editingId === provider.id;
           const draft = drafts[provider.id] || { defaultModel: "", priority: 100, costTier: "MEDIUM" };
 
+          const health = getHealth(provider);
+          const account = getAccount(provider);
+          const modelCount = getModelCount(provider);
+          const providerModels = getProviderModels(provider);
+          const modelsExpanded = expandedModels[provider.id] ?? false;
+
           return (
             <Card key={provider.id} className="relative overflow-hidden transition-all duration-200 hover:border-primary/50">
               <div className="p-5">
@@ -204,6 +251,7 @@ export function ProvidersPage() {
                       <h2 className="font-display text-lg flex flex-wrap items-center gap-2">
                         {getProviderDisplayName(provider)}
                         {getReadinessBadge(provider)}
+                        <HealthBadge status={health?.healthStatus} />
                       </h2>
                       <div className="mt-0.5 text-xs text-muted-foreground">{getProviderModeBadge(provider)}</div>
                     </div>
@@ -267,15 +315,6 @@ export function ProvidersPage() {
                       <span className="font-medium">{isLocalSandboxProvider(provider) ? "sandbox" : provider.type}</span>
                     </div>
                     <div>
-                      <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Default Model</span>
-                      <span className="font-medium">{provider.defaultModel ? getModelDisplayName(provider.defaultModel) : "None"}</span>
-                      {provider.defaultModel && !isLocalSandboxProvider(provider) && (
-                        <span className={cn("ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border", isPricingKnown(provider) ? "border-primary/40 bg-primary/10 text-primary" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-400")}>
-                          {isPricingKnown(provider) ? "Pricing ✓" : "Pricing ?"}
-                        </span>
-                      )}
-                    </div>
-                    <div>
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Routing Priority</span>
                       <span className="font-medium">{provider.priority}</span>
                     </div>
@@ -283,12 +322,68 @@ export function ProvidersPage() {
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Cost Tier</span>
                       <span className="font-medium">{provider.costTier}</span>
                     </div>
-                    <div className="col-span-2">
+                    <div>
                       <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Credential Status</span>
-                      <span className="font-medium">
-                        {isLocalSandboxProvider(provider) ? "No env credentials required" : 
+                      <span className="font-medium text-xs">
+                        {isLocalSandboxProvider(provider) ? "No env credentials required" :
                          provider.hasCredentials ? "Env key configured" : "Missing env key"}
                       </span>
+                    </div>
+                    {account && (
+                      <>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Balance</span>
+                          <span className="font-medium font-mono text-sm">
+                            {account.creditsRemaining != null ? `$${account.creditsRemaining.toFixed(4)}` : "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="block text-[10px] uppercase tracking-wider font-bold text-muted-foreground mb-1">Provider Spend</span>
+                          <span className="font-medium font-mono text-sm">
+                            {account.creditsUsed != null ? `$${account.creditsUsed.toFixed(4)}` : "—"}
+                          </span>
+                        </div>
+                      </>
+                    )}
+                    <div className="col-span-2">
+                      <button
+                        className="flex items-center gap-2 text-[10px] uppercase tracking-wider font-bold text-muted-foreground hover:text-foreground mb-1"
+                        onClick={() => setExpandedModels((prev) => ({ ...prev, [provider.id]: !modelsExpanded }))}
+                      >
+                        {modelsExpanded ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
+                        Default Model
+                        {modelCount > 0 && <span className="ml-1 font-normal normal-case">· {modelCount.toLocaleString()} in catalog</span>}
+                      </button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium text-sm">{provider.defaultModel ? getModelDisplayName(provider.defaultModel) : "None"}</span>
+                        {provider.defaultModel && !isLocalSandboxProvider(provider) && (
+                          <span className={cn("inline-block rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider border", isPricingKnown(provider) ? "border-primary/40 bg-primary/10 text-primary" : "border-yellow-500/40 bg-yellow-500/10 text-yellow-400")}>
+                            {isPricingKnown(provider) ? "Pricing ✓" : "Pricing ?"}
+                          </span>
+                        )}
+                      </div>
+                      {modelsExpanded && providerModels.length > 0 && (
+                        <div className="mt-2 rounded-md border border-border/50 overflow-hidden">
+                          <div className="max-h-48 overflow-y-auto">
+                            {providerModels.slice(0, 50).map((m) => (
+                              <div key={m.modelId} className="flex items-center gap-3 border-b border-border/30 last:border-0 px-3 py-1.5 text-xs">
+                                <span className="font-mono text-muted-foreground">{m.modelId}</span>
+                                {m.inputPricePerMillion === 0 && m.outputPricePerMillion === 0 && (
+                                  <span className="text-[10px] text-emerald-400">free</span>
+                                )}
+                                {m.inputPricePerMillion != null && m.inputPricePerMillion > 0 && (
+                                  <span className="text-[10px] text-muted-foreground ml-auto">${m.inputPricePerMillion}/M in · ${m.outputPricePerMillion}/M out</span>
+                                )}
+                              </div>
+                            ))}
+                            {providerModels.length > 50 && (
+                              <div className="px-3 py-2 text-xs text-muted-foreground text-center border-t border-border/30">
+                                +{providerModels.length - 50} more — see Provider Model Catalog in Routing
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                     {provider.type === "openrouter" && (
                       <div className="col-span-2">
