@@ -46,6 +46,7 @@ export class OpenAICompatibleProvider implements AIProvider {
   private baseUrl: string;
   private headers: Record<string, string>;
   private timeoutMs: number;
+  private readonly explicitTimeoutMs?: number;
 
   constructor(options: OpenAICompatibleProviderOptions) {
     this.name = options.providerId;
@@ -53,6 +54,7 @@ export class OpenAICompatibleProvider implements AIProvider {
     this.apiKey = options.apiKey;
     this.baseUrl = options.baseUrl.replace(/\/$/, "");
     this.headers = options.headers ?? {};
+    this.explicitTimeoutMs = options.timeoutMs;
     this.timeoutMs = options.timeoutMs ?? env.AI_TIMEOUT_MS;
   }
 
@@ -62,8 +64,26 @@ export class OpenAICompatibleProvider implements AIProvider {
     }
 
     const controller = new AbortController();
-    const timeoutMs = await getNumberSetting("AI_TIMEOUT_MS", this.timeoutMs);
-    const timeout = setTimeout(() => controller.abort(new Error("PROVIDER_TIMEOUT")), timeoutMs);
+    const timeoutMs = this.explicitTimeoutMs ?? await getNumberSetting("AI_TIMEOUT_MS", this.timeoutMs);
+
+    const makeTimeoutError = () => {
+      const err = new Error(`PROVIDER_TIMEOUT: ${this.name} timed out after ${timeoutMs}ms`);
+      (err as any).errorCode = "PROVIDER_TIMEOUT";
+      (err as any).statusCode = 504;
+      (err as any).providerId = this.name;
+      (err as any).providerName = this.name;
+      (err as any).model = input.model ?? this.model;
+      (err as any).endpointPath = "/chat/completions";
+      return err;
+    };
+
+    let timeoutHandle: ReturnType<typeof setTimeout>;
+    const timedOut = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => {
+        controller.abort();
+        reject(makeTimeoutError());
+      }, timeoutMs);
+    });
 
     try {
       const url = this.baseUrl.endsWith("/chat/completions") ? this.baseUrl : `${this.baseUrl}/chat/completions`;
@@ -83,16 +103,19 @@ export class OpenAICompatibleProvider implements AIProvider {
             temperature: input.temperature ?? 0.35
           };
 
-      const response = await fetch(url, {
-        method: "POST",
-        signal: controller.signal,
-        headers: {
-          Authorization: `Bearer ${this.apiKey}`,
-          "Content-Type": "application/json",
-          ...this.headers
-        },
-        body: JSON.stringify(requestBody)
-      });
+      const response = await Promise.race([
+        fetch(url, {
+          method: "POST",
+          signal: controller.signal,
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            "Content-Type": "application/json",
+            ...this.headers
+          },
+          body: JSON.stringify(requestBody)
+        }),
+        timedOut
+      ]);
 
       if (!response.ok) {
         const body = await response.text();
@@ -147,14 +170,11 @@ export class OpenAICompatibleProvider implements AIProvider {
         responseModel: payload.model ?? null
       };
     } catch (error) {
-      if (controller.signal.aborted) {
-        const timeoutErr = new Error(`PROVIDER_TIMEOUT: ${this.name} timed out after ${timeoutMs}ms`);
-        (timeoutErr as any).errorCode = "PROVIDER_TIMEOUT";
-        throw timeoutErr;
-      }
+      if ((error as any).errorCode === "PROVIDER_TIMEOUT") throw error;
+      if (controller.signal.aborted) throw makeTimeoutError();
       throw error;
     } finally {
-      clearTimeout(timeout);
+      clearTimeout(timeoutHandle!);
     }
   }
 }

@@ -217,10 +217,11 @@ export async function generateWithFallback(
         responseModel: result.responseModel ?? null
       };
     } catch (error) {
-      const statusCode = (error as any).statusCode ?? 500;
+      const errorCodeRaw = (error as any).errorCode as string | undefined;
+      const statusCode = (error as any).statusCode ?? (errorCodeRaw === "PROVIDER_TIMEOUT" ? 504 : 500);
       const msg = error instanceof Error ? error.message : String(error);
       if (call === firstCall) {
-        errorCode = String(statusCode);
+        errorCode = errorCodeRaw ?? String(statusCode);
         errorMessage = msg;
         fallbackReason = msg;
       }
