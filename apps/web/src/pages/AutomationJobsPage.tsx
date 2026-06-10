@@ -1,0 +1,409 @@
+import { useEffect, useState } from "react";
+import { Activity, Bot, CheckCircle, Clock, Play, RefreshCw, X, XCircle, AlertCircle, Eye, Cpu } from "lucide-react";
+import { PageHeader } from "@/components/PageHeader";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { api } from "@/lib/api";
+import { cn, formatDate } from "@/lib/utils";
+import type { AgentRunnerDto, AutomationJobDto, AutomationJobStatus } from "@/types/api";
+
+function statusColor(status: AutomationJobStatus): string {
+  switch (status) {
+    case "QUEUED": return "text-yellow-600 bg-yellow-50 border-yellow-200";
+    case "APPROVED": return "text-blue-600 bg-blue-50 border-blue-200";
+    case "CLAIMED": return "text-indigo-600 bg-indigo-50 border-indigo-200";
+    case "RUNNING": return "text-orange-600 bg-orange-50 border-orange-200";
+    case "NEEDS_REVIEW": return "text-purple-600 bg-purple-50 border-purple-200";
+    case "COMPLETED": return "text-green-600 bg-green-50 border-green-200";
+    case "FAILED": return "text-red-600 bg-red-50 border-red-200";
+    case "CANCELLED": return "text-gray-500 bg-gray-50 border-gray-200";
+    default: return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function statusIcon(status: AutomationJobStatus) {
+  switch (status) {
+    case "QUEUED": return <Clock className="h-3.5 w-3.5" />;
+    case "APPROVED": return <CheckCircle className="h-3.5 w-3.5" />;
+    case "CLAIMED":
+    case "RUNNING": return <Activity className="h-3.5 w-3.5 animate-pulse" />;
+    case "NEEDS_REVIEW": return <Eye className="h-3.5 w-3.5" />;
+    case "COMPLETED": return <CheckCircle className="h-3.5 w-3.5" />;
+    case "FAILED": return <XCircle className="h-3.5 w-3.5" />;
+    case "CANCELLED": return <X className="h-3.5 w-3.5" />;
+    default: return <AlertCircle className="h-3.5 w-3.5" />;
+  }
+}
+
+function runnerStatusColor(status: string): string {
+  switch (status) {
+    case "ONLINE": return "text-green-600 bg-green-50 border-green-200";
+    case "OFFLINE": return "text-gray-500 bg-gray-50 border-gray-200";
+    case "ERROR": return "text-red-600 bg-red-50 border-red-200";
+    default: return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function modeLabel(mode: string): string {
+  switch (mode) {
+    case "OBSERVE": return "Observe";
+    case "PLAN_ONLY": return "Plan Only";
+    case "SANDBOX_PATCH": return "Sandbox Patch";
+    case "VALIDATION_ONLY": return "Validation Only";
+    default: return mode;
+  }
+}
+
+export function AutomationJobsPage() {
+  const [jobs, setJobs] = useState<AutomationJobDto[]>([]);
+  const [runners, setRunners] = useState<AgentRunnerDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionJobId, setActionJobId] = useState<string | null>(null);
+  const [selectedJob, setSelectedJob] = useState<AutomationJobDto | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>("");
+
+  async function load() {
+    setLoading(true);
+    setError(null);
+    try {
+      const [jobsData, runnersData] = await Promise.all([
+        api.automationJobs(statusFilter ? { status: statusFilter } : undefined),
+        api.runners()
+      ]);
+      setJobs(jobsData);
+      setRunners(runnersData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { load(); }, [statusFilter]);
+
+  async function handleApprove(jobId: string) {
+    setActionJobId(jobId);
+    setActionError(null);
+    try {
+      await api.approveAutomationJob(jobId);
+      await load();
+      if (selectedJob?.id === jobId) await loadDetail(jobId);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Approve failed");
+    } finally {
+      setActionJobId(null);
+    }
+  }
+
+  async function handleCancel(jobId: string) {
+    setActionJobId(jobId);
+    setActionError(null);
+    try {
+      await api.cancelAutomationJob(jobId);
+      await load();
+      if (selectedJob?.id === jobId) setSelectedJob(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Cancel failed");
+    } finally {
+      setActionJobId(null);
+    }
+  }
+
+  async function loadDetail(jobId: string) {
+    setDetailLoading(true);
+    try {
+      const job = await api.automationJob(jobId);
+      setSelectedJob(job);
+    } finally {
+      setDetailLoading(false);
+    }
+  }
+
+  const onlineRunners = runners.filter((r) => r.status === "ONLINE");
+  const activeJobs = jobs.filter((j) => ["QUEUED", "APPROVED", "CLAIMED", "RUNNING"].includes(j.status));
+  const reviewJobs = jobs.filter((j) => j.status === "NEEDS_REVIEW");
+
+  const selectCls = "h-9 rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary";
+
+  return (
+    <div className="space-y-6 p-6">
+      <PageHeader
+        eyebrow="Living Agents"
+        title="Automation Jobs"
+        description="Sandboxed autonomous execution jobs for the Living Agent Runner"
+        action={
+          <Button variant="outline" onClick={load}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Refresh
+          </Button>
+        }
+      />
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Online Runners</p>
+          <p className={cn("text-2xl font-bold mt-1", onlineRunners.length > 0 ? "text-green-600" : "text-gray-500")}>
+            {onlineRunners.length}
+          </p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Active Jobs</p>
+          <p className="text-2xl font-bold mt-1 text-orange-600">{activeJobs.length}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Needs Review</p>
+          <p className="text-2xl font-bold mt-1 text-purple-600">{reviewJobs.length}</p>
+        </Card>
+        <Card className="p-4">
+          <p className="text-sm text-muted-foreground">Total Jobs</p>
+          <p className="text-2xl font-bold mt-1">{jobs.length}</p>
+        </Card>
+      </div>
+
+      {/* Runners section */}
+      {runners.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+            <Cpu className="h-4 w-4" /> Registered Runners
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {runners.map((r) => (
+              <span
+                key={r.id}
+                className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border", runnerStatusColor(r.status))}
+              >
+                <span className={cn("h-1.5 w-1.5 rounded-full", r.status === "ONLINE" ? "bg-green-500" : "bg-gray-400")} />
+                {r.name}
+                {r.hostname && <span className="opacity-70">({r.hostname})</span>}
+                {r.lastHeartbeatAt && (
+                  <span className="opacity-60">· {formatDate(r.lastHeartbeatAt)}</span>
+                )}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {actionError && (
+        <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+          {actionError}
+        </div>
+      )}
+
+      {/* Jobs list */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
+            <Bot className="h-4 w-4" /> Jobs
+          </h3>
+          <select
+            className={selectCls}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+          >
+            <option value="">All statuses</option>
+            {(["QUEUED", "APPROVED", "CLAIMED", "RUNNING", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED"] as AutomationJobStatus[]).map((s) => (
+              <option key={s} value={s}>{s}</option>
+            ))}
+          </select>
+        </div>
+
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading...</p>
+        ) : error ? (
+          <p className="text-sm text-destructive">{error}</p>
+        ) : jobs.length === 0 ? (
+          <Card className="p-8 text-center">
+            <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">No automation jobs yet.</p>
+            <p className="text-xs text-muted-foreground mt-1">Create one from a Work Order page.</p>
+          </Card>
+        ) : (
+          <div className="space-y-2">
+            {jobs.map((job) => (
+              <Card
+                key={job.id}
+                className={cn("p-4 cursor-pointer transition-colors hover:bg-accent/40", selectedJob?.id === job.id && "ring-1 ring-primary")}
+                onClick={() => loadDetail(job.id)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border", statusColor(job.status))}>
+                        {statusIcon(job.status)}
+                        {job.status}
+                      </span>
+                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{modeLabel(job.mode)}</span>
+                      {job.runner && (
+                        <span className="text-xs text-muted-foreground">Runner: {job.runner.name}</span>
+                      )}
+                    </div>
+                    <p className="text-sm font-medium mt-1 truncate">{job.workOrder.title}</p>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      {job.agent && <span>Agent: {job.agent.name}</span>}
+                      {job.project && <span>Project: {job.project.name}</span>}
+                      <span>{formatDate(job.createdAt)}</span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {job.status === "QUEUED" && (
+                      <Button
+                        className="h-8 text-xs px-3"
+                        variant="outline"
+                        disabled={actionJobId === job.id}
+                        onClick={(e) => { e.stopPropagation(); handleApprove(job.id); }}
+                      >
+                        <Play className="h-3 w-3 mr-1" />
+                        Approve
+                      </Button>
+                    )}
+                    {!["COMPLETED", "CANCELLED", "FAILED"].includes(job.status) && (
+                      <Button
+                        className="h-8 text-xs px-3 text-destructive hover:text-destructive"
+                        variant="ghost"
+                        disabled={actionJobId === job.id}
+                        onClick={(e) => { e.stopPropagation(); handleCancel(job.id); }}
+                      >
+                        <X className="h-3 w-3 mr-1" />
+                        Cancel
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Patch summary / logs preview */}
+                {job.patchSummary && (
+                  <p className="mt-2 text-xs text-muted-foreground border-t pt-2 line-clamp-2">{job.patchSummary}</p>
+                )}
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Detail panel */}
+      {selectedJob && (
+        <Card className="p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold">Job Detail: {selectedJob.workOrder.title}</h3>
+            <Button variant="ghost" className="h-8 text-xs px-3" onClick={() => setSelectedJob(null)}>
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          {detailLoading ? (
+            <p className="text-sm text-muted-foreground">Loading detail...</p>
+          ) : (
+            <>
+              <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+                <div>
+                  <dt className="text-muted-foreground">Status</dt>
+                  <dd className={cn("inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full border", statusColor(selectedJob.status))}>
+                    {statusIcon(selectedJob.status)} {selectedJob.status}
+                  </dd>
+                </div>
+                <div><dt className="text-muted-foreground">Mode</dt><dd className="mt-0.5 font-medium">{modeLabel(selectedJob.mode)}</dd></div>
+                <div><dt className="text-muted-foreground">Created</dt><dd className="mt-0.5">{formatDate(selectedJob.createdAt)}</dd></div>
+                {selectedJob.startedAt && <div><dt className="text-muted-foreground">Started</dt><dd className="mt-0.5">{formatDate(selectedJob.startedAt)}</dd></div>}
+                {selectedJob.completedAt && <div><dt className="text-muted-foreground">Completed</dt><dd className="mt-0.5">{formatDate(selectedJob.completedAt)}</dd></div>}
+                {selectedJob.agent && <div><dt className="text-muted-foreground">Planner Agent</dt><dd className="mt-0.5 font-medium">{selectedJob.agent.name}</dd></div>}
+                {selectedJob.runner && <div><dt className="text-muted-foreground">Runner</dt><dd className="mt-0.5">{selectedJob.runner.name}</dd></div>}
+                {selectedJob.approvedByUser && <div><dt className="text-muted-foreground">Approved By</dt><dd className="mt-0.5">{selectedJob.approvedByUser.displayName}</dd></div>}
+              </dl>
+
+              {/* Step timeline */}
+              {selectedJob.steps && selectedJob.steps.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">Step Timeline</h4>
+                  <div className="space-y-1.5">
+                    {selectedJob.steps.map((step) => (
+                      <div key={step.id} className="flex items-start gap-2 text-xs">
+                        <span className="text-muted-foreground shrink-0">#{step.sequence}</span>
+                        <span className={cn("shrink-0 px-1.5 py-0.5 rounded text-xs font-medium",
+                          step.status === "COMPLETED" ? "bg-green-50 text-green-700" :
+                          step.status === "FAILED" ? "bg-red-50 text-red-700" :
+                          step.status === "BLOCKED" ? "bg-yellow-50 text-yellow-700" :
+                          "bg-gray-50 text-gray-600"
+                        )}>{step.stepType}</span>
+                        <span className="flex-1">{step.title}</span>
+                        {step.exitCode !== null && (
+                          <span className={cn("shrink-0", step.exitCode === 0 ? "text-green-600" : "text-red-600")}>
+                            exit {step.exitCode}
+                          </span>
+                        )}
+                        {step.durationMs !== null && <span className="shrink-0 text-muted-foreground">{step.durationMs}ms</span>}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Execution plan */}
+              {selectedJob.planJson && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">Execution Plan</h4>
+                  <pre className="text-xs bg-muted/50 rounded p-3 overflow-auto max-h-48 whitespace-pre-wrap">
+                    {JSON.stringify(selectedJob.planJson, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* Logs preview */}
+              {selectedJob.logsPreview && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">Logs Preview</h4>
+                  <pre className="text-xs bg-muted/50 rounded p-3 overflow-auto max-h-32 whitespace-pre-wrap font-mono">
+                    {selectedJob.logsPreview}
+                  </pre>
+                </div>
+              )}
+
+              {/* Patch summary */}
+              {selectedJob.patchSummary && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">Patch Summary</h4>
+                  <p className="text-xs text-foreground">{selectedJob.patchSummary}</p>
+                </div>
+              )}
+
+              {/* Implementation reports */}
+              {selectedJob.implementationReports && selectedJob.implementationReports.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">Implementation Reports</h4>
+                  {selectedJob.implementationReports.map((report) => (
+                    <div key={report.id} className="text-xs border rounded p-3 space-y-1">
+                      <p className="font-medium">{report.summary}</p>
+                      <p>Test result: <span className={cn("font-medium", report.testResult === "PASSED" ? "text-green-600" : report.testResult === "FAILED" ? "text-red-600" : "text-muted-foreground")}>{report.testResult}</span></p>
+                      {report.filesChanged.length > 0 && <p>Files: {report.filesChanged.join(", ")}</p>}
+                      {report.errors.length > 0 && <p className="text-destructive">Errors: {report.errors.join("; ")}</p>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Actions in detail view */}
+              <div className="flex gap-2 pt-2 border-t">
+                {selectedJob.status === "QUEUED" && (
+                  <Button className="h-8 text-xs px-3" onClick={() => handleApprove(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
+                    <Play className="h-3.5 w-3.5 mr-1.5" />
+                    Approve for Execution
+                  </Button>
+                )}
+                {!["COMPLETED", "CANCELLED", "FAILED"].includes(selectedJob.status) && (
+                  <Button className="h-8 text-xs px-3 text-destructive border-destructive/30" variant="outline" onClick={() => handleCancel(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
+                    <X className="h-3.5 w-3.5 mr-1.5" />
+                    Cancel
+                  </Button>
+                )}
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}

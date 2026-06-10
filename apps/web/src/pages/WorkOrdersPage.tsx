@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Clipboard, FileText, Handshake, Plus, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2 } from "lucide-react";
+import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2 } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { ExternalAgentDto, ImplementationReportPayload, ProjectDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, ExternalAgentDto, ImplementationReportPayload, ProjectDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -79,6 +79,9 @@ export function WorkOrdersPage() {
   const [taskId, setTaskId] = useState("");
   const [matterId, setMatterId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [automationJobs, setAutomationJobs] = useState<AutomationJobDto[]>([]);
+  const [creatingJob, setCreatingJob] = useState(false);
+  const [approvingJob, setApprovingJob] = useState<string | null>(null);
 
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
 
@@ -109,6 +112,44 @@ export function WorkOrdersPage() {
     setDraft(order ? toPayload(order) : blankWorkOrder);
     setGeneratedPrompt("");
     setError(null);
+    if (order) {
+      api.automationJobs({ workOrderId: order.id })
+        .then(setAutomationJobs)
+        .catch(() => setAutomationJobs([]));
+    } else {
+      setAutomationJobs([]);
+    }
+  }
+
+  async function createJob() {
+    if (!selected || !canCreate) return;
+    setCreatingJob(true);
+    setError(null);
+    try {
+      await api.createAutomationJobForWorkOrder(selected.id, { mode: "SANDBOX_PATCH" });
+      const jobs = await api.automationJobs({ workOrderId: selected.id });
+      setAutomationJobs(jobs);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create automation job");
+    } finally {
+      setCreatingJob(false);
+    }
+  }
+
+  async function approveJob(jobId: string) {
+    setApprovingJob(jobId);
+    setError(null);
+    try {
+      await api.approveAutomationJob(jobId);
+      if (selected) {
+        const jobs = await api.automationJobs({ workOrderId: selected.id });
+        setAutomationJobs(jobs);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to approve job");
+    } finally {
+      setApprovingJob(null);
+    }
   }
 
   async function save(event: FormEvent) {
@@ -557,6 +598,58 @@ export function WorkOrdersPage() {
                   </form>
                 </Card>
               ) : null}
+
+              {/* Automation Jobs panel */}
+              {user?.role === "KING" && (
+                <Card>
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <h2 className="font-display text-lg flex items-center gap-2">
+                      <Bot className="h-4 w-4 text-muted-foreground" />
+                      Runner Automation
+                    </h2>
+                    <Button
+                      variant="outline"
+                      onClick={() => void createJob()}
+                      disabled={creatingJob || automationJobs.some((j) => ["QUEUED","APPROVED","CLAIMED","RUNNING","NEEDS_REVIEW"].includes(j.status))}
+                    >
+                      <Play className="h-4 w-4" />
+                      {creatingJob ? "Creating…" : "Create Automation Job"}
+                    </Button>
+                  </div>
+                  <div className="mt-3 space-y-2">
+                    {automationJobs.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No automation jobs for this work order.</p>
+                    ) : (
+                      automationJobs.map((job) => (
+                        <div key={job.id} className="flex items-center justify-between gap-3 rounded-md border p-2.5 text-sm">
+                          <div>
+                            <span className={cn("text-xs font-medium px-2 py-0.5 rounded-full border mr-2",
+                              job.status === "QUEUED" ? "bg-yellow-50 text-yellow-700 border-yellow-200" :
+                              job.status === "APPROVED" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                              job.status === "RUNNING" || job.status === "CLAIMED" ? "bg-orange-50 text-orange-700 border-orange-200" :
+                              job.status === "NEEDS_REVIEW" ? "bg-purple-50 text-purple-700 border-purple-200" :
+                              job.status === "COMPLETED" ? "bg-green-50 text-green-700 border-green-200" :
+                              "bg-muted text-muted-foreground border-border"
+                            )}>{job.status}</span>
+                            <span className="text-xs text-muted-foreground">{job.mode} · {formatDate(job.createdAt)}</span>
+                            {job.agent && <span className="ml-2 text-xs text-muted-foreground">via {job.agent.name}</span>}
+                          </div>
+                          {job.status === "QUEUED" && (
+                            <Button
+                              variant="outline"
+                              className="h-8 text-xs px-3"
+                              disabled={approvingJob === job.id}
+                              onClick={() => void approveJob(job.id)}
+                            >
+                              Approve
+                            </Button>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </Card>
+              )}
 
               <Card>
                 <div className="flex flex-wrap items-center justify-between gap-3">

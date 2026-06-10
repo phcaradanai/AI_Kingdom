@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { requireRole } from "../middleware/rbac.js";
 import { auditLog } from "../services/auditService.js";
+import { createAutomationJob } from "../services/automationJobService.js";
 import { enrichDataQuality } from "../services/dataQualityService.js";
 import {
   buildExternalAgentPrompt,
@@ -267,6 +268,43 @@ router.post("/:id/build-prompt/:externalAgentId", requireRole("KING", "CROWN_PRI
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+const automationJobCreateSchema = z.object({
+  agentId: z.string().trim().optional().nullable(),
+  mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY"]).default("SANDBOX_PATCH"),
+  commandPolicy: z.string().trim().max(1000).optional().nullable(),
+  allowedCommands: z.array(z.string().trim().min(1).max(100)).max(50).default([])
+});
+
+router.post("/:id/automation-job", requireRole("KING"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const body = automationJobCreateSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+    const job = await createAutomationJob({
+      workOrderId: id,
+      agentId: body.data.agentId,
+      mode: body.data.mode,
+      commandPolicy: body.data.commandPolicy,
+      allowedCommands: body.data.allowedCommands,
+      createdByUserId: req.user!.id
+    });
+    res.status(201).json({ job });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.name === "ConflictError") {
+      res.status(409).json({ error: error.message });
       return;
     }
     next(error);

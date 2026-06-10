@@ -74,7 +74,10 @@ import type {
   ProviderModelsDto,
   EffectiveRequestPreviewDto,
   RepositorySnapshotDto,
-  ProviderReconciliationSnapshotDto
+  ProviderReconciliationSnapshotDto,
+  AutomationJobDto,
+  AutomationJobPayload,
+  AgentRunnerDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -532,7 +535,38 @@ export const api = {
   agentKnowledgeMemories: (agentId: string) =>
     apiRequest<{ memories: KnowledgeMemoryDto[] }>(`/knowledge-memories/agent/${agentId}`),
   agentKnowledgeCandidates: (agentId: string) =>
-    apiRequest<{ candidates: KnowledgeCandidateDto[] }>(`/knowledge-candidates?agentId=${encodeURIComponent(agentId)}`)
+    apiRequest<{ candidates: KnowledgeCandidateDto[] }>(`/knowledge-candidates?agentId=${encodeURIComponent(agentId)}`),
+
+  // ── M17B: Automation Jobs & Runners ──────────────────────────────────────────
+  runners: () => apiRequest<AgentRunnerDto[]>("/runners"),
+  registerRunner: (name: string, description: string, token: string) =>
+    apiRequest<AgentRunnerDto>("/runners", {
+      method: "POST",
+      body: JSON.stringify({ name, description, token })
+    }),
+  automationJobs: (params?: { status?: string; workOrderId?: string; projectId?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.workOrderId) search.set("workOrderId", params.workOrderId);
+    if (params?.projectId) search.set("projectId", params.projectId);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<AutomationJobDto[]>(`/automation-jobs${suffix}`);
+  },
+  automationJob: (id: string) => apiRequest<AutomationJobDto>(`/automation-jobs/${id}`),
+  createAutomationJob: (payload: AutomationJobPayload) =>
+    apiRequest<AutomationJobDto>("/automation-jobs", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  createAutomationJobForWorkOrder: (workOrderId: string, payload: Omit<AutomationJobPayload, "workOrderId">) =>
+    apiRequest<{ job: AutomationJobDto }>(`/work-orders/${workOrderId}/automation-job`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  approveAutomationJob: (id: string) =>
+    apiRequest<AutomationJobDto>(`/automation-jobs/${id}/approve`, { method: "POST" }),
+  cancelAutomationJob: (id: string) =>
+    apiRequest<AutomationJobDto>(`/automation-jobs/${id}/cancel`, { method: "POST" })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

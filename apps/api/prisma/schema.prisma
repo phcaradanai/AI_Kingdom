@@ -21,6 +21,30 @@ enum KnowledgeCandidateStatus {
   ARCHIVED
 }
 
+enum AutomationJobStatus {
+  QUEUED
+  APPROVED
+  CLAIMED
+  RUNNING
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum AutomationJobMode {
+  OBSERVE
+  PLAN_ONLY
+  SANDBOX_PATCH
+  VALIDATION_ONLY
+}
+
+enum AgentRunnerStatus {
+  ONLINE
+  OFFLINE
+  ERROR
+}
+
 enum KnowledgeCategory {
   PROJECT_FACT
   ARCHITECTURE_DECISION
@@ -310,6 +334,8 @@ model User {
   auditLogs     AuditLog[]
   workOrders    WorkOrder[]
   ownedProjects Project[]
+  createdAutomationJobs  AutomationJob[] @relation("AutomationJobCreatedBy")
+  approvedAutomationJobs AutomationJob[] @relation("AutomationJobApprovedBy")
 }
 
 model RefreshToken {
@@ -368,6 +394,7 @@ model Agent {
   aiUsageTraces AIUsageTrace[]
   aiUsageTraceSteps AIUsageTraceStep[]
   assignedWorkOrders WorkOrder[]
+  automationJobs     AutomationJob[] @relation("AgentAutomationJobs")
 }
 
 model ExternalAgent {
@@ -418,6 +445,7 @@ model Project {
   implementationReports ImplementationReport[]
   handoffBriefs     HandoffBrief[]
   artifacts         Artifact[]
+  automationJobs    AutomationJob[]
   routingCandidates ProjectRoutingCandidate[]
   repositorySnapshots RepositorySnapshot[]
 }
@@ -548,6 +576,7 @@ model WorkOrder {
   workSessions            WorkSession[]
   implementationReports   ImplementationReport[]
   handoffBriefs           HandoffBrief[]
+  automationJobs          AutomationJob[]
 }
 
 model WorkSession {
@@ -574,6 +603,7 @@ model ImplementationReport {
   workOrderId           String
   workSessionId         String?
   externalAgentId       String?
+  automationJobId       String?
   summary               String
   filesChanged          String[]                 @default([])
   commandsRun           String[]                 @default([])
@@ -590,6 +620,7 @@ model ImplementationReport {
   workOrder             WorkOrder                @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   workSession           WorkSession?             @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   externalAgent         ExternalAgent?           @relation(fields: [externalAgentId], references: [id], onDelete: SetNull)
+  automationJob         AutomationJob?           @relation(fields: [automationJobId], references: [id], onDelete: SetNull)
 }
 
 model HandoffBrief {
@@ -1214,4 +1245,79 @@ model AgentKnowledgeMemory {
   @@index([projectId])
   @@index([category])
   @@index([fingerprint])
+}
+
+model AgentRunner {
+  id              String            @id @default(cuid())
+  name            String
+  description     String            @default("")
+  status          AgentRunnerStatus @default(OFFLINE)
+  lastHeartbeatAt DateTime?
+  tokenHash       String            @unique
+  version         String?
+  hostname        String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  jobs            AutomationJob[]
+}
+
+model AutomationJob {
+  id               String              @id @default(cuid())
+  workOrderId      String
+  projectId        String?
+  agentId          String?
+  runnerId         String?
+  status           AutomationJobStatus @default(QUEUED)
+  mode             AutomationJobMode   @default(SANDBOX_PATCH)
+  commandPolicy    String?
+  allowedCommands  String[]            @default([])
+  provenance       Json?
+  planJson         Json?
+  patchSummary     String?
+  logsPreview      String?
+  createdByUserId  String?
+  approvedByUserId String?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+  workOrder        WorkOrder           @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  project          Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  agent            Agent?              @relation("AgentAutomationJobs", fields: [agentId], references: [id], onDelete: SetNull)
+  runner           AgentRunner?        @relation(fields: [runnerId], references: [id], onDelete: SetNull)
+  createdByUser    User?               @relation("AutomationJobCreatedBy", fields: [createdByUserId], references: [id], onDelete: SetNull)
+  approvedByUser   User?               @relation("AutomationJobApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
+  steps            AgentRunStep[]
+  implementationReports ImplementationReport[]
+
+  @@index([workOrderId])
+  @@index([projectId])
+  @@index([agentId])
+  @@index([runnerId])
+  @@index([status])
+  @@index([createdByUserId])
+}
+
+model AgentRunStep {
+  id          String        @id @default(cuid())
+  jobId       String
+  sequence    Int
+  stepType    String
+  title       String
+  detail      String?
+  status      String        @default("PENDING")
+  command     String?
+  args        String[]      @default([])
+  output      String?
+  exitCode    Int?
+  durationMs  Int?
+  metadata    Json?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  job         AutomationJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([sequence])
 }

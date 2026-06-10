@@ -41,6 +41,9 @@ import usersRouter from "./routes/users.js";
 import workOrdersRouter from "./routes/workOrders.js";
 import workSessionsRouter from "./routes/workSessions.js";
 import routeChainsRouter from "./routes/routeChains.js";
+import runnersRouter from "./routes/runners.js";
+import automationJobsRouter from "./routes/automationJobs.js";
+import runnerJobsRouter from "./routes/runnerJobs.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -118,6 +121,11 @@ export function createApp() {
   app.use("/api/knowledge-candidates", requireAuth, knowledgeCandidatesRouter);
   app.use("/api/knowledge-memories", requireAuth, knowledgeMemoriesRouter);
   app.use("/api/route-chains", requireAuth, routeChainsRouter);
+  // User-facing (JWT) routes for managing runners and automation jobs
+  app.use("/api/runners", requireAuth, runnersRouter);
+  app.use("/api/automation-jobs", requireAuth, automationJobsRouter);
+  // Runner-token authenticated routes — NO requireAuth, uses requireRunnerToken inside router
+  app.use("/api/runner", runnerJobsRouter);
   app.use("/api/model-pricing", requireAuth, requireRole("KING"), modelPricingRouter);
   app.use("/api/audit", requireAuth, requireRole("KING"), auditRouter);
   app.use("/api/secretary", requireAuth, secretaryRouter);

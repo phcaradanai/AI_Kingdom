@@ -34,6 +34,7 @@ import { KnowledgeLabPage } from "@/pages/KnowledgeLabPage";
 import { KnowledgeCandidatesPage } from "@/pages/KnowledgeCandidatesPage";
 import { KnowledgeMemoriesPage } from "@/pages/KnowledgeMemoriesPage";
 import { RoutingPage } from "@/pages/RoutingPage";
+import { AutomationJobsPage } from "@/pages/AutomationJobsPage";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -78,6 +79,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/matters" element={<MattersPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/security" element={<SecurityPage />} />
+          <Route path="/automation-jobs" element={<AutomationJobsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

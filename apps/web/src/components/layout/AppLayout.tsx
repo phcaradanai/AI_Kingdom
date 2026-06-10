@@ -43,6 +43,7 @@ const navCategories = [
       { to: "/agents", label: "Agents", icon: Shield, roles: ["KING"] },
       { to: "/external-agents", label: "External Agents", icon: Bot, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/work-orders", label: "Work Orders", icon: ClipboardList, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/automation-jobs", label: "Automation Jobs", icon: Activity, roles: ["KING"] },
     ]
   },
   {

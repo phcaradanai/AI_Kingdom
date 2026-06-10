@@ -1459,3 +1459,77 @@ export type KnowledgeMemoryDto = {
   createdAt: string;
   updatedAt: string;
 };
+
+// ── M17B: Automation Jobs ──────────────────────────────────────────────────────
+
+export type AutomationJobStatus = "QUEUED" | "APPROVED" | "CLAIMED" | "RUNNING" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED";
+export type AutomationJobMode = "OBSERVE" | "PLAN_ONLY" | "SANDBOX_PATCH" | "VALIDATION_ONLY";
+export type AgentRunnerStatus = "ONLINE" | "OFFLINE" | "ERROR";
+
+export type AgentRunnerDto = {
+  id: string;
+  name: string;
+  description: string;
+  status: AgentRunnerStatus;
+  lastHeartbeatAt: string | null;
+  version: string | null;
+  hostname: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AgentRunStepDto = {
+  id: string;
+  jobId: string;
+  sequence: number;
+  stepType: string;
+  title: string;
+  detail: string | null;
+  status: string;
+  command: string | null;
+  args: string[];
+  output: string | null;
+  exitCode: number | null;
+  durationMs: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+};
+
+export type AutomationJobDto = {
+  id: string;
+  workOrderId: string;
+  projectId: string | null;
+  agentId: string | null;
+  runnerId: string | null;
+  status: AutomationJobStatus;
+  mode: AutomationJobMode;
+  commandPolicy: string | null;
+  allowedCommands: string[];
+  provenance: unknown;
+  planJson: unknown;
+  patchSummary: string | null;
+  logsPreview: string | null;
+  createdByUserId: string | null;
+  approvedByUserId: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  workOrder: { id: string; title: string; status: string; projectId: string | null };
+  project: { id: string; name: string } | null;
+  agent: { id: string; slug: string; name: string; title: string } | null;
+  runner: { id: string; name: string; status: AgentRunnerStatus } | null;
+  createdByUser: { id: string; displayName: string } | null;
+  approvedByUser: { id: string; displayName: string } | null;
+  steps?: AgentRunStepDto[];
+  implementationReports?: ImplementationReportDto[];
+};
+
+export type AutomationJobPayload = {
+  workOrderId?: string;
+  agentId?: string | null;
+  mode?: AutomationJobMode;
+  commandPolicy?: string | null;
+  allowedCommands?: string[];
+};
