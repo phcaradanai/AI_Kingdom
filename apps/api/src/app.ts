@@ -40,6 +40,7 @@ import usageTracesRouter from "./routes/usageTraces.js";
 import usersRouter from "./routes/users.js";
 import workOrdersRouter from "./routes/workOrders.js";
 import workSessionsRouter from "./routes/workSessions.js";
+import routeChainsRouter from "./routes/routeChains.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -116,6 +117,7 @@ export function createApp() {
   app.use("/api/usage-traces", requireAuth, usageTracesRouter);
   app.use("/api/knowledge-candidates", requireAuth, knowledgeCandidatesRouter);
   app.use("/api/knowledge-memories", requireAuth, knowledgeMemoriesRouter);
+  app.use("/api/route-chains", requireAuth, routeChainsRouter);
   app.use("/api/model-pricing", requireAuth, requireRole("KING"), modelPricingRouter);
   app.use("/api/audit", requireAuth, requireRole("KING"), auditRouter);
   app.use("/api/secretary", requireAuth, secretaryRouter);

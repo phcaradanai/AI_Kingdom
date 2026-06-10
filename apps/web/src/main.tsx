@@ -33,6 +33,7 @@ import { LivingAgentProfilePage } from "@/pages/LivingAgentProfilePage";
 import { KnowledgeLabPage } from "@/pages/KnowledgeLabPage";
 import { KnowledgeCandidatesPage } from "@/pages/KnowledgeCandidatesPage";
 import { KnowledgeMemoriesPage } from "@/pages/KnowledgeMemoriesPage";
+import { RoutingPage } from "@/pages/RoutingPage";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -62,6 +63,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/users" element={<UsersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/providers" element={<ProvidersPage />} />
+          <Route path="/routing" element={<RoutingPage />} />
           <Route path="/treasury" element={<TreasuryPage />} />
           <Route path="/usage-traces/:traceId" element={<UsageTracePage />} />
           <Route path="/living-agents" element={<LivingAgentsPage />} />

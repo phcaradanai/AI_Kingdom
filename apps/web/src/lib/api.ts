@@ -41,6 +41,9 @@ import type {
   ProviderAccountSnapshotDto,
   ProviderModelSnapshotDto,
   ProviderHealthSnapshotDto,
+  ProviderRegistryDto,
+  RouteChainDto,
+  RouteChainEntryDto,
   SecretaryBriefDto,
   CouncilSessionDto,
   CurrentAgentActivityDto,
@@ -378,6 +381,7 @@ export const api = {
   treasuryFallbackAnalytics: () => apiRequest<{ analytics: TreasuryFallbackAnalyticsDto[] }>("/treasury/fallback-analytics"),
   treasuryBudgetStatus: () => apiRequest<BudgetStatusDetailDto>("/treasury/budget-status"),
   treasuryPricingWarnings: () => apiRequest<PricingWarningsDto>("/treasury/pricing-warnings"),
+  treasuryProviderRegistry: () => apiRequest<{ providers: ProviderRegistryDto[] }>("/treasury/provider-registry"),
   providerBalances: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances"),
   syncDeepSeekBalance: () => apiRequest<{ balances: ProviderBalanceSnapshotDto[] }>("/provider-balances/deepseek/sync", { method: "POST" }),
   providerAccounts: () => apiRequest<{ accounts: ProviderAccountSnapshotDto[] }>("/provider-balances/accounts"),
@@ -408,6 +412,13 @@ export const api = {
   getLivingAgentRelations: (agentId: string) =>
     apiRequest<{ relations: LivingAgentRelationsDto }>(`/living-agents/${encodeURIComponent(agentId)}/relations`),
   usageTrace: (traceId: string) => apiRequest<UsageTraceDetailsDto>(`/usage-traces/${encodeURIComponent(traceId)}`),
+  routeChains: () => apiRequest<{ routeChains: RouteChainDto[] }>("/route-chains"),
+  getRouteChain: (id: string) => apiRequest<{ routeChain: RouteChainDto }>(`/route-chains/${id}`),
+  createRouteChain: (payload: { name: string; taskMode?: string | null; agentId?: string | null; scope?: string; description?: string | null; entries: { providerId: string; model: string; isEnabled?: boolean; notes?: string | null }[] }) =>
+    apiRequest<{ routeChain: RouteChainDto }>("/route-chains", { method: "POST", body: JSON.stringify(payload) }),
+  updateRouteChain: (id: string, payload: { name?: string; isActive?: boolean; description?: string | null; entries?: { providerId: string; model: string; isEnabled?: boolean; notes?: string | null }[] }) =>
+    apiRequest<{ routeChain: RouteChainDto }>(`/route-chains/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  deleteRouteChain: (id: string) => apiRequest<{ ok: boolean }>(`/route-chains/${id}`, { method: "DELETE" }),
   modelPricing: () => apiRequest<{ modelPricing: ModelPricingDto[] }>("/model-pricing"),
   createModelPricing: (payload: ModelPricingPayload) =>
     apiRequest<{ record: ModelPricingDto }>("/model-pricing", { method: "POST", body: JSON.stringify(payload) }),

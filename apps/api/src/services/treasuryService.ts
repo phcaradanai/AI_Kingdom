@@ -1,5 +1,6 @@
 import { prisma } from "../db/prisma.js";
 import { getSettingValue } from "./settingsService.js";
+import { listAIProviders } from "./aiProviderRegistry.js";
 
 function extractDisplayProfile(config: unknown): {
   displayName: string | null;
@@ -327,6 +328,113 @@ export async function getTreasuryByModel() {
     completionTokens: g._sum.completionTokens ?? 0,
     callCount: g._count.id
   }));
+}
+
+export async function getTreasuryProviderRegistry() {
+  const allProviders = await listAIProviders({ activeOnly: false });
+  const activeProviders = allProviders.filter((p) => p.isActive);
+
+  // Latest balance snapshots per provider type
+  const latestBalanceRows = await prisma.providerBalanceSnapshot.findMany({
+    orderBy: { fetchedAt: "desc" }
+  });
+  const latestBalanceByType = new Map<string, (typeof latestBalanceRows)[number]>();
+  for (const row of latestBalanceRows) {
+    if (!latestBalanceByType.has(row.providerType)) latestBalanceByType.set(row.providerType, row);
+  }
+
+  // Latest account snapshots per provider type
+  const latestAccountRows = await prisma.providerAccountSnapshot.findMany({
+    orderBy: { syncedAt: "desc" }
+  });
+  const latestAccountByType = new Map<string, (typeof latestAccountRows)[number]>();
+  for (const row of latestAccountRows) {
+    if (!latestAccountByType.has(row.providerType)) latestAccountByType.set(row.providerType, row);
+  }
+
+  // Latest health snapshots (LAST_50 preferred)
+  const healthRows = await prisma.providerHealthSnapshot.findMany({
+    where: { windowKind: "LAST_50" },
+    orderBy: { computedAt: "desc" }
+  });
+  // Fall back to any snapshot if no LAST_50
+  const healthRowsFallback = await prisma.providerHealthSnapshot.findMany({
+    orderBy: { computedAt: "desc" }
+  });
+  const healthByProvider = new Map<string, (typeof healthRows)[number]>();
+  for (const row of [...healthRows, ...healthRowsFallback]) {
+    const key = row.providerId ?? row.providerType;
+    if (!healthByProvider.has(key)) healthByProvider.set(key, row);
+  }
+
+  // Spend per provider (all time)
+  const spendGroups = await prisma.usageRecord.groupBy({
+    by: ["provider", "providerId"],
+    _sum: { estimatedCostUSD: true }
+  });
+  const spendByProvider = new Map<string, number>();
+  for (const g of spendGroups) {
+    const key = g.providerId ?? g.provider;
+    spendByProvider.set(key, (spendByProvider.get(key) ?? 0) + (g._sum.estimatedCostUSD ?? 0));
+  }
+
+  // Model count per provider type from ProviderModelSnapshot
+  const modelCountRows = await prisma.providerModelSnapshot.groupBy({
+    by: ["providerType"],
+    _count: { modelId: true }
+  });
+  const modelCountByType = new Map<string, number>(modelCountRows.map((r) => [r.providerType, r._count.modelId]));
+
+  // Last sync time = most recent of balance or account snapshot
+  function getLastSync(providerType: string): Date | null {
+    const balance = latestBalanceByType.get(providerType);
+    const account = latestAccountByType.get(providerType);
+    const times = [balance?.fetchedAt, account?.syncedAt].filter(Boolean) as Date[];
+    if (times.length === 0) return null;
+    return times.reduce((a, b) => (a > b ? a : b));
+  }
+
+  return activeProviders.map((p) => {
+    const healthRow = healthByProvider.get(p.id) ?? healthByProvider.get(p.type);
+    const balanceRow = latestBalanceByType.get(p.type) ?? latestBalanceByType.get(p.id);
+    const accountRow = latestAccountByType.get(p.type) ?? latestAccountByType.get(p.id);
+    const spend = spendByProvider.get(p.id) ?? spendByProvider.get(p.type) ?? 0;
+    const modelCount = modelCountByType.get(p.type) ?? 0;
+
+    // Derive balance from whichever snapshot exists
+    let balance: number | null = null;
+    if (balanceRow?.isAvailable) balance = balanceRow.totalBalance;
+    else if (accountRow?.creditsRemaining != null) balance = accountRow.creditsRemaining;
+
+    return {
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      isActive: p.isActive,
+      isFreeTier: p.isFreeTier,
+      environmentMode: p.environmentMode,
+      costTier: p.costTier,
+      hasCredentials: p.hasCredentials,
+      status: deriveProviderStatus(p, accountRow ?? null),
+      healthStatus: (healthRow?.healthStatus ?? "UNKNOWN") as "HEALTHY" | "DEGRADED" | "DOWN" | "UNKNOWN",
+      balance,
+      spend,
+      lastSyncAt: getLastSync(p.type) ?? getLastSync(p.id),
+      modelCount,
+      defaultModel: p.defaultModel
+    };
+  });
+}
+
+function deriveProviderStatus(
+  provider: { isActive: boolean; hasCredentials: boolean; environmentMode: string; isFreeTier: boolean },
+  accountSnapshot: { status: string } | null
+): "ACTIVE" | "NO_CREDENTIALS" | "DISABLED" | "SANDBOX" {
+  if (provider.environmentMode === "SANDBOX") return "SANDBOX";
+  if (!provider.isActive) return "DISABLED";
+  if (!provider.hasCredentials && !provider.isFreeTier) return "NO_CREDENTIALS";
+  if (accountSnapshot) return accountSnapshot.status as "ACTIVE";
+  return "ACTIVE";
 }
 
 export async function getTreasuryFallbackAnalytics() {

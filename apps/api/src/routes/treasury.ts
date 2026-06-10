@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getTreasuryByAgent, getTreasuryByModel, getTreasuryByMonth, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryFallbackAnalytics, getTreasuryOverview, getTreasuryUsage, getPricingWarnings } from "../services/treasuryService.js";
+import { getTreasuryByAgent, getTreasuryByModel, getTreasuryByMonth, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryFallbackAnalytics, getTreasuryOverview, getTreasuryUsage, getPricingWarnings, getTreasuryProviderRegistry } from "../services/treasuryService.js";
 import { checkBudgetStatus } from "../services/budgetGuardService.js";
 
 const router = Router();
@@ -36,6 +36,15 @@ router.get("/providers", async (_req, res, next) => {
   try {
     const providers = await getTreasuryByProvider();
     res.json({ providers });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/provider-registry", async (_req, res, next) => {
+  try {
+    const registry = await getTreasuryProviderRegistry();
+    res.json({ providers: registry });
   } catch (error) {
     next(error);
   }

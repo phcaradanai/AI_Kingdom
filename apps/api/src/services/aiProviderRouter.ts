@@ -6,6 +6,9 @@ import { getAIProvider, listAIProviders } from "./aiProviderRegistry.js";
 import { LEGACY_MOCK_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_ID, OPENROUTER_FREE_PROVIDER_ID } from "./aiProviderRegistry.js";
 import { checkBudgetStatus, filterProvidersForBudget, logBudgetEvents } from "./budgetGuardService.js";
 import { getSettingValue } from "./settingsService.js";
+import { findActiveChainForContext } from "./routeChainService.js";
+import { getCachedProviderHealth } from "./providerIntelligenceService.js";
+import type { AIProviderCall } from "../ai/generateWithFallback.js";
 
 export type RequiredAICapabilities = {
   chat?: boolean;
@@ -22,6 +25,10 @@ export type AIProviderRouteSelection = {
   costMode: AICostMode;
   budgetBlocked?: boolean;
   blockedProviderIds?: string[];
+  // Route chain context
+  routeChainId?: string;
+  skippedProviderIds?: string[];
+  skippedReasons?: Record<string, string>;
 };
 
 const TASK_MODE_PROVIDER_ORDER: Record<TaskMode, string[]> = {
@@ -45,6 +52,13 @@ export async function selectAIProviderRoute(input: {
   const providers = await listAIProviders({ activeOnly: true });
   const capableProviders = providers.filter((provider) => supportsRequiredCapabilities(provider, input.requiredCapabilities));
 
+  // Phase 4+5: Try route chain first
+  const chain = await findActiveChainForContext(input.taskMode, input.agent.id);
+  if (chain && chain.entries.length > 0) {
+    return buildSelectionFromChain(chain, capableProviders, providers, costMode, input.requiredCapabilities);
+  }
+
+  // Legacy routing fallback below
   const agentProvider = input.agent.preferredProviderId ? await getAIProvider(input.agent.preferredProviderId) : null;
   if (agentProvider?.isActive && supportsRequiredCapabilities(agentProvider, input.requiredCapabilities)) {
     const fallbackIds = input.fallbackProviderIds?.length
@@ -115,6 +129,70 @@ export async function selectAIProviderRoute(input: {
   }, providers);
 }
 
+async function buildSelectionFromChain(
+  chain: Awaited<ReturnType<typeof findActiveChainForContext>> & object,
+  capableProviders: AIProviderConfig[],
+  allProviders: AIProviderConfig[],
+  costMode: AICostMode,
+  requiredCapabilities?: RequiredAICapabilities
+): Promise<AIProviderRouteSelection> {
+  const healthSnapshots = await getCachedProviderHealth().catch(() => []);
+  const healthMap = new Map(healthSnapshots.map((h) => [h.providerType, h.healthStatus]));
+
+  const skippedProviderIds: string[] = [];
+  const skippedReasons: Record<string, string> = {};
+
+  const enabledEntries = chain!.entries.filter((e) => e.isEnabled);
+
+  let primary: AIProviderConfig | null = null;
+  let primaryModel = "";
+  const fallbackCalls: { provider: AIProviderConfig; model: string }[] = [];
+
+  for (const entry of enabledEntries) {
+    const config = capableProviders.find((p) => p.id === entry.providerId)
+      ?? allProviders.find((p) => p.id === entry.providerId);
+
+    if (!config) continue;
+    if (!supportsRequiredCapabilities(config, requiredCapabilities)) continue;
+
+    // Phase 5: Skip DOWN providers, de-prioritize DEGRADED
+    const health = healthMap.get(config.type) ?? healthMap.get(config.id);
+    if (health === "DOWN" && config.id !== LOCAL_SANDBOX_PROVIDER_ID) {
+      skippedProviderIds.push(config.id);
+      skippedReasons[config.id] = "HEALTH_BLOCKED: provider is DOWN";
+      continue;
+    }
+
+    if (!primary) {
+      // DEGRADED providers are used but noted
+      primary = config;
+      primaryModel = entry.model || config.defaultModel;
+    } else {
+      fallbackCalls.push({ provider: config, model: entry.model || config.defaultModel });
+    }
+  }
+
+  // If all entries skipped, fall back to sandbox
+  if (!primary) {
+    const sandbox = allProviders.find((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID)!;
+    primary = sandbox;
+    primaryModel = sandbox.defaultModel;
+  }
+
+  const selection: AIProviderRouteSelection = {
+    provider: primary,
+    model: primaryModel,
+    fallbackProviders: fallbackCalls.map((c) => c.provider),
+    attemptedProviderIds: [primary.id, ...fallbackCalls.map((c) => c.provider.id)],
+    costMode,
+    routeChainId: chain!.id,
+    skippedProviderIds: skippedProviderIds.length > 0 ? skippedProviderIds : undefined,
+    skippedReasons: Object.keys(skippedReasons).length > 0 ? skippedReasons : undefined
+  };
+
+  return applyBudgetGuard(selection, allProviders);
+}
+
 async function applyBudgetGuard(
   selection: AIProviderRouteSelection,
   allProviders: AIProviderConfig[]
@@ -127,11 +205,9 @@ async function applyBudgetGuard(
   const allCandidates = [selection.provider, ...selection.fallbackProviders];
   const { allowed, blocked } = filterProvidersForBudget(allCandidates, budgetStatus);
 
-  // Log budget events asynchronously — must not crash the session
   logBudgetEvents(budgetStatus, blocked).catch(() => undefined);
 
   if (allowed.length === 0) {
-    // All candidates blocked — ensure sandbox is available as last resort
     const sandbox = allProviders.find((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID);
     if (sandbox) {
       return {
@@ -268,8 +344,6 @@ function isModelFallback(value: string): boolean {
   return value.includes("/") || value.includes(":");
 }
 
-// Merge model-level fallbacks before provider-level fallbacks so model variants are
-// tried first (same provider, different model) before switching to a different provider.
 function buildAgentFallbackIds(agent: { fallbackModels: string[]; fallbackProviderIds: string[] }): string[] {
   return [...agent.fallbackModels, ...agent.fallbackProviderIds];
 }

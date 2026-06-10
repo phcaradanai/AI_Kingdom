@@ -66,6 +66,8 @@ function stepStatusIcon(status: string) {
     case "STARTED": return <Clock className="h-4 w-4 text-blue-400 animate-pulse" />;
     case "SKIPPED": return <MinusCircle className="h-4 w-4 text-muted-foreground" />;
     case "FALLBACK_USED": return <RefreshCw className="h-4 w-4 text-amber-400" />;
+    case "HEALTH_BLOCKED": return <XCircle className="h-4 w-4 text-orange-400" />;
+    case "BUDGET_BLOCKED": return <XCircle className="h-4 w-4 text-yellow-400" />;
     default: return <Activity className="h-4 w-4 text-muted-foreground" />;
   }
 }
@@ -95,6 +97,8 @@ function stepTypeBgColor(stepType: string) {
     case "REPORT_GENERATION": return "bg-cyan-500/15 text-cyan-300 border-cyan-500/30";
     case "TRACE_COMPLETED": return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
     case "TRACE_FAILED": return "bg-red-500/15 text-red-300 border-red-500/30";
+    case "HEALTH_BLOCKED": return "bg-orange-500/15 text-orange-300 border-orange-500/30";
+    case "BUDGET_BLOCKED": return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
     default: return "bg-muted/20 text-muted-foreground border-border";
   }
 }
@@ -166,6 +170,13 @@ function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean
         {step.errorMessage && (
           <div className="mt-2 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
             {step.errorMessage}
+          </div>
+        )}
+        {(step.stepType === "HEALTH_BLOCKED" || step.stepType === "BUDGET_BLOCKED") && step.detail && (
+          <div className={cn("mt-2 rounded-md border px-3 py-2 text-xs",
+            step.stepType === "HEALTH_BLOCKED" ? "border-orange-500/30 bg-orange-500/10 text-orange-300" : "border-yellow-500/30 bg-yellow-500/10 text-yellow-300"
+          )}>
+            <span className="font-semibold">Skip reason: </span>{step.detail}
           </div>
         )}
 

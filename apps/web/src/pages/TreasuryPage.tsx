@@ -22,7 +22,9 @@ import type {
   TreasuryModelDto,
   TreasuryFallbackAnalyticsDto,
   UsageRecordDto,
-  ProviderHealthStatus
+  ProviderHealthStatus,
+  ProviderRegistryDto,
+  CostSource
 } from "@/types/api";
 
 function formatCost(usd: number): string {
@@ -565,6 +567,92 @@ function DailyChart({ daily }: { daily: TreasuryDailyDto[] }) {
   );
 }
 
+function CostSourceBadge({ source }: { source?: CostSource | null }) {
+  if (!source || source === "ESTIMATED") return null;
+  if (source === "FREE") {
+    return (
+      <span className="ml-1 rounded px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+        Free
+      </span>
+    );
+  }
+  if (source === "PROVIDER_REPORTED") {
+    return (
+      <span className="ml-1 rounded px-1 py-0.5 text-[10px] font-bold uppercase tracking-wide bg-blue-500/20 text-blue-300 border border-blue-500/30">
+        Reported
+      </span>
+    );
+  }
+  return null;
+}
+
+function ProviderStatusBadge({ status }: { status: ProviderRegistryDto["status"] }) {
+  const meta: Record<string, { label: string; className: string }> = {
+    ACTIVE: { label: "Active", className: "text-emerald-400" },
+    SANDBOX: { label: "Sandbox", className: "text-blue-400" },
+    NO_CREDENTIALS: { label: "No Key", className: "text-amber-400" },
+    DISABLED: { label: "Disabled", className: "text-muted-foreground" }
+  };
+  const m = meta[status] ?? { label: status, className: "text-muted-foreground" };
+  return <span className={cn("text-xs font-semibold", m.className)}>{m.label}</span>;
+}
+
+function ProviderRegistrySection({ providers }: { providers: ProviderRegistryDto[] }) {
+  if (providers.length === 0) {
+    return (
+      <div className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted-foreground">
+        No active providers detected.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b border-border text-left text-xs text-muted-foreground">
+            <th className="pb-2 pr-4 font-medium">Provider</th>
+            <th className="pb-2 pr-4 font-medium">Status</th>
+            <th className="pb-2 pr-4 text-right font-medium">Health</th>
+            <th className="pb-2 pr-4 text-right font-medium">Balance</th>
+            <th className="pb-2 pr-4 text-right font-medium">Spend</th>
+            <th className="pb-2 pr-4 text-right font-medium">Models</th>
+            <th className="pb-2 text-right font-medium">Last Sync</th>
+          </tr>
+        </thead>
+        <tbody>
+          {providers.map((p) => (
+            <tr key={p.id} className="border-b border-border/40 last:border-0">
+              <td className="py-2.5 pr-4">
+                <div className="font-medium">{p.name}</div>
+                <div className="text-xs text-muted-foreground">{p.defaultModel}</div>
+              </td>
+              <td className="py-2.5 pr-4">
+                <ProviderStatusBadge status={p.status} />
+              </td>
+              <td className={cn("py-2.5 pr-4 text-right text-xs font-semibold", healthStatusColor(p.healthStatus))}>
+                {p.healthStatus}
+              </td>
+              <td className="py-2.5 pr-4 text-right font-mono text-xs">
+                {p.balance != null ? `$${p.balance.toFixed(4)}` : <span className="text-muted-foreground">—</span>}
+              </td>
+              <td className="py-2.5 pr-4 text-right font-mono text-xs">
+                {p.spend > 0 ? formatCost(p.spend) : <span className="text-muted-foreground">$0.00</span>}
+              </td>
+              <td className="py-2.5 pr-4 text-right tabular-nums text-xs">
+                {p.modelCount > 0 ? p.modelCount : <span className="text-muted-foreground">—</span>}
+              </td>
+              <td className="py-2.5 text-right text-xs text-muted-foreground">
+                {p.lastSyncAt ? formatDate(p.lastSyncAt) : "—"}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function PricingStatusBadge({ status, notes }: { status?: string | null; notes?: string | null }) {
   if (!status || status === "KNOWN") return null;
   if (status === "ESTIMATED") {
@@ -643,6 +731,7 @@ function RecentUsageTable({ records }: { records: UsageRecordDto[] }) {
                   <td className="py-2 pr-4 text-right tabular-nums text-xs">{formatTokens(r.totalTokens)}</td>
                   <td className="py-2 text-right font-mono tabular-nums text-xs">
                     {formatCost(r.estimatedCostUSD)}
+                    <CostSourceBadge source={r.costSource} />
                     <PricingStatusBadge status={r.pricingStatus} notes={r.pricingNotes} />
                   </td>
                 </tr>
@@ -853,6 +942,7 @@ export function TreasuryPage() {
   const [overview, setOverview] = useState<TreasuryOverviewDto | null>(null);
   const [agents, setAgents] = useState<TreasuryAgentDto[]>([]);
   const [providers, setProviders] = useState<TreasuryProviderDto[]>([]);
+  const [providerRegistry, setProviderRegistry] = useState<ProviderRegistryDto[]>([]);
   const [models, setModels] = useState<TreasuryModelDto[]>([]);
   const [daily, setDaily] = useState<TreasuryDailyDto[]>([]);
   const [monthly, setMonthly] = useState<TreasuryMonthlyDto[]>([]);
@@ -872,10 +962,11 @@ export function TreasuryPage() {
       setLoading(true);
       setError(null);
       try {
-        const [ov, ag, pr, md, rp, mo, fa, us] = await Promise.all([
+        const [ov, ag, pr, reg, md, rp, mo, fa, us] = await Promise.all([
           api.treasuryOverview(),
           api.treasuryByAgent(),
           api.treasuryByProvider(),
+          api.treasuryProviderRegistry(),
           api.treasuryByModel(),
           api.treasuryReports(30),
           api.treasuryMonthly(12),
@@ -885,6 +976,7 @@ export function TreasuryPage() {
         setOverview(ov);
         setAgents(ag.agents);
         setProviders(pr.providers);
+        setProviderRegistry(reg.providers);
         setModels(md.models);
         setDaily(rp.daily);
         setMonthly(mo.monthly);
@@ -1015,6 +1107,14 @@ export function TreasuryPage() {
                 sub={`${overview.totalCallsAllTime} AI calls recorded`}
               />
             </div>
+          </section>
+
+          {/* Unified Provider Registry */}
+          <section>
+            <h2 className="mb-3 text-sm font-semibold uppercase tracking-wider text-muted-foreground">Provider Registry</h2>
+            <Card className="p-5">
+              <ProviderRegistrySection providers={providerRegistry} />
+            </Card>
           </section>
 
           <ProviderBalanceSection

@@ -73,10 +73,13 @@ export type CacheAwareUsage = {
   inputCacheMissTokens?: number | null;
 };
 
+export type CostSource = "FREE" | "ESTIMATED" | "PROVIDER_REPORTED";
+
 export type CostCalculationResult = {
   costUSD: number;
   pricingStatus: PricingStatus;
   source: PricingSource;
+  costSource: CostSource;
   pricingNotes?: string;
 };
 
@@ -152,8 +155,15 @@ export async function calculateCostUSDFromRegistry(
 ): Promise<CostCalculationResult> {
   const pricing = await getModelPricing(providerType, model);
 
+  // FREE providers (sandbox/mock): cost is intrinsically $0
+  const isFreeProvider = isKnownFreeProvider(providerType, model);
+
   if (pricing.pricingStatus === "UNKNOWN") {
-    return { costUSD: 0, pricingStatus: "UNKNOWN", source: pricing.source };
+    return { costUSD: 0, pricingStatus: "UNKNOWN", source: pricing.source, costSource: isFreeProvider ? "FREE" : "ESTIMATED" };
+  }
+
+  if (isFreeProvider) {
+    return { costUSD: 0, pricingStatus: "KNOWN", source: pricing.source, costSource: "FREE" };
   }
 
   const { promptTokens, completionTokens, inputCacheHitTokens, inputCacheMissTokens } = usage;
@@ -171,7 +181,7 @@ export async function calculateCostUSDFromRegistry(
           inputCacheMissTokens * missPrice +
           completionTokens * outPrice) /
         1_000_000;
-      return { costUSD, pricingStatus: "KNOWN", source: pricing.source };
+      return { costUSD, pricingStatus: "KNOWN", source: pricing.source, costSource: "ESTIMATED" };
     } else {
       // Cache pricing exists but provider did not return cache breakdown — use miss rate conservatively
       const costUSD = (promptTokens * missPrice + completionTokens * outPrice) / 1_000_000;
@@ -179,6 +189,7 @@ export async function calculateCostUSDFromRegistry(
         costUSD,
         pricingStatus: "ESTIMATED",
         source: pricing.source,
+        costSource: "ESTIMATED",
         pricingNotes: "Cache details unavailable; input estimated as cache miss."
       };
     }
@@ -187,7 +198,16 @@ export async function calculateCostUSDFromRegistry(
   // Legacy simple pricing path (inputPerMillion always present in static table or older DB rows)
   const inputRate = pricing.inputPerMillion ?? 0;
   const costUSD = (promptTokens * inputRate + completionTokens * pricing.outputPerMillion) / 1_000_000;
-  return { costUSD, pricingStatus: "KNOWN", source: pricing.source };
+  return { costUSD, pricingStatus: "KNOWN", source: pricing.source, costSource: "ESTIMATED" };
+}
+
+function isKnownFreeProvider(providerType: string, model: string): boolean {
+  const freeTypes = new Set([
+    LOCAL_SANDBOX_PROVIDER_ID, "sandbox", "mock",
+    LEGACY_MOCK_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_NAME
+  ]);
+  const freeModels = new Set([LOCAL_SANDBOX_MODEL, LEGACY_MOCK_MODEL]);
+  return freeTypes.has(providerType) || freeModels.has(model);
 }
 
 // Backward-compatible wrapper — callers that don't supply cache detail get ESTIMATED when applicable.
@@ -196,7 +216,7 @@ export async function calculateCostFromRegistry(
   model: string,
   promptTokens: number,
   completionTokens: number
-): Promise<{ costUSD: number; pricingStatus: PricingStatus; source: PricingSource }> {
+): Promise<{ costUSD: number; pricingStatus: PricingStatus; source: PricingSource; costSource: CostSource }> {
   return calculateCostUSDFromRegistry(providerType, model, {
     promptTokens,
     completionTokens,

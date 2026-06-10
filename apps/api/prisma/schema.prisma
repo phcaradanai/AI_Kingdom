@@ -839,6 +839,8 @@ model UsageRecord {
   pricingSource        String?
   pricingStatus        String?
   pricingNotes         String?
+  // Cost source classification: where did the cost figure come from?
+  costSource           String?  // FREE | ESTIMATED | PROVIDER_REPORTED
   purpose              String?
   sourceType           String?
   sourceId             String?
@@ -987,12 +989,14 @@ model ProviderHealthSnapshot {
   avgDurationMs Int?
   sampleSize    Int       @default(0)
   healthStatus  String    @default("UNKNOWN")
+  windowKind    String    @default("LIFETIME")  // LAST_50 | LAST_24H | LAST_7D | LIFETIME
   computedAt    DateTime  @default(now())
   createdAt     DateTime  @default(now())
 
   @@index([providerType])
   @@index([providerId])
   @@index([computedAt])
+  @@index([windowKind])
 }
 
 model Budget {
@@ -1004,6 +1008,39 @@ model Budget {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+}
+
+model AIRouteChain {
+  id          String   @id @default(cuid())
+  name        String
+  taskMode    TaskMode?
+  agentId     String?
+  scope       String   @default("GLOBAL")  // GLOBAL | TASK_MODE | AGENT
+  isActive    Boolean  @default(true)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  entries     AIRouteChainEntry[]
+
+  @@index([taskMode])
+  @@index([agentId])
+  @@index([isActive])
+}
+
+model AIRouteChainEntry {
+  id         String   @id @default(cuid())
+  chainId    String
+  sequence   Int
+  providerId String
+  model      String
+  isEnabled  Boolean  @default(true)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  chain      AIRouteChain @relation(fields: [chainId], references: [id], onDelete: Cascade)
+
+  @@index([chainId])
+  @@index([sequence])
 }
 
 model Report {

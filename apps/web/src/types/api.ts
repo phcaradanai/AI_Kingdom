@@ -572,6 +572,8 @@ export type MemoryPayload = {
   importance: MemoryImportance;
 };
 
+export type CostSource = "FREE" | "ESTIMATED" | "PROVIDER_REPORTED";
+
 export type UsageRecordDto = {
   id: string;
   traceId: string | null;
@@ -610,6 +612,7 @@ export type UsageRecordDto = {
   pricingSource?: string | null;
   pricingStatus?: string | null;
   pricingNotes?: string | null;
+  costSource?: CostSource | null;
   createdAt: string;
   agent?: { name: string; title: string; slug: string; displayName: string | null; displayTitle: string | null; avatarUrl: string | null } | null;
   task?: { id: string; title: string; mode: string } | null;
@@ -772,8 +775,50 @@ export type ProviderHealthSnapshotDto = {
   avgDurationMs: number | null;
   sampleSize: number;
   healthStatus: ProviderHealthStatus;
+  windowKind?: string | null;
   computedAt: string;
   createdAt: string;
+};
+
+export type ProviderRegistryDto = {
+  id: string;
+  name: string;
+  type: string;
+  isActive: boolean;
+  isFreeTier: boolean;
+  environmentMode: string;
+  costTier: string;
+  hasCredentials: boolean;
+  status: "ACTIVE" | "NO_CREDENTIALS" | "DISABLED" | "SANDBOX";
+  healthStatus: ProviderHealthStatus;
+  balance: number | null;
+  spend: number;
+  lastSyncAt: string | null;
+  modelCount: number;
+  defaultModel: string;
+};
+
+export type RouteChainEntryDto = {
+  id: string;
+  chainId: string;
+  sequence: number;
+  providerId: string;
+  model: string;
+  isEnabled: boolean;
+  notes: string | null;
+};
+
+export type RouteChainDto = {
+  id: string;
+  name: string;
+  taskMode: string | null;
+  agentId: string | null;
+  scope: string;
+  isActive: boolean;
+  description: string | null;
+  entries: RouteChainEntryDto[];
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type TreasuryReconciliationStatus = "NO_BALANCE_SNAPSHOT" | "OK" | "ESTIMATE_ONLY" | "PROVIDER_API_ERROR";

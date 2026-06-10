@@ -50,6 +50,7 @@ const navCategories = [
     items: [
       { to: "/treasury", label: "Treasury", icon: Coins, roles: ["KING"] },
       { to: "/providers", label: "Providers", icon: Cpu, roles: ["KING"] },
+      { to: "/routing", label: "Routing", icon: Landmark, roles: ["KING"] },
       { to: "/audit", label: "Audit Log", icon: ClipboardList, roles: ["KING"] },
       { to: "/settings", label: "Settings", icon: Settings, roles: ["KING"] },
       { to: "/users", label: "Users", icon: Users, roles: ["KING"] },
