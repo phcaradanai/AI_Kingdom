@@ -1533,3 +1533,42 @@ export type AutomationJobPayload = {
   commandPolicy?: string | null;
   allowedCommands?: string[];
 };
+
+export type PatchValidationResult = {
+  command: string;
+  exitCode: number;
+  durationMs: number;
+  output: string;
+  success: boolean;
+};
+
+export type PatchArtifactValidationStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVISION_REQUESTED";
+export type PatchRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type PatchArtifactDto = {
+  id: string;
+  automationJobId: string;
+  workOrderId: string;
+  projectId: string | null;
+  title: string;
+  summary: string;
+  diffStat: string | null;
+  diffPreview: string | null;
+  fullPatch: string | null;
+  fullPatchTruncated: boolean;
+  filesChanged: string[];
+  riskLevel: PatchRiskLevel;
+  validationStatus: PatchArtifactValidationStatus;
+  validationResults: PatchValidationResult[] | null;
+  reviewedByUserId: string | null;
+  reviewNote: string | null;
+  blockedPaths: string[];
+  branchName: string | null;
+  branchPushed: boolean;
+  prUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+  automationJob: { id: string; status: string; workOrderId: string };
+  workOrder: { id: string; title: string };
+  reviewedByUser: { id: string; displayName: string } | null;
+};

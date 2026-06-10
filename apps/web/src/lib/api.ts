@@ -77,7 +77,8 @@ import type {
   ProviderReconciliationSnapshotDto,
   AutomationJobDto,
   AutomationJobPayload,
-  AgentRunnerDto
+  AgentRunnerDto,
+  PatchArtifactDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -566,7 +567,36 @@ export const api = {
   approveAutomationJob: (id: string) =>
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/approve`, { method: "POST" }),
   cancelAutomationJob: (id: string) =>
-    apiRequest<AutomationJobDto>(`/automation-jobs/${id}/cancel`, { method: "POST" })
+    apiRequest<AutomationJobDto>(`/automation-jobs/${id}/cancel`, { method: "POST" }),
+
+  // Patch artifacts
+  patchArtifacts: (params?: { automationJobId?: string; workOrderId?: string; projectId?: string; validationStatus?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.automationJobId) search.set("automationJobId", params.automationJobId);
+    if (params?.workOrderId) search.set("workOrderId", params.workOrderId);
+    if (params?.projectId) search.set("projectId", params.projectId);
+    if (params?.validationStatus) search.set("validationStatus", params.validationStatus);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<PatchArtifactDto[]>(`/patch-artifacts${suffix}`);
+  },
+  patchArtifact: (id: string) => apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}`),
+  approvePatchArtifact: (id: string, reviewNote?: string) =>
+    apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/approve`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNote })
+    }),
+  rejectPatchArtifact: (id: string, reviewNote?: string) =>
+    apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/reject`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNote })
+    }),
+  requestPatchRevision: (id: string, reviewNote: string) =>
+    apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/request-revision`, {
+      method: "POST",
+      body: JSON.stringify({ reviewNote })
+    }),
+  createPatchPr: (id: string) =>
+    apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/create-pr`, { method: "POST" })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

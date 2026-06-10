@@ -13,7 +13,7 @@ type AllowedEntry = {
 };
 
 export const GLOBAL_ALLOWLIST: AllowedEntry[] = [
-  { command: "git", argMatcher: (args) => allowedGitSubcommands.has(args[0] ?? "INVALID") },
+  { command: "git", argMatcher: (args) => validateGitArgs(args) },
   { command: "npm", argMatcher: (args) => allowedNpmSubcommands(args) },
   { command: "ls" },
   {
@@ -26,7 +26,50 @@ export const GLOBAL_ALLOWLIST: AllowedEntry[] = [
   }
 ];
 
-const allowedGitSubcommands = new Set(["status", "diff", "log", "show"]);
+const allowedGitSubcommands = new Set(["status", "diff", "log", "show", "checkout", "add", "commit", "push"]);
+
+const SAFE_BRANCH_PATTERN = /^kingdom\/job-[0-9a-f]{1,16}-[a-z0-9-]{1,50}$/;
+const PROTECTED_BRANCH_NAMES = new Set(["main", "master", "develop", "development", "release"]);
+
+function isProtectedBranch(name: string): boolean {
+  const lower = name.toLowerCase();
+  return PROTECTED_BRANCH_NAMES.has(lower) || lower.startsWith("release/") || lower.startsWith("hotfix/");
+}
+
+function validateGitArgs(args: string[]): boolean {
+  const sub = args[0] ?? "INVALID";
+  if (!allowedGitSubcommands.has(sub)) return false;
+
+  switch (sub) {
+    case "status": case "log": return true;
+    case "diff": return args.length <= 3;
+    case "show": return args.length <= 2;
+    case "checkout": {
+      if (args[1] !== "-b") return false;
+      const branch = args[2];
+      if (!branch) return false;
+      return SAFE_BRANCH_PATTERN.test(branch);
+    }
+    case "add": {
+      if (args.length < 2) return false;
+      return args.slice(1).every((a) => !a.startsWith("../") && !a.startsWith("/") && a !== "--");
+    }
+    case "commit": {
+      if (args[1] !== "-m" || !args[2]) return false;
+      const msg = args[2];
+      return !/[`$<>|;&]/.test(msg) && msg.length <= 200;
+    }
+    case "push": {
+      if (args[1] !== "origin") return false;
+      const branch = args[2];
+      if (!branch || isProtectedBranch(branch)) return false;
+      if (!SAFE_BRANCH_PATTERN.test(branch)) return false;
+      if (args.length > 3) return false;
+      return true;
+    }
+    default: return false;
+  }
+}
 
 function allowedNpmSubcommands(args: string[]): boolean {
   if (args.length === 0) return false;

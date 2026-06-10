@@ -6,6 +6,8 @@
  * - Never run destructive commands
  * - All work in isolated workspace
  * - All outputs redacted before reporting
+ * - Branch push only to safe kingdom/job-* branches
+ * - HIGH/CRITICAL patches require King approval before push
  */
 
 import dotenv from "dotenv";
@@ -16,6 +18,7 @@ import { ApiClient, type AutomationJob } from "./apiClient.js";
 import { runCommand } from "./sandbox.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
+import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -26,12 +29,18 @@ const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS ?? "150
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS ?? "5000", 10);
 const WORKSPACE_BASE = process.env.WORKSPACE_BASE ?? path.join(os.tmpdir(), "ai-kingdom-runner");
 
+// How long to wait for King approval before giving up on branch push (ms)
+const APPROVAL_WAIT_MS = parseInt(process.env.APPROVAL_WAIT_MS ?? "300000", 10); // 5 minutes
+
+// Server-side settings (fetched at startup)
+let ALLOW_BRANCH_PUSH = false;
+
 if (!RUNNER_TOKEN) {
   console.error("[Runner] RUNNER_TOKEN is required. Set it in .env or environment.");
   process.exit(1);
 }
 
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 const HOSTNAME = os.hostname();
 
 const api = new ApiClient({ baseUrl: API_BASE_URL, runnerToken: RUNNER_TOKEN });
@@ -40,17 +49,22 @@ async function main() {
   console.log(`[Runner] Starting AI Kingdom Runner v${VERSION}`);
   console.log(`[Runner] API: ${API_BASE_URL}`);
   console.log(`[Runner] Workspace base: ${WORKSPACE_BASE}`);
+  console.log(`[Runner] Branch push: ${ALLOW_BRANCH_PUSH ? "ENABLED" : "DISABLED"}`);
 
-  // Ensure workspace base exists
   fs.mkdirSync(WORKSPACE_BASE, { recursive: true });
 
-  // Initial heartbeat to go ONLINE
-  await sendHeartbeat();
+  // Fetch server-side settings before starting
+  try {
+    const settings = await api.getRunnerSettings();
+    ALLOW_BRANCH_PUSH = settings.allowBranchPush;
+    console.log(`[Runner] Settings: branch push=${ALLOW_BRANCH_PUSH}, pr create=${settings.allowPrCreate}`);
+  } catch (err) {
+    console.warn("[Runner] Could not fetch server settings, using defaults:", err instanceof Error ? err.message : String(err));
+  }
 
-  // Start heartbeat loop
+  await sendHeartbeat();
   const heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
 
-  // Poll loop
   console.log("[Runner] Polling for jobs...");
   while (true) {
     try {
@@ -65,7 +79,6 @@ async function main() {
     await sleep(POLL_INTERVAL_MS);
   }
 
-  // Not reached but TypeScript-safe
   clearInterval(heartbeatTimer);
 }
 
@@ -93,36 +106,30 @@ async function executeJob(job: AutomationJob) {
   };
 
   try {
-    // Mark as RUNNING
     await api.updateStatus(job.id, "RUNNING");
-
     log(`[Job ${job.id}] Starting execution in ${workspaceDir}`);
     log(`[Job ${job.id}] Mode: ${job.mode}`);
 
-    // Create isolated workspace
     fs.mkdirSync(workspaceDir, { recursive: true });
 
-    // If project has a localPath, copy or use as reference context (read-only scan)
     if (job.project) {
       log(`[Job ${job.id}] Project: ${job.project.name}`);
     }
 
-    // Parse execution plan
+    // Execute plan steps
     const plan = job.planJson as ExecutionPlan | null;
     if (!plan || !Array.isArray(plan.steps)) {
       log(`[Job ${job.id}] No execution plan available. Running validation-only.`);
     } else {
       log(`[Job ${job.id}] Plan: ${plan.summary ?? "(no summary)"} — ${plan.steps.length} step(s)`);
 
-      // Execute each step from plan
       for (const step of plan.steps) {
         sequence++;
         if (step.type === "COMMAND") {
           const cmd = step.command;
           const args = step.args ?? [];
-
-          // Pre-validate
           const check = validateCommand(cmd, args, job.allowedCommands);
+
           if (!check.allowed) {
             log(`[Job ${job.id}] Step ${sequence}: BLOCKED — ${check.reason}`);
             await api.recordStep(job.id, {
@@ -146,16 +153,14 @@ async function executeJob(job: AutomationJob) {
           });
 
           commandsRun.push(`${cmd} ${args.join(" ")}`);
-          if (cmd === "npm" && args[0] === "run" && (args[1] === "test" || args[1] === "typecheck" || args[1] === "build")) {
+          if (cmd === "npm" && args[0] === "run" && ["test", "typecheck", "build"].includes(args[1] ?? "")) {
             testsRun.push(`${cmd} ${args.join(" ")}`);
             if (testResult === "NOT_RUN") testResult = result.exitCode === 0 ? "PASSED" : "FAILED";
             else if (result.exitCode !== 0) testResult = "FAILED";
             else if (testResult === "FAILED") testResult = "PARTIAL";
           }
 
-          if (result.exitCode !== 0) {
-            errors.push(`Exit ${result.exitCode}: ${cmd} ${args.join(" ")}`);
-          }
+          if (result.exitCode !== 0) errors.push(`Exit ${result.exitCode}: ${cmd} ${args.join(" ")}`);
 
           await api.recordStep(job.id, {
             sequence,
@@ -178,31 +183,63 @@ async function executeJob(job: AutomationJob) {
             detail: step.description,
             status: "COMPLETED"
           });
-        } else {
-          log(`[Job ${job.id}] Step ${sequence}: Unknown step type: ${step.type}`);
         }
       }
     }
 
-    // Submit report
+    // Generate patch artifact
+    log(`[Job ${job.id}] Generating patch artifact...`);
+    const patchPayload = await generatePatch({
+      workspaceRoot: workspaceDir,
+      jobId: job.id,
+      workOrderTitle: job.workOrder.title,
+      allowBranchPush: ALLOW_BRANCH_PUSH
+    });
+
+    // Run validation commands
+    log(`[Job ${job.id}] Running validation...`);
+    const validationResults = await runValidation(workspaceDir);
+    patchPayload.validationResults = validationResults;
+
+    // Track validation in commands/tests
+    for (const vr of validationResults) {
+      commandsRun.push(vr.command);
+      testsRun.push(vr.command);
+      if (testResult === "NOT_RUN") testResult = vr.success ? "PASSED" : "FAILED";
+      else if (!vr.success) testResult = testResult === "PASSED" ? "PARTIAL" : "FAILED";
+    }
+
+    // Submit patch artifact
+    const artifact = await submitPatchArtifact(api, job.id, patchPayload);
+    if (artifact) {
+      log(`[Job ${job.id}] Patch artifact submitted: ${artifact.id} (risk: pending server score)`);
+    }
+
+    // Submit implementation report
     const logsPreview = sanitizeLogOutput(logLines.slice(-100).join("\n"));
     log(`[Job ${job.id}] Submitting report...`);
 
     await api.submitReport(job.id, {
       summary: plan?.summary ?? "Sandbox execution completed.",
-      filesChanged: [],
+      filesChanged: patchPayload.filesChanged,
       commandsRun,
       testsRun,
       testResult,
       errors,
       decisionsMade: [],
       remainingWork: errors.length > 0 ? ["Review and fix failed commands"] : [],
-      nextRecommendedAction: errors.length > 0 ? "Review errors in implementation report" : "Mark work order as complete",
+      nextRecommendedAction: errors.length > 0 ? "Review errors in implementation report" : "Review patch artifact",
       logsPreview,
-      rawOutput: logsPreview
+      rawOutput: logsPreview,
+      patchSummary: patchPayload.summary
     });
 
     log(`[Job ${job.id}] Report submitted. Job is NEEDS_REVIEW.`);
+
+    // Branch push (if enabled and artifact was submitted)
+    if (ALLOW_BRANCH_PUSH && artifact && patchPayload.branchName) {
+      await attemptBranchPush(job, artifact.id, patchPayload, workspaceDir, log);
+    }
 
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -216,14 +253,71 @@ async function executeJob(job: AutomationJob) {
       // Best effort
     }
   } finally {
-    // Clean up workspace
     try {
       fs.rmSync(workspaceDir, { recursive: true, force: true });
-      log(`[Job ${job.id}] Workspace cleaned up`);
     } catch {
       // Best effort
     }
   }
+}
+
+async function attemptBranchPush(
+  job: AutomationJob,
+  artifactId: string,
+  patchPayload: { filesChanged: string[]; branchName: string | null; summary: string },
+  workspaceDir: string,
+  log: (msg: string) => void
+) {
+  const branchName = patchPayload.branchName;
+  if (!branchName) return;
+
+  log(`[Job ${job.id}] Branch push enabled. Checking patch approval...`);
+
+  // Poll for King approval (HIGH/CRITICAL require explicit approval)
+  const approved = await waitForApproval(artifactId, log);
+  if (!approved) {
+    log(`[Job ${job.id}] Branch push skipped: patch not approved within timeout`);
+    return;
+  }
+
+  log(`[Job ${job.id}] Patch approved. Pushing branch: ${branchName}`);
+  const commitMsg = `runner: ${job.workOrder.title.slice(0, 80)} [job-${job.id.slice(0, 8)}]`;
+  const pushResult = await pushSafeBranch(workspaceDir, branchName, commitMsg);
+
+  if (pushResult.pushed) {
+    log(`[Job ${job.id}] Branch pushed: ${branchName}`);
+    await api.markBranchPushed(job.id, artifactId, branchName).catch((err) => {
+      console.warn("[Runner] Failed to record branch push:", err instanceof Error ? err.message : String(err));
+    });
+  } else {
+    log(`[Job ${job.id}] Branch push failed: ${pushResult.error}`);
+  }
+}
+
+async function waitForApproval(artifactId: string, log: (msg: string) => void): Promise<boolean> {
+  const deadline = Date.now() + APPROVAL_WAIT_MS;
+  const pollMs = 15_000;
+
+  while (Date.now() < deadline) {
+    try {
+      const artifact = await api.getPatchArtifact(artifactId);
+      if (artifact.validationStatus === "APPROVED") return true;
+      if (artifact.validationStatus === "REJECTED") {
+        log(`[Runner] Patch rejected — branch push cancelled`);
+        return false;
+      }
+      // LOW/MEDIUM risk: push without waiting for explicit approval
+      if (["LOW", "MEDIUM"].includes(artifact.riskLevel) && artifact.validationStatus === "PENDING") {
+        return true;
+      }
+    } catch (err) {
+      console.warn("[Runner] Approval poll error:", err instanceof Error ? err.message : String(err));
+    }
+    await sleep(pollMs);
+  }
+
+  log("[Runner] Approval wait timed out");
+  return false;
 }
 
 interface ExecutionPlan {

@@ -6,6 +6,8 @@ import { sanitizeLogOutput } from "../services/secretRedactorService.js";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { validateCommand } from "../services/commandValidatorService.js";
+import { createPatchArtifact, markBranchPushed, getPatchArtifact } from "../services/patchArtifactService.js";
+import { getBooleanSetting } from "../services/settingsService.js";
 import type { AutomationJobStatus } from "@prisma/client";
 
 const router = Router();
@@ -208,6 +210,110 @@ router.post("/jobs/:id/step", async (req, res, next) => {
     });
 
     res.status(201).json(step);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const validationResultSchema = z.object({
+  command: z.string().trim().min(1).max(200),
+  exitCode: z.number().int(),
+  durationMs: z.number().int().min(0),
+  output: z.string().max(5000),
+  success: z.boolean()
+});
+
+const patchArtifactSchema = z.object({
+  title: z.string().trim().min(1).max(300),
+  summary: z.string().trim().min(1).max(5000),
+  diffStat: z.string().max(5000).optional().nullable(),
+  diffPreview: z.string().max(12000).optional().nullable(),
+  fullPatch: z.string().max(250000).optional().nullable(),
+  filesChanged: z.array(z.string().trim().min(1).max(500)).max(500).default([]),
+  validationResults: z.array(validationResultSchema).max(20).optional(),
+  branchName: z.string().max(100).optional().nullable()
+});
+
+/** POST /api/runner/jobs/:id/patch-artifact — runner submits patch artifact */
+router.post("/jobs/:id/patch-artifact", async (req, res, next) => {
+  try {
+    const runner = req.runner!;
+    const body = patchArtifactSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+
+    const artifact = await createPatchArtifact({
+      automationJobId: req.params.id,
+      runnerId: runner.id,
+      ...body.data
+    });
+    res.status(201).json(artifact);
+  } catch (err) {
+    if (err instanceof Error) {
+      if (err.name === "NotFoundError") { res.status(404).json({ error: err.message }); return; }
+      if (err.name === "BlockedPathError") { res.status(422).json({ error: err.message }); return; }
+    }
+    next(err);
+  }
+});
+
+const branchPushSchema = z.object({
+  branchName: z.string().trim().min(1).max(100)
+});
+
+/** POST /api/runner/jobs/:jobId/patch-artifacts/:artifactId/branch-pushed — runner confirms push */
+router.post("/jobs/:jobId/patch-artifacts/:artifactId/branch-pushed", async (req, res, next) => {
+  try {
+    const runner = req.runner!;
+    const body = branchPushSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+
+    await auditLog({
+      action: "branch_push_requested",
+      resourceType: "PatchArtifact",
+      resourceId: req.params.artifactId,
+      metadata: { runnerId: runner.id, branchName: body.data.branchName }
+    }).catch(() => undefined);
+
+    const artifact = await markBranchPushed(req.params.artifactId, runner.id, body.data.branchName);
+    res.json(artifact);
+  } catch (err) {
+    if (err instanceof Error && err.name === "NotFoundError") {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+/** GET /api/runner/settings — runner fetches server-side settings */
+router.get("/settings", async (_req, res, next) => {
+  try {
+    const [allowBranchPush, allowPrCreate] = await Promise.all([
+      getBooleanSetting("ALLOW_RUNNER_BRANCH_PUSH", false),
+      getBooleanSetting("ALLOW_RUNNER_PR_CREATE", false)
+    ]);
+    res.json({ allowBranchPush, allowPrCreate });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/runner/patch-artifacts/:id — runner reads patch artifact status */
+router.get("/patch-artifacts/:id", async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const artifact = await getPatchArtifact(id);
+    if (!artifact) {
+      res.status(404).json({ error: "PatchArtifact not found" });
+      return;
+    }
+    res.json({ id: artifact.id, validationStatus: artifact.validationStatus, riskLevel: artifact.riskLevel });
   } catch (err) {
     next(err);
   }

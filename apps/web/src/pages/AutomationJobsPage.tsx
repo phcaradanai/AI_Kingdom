@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { Activity, Bot, CheckCircle, Clock, Play, RefreshCw, X, XCircle, AlertCircle, Eye, Cpu } from "lucide-react";
+import { Activity, AlertTriangle, Bot, CheckCircle, Clock, GitBranch, Play, RefreshCw, Shield, X, XCircle, AlertCircle, Eye, Cpu } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
-import type { AgentRunnerDto, AutomationJobDto, AutomationJobStatus } from "@/types/api";
+import { useAuthStore } from "@/stores/authStore";
+import type { AgentRunnerDto, AutomationJobDto, AutomationJobStatus, PatchArtifactDto } from "@/types/api";
 
 function statusColor(status: AutomationJobStatus): string {
   switch (status) {
@@ -55,6 +56,7 @@ function modeLabel(mode: string): string {
 }
 
 export function AutomationJobsPage() {
+  const { user } = useAuthStore();
   const [jobs, setJobs] = useState<AutomationJobDto[]>([]);
   const [runners, setRunners] = useState<AgentRunnerDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,6 +66,8 @@ export function AutomationJobsPage() {
   const [selectedJob, setSelectedJob] = useState<AutomationJobDto | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [patchArtifacts, setPatchArtifacts] = useState<PatchArtifactDto[]>([]);
+  const [patchActionId, setPatchActionId] = useState<string | null>(null);
 
   async function load() {
     setLoading(true);
@@ -115,10 +119,64 @@ export function AutomationJobsPage() {
   async function loadDetail(jobId: string) {
     setDetailLoading(true);
     try {
-      const job = await api.automationJob(jobId);
+      const [job, patches] = await Promise.all([
+        api.automationJob(jobId),
+        api.patchArtifacts({ automationJobId: jobId })
+      ]);
       setSelectedJob(job);
+      setPatchArtifacts(patches);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function approvePatch(artifactId: string) {
+    setPatchActionId(artifactId);
+    try {
+      await api.approvePatchArtifact(artifactId);
+      if (selectedJob) setPatchArtifacts(await api.patchArtifacts({ automationJobId: selectedJob.id }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to approve patch");
+    } finally {
+      setPatchActionId(null);
+    }
+  }
+
+  async function rejectPatch(artifactId: string) {
+    setPatchActionId(artifactId);
+    try {
+      await api.rejectPatchArtifact(artifactId);
+      if (selectedJob) setPatchArtifacts(await api.patchArtifacts({ automationJobId: selectedJob.id }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to reject patch");
+    } finally {
+      setPatchActionId(null);
+    }
+  }
+
+  async function requestRevision(artifactId: string) {
+    const note = window.prompt("Revision notes:");
+    if (note === null) return;
+    setPatchActionId(artifactId);
+    try {
+      await api.requestPatchRevision(artifactId, note || "Revision requested");
+      if (selectedJob) setPatchArtifacts(await api.patchArtifacts({ automationJobId: selectedJob.id }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to request revision");
+    } finally {
+      setPatchActionId(null);
+    }
+  }
+
+  async function createPr(artifactId: string) {
+    setPatchActionId(artifactId);
+    try {
+      await api.createPatchPr(artifactId);
+      if (selectedJob) setPatchArtifacts(await api.patchArtifacts({ automationJobId: selectedJob.id }));
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to create PR");
+    } finally {
+      setPatchActionId(null);
     }
   }
 
@@ -385,6 +443,29 @@ export function AutomationJobsPage() {
                 </div>
               )}
 
+              {/* Patch Review panel */}
+              {patchArtifacts.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
+                    <Eye className="h-3.5 w-3.5" /> Patch Review ({patchArtifacts.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {patchArtifacts.map((artifact) => (
+                      <PatchReviewCard
+                        key={artifact.id}
+                        artifact={artifact}
+                        isActing={patchActionId === artifact.id}
+                        isKing={user?.role === "KING"}
+                        onApprove={() => void approvePatch(artifact.id)}
+                        onReject={() => void rejectPatch(artifact.id)}
+                        onRevision={() => void requestRevision(artifact.id)}
+                        onCreatePr={() => void createPr(artifact.id)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Actions in detail view */}
               <div className="flex gap-2 pt-2 border-t">
                 {selectedJob.status === "QUEUED" && (
@@ -403,6 +484,146 @@ export function AutomationJobsPage() {
             </>
           )}
         </Card>
+      )}
+    </div>
+  );
+}
+
+function riskColor(risk: string) {
+  switch (risk) {
+    case "LOW": return "text-green-700 bg-green-50 border-green-200";
+    case "MEDIUM": return "text-yellow-700 bg-yellow-50 border-yellow-200";
+    case "HIGH": return "text-orange-700 bg-orange-50 border-orange-200";
+    case "CRITICAL": return "text-red-700 bg-red-50 border-red-200";
+    default: return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function validationStatusBadge(status: string) {
+  switch (status) {
+    case "APPROVED": return "text-green-700 bg-green-50 border-green-200";
+    case "REJECTED": return "text-red-700 bg-red-50 border-red-200";
+    case "REVISION_REQUESTED": return "text-orange-700 bg-orange-50 border-orange-200";
+    default: return "text-purple-700 bg-purple-50 border-purple-200";
+  }
+}
+
+function PatchReviewCard({
+  artifact,
+  isActing,
+  isKing,
+  onApprove,
+  onReject,
+  onRevision,
+  onCreatePr
+}: {
+  artifact: PatchArtifactDto;
+  isActing: boolean;
+  isKing: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+  onRevision: () => void;
+  onCreatePr: () => void;
+}) {
+  const [showDiff, setShowDiff] = useState(false);
+  const isHighRisk = artifact.riskLevel === "HIGH" || artifact.riskLevel === "CRITICAL";
+
+  return (
+    <div className="rounded border p-3 space-y-2 text-xs bg-muted/20">
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className={cn("px-2 py-0.5 rounded-full font-medium border", riskColor(artifact.riskLevel))}>
+          {isHighRisk && <AlertTriangle className="h-3 w-3 inline mr-0.5" />}
+          {artifact.riskLevel}
+        </span>
+        <span className={cn("px-2 py-0.5 rounded-full font-medium border", validationStatusBadge(artifact.validationStatus))}>
+          {artifact.validationStatus}
+        </span>
+        {artifact.branchPushed && (
+          <span className="px-2 py-0.5 rounded-full font-medium border text-blue-700 bg-blue-50 border-blue-200 flex items-center gap-1">
+            <GitBranch className="h-3 w-3" /> {artifact.branchName}
+          </span>
+        )}
+        <span className="ml-auto text-muted-foreground">{formatDate(artifact.createdAt)}</span>
+      </div>
+
+      <p className="font-medium text-sm">{artifact.title}</p>
+      <p className="text-muted-foreground">{artifact.summary}</p>
+
+      {artifact.filesChanged.length > 0 && (
+        <p className="text-muted-foreground">
+          Files: {artifact.filesChanged.slice(0, 4).join(", ")}
+          {artifact.filesChanged.length > 4 && ` +${artifact.filesChanged.length - 4} more`}
+        </p>
+      )}
+
+      {artifact.diffStat && (
+        <pre className="bg-muted rounded p-2 overflow-auto max-h-20 font-mono">{artifact.diffStat}</pre>
+      )}
+
+      {isHighRisk && artifact.validationStatus === "PENDING" && (
+        <div className="flex items-center gap-1.5 text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+          <Shield className="h-3.5 w-3.5 flex-shrink-0" />
+          HIGH/CRITICAL risk — King approval required before branch push
+        </div>
+      )}
+
+      {artifact.diffPreview && (
+        <div>
+          <button className="text-primary hover:underline" onClick={() => setShowDiff(!showDiff)}>
+            {showDiff ? "Hide diff" : "Show diff preview"}
+          </button>
+          {showDiff && (
+            <pre className="mt-1 bg-muted rounded p-2 overflow-auto max-h-40 font-mono whitespace-pre-wrap">
+              {artifact.diffPreview}
+              {artifact.fullPatchTruncated && "\n...[truncated]"}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {artifact.validationResults && artifact.validationResults.length > 0 && (
+        <div className="space-y-0.5">
+          {artifact.validationResults.map((vr, i) => (
+            <div key={i} className="flex items-center gap-2">
+              {vr.success ? <CheckCircle className="h-3.5 w-3.5 text-green-600 flex-shrink-0" /> : <XCircle className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />}
+              <span className="font-mono">{vr.command}</span>
+              <span className="text-muted-foreground">{vr.durationMs}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isKing && artifact.validationStatus === "PENDING" && (
+        <div className="flex gap-1.5 pt-1.5 border-t">
+          <Button className="h-7 text-xs px-2.5" onClick={onApprove} disabled={isActing}>
+            <CheckCircle className="h-3 w-3 mr-1" />Approve
+          </Button>
+          <Button className="h-7 text-xs px-2.5 text-destructive border-destructive/30" variant="outline" onClick={onReject} disabled={isActing}>
+            <XCircle className="h-3 w-3 mr-1" />Reject
+          </Button>
+          <Button className="h-7 text-xs px-2.5" variant="outline" onClick={onRevision} disabled={isActing}>
+            Request Revision
+          </Button>
+        </div>
+      )}
+      {isKing && artifact.validationStatus === "APPROVED" && artifact.branchPushed && !artifact.prUrl && (
+        <div className="flex gap-1.5 pt-1.5 border-t">
+          <Button className="h-7 text-xs px-2.5" variant="outline" onClick={onCreatePr} disabled={isActing}>
+            <GitBranch className="h-3 w-3 mr-1" />Create PR
+          </Button>
+        </div>
+      )}
+      {artifact.prUrl && (
+        <a href={artifact.prUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-primary hover:underline flex items-center gap-1">
+          <GitBranch className="h-3 w-3" />View PR
+        </a>
+      )}
+
+      {artifact.reviewedByUser && (
+        <p className="text-muted-foreground">
+          {artifact.validationStatus} by {artifact.reviewedByUser.displayName}
+          {artifact.reviewNote && ` — "${artifact.reviewNote}"`}
+        </p>
       )}
     </div>
   );

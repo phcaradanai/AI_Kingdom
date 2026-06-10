@@ -336,6 +336,7 @@ model User {
   ownedProjects Project[]
   createdAutomationJobs  AutomationJob[] @relation("AutomationJobCreatedBy")
   approvedAutomationJobs AutomationJob[] @relation("AutomationJobApprovedBy")
+  reviewedPatchArtifacts PatchArtifact[] @relation("PatchArtifactReviewedBy")
 }
 
 model RefreshToken {
@@ -448,6 +449,7 @@ model Project {
   automationJobs    AutomationJob[]
   routingCandidates ProjectRoutingCandidate[]
   repositorySnapshots RepositorySnapshot[]
+  patchArtifacts      PatchArtifact[]
 }
 
 model RepositorySnapshot {
@@ -577,6 +579,7 @@ model WorkOrder {
   implementationReports   ImplementationReport[]
   handoffBriefs           HandoffBrief[]
   automationJobs          AutomationJob[]
+  patchArtifacts          PatchArtifact[]
 }
 
 model WorkSession {
@@ -1289,6 +1292,7 @@ model AutomationJob {
   approvedByUser   User?               @relation("AutomationJobApprovedBy", fields: [approvedByUserId], references: [id], onDelete: SetNull)
   steps            AgentRunStep[]
   implementationReports ImplementationReport[]
+  patchArtifacts   PatchArtifact[]
 
   @@index([workOrderId])
   @@index([projectId])
@@ -1320,4 +1324,40 @@ model AgentRunStep {
 
   @@index([jobId])
   @@index([sequence])
+}
+
+model PatchArtifact {
+  id                   String    @id @default(cuid())
+  automationJobId      String
+  workOrderId          String
+  projectId            String?
+  title                String
+  summary              String
+  diffStat             String?
+  diffPreview          String?
+  fullPatch            String?
+  fullPatchTruncated   Boolean   @default(false)
+  filesChanged         String[]  @default([])
+  riskLevel            String    @default("MEDIUM")
+  validationStatus     String    @default("PENDING")
+  validationResults    Json?
+  reviewedByUserId     String?
+  reviewNote           String?
+  blockedPaths         String[]  @default([])
+  branchName           String?
+  branchPushed         Boolean   @default(false)
+  prUrl                String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  automationJob   AutomationJob @relation(fields: [automationJobId], references: [id], onDelete: Cascade)
+  workOrder       WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  reviewedByUser  User?         @relation("PatchArtifactReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([automationJobId])
+  @@index([workOrderId])
+  @@index([projectId])
+  @@index([riskLevel])
+  @@index([validationStatus])
 }

@@ -100,4 +100,29 @@ export class ApiClient {
   }): Promise<void> {
     await this.request("POST", `/api/runner/jobs/${jobId}/report`, report);
   }
+
+  async submitPatchArtifact(jobId: string, payload: {
+    title: string;
+    summary: string;
+    diffStat?: string | null;
+    diffPreview?: string | null;
+    fullPatch?: string | null;
+    filesChanged: string[];
+    validationResults?: Array<{ command: string; exitCode: number; durationMs: number; output: string; success: boolean }>;
+    branchName?: string | null;
+  }): Promise<{ id: string }> {
+    return this.request("POST", `/api/runner/jobs/${jobId}/patch-artifact`, payload);
+  }
+
+  async markBranchPushed(jobId: string, artifactId: string, branchName: string): Promise<void> {
+    await this.request("POST", `/api/runner/jobs/${jobId}/patch-artifacts/${artifactId}/branch-pushed`, { branchName });
+  }
+
+  async getPatchArtifact(artifactId: string): Promise<{ validationStatus: string; riskLevel: string }> {
+    return this.request("GET", `/api/runner/patch-artifacts/${artifactId}`);
+  }
+
+  async getRunnerSettings(): Promise<{ allowBranchPush: boolean; allowPrCreate: boolean }> {
+    return this.request("GET", "/api/runner/settings");
+  }
 }

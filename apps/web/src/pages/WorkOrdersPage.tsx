@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2 } from "lucide-react";
+import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationJobDto, ExternalAgentDto, ImplementationReportPayload, ProjectDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, ExternalAgentDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -82,6 +82,8 @@ export function WorkOrdersPage() {
   const [automationJobs, setAutomationJobs] = useState<AutomationJobDto[]>([]);
   const [creatingJob, setCreatingJob] = useState(false);
   const [approvingJob, setApprovingJob] = useState<string | null>(null);
+  const [patchArtifacts, setPatchArtifacts] = useState<PatchArtifactDto[]>([]);
+  const [patchActionId, setPatchActionId] = useState<string | null>(null);
 
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
 
@@ -113,11 +115,19 @@ export function WorkOrdersPage() {
     setGeneratedPrompt("");
     setError(null);
     if (order) {
-      api.automationJobs({ workOrderId: order.id })
-        .then(setAutomationJobs)
-        .catch(() => setAutomationJobs([]));
+      Promise.all([
+        api.automationJobs({ workOrderId: order.id }),
+        api.patchArtifacts({ workOrderId: order.id })
+      ]).then(([jobs, patches]) => {
+        setAutomationJobs(jobs);
+        setPatchArtifacts(patches);
+      }).catch(() => {
+        setAutomationJobs([]);
+        setPatchArtifacts([]);
+      });
     } else {
       setAutomationJobs([]);
+      setPatchArtifacts([]);
     }
   }
 
@@ -149,6 +159,30 @@ export function WorkOrdersPage() {
       setError(err instanceof Error ? err.message : "Failed to approve job");
     } finally {
       setApprovingJob(null);
+    }
+  }
+
+  async function approvePatch(artifactId: string) {
+    setPatchActionId(artifactId);
+    try {
+      await api.approvePatchArtifact(artifactId);
+      if (selected) setPatchArtifacts(await api.patchArtifacts({ workOrderId: selected.id }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to approve patch");
+    } finally {
+      setPatchActionId(null);
+    }
+  }
+
+  async function rejectPatch(artifactId: string) {
+    setPatchActionId(artifactId);
+    try {
+      await api.rejectPatchArtifact(artifactId);
+      if (selected) setPatchArtifacts(await api.patchArtifacts({ workOrderId: selected.id }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to reject patch");
+    } finally {
+      setPatchActionId(null);
     }
   }
 
@@ -651,6 +685,27 @@ export function WorkOrdersPage() {
                 </Card>
               )}
 
+              {/* Patch Artifacts panel */}
+              {user?.role === "KING" && patchArtifacts.length > 0 && (
+                <Card>
+                  <h2 className="font-display text-lg flex items-center gap-2 mb-3">
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                    Patch Review
+                  </h2>
+                  <div className="space-y-3">
+                    {patchArtifacts.map((artifact) => (
+                      <PatchArtifactCard
+                        key={artifact.id}
+                        artifact={artifact}
+                        isActing={patchActionId === artifact.id}
+                        onApprove={() => void approvePatch(artifact.id)}
+                        onReject={() => void rejectPatch(artifact.id)}
+                      />
+                    ))}
+                  </div>
+                </Card>
+              )}
+
               <Card>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-display text-lg">Handoff Briefs</h2>
@@ -720,4 +775,135 @@ function lines(value: string): string[] {
 
 async function copy(value: string) {
   await navigator.clipboard.writeText(value);
+}
+
+function riskColor(risk: string) {
+  switch (risk) {
+    case "LOW": return "text-green-700 bg-green-50 border-green-200";
+    case "MEDIUM": return "text-yellow-700 bg-yellow-50 border-yellow-200";
+    case "HIGH": return "text-orange-700 bg-orange-50 border-orange-200";
+    case "CRITICAL": return "text-red-700 bg-red-50 border-red-200";
+    default: return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function validationStatusColor(status: string) {
+  switch (status) {
+    case "APPROVED": return "text-green-700 bg-green-50 border-green-200";
+    case "REJECTED": return "text-red-700 bg-red-50 border-red-200";
+    case "REVISION_REQUESTED": return "text-orange-700 bg-orange-50 border-orange-200";
+    default: return "text-purple-700 bg-purple-50 border-purple-200";
+  }
+}
+
+function PatchArtifactCard({
+  artifact,
+  isActing,
+  onApprove,
+  onReject
+}: {
+  artifact: PatchArtifactDto;
+  isActing: boolean;
+  onApprove: () => void;
+  onReject: () => void;
+}) {
+  const [showDiff, setShowDiff] = useState(false);
+  const isHighRisk = artifact.riskLevel === "HIGH" || artifact.riskLevel === "CRITICAL";
+
+  return (
+    <div className="rounded-md border p-3 space-y-2 text-sm">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", riskColor(artifact.riskLevel))}>
+            {isHighRisk && <AlertTriangle className="h-3 w-3 inline mr-1" />}
+            {artifact.riskLevel} risk
+          </span>
+          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", validationStatusColor(artifact.validationStatus))}>
+            {artifact.validationStatus}
+          </span>
+          {artifact.branchPushed && (
+            <span className="px-2 py-0.5 rounded-full text-xs font-medium border text-blue-700 bg-blue-50 border-blue-200 flex items-center gap-1">
+              <GitBranch className="h-3 w-3" />
+              {artifact.branchName}
+            </span>
+          )}
+        </div>
+        <span className="text-xs text-muted-foreground">{formatDate(artifact.createdAt)}</span>
+      </div>
+
+      <p className="font-medium">{artifact.title}</p>
+      <p className="text-xs text-muted-foreground">{artifact.summary}</p>
+
+      {artifact.filesChanged.length > 0 && (
+        <div className="text-xs text-muted-foreground">
+          Files: {artifact.filesChanged.slice(0, 5).join(", ")}
+          {artifact.filesChanged.length > 5 && ` +${artifact.filesChanged.length - 5} more`}
+        </div>
+      )}
+
+      {artifact.diffStat && (
+        <pre className="text-xs bg-muted/50 rounded p-2 overflow-auto max-h-24 font-mono">{artifact.diffStat}</pre>
+      )}
+
+      {isHighRisk && artifact.validationStatus === "PENDING" && (
+        <div className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+          <Shield className="h-3.5 w-3.5" />
+          HIGH/CRITICAL risk — King approval required before branch push
+        </div>
+      )}
+
+      {artifact.diffPreview && (
+        <div>
+          <button
+            className="text-xs text-primary hover:underline"
+            onClick={() => setShowDiff(!showDiff)}
+          >
+            {showDiff ? "Hide diff preview" : "Show diff preview"}
+          </button>
+          {showDiff && (
+            <pre className="mt-1 text-xs bg-muted/50 rounded p-2 overflow-auto max-h-48 font-mono whitespace-pre-wrap">
+              {artifact.diffPreview}
+              {artifact.fullPatchTruncated && "\n...[diff truncated]"}
+            </pre>
+          )}
+        </div>
+      )}
+
+      {artifact.validationResults && artifact.validationResults.length > 0 && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-muted-foreground">Validation</p>
+          {artifact.validationResults.map((vr, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              {vr.success
+                ? <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                : <XCircle className="h-3.5 w-3.5 text-red-600" />
+              }
+              <span className="font-mono">{vr.command}</span>
+              <span className="text-muted-foreground">{vr.durationMs}ms</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {artifact.validationStatus === "PENDING" && (
+        <div className="flex gap-2 pt-1 border-t">
+          <Button className="h-7 text-xs px-3" onClick={onApprove} disabled={isActing}>
+            <CheckCircle className="h-3.5 w-3.5 mr-1" />
+            Approve
+          </Button>
+          <Button className="h-7 text-xs px-3 text-destructive border-destructive/30" variant="outline" onClick={onReject} disabled={isActing}>
+            <XCircle className="h-3.5 w-3.5 mr-1" />
+            Reject
+          </Button>
+        </div>
+      )}
+
+      {artifact.reviewedByUser && (
+        <p className="text-xs text-muted-foreground">
+          Reviewed by {artifact.reviewedByUser.displayName}
+          {artifact.reviewNote && ` — "${artifact.reviewNote}"`}
+        </p>
+      )}
+    </div>
+  );
 }
