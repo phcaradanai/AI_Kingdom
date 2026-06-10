@@ -250,92 +250,92 @@ export const DEFAULT_MODEL_PRICING: Array<{
   unsupportedThinkingParams?: string[];
   notes?: string;
 }> = [
-  { providerType: "mock", model: "deterministic-mock-v1", displayName: "Local Sandbox Baseline (legacy)", inputPerMillion: 0, outputPerMillion: 0, notes: "Legacy deterministic baseline model retained for old usage records." },
-  { providerType: "sandbox", model: "local-sandbox-baseline", displayName: "Local Sandbox Baseline", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "local-sandbox-baseline", model: "local-sandbox-baseline", displayName: "Local Sandbox Baseline", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "nvidia/nemotron-3-ultra-550b-a55b:free", displayName: "OpenRouter Free: Nemotron 3 Ultra", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "nvidia/nemotron-3-super-120b-a12b:free", displayName: "OpenRouter Free: Nemotron 3 Super", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "poolside/laguna-m.1:free", displayName: "OpenRouter Free: Laguna M", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "poolside/laguna-xs.2:free", displayName: "OpenRouter Free: Laguna XS", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "google/gemma-4-31b-it:free", displayName: "OpenRouter Free: Gemma 4 31B", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "google/gemma-4-26b-a4b-it:free", displayName: "OpenRouter Free: Gemma 4 26B", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openrouter", model: "openrouter/owl-alpha", displayName: "OpenRouter Free: Owl Alpha", inputPerMillion: 0, outputPerMillion: 0 },
-  { providerType: "openai", model: "gpt-4o", displayName: "GPT-4o", inputPerMillion: 2.5, outputPerMillion: 10.0 },
-  { providerType: "openai", model: "gpt-4o-mini", displayName: "GPT-4o Mini", inputPerMillion: 0.15, outputPerMillion: 0.6 },
-  { providerType: "openai", model: "gpt-4-turbo", displayName: "GPT-4 Turbo", inputPerMillion: 10.0, outputPerMillion: 30.0 },
-  { providerType: "openai", model: "gpt-4", displayName: "GPT-4", inputPerMillion: 30.0, outputPerMillion: 60.0 },
-  { providerType: "openai", model: "gpt-3.5-turbo", displayName: "GPT-3.5 Turbo", inputPerMillion: 0.5, outputPerMillion: 1.5 },
-  { providerType: "openrouter", model: "openai/gpt-4o-mini", displayName: "OpenRouter GPT-4o Mini", inputPerMillion: 0.15, outputPerMillion: 0.6 },
+    { providerType: "mock", model: "deterministic-mock-v1", displayName: "Local Sandbox Baseline (legacy)", inputPerMillion: 0, outputPerMillion: 0, notes: "Legacy deterministic baseline model retained for old usage records." },
+    { providerType: "sandbox", model: "local-sandbox-baseline", displayName: "Local Sandbox Baseline", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "local-sandbox-baseline", model: "local-sandbox-baseline", displayName: "Local Sandbox Baseline", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "nvidia/nemotron-3-ultra-550b-a55b:free", displayName: "OpenRouter Free: Nemotron 3 Ultra", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "nvidia/nemotron-3-super-120b-a12b:free", displayName: "OpenRouter Free: Nemotron 3 Super", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "poolside/laguna-m.1:free", displayName: "OpenRouter Free: Laguna M", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "poolside/laguna-xs.2:free", displayName: "OpenRouter Free: Laguna XS", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "google/gemma-4-31b-it:free", displayName: "OpenRouter Free: Gemma 4 31B", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "google/gemma-4-26b-a4b-it:free", displayName: "OpenRouter Free: Gemma 4 26B", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openrouter", model: "openrouter/owl-alpha", displayName: "OpenRouter Free: Owl Alpha", inputPerMillion: 0, outputPerMillion: 0 },
+    { providerType: "openai", model: "gpt-4o", displayName: "GPT-4o", inputPerMillion: 2.5, outputPerMillion: 10.0 },
+    { providerType: "openai", model: "gpt-4o-mini", displayName: "GPT-4o Mini", inputPerMillion: 0.15, outputPerMillion: 0.6 },
+    { providerType: "openai", model: "gpt-4-turbo", displayName: "GPT-4 Turbo", inputPerMillion: 10.0, outputPerMillion: 30.0 },
+    { providerType: "openai", model: "gpt-4", displayName: "GPT-4", inputPerMillion: 30.0, outputPerMillion: 60.0 },
+    { providerType: "openai", model: "gpt-3.5-turbo", displayName: "GPT-3.5 Turbo", inputPerMillion: 0.5, outputPerMillion: 1.5 },
+    { providerType: "openrouter", model: "openai/gpt-4o-mini", displayName: "OpenRouter GPT-4o Mini", inputPerMillion: 0.15, outputPerMillion: 0.6 },
 
-  // DeepSeek V4 — official pricing from api-docs.deepseek.com (as of 2026-06)
-  {
-    providerType: "deepseek",
-    model: "deepseek-v4-flash",
-    displayName: "DeepSeek V4 Flash",
-    inputCacheHitPerMillion: 0.0028,
-    inputCacheMissPerMillion: 0.14,
-    outputPerMillion: 0.28,
-    concurrencyLimit: 2500,
-    supportsThinking: true,
-    defaultThinkingEnabled: true,
-    supportedReasoningEfforts: ["high", "max"],
-    unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
-    notes: "deepseek-chat and deepseek-reasoner are compatibility aliases for this model."
-  },
-  {
-    providerType: "deepseek",
-    model: "deepseek-v4-pro",
-    displayName: "DeepSeek V4 Pro",
-    inputCacheHitPerMillion: 0.003625,
-    inputCacheMissPerMillion: 0.435,
-    outputPerMillion: 0.87,
-    concurrencyLimit: 500,
-    supportsThinking: true,
-    defaultThinkingEnabled: true,
-    supportedReasoningEfforts: ["high", "max"],
-    unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
-    notes: "Official DeepSeek V4 Pro pricing."
-  },
-  // Deprecated aliases — same pricing as deepseek-v4-flash
-  {
-    providerType: "deepseek",
-    model: "deepseek-chat",
-    displayName: "DeepSeek Chat (alias → V4 Flash)",
-    canonicalModel: "deepseek-v4-flash",
-    inputCacheHitPerMillion: 0.0028,
-    inputCacheMissPerMillion: 0.14,
-    outputPerMillion: 0.28,
-    concurrencyLimit: 2500,
-    supportsThinking: true,
-    defaultThinkingEnabled: true,
-    supportedReasoningEfforts: ["high", "max"],
-    unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
-    isAlias: true,
-    aliasOf: "deepseek-v4-flash",
-    isDeprecated: true,
-    deprecationDate: DEPRECATION_DATE,
-    notes: "Deprecated compatibility alias for deepseek-v4-flash (non-thinking mode). Deprecated after 2026-07-24."
-  },
-  {
-    providerType: "deepseek",
-    model: "deepseek-reasoner",
-    displayName: "DeepSeek Reasoner (alias → V4 Flash)",
-    canonicalModel: "deepseek-v4-flash",
-    inputCacheHitPerMillion: 0.0028,
-    inputCacheMissPerMillion: 0.14,
-    outputPerMillion: 0.28,
-    concurrencyLimit: 2500,
-    supportsThinking: true,
-    defaultThinkingEnabled: true,
-    supportedReasoningEfforts: ["high", "max"],
-    unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
-    isAlias: true,
-    aliasOf: "deepseek-v4-flash",
-    isDeprecated: true,
-    deprecationDate: DEPRECATION_DATE,
-    notes: "Deprecated compatibility alias for deepseek-v4-flash (thinking mode). Deprecated after 2026-07-24."
-  }
-];
+    // DeepSeek V4 — official pricing from api-docs.deepseek.com (as of 2026-06)
+    {
+      providerType: "deepseek",
+      model: "deepseek-v4-flash",
+      displayName: "DeepSeek V4 Flash",
+      inputCacheHitPerMillion: 0.0028,
+      inputCacheMissPerMillion: 0.14,
+      outputPerMillion: 0.28,
+      concurrencyLimit: 2500,
+      supportsThinking: true,
+      defaultThinkingEnabled: true,
+      supportedReasoningEfforts: ["high", "max"],
+      unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
+      notes: "deepseek-chat and deepseek-reasoner are compatibility aliases for this model."
+    },
+    {
+      providerType: "deepseek",
+      model: "deepseek-v4-pro",
+      displayName: "DeepSeek V4 Pro",
+      inputCacheHitPerMillion: 0.003625,
+      inputCacheMissPerMillion: 0.435,
+      outputPerMillion: 0.87,
+      concurrencyLimit: 500,
+      supportsThinking: true,
+      defaultThinkingEnabled: true,
+      supportedReasoningEfforts: ["high", "max"],
+      unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
+      notes: "Official DeepSeek V4 Pro pricing."
+    },
+    // Deprecated aliases — same pricing as deepseek-v4-flash
+    {
+      providerType: "deepseek",
+      model: "deepseek-chat",
+      displayName: "DeepSeek Chat (alias → V4 Flash)",
+      canonicalModel: "deepseek-v4-flash",
+      inputCacheHitPerMillion: 0.0028,
+      inputCacheMissPerMillion: 0.14,
+      outputPerMillion: 0.28,
+      concurrencyLimit: 2500,
+      supportsThinking: true,
+      defaultThinkingEnabled: true,
+      supportedReasoningEfforts: ["high", "max"],
+      unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
+      isAlias: true,
+      aliasOf: "deepseek-v4-flash",
+      isDeprecated: true,
+      deprecationDate: DEPRECATION_DATE,
+      notes: "Deprecated compatibility alias for deepseek-v4-flash (non-thinking mode). Deprecated after 2026-07-24."
+    },
+    {
+      providerType: "deepseek",
+      model: "deepseek-reasoner",
+      displayName: "DeepSeek Reasoner (alias → V4 Flash)",
+      canonicalModel: "deepseek-v4-flash",
+      inputCacheHitPerMillion: 0.0028,
+      inputCacheMissPerMillion: 0.14,
+      outputPerMillion: 0.28,
+      concurrencyLimit: 2500,
+      supportsThinking: true,
+      defaultThinkingEnabled: true,
+      supportedReasoningEfforts: ["high", "max"],
+      unsupportedThinkingParams: ["temperature", "top_p", "presence_penalty", "frequency_penalty"],
+      isAlias: true,
+      aliasOf: "deepseek-v4-flash",
+      isDeprecated: true,
+      deprecationDate: DEPRECATION_DATE,
+      notes: "Deprecated compatibility alias for deepseek-v4-flash (thinking mode). Deprecated after 2026-07-24."
+    }
+  ];
 
 export async function ensureDefaultModelPricing() {
   for (const entry of DEFAULT_MODEL_PRICING) {
@@ -387,6 +387,7 @@ export async function ensureDefaultModelPricing() {
 }
 
 function normalizePricingKey(providerType: string, model: string): { providerType: string; model: string } {
+  // Sandbox/mock normalization — space in LOCAL_SANDBOX_PROVIDER_NAME requires exact match before generic lowercase.
   if (
     providerType === LOCAL_SANDBOX_PROVIDER_NAME ||
     providerType === LOCAL_SANDBOX_PROVIDER_ID ||
@@ -398,9 +399,15 @@ function normalizePricingKey(providerType: string, model: string): { providerTyp
     return { providerType: "sandbox", model: LOCAL_SANDBOX_MODEL };
   }
 
-  if (providerType === OPENROUTER_FREE_PROVIDER_NAME || providerType === OPENROUTER_FREE_PROVIDER_ID) {
+  const lc = providerType.toLowerCase();
+
+  // Normalize all OpenRouter variants to canonical "openrouter":
+  //   "openrouter-free", "OpenRouter", "Openrouter", "OpenRouter Free Sandbox", etc.
+  if (lc.startsWith("openrouter")) {
     return { providerType: "openrouter", model };
   }
 
-  return { providerType, model };
+  // Normalize provider display names to lowercase type IDs:
+  //   "DeepSeek" → "deepseek", "OpenAI" → "openai", etc.
+  return { providerType: lc, model };
 }

@@ -273,7 +273,7 @@ async function callPlannerLLM(opts: {
     throw error;
   }
 
-  const cost = await calculateCostUSDFromRegistry(generated.providerName, generated.modelUsed, generated.usage);
+  const cost = await calculateCostUSDFromRegistry(generated.providerId ?? generated.providerName, generated.modelUsed, generated.usage);
 
   await prisma.usageRecord.create({
     data: {

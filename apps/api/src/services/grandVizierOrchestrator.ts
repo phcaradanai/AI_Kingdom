@@ -270,7 +270,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         await updateTraceSource(traceId, { sourceId: agentResponse.id });
 
         const agentCost = await calculateCostUSDFromRegistry(
-          generated.providerName,
+          generated.providerId ?? generated.providerName,
           generated.modelUsed,
           generated.usage
         );
@@ -517,7 +517,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     usedModels.push(generatedSummary.modelUsed);
 
     const summaryCost = await calculateCostUSDFromRegistry(
-      generatedSummary.providerName,
+      generatedSummary.providerId ?? generatedSummary.providerName,
       generatedSummary.modelUsed,
       generatedSummary.usage
     );

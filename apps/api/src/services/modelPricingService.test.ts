@@ -116,6 +116,34 @@ test("static fallback used when model not in DB", async () => {
   assert.ok(result.inputPerMillion != null && result.inputPerMillion > 0);
 });
 
+test("display name 'OpenRouter' normalizes to openrouter for pricing lookup", async () => {
+  await ensureDefaultModelPricing();
+  invalidatePricingCache();
+  // "OpenRouter" is the display name stored in UsageRecord.provider via PROVIDER_DISPLAY_NAMES;
+  // the DB row is keyed "openrouter:openai/gpt-4o-mini" — normalization must bridge the gap.
+  const result = await getModelPricing("OpenRouter", "openai/gpt-4o-mini");
+  assert.equal(result.pricingStatus, "KNOWN");
+  assert.equal(result.source, "db");
+});
+
+test("mixed-case 'Openrouter' and 'OPENROUTER' normalize to openrouter for pricing lookup", async () => {
+  await ensureDefaultModelPricing();
+  invalidatePricingCache();
+  const r1 = await getModelPricing("Openrouter", "openai/gpt-4o-mini");
+  assert.equal(r1.pricingStatus, "KNOWN");
+  const r2 = await getModelPricing("OPENROUTER", "openai/gpt-4o-mini");
+  assert.equal(r2.pricingStatus, "KNOWN");
+});
+
+test("display name 'DeepSeek' normalizes to deepseek for pricing lookup", async () => {
+  await ensureDefaultModelPricing();
+  invalidatePricingCache();
+  const result = await getModelPricing("DeepSeek", "deepseek-v4-flash");
+  assert.equal(result.pricingStatus, "KNOWN");
+  assert.equal(result.source, "db");
+  assert.equal(result.outputPerMillion, 0.28);
+});
+
 test("unknown model returns 0 cost and UNKNOWN status", async () => {
   invalidatePricingCache();
   const result = await getModelPricing("fictional-provider", "fictional-model-xyz");

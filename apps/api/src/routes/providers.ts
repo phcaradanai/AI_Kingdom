@@ -278,7 +278,7 @@ router.post("/:id/test", requireRole("KING"), async (req, res, next) => {
       metadata: { providerUsed: generated.providerName, modelUsed: generated.modelUsed }
     });
 
-    const cost = await calculateCostUSDFromRegistry(generated.providerName, generated.modelUsed, generated.usage);
+    const cost = await calculateCostUSDFromRegistry(generated.providerId ?? generated.providerName, generated.modelUsed, generated.usage);
     const usageRecord = await prisma.usageRecord.create({
       data: {
         traceId,

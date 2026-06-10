@@ -6,7 +6,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace @ai-kingdom/api & npm run dev --workspace @ai-kingdom/web",
+    "dev": "concurrently \"npm run dev --workspace @ai-kingdom/api\" \"npm run dev --workspace @ai-kingdom/web\"",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces",
@@ -30,6 +30,7 @@
     "data:archive-low-value-work-orders": "npm run data:archive-low-value-work-orders --workspace @ai-kingdom/api"
   },
   "devDependencies": {
+    "concurrently": "^10.0.3",
     "typescript": "^5.6.3"
   }
 }

@@ -41,10 +41,11 @@ router.get("/", async (_req, res, next) => {
 router.post("/", requireRole("KING"), async (req, res, next) => {
   try {
     const payload = pricingSchema.parse(req.body);
+    const normalized = { ...payload, providerType: payload.providerType.toLowerCase() };
     const record = await prisma.aIModelPricing.upsert({
-      where: { providerType_model: { providerType: payload.providerType, model: payload.model } },
-      update: { ...payload, source: "manual" },
-      create: { ...payload, source: "manual" }
+      where: { providerType_model: { providerType: normalized.providerType, model: normalized.model } },
+      update: { ...normalized, source: "manual" },
+      create: { ...normalized, source: "manual" }
     });
     invalidatePricingCache();
     res.status(201).json({ record });
@@ -61,7 +62,8 @@ router.put("/:id", requireRole("KING"), async (req, res, next) => {
       return;
     }
     const payload = pricingSchema.partial().parse(req.body);
-    const record = await prisma.aIModelPricing.update({ where: { id: existing.id }, data: { ...payload, source: "manual" } });
+    const normalized = payload.providerType ? { ...payload, providerType: payload.providerType.toLowerCase() } : payload;
+    const record = await prisma.aIModelPricing.update({ where: { id: existing.id }, data: { ...normalized, source: "manual" } });
     invalidatePricingCache();
     res.json({ record });
   } catch (error) {
