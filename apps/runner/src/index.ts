@@ -20,6 +20,7 @@ import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
 import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
+import { evaluateBranchPushEligibility, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -242,8 +243,16 @@ async function executeJob(job: AutomationJob) {
     log(`[Job ${job.id}] Report submitted. Job is NEEDS_REVIEW.`);
 
     // Branch push (if enabled and artifact was submitted)
-    if (ALLOW_BRANCH_PUSH && artifact && patchPayload.branchName) {
-      await attemptBranchPush(job, artifact.id, patchPayload, workspaceDir, log);
+    const pushEligibility = evaluateBranchPushEligibility({
+      allowBranchPush: ALLOW_BRANCH_PUSH,
+      commandPolicy: job.commandPolicy,
+      branchName: patchPayload.branchName,
+      hasArtifact: Boolean(artifact)
+    });
+    if (pushEligibility.attemptPush) {
+      await attemptBranchPush(job, artifact!.id, patchPayload, workspaceDir, log);
+    } else if (ALLOW_BRANCH_PUSH && artifact && patchPayload.branchName) {
+      log(`[Job ${job.id}] Branch push skipped: ${pushEligibility.reason}`);
     }
 
   } catch (err) {
@@ -359,8 +368,8 @@ async function waitForApproval(artifactId: string, log: (msg: string) => void): 
         log(`[Runner] Patch rejected — branch push cancelled`);
         return false;
       }
-      // LOW/MEDIUM risk: push without waiting for explicit approval
-      if (["LOW", "MEDIUM"].includes(artifact.riskLevel) && artifact.validationStatus === "PENDING") {
+      // LOW risk: push without waiting for explicit approval (if enabled)
+      if (shouldPushWithoutApproval(artifact)) {
         return true;
       }
     } catch (err) {

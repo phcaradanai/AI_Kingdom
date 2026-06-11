@@ -12,6 +12,7 @@ const mockStatus: LivingLoopStatusDto = {
   highCriticalCandidates: 1,
   runnerIssues: 0,
   providerIssues: 0,
+  patchesPendingReview: 1,
   autoValidation: {
     enabled: true,
     dailyCount: 4,
@@ -19,6 +20,14 @@ const mockStatus: LivingLoopStatusDto = {
     cooldownMinutes: 60,
     jobsCreatedLastRun: 1,
     validationFailuresNeedingReview: 3
+  },
+  autoSandboxPatch: {
+    enabled: true,
+    dailyCount: 0,
+    dailyLimit: 5,
+    cooldownMinutes: 15,
+    minConfidence: 85,
+    jobsCreatedLastRun: 0
   }
 };
 
@@ -33,6 +42,12 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
+function getStatCardValue(title: string): string {
+  const heading = screen.getByText(title);
+  const card = heading.closest(".rounded-xl") as HTMLElement;
+  return card.querySelector(".font-display")?.textContent ?? "";
+}
+
 describe("LivingLoopDashboardCard", () => {
   it("renders pending and high/critical counts from the loop status", async () => {
     apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
@@ -40,9 +55,9 @@ describe("LivingLoopDashboardCard", () => {
     render(<LivingLoopDashboardCard />);
 
     expect(await screen.findByText("Pending")).toBeInTheDocument();
-    expect(screen.getByText("2")).toBeInTheDocument();
+    expect(getStatCardValue("Pending")).toBe("2");
     expect(screen.getByText("High/Critical")).toBeInTheDocument();
-    expect(screen.getByText("1")).toBeInTheDocument();
+    expect(getStatCardValue("High/Critical")).toBe("1");
     expect(screen.getByText(/Last run: COMPLETED/)).toBeInTheDocument();
   });
 
@@ -52,10 +67,21 @@ describe("LivingLoopDashboardCard", () => {
     render(<LivingLoopDashboardCard />);
 
     expect(await screen.findByText("Auto Validation Today")).toBeInTheDocument();
-    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(getStatCardValue("Auto Validation Today")).toBe("4");
     expect(screen.getByText("Validation Failures")).toBeInTheDocument();
-    expect(screen.getByText("3")).toBeInTheDocument();
+    expect(getStatCardValue("Validation Failures")).toBe("3");
   });
+  it("shows auto patch jobs today and patches needing review", async () => {
+    apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
+
+    render(<LivingLoopDashboardCard />);
+
+    expect(await screen.findByText("Auto Patch Jobs Today")).toBeInTheDocument();
+    expect(getStatCardValue("Auto Patch Jobs Today")).toBe("0");
+    expect(screen.getByText("Patches Needing Review")).toBeInTheDocument();
+    expect(getStatCardValue("Patches Needing Review")).toBe("1");
+  });
+
 });
 
 describe("RunLivingLoopButton", () => {

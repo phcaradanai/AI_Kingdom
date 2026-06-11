@@ -1579,8 +1579,11 @@ export type LivingLoopStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";
 export type LivingLoopTriggerType = "MANUAL" | "SCHEDULED";
 export type AutomationCandidateKind =
   | "WORK_ORDER_REVIEW" | "VALIDATION_JOB" | "PATCH_REVIEW"
-  | "MEMORY_REVIEW" | "CLEANUP_REVIEW" | "PROVIDER_REVIEW"
-  | "PROJECT_REVIEW" | "RUNNER_REVIEW";
+  | "MEMORY_REVIEW"  | "CLEANUP_REVIEW"
+  | "PROVIDER_REVIEW"
+  | "PROJECT_REVIEW"
+  | "RUNNER_REVIEW"
+  | "SANDBOX_PATCH";
 export type AutomationCandidatePriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type AutomationCandidateRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type AutomationCandidateStatus = "PENDING" | "APPROVED" | "REJECTED" | "APPLIED" | "ARCHIVED";
@@ -1639,6 +1642,15 @@ export type AutoValidationStatusDto = {
   validationFailuresNeedingReview: number;
 };
 
+export type AutoSandboxPatchStatusDto = {
+  enabled: boolean;
+  dailyCount: number;
+  dailyLimit: number;
+  cooldownMinutes: number;
+  minConfidence: number;
+  jobsCreatedLastRun: number;
+};
+
 export type LivingLoopStatusDto = {
   enabled: boolean;
   lastRun: LivingLoopRunDto | null;
@@ -1648,6 +1660,8 @@ export type LivingLoopStatusDto = {
   highCriticalCandidates: number;
   runnerIssues: number;
   providerIssues: number;
+  patchesPendingReview: number;
   autoValidation: AutoValidationStatusDto;
+  autoSandboxPatch: AutoSandboxPatchStatusDto;
 };
 

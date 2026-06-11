@@ -294,7 +294,7 @@ export function RunLivingLoopButton() {
 }
 
 export function LivingLoopDashboardCard() {
-  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null; autoValidationToday: number; validationFailures: number } | null>(null);
+  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null; autoValidationToday: number; validationFailures: number; autoSandboxPatchToday: number; patchesPendingReview: number } | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     api.livingLoopStatus()
@@ -305,7 +305,9 @@ export function LivingLoopDashboardCard() {
         providerIssues: res.status.providerIssues,
         lastRun: res.status.lastResult,
         autoValidationToday: res.status.autoValidation?.dailyCount ?? 0,
-        validationFailures: res.status.autoValidation?.validationFailuresNeedingReview ?? 0
+        validationFailures: res.status.autoValidation?.validationFailuresNeedingReview ?? 0,
+        autoSandboxPatchToday: res.status.autoSandboxPatch?.dailyCount ?? 0,
+        patchesPendingReview: res.status.patchesPendingReview ?? 0
       }))
       .catch(() => { /* ignore */ })
       .finally(() => setLoading(false));
@@ -321,6 +323,8 @@ export function LivingLoopDashboardCard() {
         <StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={status.providerIssues} trend={status.providerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
         <StatCard className="bg-transparent border-none p-0" title="Auto Validation Today" value={status.autoValidationToday} />
         <StatCard className="bg-transparent border-none p-0" title="Validation Failures" value={status.validationFailures} trend={status.validationFailures > 0 ? { value: "Review", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Auto Patch Jobs Today" value={status.autoSandboxPatchToday} />
+        <StatCard className="bg-transparent border-none p-0" title="Patches Needing Review" value={status.patchesPendingReview} trend={status.patchesPendingReview > 0 ? { value: "Review", isPositive: false } : undefined} />
       </div>
       {status.lastRun && <div className="text-xs text-muted-foreground">Last run: {status.lastRun}</div>}
     </div>

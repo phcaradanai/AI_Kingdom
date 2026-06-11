@@ -63,6 +63,11 @@ function autoValidationProvenance(job: AutomationJobDto): AutoValidationProvenan
   return p && p.source === "LIVING_LOOP_AUTO_VALIDATION" ? p : null;
 }
 
+function autoSandboxPatchProvenance(job: AutomationJobDto): AutoValidationProvenance | null {
+  const p = job.provenance as AutoValidationProvenance | null | undefined;
+  return p && p.source === "LIVING_LOOP_AUTO_SANDBOX_PATCH" ? p : null;
+}
+
 function ModeBadge({ mode }: { mode: string }) {
   if (mode === "VALIDATION_ONLY") {
     return (
@@ -80,6 +85,15 @@ function LivingLoopSourceBadge() {
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border text-indigo-700 bg-indigo-50 border-indigo-200">
       <Zap className="h-3 w-3" />
       Living Loop Auto Validation
+    </span>
+  );
+}
+
+function AutoSandboxPatchBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border text-lime-700 bg-lime-50 border-lime-200">
+      <Zap className="h-3 w-3" />
+      Living Loop Auto Sandbox Patch
     </span>
   );
 }
@@ -326,6 +340,7 @@ export function AutomationJobsPage() {
                       </span>
                       <ModeBadge mode={job.mode} />
                       {autoValidationProvenance(job) && <LivingLoopSourceBadge />}
+                      {autoSandboxPatchProvenance(job) && <AutoSandboxPatchBadge />}
                       {job.runner && (
                         <span className="text-xs text-muted-foreground">Runner: {job.runner.name}</span>
                       )}
@@ -403,6 +418,21 @@ export function AutomationJobsPage() {
                       <Link to="/living-loop" className="block text-primary hover:underline">
                         Candidate {autoValidationProvenance(selectedJob)?.candidateId?.slice(0, 8)} · Run {autoValidationProvenance(selectedJob)?.loopRunId?.slice(0, 8)} →
                       </Link>
+                    </dd>
+                  </div>
+                )}
+                {autoSandboxPatchProvenance(selectedJob) && (
+                  <div>
+                    <dt className="text-muted-foreground">Source</dt>
+                    <dd className="mt-0.5 space-y-1">
+                      <AutoSandboxPatchBadge />
+                      <Link to="/living-loop" className="block text-primary hover:underline">
+                        Candidate {autoSandboxPatchProvenance(selectedJob)?.candidateId?.slice(0, 8)} · Run {autoSandboxPatchProvenance(selectedJob)?.loopRunId?.slice(0, 8)} →
+                      </Link>
+                      <div className="text-[11px] text-lime-600 bg-lime-50 border border-lime-200 rounded px-2 py-1 mt-1 font-medium">
+                        <AlertTriangle className="h-3 w-3 inline mr-1" />
+                        No branch push / no PR auto-create
+                      </div>
                     </dd>
                   </div>
                 )}

@@ -25,6 +25,9 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "LIVING_LOOP_MAX_DAILY_VALIDATION_JOBS", value: "10", category: "SYSTEM", description: "Maximum number of auto-created VALIDATION_ONLY jobs per day." },
   { key: "LIVING_LOOP_VALIDATION_JOB_COOLDOWN_MINUTES", value: "60", category: "SYSTEM", description: "Minimum minutes between validation jobs for the same work order." },
   { key: "LIVING_LOOP_AUTO_SANDBOX_PATCH", value: "false", category: "SYSTEM", description: "Auto-run SANDBOX_PATCH jobs. Disabled in M17D-1." },
+  { key: "LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS", value: "3", category: "SYSTEM", description: "Maximum number of auto-created SANDBOX_PATCH jobs per day." },
+  { key: "LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES", value: "120", category: "SYSTEM", description: "Minimum minutes between auto patch jobs for the same work order." },
+  { key: "LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", value: "85", category: "SYSTEM", description: "Minimum confidence score (0-100) for a candidate to be auto-patched." },
   { key: "LIVING_LOOP_ALLOW_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Allow automatic branch push. Disabled in M17D-1." },
   { key: "LIVING_LOOP_ALLOW_PR_CREATE", value: "false", category: "SYSTEM", description: "Allow automatic PR creation. Disabled in M17D-1." },
   { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Allow loop to use paid providers for observations. Disabled in M17D-1." }

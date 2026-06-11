@@ -290,6 +290,7 @@ enum AutomationCandidateKind {
   PROVIDER_REVIEW
   PROJECT_REVIEW
   RUNNER_REVIEW
+  SANDBOX_PATCH
 }
 
 enum AutomationCandidatePriority {

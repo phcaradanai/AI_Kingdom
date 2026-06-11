@@ -3,6 +3,7 @@ import type { AutomationCandidateKind, AutomationCandidatePriority, AutomationCa
 import { prisma } from "../db/prisma.js";
 import { auditLog, sanitizeMetadata } from "./auditService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { isAutoPatchEligible } from "./livingLoopRiskPolicyService.js";
 
 const STALE_RUNNER_HOURS = 24;
 const STALE_WORK_ORDER_HOURS = 1;
@@ -20,6 +21,7 @@ export type Observation = {
   staleRunners: Array<any>;
   providerIssues: Array<any>;
   staleInboxItems: Array<any>;
+  workOrdersReadyForPatch: Array<any>;
   mattersAwaitingDecision: Array<any>;
   reportsWithRemainingWork: Array<any>;
 };
@@ -56,7 +58,7 @@ export type AutoValidationSummary = {
 
 const EMPTY_AUTO_VALIDATION: AutoValidationSummary = { enabled: false, createdJobs: [], skippedReasons: [] };
 
-export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", userId?: string | null): Promise<{ run: LivingLoopRun; candidates: AutomationCandidate[]; autoValidation: AutoValidationSummary }> {
+export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", userId?: string | null): Promise<{ run: LivingLoopRun; candidates: AutomationCandidate[]; autoValidation: AutoValidationSummary; autoSandboxPatch: AutoValidationSummary }> {
   const skipReasons: string[] = [];
   let run: LivingLoopRun | null = null;
   try {
@@ -65,7 +67,7 @@ export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", use
       if (!enabled) {
         run = await prisma.livingLoopRun.create({ data: { status: "SKIPPED", triggerType, completedAt: new Date(), summary: "Living loop is disabled." } });
         await auditLog({ userId, action: "living_loop_run_skipped", resourceType: "living_loop_run", resourceId: run.id, metadata: toMeta({ triggerType }) });
-        return { run, candidates: [], autoValidation: EMPTY_AUTO_VALIDATION };
+        return { run, candidates: [], autoValidation: EMPTY_AUTO_VALIDATION, autoSandboxPatch: EMPTY_AUTO_VALIDATION };
       }
     }
     run = await prisma.livingLoopRun.create({ data: { status: "STARTED", triggerType, startedAt: new Date() } });
@@ -77,7 +79,7 @@ export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", use
     const todayCount = await prisma.automationCandidate.count({ where: { createdAt: { gte: today } } });
     if (todayCount >= maxDailyCandidates) {
       run = await prisma.livingLoopRun.update({ where: { id: run.id }, data: { status: "SKIPPED", completedAt: new Date(), summary: "Daily candidate limit reached", skippedReasons: ["Daily limit reached"] as Prisma.InputJsonValue } });
-      return { run, candidates: [], autoValidation: EMPTY_AUTO_VALIDATION };
+      return { run, candidates: [], autoValidation: EMPTY_AUTO_VALIDATION, autoSandboxPatch: EMPTY_AUTO_VALIDATION };
     }
     const observation = await observeKingdomState();
     const observedCounts = { workOrdersNeedingReview: observation.workOrdersNeedingReview.length, staleWorkOrders: observation.staleWorkOrders.length, failedJobs: observation.failedJobs.length, needsReviewJobs: observation.needsReviewJobs.length, staleJobs: observation.staleJobs.length, patchesPendingReview: observation.patchesPendingReview.length, staleRunners: observation.staleRunners.length, providerIssues: observation.providerIssues.length, staleInboxItems: observation.staleInboxItems.length, mattersAwaitingDecision: observation.mattersAwaitingDecision.length, reportsWithRemainingWork: observation.reportsWithRemainingWork.length };
@@ -91,11 +93,13 @@ export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", use
       if (result) createdCandidates.push(result); else skippedCount++;
     }
     const autoValidation = await autoCreateValidationJobs(run.id, createdCandidates, userId);
+    const autoSandboxPatch = await autoCreateSandboxPatchJobs(run.id, createdCandidates, userId);
     for (const reason of autoValidation.skippedReasons) skipReasons.push(`AutoValidation: ${reason}`);
+    for (const reason of autoSandboxPatch.skippedReasons) skipReasons.push(`${reason}`);
     await summarizeLivingLoopRun(run.id);
-    run = await prisma.livingLoopRun.update({ where: { id: run.id }, data: { skippedCandidates: skippedCount, skippedReasons: skipReasons as Prisma.InputJsonValue, createdJobs: autoValidation.createdJobs.length } });
-    await auditLog({ userId, action: "living_loop_run_completed", resourceType: "living_loop_run", resourceId: run.id, metadata: toMeta({ triggerType, proposedCandidates: createdCandidates.length, skippedCandidates: skippedCount, autoValidationJobsCreated: autoValidation.createdJobs.length }) });
-    return { run, candidates: createdCandidates, autoValidation };
+    run = await prisma.livingLoopRun.update({ where: { id: run.id }, data: { skippedCandidates: skippedCount, skippedReasons: skipReasons as Prisma.InputJsonValue, createdJobs: autoValidation.createdJobs.length + autoSandboxPatch.createdJobs.length } });
+    await auditLog({ userId, action: "living_loop_run_completed", resourceType: "living_loop_run", resourceId: run.id, metadata: toMeta({ triggerType, proposedCandidates: createdCandidates.length, skippedCandidates: skippedCount, autoValidationJobsCreated: autoValidation.createdJobs.length, autoSandboxPatchJobsCreated: autoSandboxPatch.createdJobs.length }) });
+    return { run, candidates: createdCandidates, autoValidation, autoSandboxPatch };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     try { if (run) await prisma.livingLoopRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), error: msg } }); } catch { /* ignore */ }
@@ -111,9 +115,10 @@ export async function observeKingdomState(): Promise<Observation> {
   const staleRunnerDate = new Date(now.getTime() - STALE_RUNNER_HOURS * 3600000);
   const staleInboxDate = new Date(now.getTime() - STALE_INBOX_HOURS * 3600000);
   const staleReportDate = new Date(now.getTime() - STALE_REPORT_DAYS * 86400000);
-  const [workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork] = await Promise.all([
+  const [workOrdersNeedingReview, staleWorkOrders, workOrdersReadyForPatch, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork] = await Promise.all([
     prisma.workOrder.findMany({ where: { status: "NEEDS_REVIEW" }, select: { id: true, title: true, status: true, priority: true, projectId: true, assignedAgentId: true, isTestData: true, dataQuality: true, workQuality: true, validationCommands: true, createdAt: true, updatedAt: true }, orderBy: { updatedAt: "desc" }, take: 20 }),
     prisma.workOrder.findMany({ where: { status: "IN_PROGRESS", updatedAt: { lt: staleWODate } }, select: { id: true, title: true, status: true, priority: true, createdAt: true, updatedAt: true }, orderBy: { updatedAt: "asc" }, take: 10 }),
+    prisma.workOrder.findMany({ where: { status: { in: ["READY", "IN_PROGRESS"] } }, select: { id: true, title: true, status: true, priority: true, projectId: true, assignedAgentId: true, objective: true, instructions: true, validationCommands: true, isTestData: true, dataQuality: true, workQuality: true }, take: 20 }),
     prisma.automationJob.findMany({ where: { status: "FAILED" }, select: { id: true, status: true, mode: true, workOrderId: true, projectId: true, agentId: true, runnerId: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.automationJob.findMany({ where: { status: "NEEDS_REVIEW" }, select: { id: true, status: true, mode: true, workOrderId: true, projectId: true, agentId: true, runnerId: true, createdAt: true }, orderBy: { createdAt: "desc" }, take: 10 }),
     prisma.automationJob.findMany({ where: { status: "RUNNING", startedAt: { lt: staleJobDate } }, select: { id: true, status: true, mode: true, workOrderId: true, projectId: true, runnerId: true, startedAt: true, createdAt: true }, orderBy: { startedAt: "asc" }, take: 10 }),
@@ -136,7 +141,7 @@ export async function observeKingdomState(): Promise<Observation> {
     }
     providerIssues = Array.from(m.values()).filter(p => p.errorCount >= 3);
   } catch { /* best-effort */ }
-  return { workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, providerIssues, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork };
+  return { workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, providerIssues, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork, workOrdersReadyForPatch };
 }
 
 /** Non-actionable work order states for auto validation */
@@ -164,6 +169,43 @@ export async function proposeAutomationCandidates(obs: Observation, settings: { 
   for (const w of obs.workOrdersNeedingReview) { if (!w.projectId) push({ kind: "PROJECT_REVIEW", title: `Missing Project: ${w.title}`, summary: "Work order has no project.", reason: "Missing project context.", confidence: 65, priority: "LOW", riskLevel: "LOW", sourceType: "WorkOrder", sourceId: w.id, workOrderId: w.id, proposedAction: { action: "assign_project", targetId: w.id, options: ["assign_to_project", "archive"] }, provenance: { source: "WorkOrder", id: w.id, kind: "PROJECT_REVIEW", observedAt: now.toISOString() } }); }
   for (const r of obs.reportsWithRemainingWork) { if (r.decisionsMade.length > 0) push({ kind: "MEMORY_REVIEW", title: `Memory: ${(r.decisionsMade[0] ?? "Knowledge").slice(0, 80)}`, summary: `Report has ${r.decisionsMade.length} decisions.`, reason: "Decisions worth preserving.", confidence: 70, priority: "LOW", riskLevel: "LOW", sourceType: "ImplementationReport", sourceId: r.id, workOrderId: r.workOrderId, proposedAction: { action: "create_memory_candidate", targetId: r.id, decisionsCount: r.decisionsMade.length, options: ["review", "dismiss"] }, provenance: { source: "ImplementationReport", id: r.id, kind: "MEMORY_REVIEW", observedAt: now.toISOString(), decisionsCount: r.decisionsMade.length } }); }
   for (const i of obs.staleInboxItems) { push({ kind: "CLEANUP_REVIEW", title: `Stale Inbox: ${i.title}`, summary: `Pending since ${i.createdAt.toISOString().split("T")[0]}.`, reason: "Pending over 24h.", confidence: 60, priority: "LOW", riskLevel: "LOW", sourceType: "ProjectInboxItem", sourceId: i.id, proposedAction: { action: "archive_target", targetId: i.id, options: ["archive", "dismiss"] }, provenance: { source: "ProjectInboxItem", id: i.id, kind: "CLEANUP_REVIEW", observedAt: now.toISOString() } }); }
+
+  for (const w of obs.workOrdersReadyForPatch) {
+    if (!isWorkOrderEligibleForValidation(w).eligible) continue;
+    const fileHints: string[] = [];
+    const text = `${w.objective} ${w.instructions}`.toLowerCase();
+    if (text.includes("readme")) fileHints.push("README.md");
+    if (text.includes("docs/")) fileHints.push("docs/**");
+    if (text.includes("project_status.md")) fileHints.push("PROJECT_STATUS.md");
+    if (text.includes("next_task.md")) fileHints.push("NEXT_TASK.md");
+    if (text.includes("test") || text.includes("spec")) fileHints.push("test");
+
+    push({
+      kind: "SANDBOX_PATCH",
+      title: `Sandbox Patch: ${w.title}`,
+      summary: `Auto-run sandbox patch for work order: ${w.title}`,
+      reason: "Work order is ready for patching.",
+      confidence: 85,
+      priority: w.priority,
+      riskLevel: "LOW",
+      sourceType: "WorkOrder",
+      sourceId: w.id,
+      projectId: w.projectId,
+      agentId: w.assignedAgentId,
+      workOrderId: w.id,
+      proposedAction: {
+        action: "create_sandbox_patch_job",
+        targetId: w.id,
+        mode: "SANDBOX_PATCH",
+        allowedRisk: "LOW",
+        fileHints,
+        validationCommands: w.validationCommands,
+        reviewRequired: true,
+        options: ["auto_create", "dismiss"]
+      },
+      provenance: { source: "WorkOrder", id: w.id, kind: "SANDBOX_PATCH", observedAt: now.toISOString(), status: w.status }
+    });
+  }
   return cands;
 }
 
@@ -281,6 +323,90 @@ export async function autoCreateValidationJobs(loopRunId: string, candidates: Au
   return summary;
 }
 
+
+export const AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE = "LIVING_LOOP_AUTO_SANDBOX_PATCH";
+
+export async function countAutoSandboxPatchJobsToday(): Promise<number> {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return prisma.automationJob.count({
+    where: { mode: "SANDBOX_PATCH", createdAt: { gte: today }, provenance: { path: ["source"], equals: AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE } }
+  });
+}
+
+export async function autoCreateSandboxPatchJobs(loopRunId: string, candidates: AutomationCandidate[], userId?: string | null): Promise<AutoValidationSummary> {
+  const patchCandidates = candidates.filter(c => (c.kind === "SANDBOX_PATCH" || c.kind === "WORK_ORDER_REVIEW") && c.status === "PENDING" && c.workOrderId);
+  const enabled = await getBooleanSetting("LIVING_LOOP_AUTO_SANDBOX_PATCH", false);
+  const summary: AutoValidationSummary = { enabled, createdJobs: [], skippedReasons: [] };
+  if (patchCandidates.length === 0) return summary;
+
+  if (!enabled) {
+    summary.skippedReasons.push("AutoSandboxPatch: disabled");
+    await auditLog({ userId, action: "living_loop_auto_sandbox_patch_skipped", resourceType: "living_loop_run", resourceId: loopRunId, metadata: toMeta({ reason: "disabled" }) });
+    return summary;
+  }
+
+  const [minConfidence, maxDailyJobs, cooldownMinutes] = await Promise.all([
+    getNumberSetting("LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", 85),
+    getNumberSetting("LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS", 3),
+    getNumberSetting("LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES", 120)
+  ]);
+  let todayJobCount = await countAutoSandboxPatchJobsToday();
+  const runnerOnline = await hasOnlineRunner();
+
+  const skip = async (candidate: AutomationCandidate, reason: string, action = "living_loop_auto_sandbox_patch_skipped") => {
+    summary.skippedReasons.push(`AutoSandboxPatch: ${reason} (${candidate.workOrderId ?? candidate.sourceId})`);
+    await auditLog({ userId, action, resourceType: "automation_candidate", resourceId: candidate.id, metadata: toMeta({ reason, workOrderId: candidate.workOrderId, loopRunId }) });
+  };
+
+  for (const candidate of patchCandidates) {
+    const actionObj = candidate.proposedAction as any;
+    if (actionObj?.mode !== "SANDBOX_PATCH") continue;
+
+    const workOrder = await prisma.workOrder.findUnique({ where: { id: candidate.workOrderId! }, select: { id: true, status: true, projectId: true, assignedAgentId: true, isTestData: true, dataQuality: true, workQuality: true } });
+    if (!workOrder) { await skip(candidate, "Work order not found"); continue; }
+    
+    const activeJobCount = await prisma.automationJob.count({ where: { workOrderId: workOrder.id, status: { in: ["QUEUED", "APPROVED", "CLAIMED", "RUNNING", "NEEDS_REVIEW"] } } });
+    const cooldownCutoff = new Date(Date.now() - cooldownMinutes * 60000);
+    const recentJobCount = await prisma.automationJob.count({ where: { workOrderId: workOrder.id, mode: "SANDBOX_PATCH", createdAt: { gte: cooldownCutoff } } });
+
+    const eligibility = isAutoPatchEligible({
+      candidate,
+      workOrder,
+      runnerOnline,
+      activeJobCount,
+      recentJobCount,
+      todayJobCount,
+      maxDailyJobs,
+      minConfidence
+    });
+
+    if (!eligibility.eligible) {
+      await skip(candidate, eligibility.skippedReason ?? "Risk policy blocked", eligibility.auditAction);
+      continue;
+    }
+
+    const job = await prisma.automationJob.create({
+      data: {
+        workOrderId: workOrder.id,
+        projectId: candidate.projectId ?? workOrder.projectId,
+        agentId: candidate.agentId ?? workOrder.assignedAgentId,
+        status: "APPROVED",
+        mode: "SANDBOX_PATCH",
+        commandPolicy: "SANDBOX_PATCH_NO_PUSH",
+        allowedCommands: ["npm", "git"],
+        provenance: toMeta({ source: AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE, loopRunId, candidateId: candidate.id, workOrderId: workOrder.id, createdAt: new Date().toISOString(), riskPolicyVersion: "1.0" })
+      }
+    });
+    todayJobCount++;
+    summary.createdJobs.push({ jobId: job.id, candidateId: candidate.id, workOrderId: workOrder.id });
+
+    await prisma.automationCandidate.update({ where: { id: candidate.id }, data: { status: "APPLIED", automationJobId: job.id, reviewedAt: new Date() } });
+    await auditLog({ userId, action: "living_loop_auto_sandbox_patch_job_created", resourceType: "AutomationJob", resourceId: job.id, metadata: toMeta({ workOrderId: workOrder.id, candidateId: candidate.id, loopRunId, mode: "SANDBOX_PATCH" }) });
+  }
+
+  return summary;
+}
+
 export async function summarizeLivingLoopRun(runId: string): Promise<void> {
   const [candidates, run] = await Promise.all([prisma.automationCandidate.findMany({ where: { loopRunId: runId }, select: { id: true, kind: true, status: true } }), prisma.livingLoopRun.findUnique({ where: { id: runId } })]);
   if (!run) return;
@@ -289,6 +415,15 @@ export async function summarizeLivingLoopRun(runId: string): Promise<void> {
   await prisma.livingLoopRun.update({ where: { id: runId }, data: { summary: `Proposed ${proposed} candidates across ${kinds} kinds.`, completedAt: new Date(), status: "COMPLETED", proposedCandidates: proposed } });
 }
 
+
+export type AutoSandboxPatchStatus = {
+  enabled: boolean;
+  dailyCount: number;
+  dailyLimit: number;
+  cooldownMinutes: number;
+  minConfidence: number;
+  jobsCreatedLastRun: number;
+};
 export type AutoValidationStatus = {
   enabled: boolean;
   dailyCount: number;
@@ -298,20 +433,34 @@ export type AutoValidationStatus = {
   validationFailuresNeedingReview: number;
 };
 
-export async function getLivingLoopStatus(): Promise<{ enabled: boolean; lastRun: LivingLoopRun | null; lastResult: string | null; todayCandidates: number; pendingCandidates: number; highCriticalCandidates: number; runnerIssues: number; providerIssues: number; autoValidation: AutoValidationStatus }> {
+export async function getLivingLoopStatus(): Promise<{ enabled: boolean; lastRun: LivingLoopRun | null; lastResult: string | null; todayCandidates: number; pendingCandidates: number; highCriticalCandidates: number; runnerIssues: number; providerIssues: number; patchesPendingReview: number; autoValidation: AutoValidationStatus; autoSandboxPatch: AutoSandboxPatchStatus }> {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const [enabled, lastRun, todayCandidates, pendingCandidates, highCriticalCandidates] = await Promise.all([getBooleanSetting("LIVING_LOOP_ENABLED", false), prisma.livingLoopRun.findFirst({ orderBy: { createdAt: "desc" } }), prisma.automationCandidate.count({ where: { createdAt: { gte: today } } }), prisma.automationCandidate.count({ where: { status: "PENDING" } }), prisma.automationCandidate.count({ where: { status: "PENDING", priority: { in: ["HIGH", "CRITICAL"] } } })]);
-  const [runnerIssues, providerIssues] = await Promise.all([prisma.automationCandidate.count({ where: { kind: "RUNNER_REVIEW", status: "PENDING" } }), prisma.automationCandidate.count({ where: { kind: "PROVIDER_REVIEW", status: "PENDING" } })]);
-  const [autoValidationEnabled, dailyLimit, cooldownMinutes, dailyCount, validationFailuresNeedingReview] = await Promise.all([
+  const [runnerIssues, providerIssues, patchesPendingReview] = await Promise.all([prisma.automationCandidate.count({ where: { kind: "RUNNER_REVIEW", status: "PENDING" } }), prisma.automationCandidate.count({ where: { kind: "PROVIDER_REVIEW", status: "PENDING" } }), prisma.patchArtifact.count({ where: { validationStatus: "PENDING" } })]);
+  const [autoValidationEnabled, dailyLimit, cooldownMinutes, dailyCount, validationFailuresNeedingReview, spEnabled, spDailyLimit, spCooldownMinutes, spMinConfidence, spDailyCount] = await Promise.all([
     getBooleanSetting("LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", false),
     getNumberSetting("LIVING_LOOP_MAX_DAILY_VALIDATION_JOBS", 10),
     getNumberSetting("LIVING_LOOP_VALIDATION_JOB_COOLDOWN_MINUTES", 60),
     countAutoValidationJobsToday(),
-    prisma.automationJob.count({ where: { mode: "VALIDATION_ONLY", status: { in: ["NEEDS_REVIEW", "FAILED"] }, provenance: { path: ["source"], equals: AUTO_VALIDATION_PROVENANCE_SOURCE } } })
+    prisma.automationJob.count({ where: { mode: "VALIDATION_ONLY", status: { in: ["NEEDS_REVIEW", "FAILED"] }, provenance: { path: ["source"], equals: AUTO_VALIDATION_PROVENANCE_SOURCE } } }),
+    getBooleanSetting("LIVING_LOOP_AUTO_SANDBOX_PATCH", false),
+    getNumberSetting("LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS", 3),
+    getNumberSetting("LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES", 120),
+    getNumberSetting("LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", 85),
+    countAutoSandboxPatchJobsToday()
   ]);
+  let validationJobsCreatedLastRun = 0;
+  let sandboxPatchJobsCreatedLastRun = 0;
+  if (lastRun) {
+    [validationJobsCreatedLastRun, sandboxPatchJobsCreatedLastRun] = await Promise.all([
+      prisma.automationJob.count({ where: { mode: "VALIDATION_ONLY", provenance: { path: ["loopRunId"], equals: lastRun.id } } }),
+      prisma.automationJob.count({ where: { mode: "SANDBOX_PATCH", provenance: { path: ["loopRunId"], equals: lastRun.id } } })
+    ]);
+  }
   return {
-    enabled, lastRun, lastResult: lastRun?.status ?? null, todayCandidates, pendingCandidates, highCriticalCandidates, runnerIssues, providerIssues,
-    autoValidation: { enabled: autoValidationEnabled, dailyCount, dailyLimit, cooldownMinutes, jobsCreatedLastRun: lastRun?.createdJobs ?? 0, validationFailuresNeedingReview }
+    enabled, lastRun, lastResult: lastRun?.status ?? null, todayCandidates, pendingCandidates, highCriticalCandidates, runnerIssues, providerIssues, patchesPendingReview,
+    autoValidation: { enabled: autoValidationEnabled, dailyCount, dailyLimit, cooldownMinutes, jobsCreatedLastRun: validationJobsCreatedLastRun, validationFailuresNeedingReview },
+    autoSandboxPatch: { enabled: spEnabled, dailyCount: spDailyCount, dailyLimit: spDailyLimit, cooldownMinutes: spCooldownMinutes, minConfidence: spMinConfidence, jobsCreatedLastRun: sandboxPatchJobsCreatedLastRun }
   };
 }
 

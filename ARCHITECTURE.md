@@ -71,6 +71,36 @@ When a task, matter, notice, or work order is created without an explicit `proje
 
 Before council processing, the orchestrator injects compact project context when the task has `projectId`; otherwise it adds an explicit warning that no project is assigned and project-specific assumptions should be avoided. External work-order prompts use the same project context builder.
 
+## Living Loop Automation and Auto Sandbox Patch Safety (M17D)
+
+`livingLoopService.ts` runs an observe -> propose -> act cycle (`runLivingLoopOnce`), gated by `LIVING_LOOP_ENABLED`. `observeKingdomState()` reads work orders needing review/stale, failed/needs-review/stale automation jobs, patches pending review, stale runners, repeated provider failures, stale project inbox items, matters awaiting decision, and reports with remaining work. `proposeAutomationCandidates()` turns observations into `AutomationCandidate` rows (kinds: `WORK_ORDER_REVIEW`, `VALIDATION_JOB`, `PATCH_REVIEW`, `MEMORY_REVIEW`, `CLEANUP_REVIEW`, `PROVIDER_REVIEW`, `PROJECT_REVIEW`, `RUNNER_REVIEW`, `SANDBOX_PATCH`), each passing `dataValueGate()` (confidence threshold, summary/reason length) before being persisted.
+
+Two opt-in auto-act stages run after candidate proposal, both disabled by default and independently toggled via `Setting`:
+
+- `autoCreateValidationJobs()` (M17D-2, `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`): creates `AutomationJob` rows in `VALIDATION_ONLY` mode for eligible `VALIDATION_JOB`/`WORK_ORDER_REVIEW` candidates. These jobs only run allowlisted read/typecheck/test/build commands on the runner — never edit files, never create patch artifacts, never push.
+- `autoCreateSandboxPatchJobs()` (M17D-3, `LIVING_LOOP_AUTO_SANDBOX_PATCH`): creates `AutomationJob` rows in `SANDBOX_PATCH` mode for eligible `SANDBOX_PATCH` candidates derived from work orders in `READY`/`IN_PROGRESS` status.
+
+### Auto Sandbox Patch risk policy (`livingLoopRiskPolicyService.ts`)
+
+`isAutoPatchEligible()` is a pure function consulted before any auto SANDBOX_PATCH job is created. A candidate is eligible only if **all** of the following hold, checked in order:
+
+1. The daily auto-patch job count (`LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS`, default 3) has not been reached.
+2. Candidate confidence meets `LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE` (default 85).
+3. Candidate `riskLevel` is strictly `LOW`.
+4. An online runner is available (`hasOnlineRunner()`).
+5. The work order is linked to a project.
+6. No active `AutomationJob` already exists for the work order.
+7. No `SANDBOX_PATCH` job was created for the work order within `LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES` (default 120).
+8. None of the candidate's proposed-action file hints touch a blocked path (auth, rbac, provider, runner, policy, secret, migrations, schema, deploy, docker, CI config, package manifests, `.env`, config).
+
+Any failure produces a `skippedReason` and an audit log entry (`living_loop_auto_sandbox_patch_skipped`, `auto_patch_risk_policy_blocked`, `auto_patch_cooldown_blocked`, or `auto_patch_daily_limit_blocked`).
+
+### Hard no-push guarantee
+
+Jobs created by `autoCreateSandboxPatchJobs()` are always created with `commandPolicy: "SANDBOX_PATCH_NO_PUSH"` and `provenance.source: "LIVING_LOOP_AUTO_SANDBOX_PATCH"` (plus `loopRunId`, `candidateId`, `workOrderId`). On the runner, `evaluateBranchPushEligibility()` (`apps/runner/src/sandboxPatchPolicy.ts`) refuses to attempt a branch push whenever `commandPolicy === "SANDBOX_PATCH_NO_PUSH"`, **regardless of the server's `LIVING_LOOP_ALLOW_BRANCH_PUSH` setting**. The runner still generates a patch artifact, runs validation, and submits an `ImplementationReport` (linked to the `AutomationJob` and, via `PatchArtifact.automationJobId`, to the generated patch) — the job ends in `NEEDS_REVIEW` for King review in the Patch Review panel. Server-side `createPatchArtifact()` independently re-checks blocked paths and risk scoring (`patchRiskService.ts`), so even a MEDIUM/HIGH/CRITICAL-scored diff cannot auto-push: `shouldPushWithoutApproval()` only allows unattended push for `riskLevel: "LOW"` + `validationStatus: "PENDING"`, and `SANDBOX_PATCH_NO_PUSH` blocks push entirely for these auto-created jobs either way. No branch push, PR creation, merge, or deploy is ever performed automatically.
+
+The Living Loop dashboard card and `/living-loop` page surface `autoSandboxPatch` status (enabled, daily count/limit, cooldown, min confidence, jobs created last run) and `patchesPendingReview` (count of `PatchArtifact` rows with `validationStatus: "PENDING"`), and the Automation Jobs page tags auto-created jobs with a "Living Loop Auto Sandbox Patch" provenance badge plus a "No branch push / no PR auto-create" notice.
+
 ## Deployment
 
 Local development uses `docker-compose.yml` for PostgreSQL and npm scripts for API/web dev servers. Staging uses `docker-compose.staging.yml` with internal PostgreSQL, backend, frontend Nginx static serving, persistent database volume, health checks, and no public database port.

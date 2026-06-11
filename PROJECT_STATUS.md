@@ -25,6 +25,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 - A1: Provider Registry UI Polish + Add Provider Flow. Overhauled the `/providers` UI to feature labeled fields, dynamic readiness badges, inline edit mode, and an "Add Provider" modal. Extended the backend to support `POST` and `DELETE` on `/api/providers`. Protected custom providers by strictly requiring that their secret keys be referenced only via environment variable names (e.g. `CUSTOM_API_KEY`) to prevent literal secrets from being transmitted or displayed.
 - M13: External Agent Work Order + Handoff System. Added `ExternalAgent`, `WorkOrder`, `WorkSession`, `ImplementationReport`, and `HandoffBrief` Prisma models with manual copy-paste execution mode. Seeded Claude Code, Codex, Cline, Kilo, Antigravity, and Hermes as external executor targets. Added `externalAgentWorkOrderService.ts` for task/matter work-order generation, context-drift-resistant prompts, implementation reports, handoff briefs, decision memory capture, and completion report summaries. API: `/api/external-agents`, `/api/work-orders`, `/api/work-sessions`, `/api/implementation-reports`, `/api/handoff-briefs`. Frontend: `/external-agents`, `/work-orders`, dashboard External Work summary. M13 does not call external agent APIs or execute shell commands from the backend.
 - M14: Project Workspace + Royal Secretary Project Routing. Added `Project`, `ProjectRoutingCandidate`, `ProjectInboxItem`, and `Artifact` Prisma models plus optional `projectId` links on tasks, matters, notices, council sessions, reports, memories, work orders, implementation reports, and handoff briefs. Seeded AI Kingdom, Godot Tower Defense, Admin Dashboard Boilerplate, E-commerce Inventory Boilerplate, and Backend Go Services idempotently. Added `projectRoutingService.ts` for explainable keyword/alias/name/source-ancestry routing: confidence >=80 auto-assigns, 50-79 creates a suggested inbox item, and <50 creates a pending inbox item without assignment. Added compact project context injection for council processing and external-agent prompts. Added `/projects`, `/project-inbox`, and `/artifacts` pages plus Obsidian markdown export payloads.
+- M17D: Living Loop Automated Kingdom Maintenance (M17D-1 through M17D-3, complete). `livingLoopService.ts` runs an observe -> propose -> act cycle (`runLivingLoopOnce`) gated by `LIVING_LOOP_ENABLED`, producing `AutomationCandidate` rows for work-order, validation, patch-review, memory, cleanup, provider, project, runner, and sandbox-patch observations, each passing `dataValueGate()` before persistence. `apps/runner` is a sandbox executor (`AgentRunner`/`AutomationJob`/`AutomationJobStep` models) that claims jobs over a token-authenticated API, runs allowlisted commands (`commandValidator.ts`), redacts secrets (`secretRedactor.ts`), and reports back via `ImplementationReport`. M17D-2 added opt-in `autoCreateValidationJobs()` (`LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`) creating `VALIDATION_ONLY` jobs that only run read/typecheck/test/build commands — never edit files, never push. M17D-3 added `PatchArtifact` (risk-scored, blocked-path-checked, secret-redacted diffs with PENDING/APPROVED/REJECTED/REVISION_REQUESTED review states) and opt-in `autoCreateSandboxPatchJobs()` (`LIVING_LOOP_AUTO_SANDBOX_PATCH`), gated by `livingLoopRiskPolicyService.isAutoPatchEligible()` (daily limit, min confidence, riskLevel===LOW, online runner required, project-linked work order, no active/cooldown job, no blocked-path file hints). Auto-created sandbox patch jobs always carry `commandPolicy: "SANDBOX_PATCH_NO_PUSH"` and `provenance.source: "LIVING_LOOP_AUTO_SANDBOX_PATCH"` (with `loopRunId`/`candidateId`/`workOrderId`); the runner's `evaluateBranchPushEligibility()` blocks branch push for this policy regardless of `LIVING_LOOP_ALLOW_BRANCH_PUSH`, and `shouldPushWithoutApproval()` only allows unattended push for LOW-risk PENDING patches. No auto branch push, PR creation, merge, or deploy occurs — every auto sandbox patch lands as a `NEEDS_REVIEW` job with a pending `PatchArtifact` for King review. Dashboard and `/living-loop` page surface `autoValidation`/`autoSandboxPatch` status and `patchesPendingReview`; `/automation-jobs` tags auto-created jobs with provenance badges and a no-push notice; the Patch Review panel warns that auto-generated patches require King review.
 
 ## Current API Surface
 
@@ -40,12 +41,17 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 - Royal Secretary: `GET /api/secretary/brief` (all authenticated).
 - Notices (read: all; create/delete: KING; update: KING+CROWN_PRINCE): `GET /api/notices`, `GET /api/notices/:id`, `POST /api/notices`, `PATCH /api/notices/:id`, `DELETE /api/notices/:id`.
 - Matters (same RBAC as notices): `GET /api/matters`, `GET /api/matters/:id`, `POST /api/matters`, `PATCH /api/matters/:id`, `DELETE /api/matters/:id`.
+- Living Loop (KING/CROWN_PRINCE read, KING write): `GET /api/living-loop/status`, `GET /api/living-loop/runs`, `POST /api/living-loop/run`.
+- Automation Candidates (KING/CROWN_PRINCE read, KING write): `GET /api/automation-candidates`, `POST /api/automation-candidates/:id/approve`, `/reject`, `/archive`, `/apply`.
+- Automation Jobs (KING only): `GET /api/automation-jobs`, `GET /api/automation-jobs/:id`, `POST /api/automation-jobs`, `POST /api/automation-jobs/:id/approve`, `POST /api/automation-jobs/:id/cancel`.
+- Patch Artifacts (read: authenticated; approve/reject/request-revision/create-pr: KING only): `GET /api/patch-artifacts`, `GET /api/patch-artifacts/:id`, `POST /api/patch-artifacts/:id/approve`, `/reject`, `/request-revision`, `/create-pr`.
+- Runner: token-authenticated endpoints for heartbeat, job claim, step recording, status updates, patch artifact submission, and report submission (not part of the user-facing RBAC surface).
 
 RBAC is enforced server-side. `KING` has full access; `CROWN_PRINCE` can use tasks, council, reports, and memory; `MINISTER` can use tasks and reports; `SCRIBE` has read-only access to tasks, council, reports, and memory.
 
 ## Current Web Routes
 
-Implemented pages: `/login`, `/dashboard`, `/charter`, `/vision`, `/notices`, `/matters`, `/projects`, `/projects/:id`, `/project-inbox`, `/artifacts`, `/throne-room`, `/council`, `/agents`, `/external-agents`, `/work-orders`, `/providers`, `/reports`, `/memory`, `/settings`, `/treasury`, `/audit`, `/profile`, `/users`, and `/security`.
+Implemented pages: `/login`, `/dashboard`, `/charter`, `/vision`, `/notices`, `/matters`, `/projects`, `/projects/:id`, `/project-inbox`, `/artifacts`, `/throne-room`, `/council`, `/agents`, `/external-agents`, `/work-orders`, `/providers`, `/reports`, `/memory`, `/settings`, `/treasury`, `/audit`, `/profile`, `/users`, `/security`, `/living-loop`, and `/automation-jobs`.
 
 Navigation is role-aware. The frontend also handles access-token refresh and clears the session when refresh fails.
 
@@ -53,10 +59,11 @@ Navigation is role-aware. The frontend also handles access-token refresh and cle
 
 Most recent verification completed successfully:
 
-- `npm run db:deploy`
-- `npm run typecheck` (both workspaces)
-- `npm run test` (`102/102` passing)
-- `npm run build` (both workspaces)
+- `npm run typecheck` (api, runner, web workspaces)
+- `npm run test --workspace @ai-kingdom/api` (518/518 passing)
+- `npm run test --workspace @ai-kingdom/runner` (11/11 passing)
+- `npm run test --workspace @ai-kingdom/web` (15/15 passing)
+- `npm run build` (api, runner, web workspaces)
 
 Local smoke checks confirmed King login, treasury page rendering with agent/provider/model breakdowns, UsageRecord creation on task processing, budget warning banner activation, and no console errors.
 
@@ -73,6 +80,7 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
 - The Grand Vizier appears twice per session in the UsageRecord table (once as a specialist agent call, once for the final synthesis pass), so per-agent call counts reflect actual AI invocations, not council participation.
 - The `Budget` model is schema-only; budget limits are stored as `Setting` keys (`DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`). No write API for `Budget` records exists yet.
 - Usage records only cover sessions processed after M10 was deployed; historical sessions have no cost data.
+- `LIVING_LOOP_AUTO_SANDBOX_PATCH` and `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS` default to disabled; auto-created `SANDBOX_PATCH` jobs always require an online runner and a project-linked work order, and never push branches, open PRs, merge, or deploy — every patch lands `NEEDS_REVIEW` for King review.
 
 ## Known non-blocking:
 - Vitest 4.x with Vite 5.x emits deprecation warnings. Tests pass; consider pinning Vitest to a Vite 5-compatible version or upgrading Vite later.

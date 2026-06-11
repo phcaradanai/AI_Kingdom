@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationCandidateDto, AutomationCandidateKind, AutoValidationStatusDto, LivingLoopRunDto, LivingLoopStatusDto, SettingDto } from "@/types/api";
+import type { AutomationCandidateDto, AutomationCandidateKind, AutoValidationStatusDto, AutoSandboxPatchStatusDto, LivingLoopRunDto, LivingLoopStatusDto, SettingDto } from "@/types/api";
 
 const LIVING_LOOP_SETTING_KEYS = [
   "LIVING_LOOP_ENABLED",
@@ -23,6 +23,9 @@ const LIVING_LOOP_SETTING_KEYS = [
   "LIVING_LOOP_MAX_DAILY_VALIDATION_JOBS",
   "LIVING_LOOP_VALIDATION_JOB_COOLDOWN_MINUTES",
   "LIVING_LOOP_AUTO_SANDBOX_PATCH",
+  "LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS",
+  "LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES",
+  "LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE",
   "LIVING_LOOP_ALLOW_BRANCH_PUSH",
   "LIVING_LOOP_ALLOW_PR_CREATE",
   "LIVING_LOOP_ALLOW_PAID_PROVIDERS"
@@ -36,7 +39,8 @@ const KIND_LABELS: Record<AutomationCandidateKind, { label: string; icon: typeof
   CLEANUP_REVIEW: { label: "Cleanup Review", icon: Archive, color: "text-slate-400 bg-slate-500/10 border-slate-500/30" },
   PROVIDER_REVIEW: { label: "Provider Review", icon: Cpu, color: "text-red-400 bg-red-500/10 border-red-500/30" },
   PROJECT_REVIEW: { label: "Project Review", icon: Activity, color: "text-cyan-400 bg-cyan-500/10 border-cyan-500/30" },
-  RUNNER_REVIEW: { label: "Runner Review", icon: Activity, color: "text-orange-400 bg-orange-500/10 border-orange-500/30" }
+  RUNNER_REVIEW: { label: "Runner Review", icon: Activity, color: "text-orange-400 bg-orange-500/10 border-orange-500/30" },
+  SANDBOX_PATCH: { label: "Sandbox Patch", icon: Zap, color: "text-lime-400 bg-lime-500/10 border-lime-500/30" }
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
@@ -65,10 +69,19 @@ function autoValidationSkipNote(c: AutomationCandidateDto, autoValidation: AutoV
   return null;
 }
 
-function CandidateCard({ c, isKing, onAction, autoValidation, lastRunSkippedReasons }: { c: AutomationCandidateDto; isKing: boolean; onAction: (id: string, action: string) => void; autoValidation?: AutoValidationStatusDto | null; lastRunSkippedReasons?: string[] | null }) {
+function autoSandboxPatchSkipNote(c: AutomationCandidateDto, autoPatch: AutoSandboxPatchStatusDto | null, lastRunSkippedReasons: string[] | null): string | null {
+  if (c.kind !== "SANDBOX_PATCH" || c.status !== "PENDING") return null;
+  const matched = (lastRunSkippedReasons ?? []).find((r) => r.startsWith("AutoSandboxPatch:") && c.workOrderId && r.includes(c.workOrderId));
+  if (matched) return matched.replace("AutoSandboxPatch:", "Not auto-created:");
+  if (!autoPatch) return null;
+  if (!autoPatch.enabled) return "Not auto-created: auto sandbox patch is disabled";
+  if (autoPatch.dailyCount >= autoPatch.dailyLimit) return "Not auto-created: daily sandbox patch job limit reached";
+  return null;
+}
+function CandidateCard({ c, isKing, onAction, autoValidation, autoSandboxPatch, lastRunSkippedReasons }: { c: AutomationCandidateDto; isKing: boolean; onAction: (id: string, action: string) => void; autoValidation?: AutoValidationStatusDto | null; autoSandboxPatch?: AutoSandboxPatchStatusDto | null, lastRunSkippedReasons?: string[] | null }) {
   const canAct = isKing && c.status === "PENDING";
   const canApply = isKing && c.status === "APPROVED";
-  const skipNote = autoValidationSkipNote(c, autoValidation ?? null, lastRunSkippedReasons ?? null);
+  const skipNote = autoValidationSkipNote(c, autoValidation ?? null, lastRunSkippedReasons ?? null) || autoSandboxPatchSkipNote(c, autoSandboxPatch ?? null, lastRunSkippedReasons ?? null);
   return (
     <div className="rounded-xl border border-border bg-card/70 p-4 transition-all hover:border-primary/30">
       <div className="flex items-start justify-between gap-4">
@@ -196,7 +209,7 @@ export function LivingLoopPage() {
 
   async function load() {
     const [s, r, c] = await Promise.all([
-      api.livingLoopStatus().catch(() => ({ status: { enabled: false, lastRun: null, lastResult: null, todayCandidates: 0, pendingCandidates: 0, highCriticalCandidates: 0, runnerIssues: 0, providerIssues: 0, autoValidation: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, jobsCreatedLastRun: 0, validationFailuresNeedingReview: 0 } } })),
+      api.livingLoopStatus().catch(() => ({ status: { enabled: false, lastRun: null, lastResult: null, todayCandidates: 0, pendingCandidates: 0, highCriticalCandidates: 0, runnerIssues: 0, providerIssues: 0, patchesPendingReview: 0, autoValidation: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, jobsCreatedLastRun: 0, validationFailuresNeedingReview: 0 }, autoSandboxPatch: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, minConfidence: 85, jobsCreatedLastRun: 0 } } })),
       api.livingLoopRuns(10).catch(() => ({ runs: [] })),
       api.automationCandidates({ limit: 50 }).catch(() => ({ candidates: [], total: 0 }))
     ]);
@@ -246,11 +259,33 @@ export function LivingLoopPage() {
           </div>
         ) : <div className="text-xs text-muted-foreground">Auto validation status unavailable.</div>}
       </SectionCard>
+
+      <SectionCard title="Auto Sandbox Patch" icon={Zap}>
+        {status?.autoSandboxPatch ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+              <StatCard className="bg-transparent border-none p-0" title="Status" value={status.autoSandboxPatch.enabled ? "Enabled" : "Disabled"} />
+              <StatCard className="bg-transparent border-none p-0" title="Jobs Today" value={`${status.autoSandboxPatch.dailyCount} / ${status.autoSandboxPatch.dailyLimit}`} />
+              <StatCard className="bg-transparent border-none p-0" title="Cooldown" value={`${status.autoSandboxPatch.cooldownMinutes}m`} />
+              <StatCard className="bg-transparent border-none p-0" title="Min Confidence" value={`${status.autoSandboxPatch.minConfidence}%`} />
+              <StatCard className="bg-transparent border-none p-0" title="Created Last Run" value={status.autoSandboxPatch.jobsCreatedLastRun} />
+            </div>
+            {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).length > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-400">
+                <div className="mb-1 font-semibold uppercase tracking-wider">Auto sandbox patch skipped reasons (last run)</div>
+                <ul className="space-y-0.5">
+                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).map((r, i) => <li key={i}>{r.replace("AutoSandboxPatch: ", "")}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : <div className="text-xs text-muted-foreground">Auto sandbox patch status unavailable.</div>}
+      </SectionCard>
       <SectionCard title="Living Loop Settings" icon={SettingsIcon}>
         <LivingLoopSettingsPanel isKing={isKing} />
       </SectionCard>
       <SectionCard title={`Candidate Queue (${candidates.length})`} icon={Eye}>
-        {candidates.length > 0 ? (<div className="space-y-4">{(["PENDING", "APPROVED", "APPLIED", "REJECTED", "ARCHIVED"] as const).map(sg => { const g = candidates.filter(x => x.status === sg); if (!g.length) return null; return <div key={sg} className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{sg} ({g.length})</h4><div className="space-y-2">{g.map(x => <CandidateCard key={x.id} c={x} isKing={isKing} onAction={act} autoValidation={status?.autoValidation} lastRunSkippedReasons={status?.lastRun?.skippedReasons} />)}</div></div>; })}</div>) : <EmptyState title="No Candidates" description="Run the living loop to generate candidates." action={<Button variant="outline" onClick={runOnce} disabled={running}><Zap className="mr-1.5 h-3.5 w-3.5" />Run Once</Button>} />}
+        {candidates.length > 0 ? (<div className="space-y-4">{(["PENDING", "APPROVED", "APPLIED", "REJECTED", "ARCHIVED"] as const).map(sg => { const g = candidates.filter(x => x.status === sg); if (!g.length) return null; return <div key={sg} className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{sg} ({g.length})</h4><div className="space-y-2">{g.map(x => <CandidateCard key={x.id} c={x} isKing={isKing} onAction={act} autoValidation={status?.autoValidation} autoSandboxPatch={status?.autoSandboxPatch} lastRunSkippedReasons={status?.lastRun?.skippedReasons} />)}</div></div>; })}</div>) : <EmptyState title="No Candidates" description="Run the living loop to generate candidates." action={<Button variant="outline" onClick={runOnce} disabled={running}><Zap className="mr-1.5 h-3.5 w-3.5" />Run Once</Button>} />}
       </SectionCard>
       <SectionCard title="Run History" icon={Clock}>
         {runs.length > 0 ? <div className="space-y-2">{runs.map(r => {

@@ -13,6 +13,7 @@ const mockStatus: LivingLoopStatusDto = {
   highCriticalCandidates: 0,
   runnerIssues: 0,
   providerIssues: 0,
+  patchesPendingReview: 1,
   autoValidation: {
     enabled: true,
     dailyCount: 2,
@@ -20,6 +21,14 @@ const mockStatus: LivingLoopStatusDto = {
     cooldownMinutes: 60,
     jobsCreatedLastRun: 1,
     validationFailuresNeedingReview: 0
+  },
+  autoSandboxPatch: {
+    enabled: true,
+    dailyCount: 0,
+    dailyLimit: 5,
+    cooldownMinutes: 15,
+    minConfidence: 85,
+    jobsCreatedLastRun: 0
   }
 };
 
@@ -168,7 +177,7 @@ describe("LivingLoopPage", () => {
     expect(await screen.findByText("Auto Validation")).toBeInTheDocument();
     expect(screen.getByText("2 / 10")).toBeInTheDocument();
     expect(screen.getByText("60m")).toBeInTheDocument();
-    expect(screen.getByText("Created Last Run")).toBeInTheDocument();
+    expect(screen.getAllByText("Created Last Run").length).toBeGreaterThan(0);
     expect(screen.getByText("Failures To Review")).toBeInTheDocument();
   });
 

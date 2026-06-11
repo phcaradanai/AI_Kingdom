@@ -305,6 +305,33 @@ Use `/artifacts` to create, filter, edit, and read markdown content linked to a 
 
 Project export v1 returns an Obsidian-friendly JSON payload rather than writing files automatically. The payload contains `index.md`, `project-status.md`, `architecture.md`, `decisions.md`, `reports.md`, `work-orders.md`, `memories.md`, and `artifacts.md`, with wikilinks such as `[[project-status]]`.
 
+## Living Loop and Sandbox Runner
+
+`apps/runner` is an optional sandbox executor that claims `AutomationJob` work from the API and runs it in an isolated workspace. It is disabled by default (`LIVING_LOOP_ENABLED=false`) and never pushes branches, opens PRs, merges, or deploys on its own.
+
+Runner env vars (`apps/runner/.env`):
+
+```env
+API_BASE_URL=http://localhost:4000
+RUNNER_TOKEN=...                # token-authenticated runner identity, set via /api/runners
+RUNNER_REPO_PATH=/absolute/path/to/repo   # required for VALIDATION_ONLY jobs (workspace copy source)
+WORKSPACE_BASE=/tmp/ai-kingdom-runner
+HEARTBEAT_INTERVAL_MS=15000
+POLL_INTERVAL_MS=5000
+APPROVAL_WAIT_MS=300000
+```
+
+Living Loop settings (`/settings`, all default disabled / conservative):
+
+- `LIVING_LOOP_ENABLED` — turns on the observe/propose/act cycle (`POST /api/living-loop/run`).
+- `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS` — auto-creates `VALIDATION_ONLY` jobs (read/typecheck/test/build commands only; never edits files or pushes).
+- `LIVING_LOOP_AUTO_SANDBOX_PATCH` — auto-creates `SANDBOX_PATCH` jobs for LOW-risk, project-linked candidates only.
+- `LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS`, `LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES`, `LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE` — risk-policy gates for auto sandbox patches.
+
+### No-push policy
+
+Every auto-created `SANDBOX_PATCH` job carries `commandPolicy: "SANDBOX_PATCH_NO_PUSH"`. The runner refuses to attempt a branch push for these jobs regardless of the server's `LIVING_LOOP_ALLOW_BRANCH_PUSH` setting — it generates a `PatchArtifact`, runs validation, and submits an `ImplementationReport`, leaving the job `NEEDS_REVIEW`. Use `/automation-jobs` to see jobs (with a "Living Loop Auto Sandbox Patch" provenance badge for auto-created ones) and the Patch Review panel on a `PatchArtifact` to approve, reject, request revisions, or create a PR — only the King can take those actions, and a PR is only ever created by an explicit King action, never automatically.
+
 ## Useful Commands
 
 ```bash
