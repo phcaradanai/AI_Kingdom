@@ -15,7 +15,17 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "DAILY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "Daily spend limit in USD. Leave empty to disable the limit." },
   { key: "MONTHLY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "Monthly spend limit in USD. Leave empty to disable the limit." },
   { key: "ALLOW_RUNNER_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Allow the runner to push a safe feature branch after King approval. Branch name format: kingdom/job-<id>-<slug>." },
-  { key: "ALLOW_RUNNER_PR_CREATE", value: "false", category: "SYSTEM", description: "Allow the runner to create a GitHub PR after King approval of a patch artifact." }
+  { key: "ALLOW_RUNNER_PR_CREATE", value: "false", category: "SYSTEM", description: "Allow the runner to create a GitHub PR after King approval of a patch artifact." },
+  { key: "LIVING_LOOP_ENABLED", value: "false", category: "SYSTEM", description: "Enable the continuous living loop that observes Kingdom state and proposes automation candidates." },
+  { key: "LIVING_LOOP_INTERVAL_MINUTES", value: "15", category: "SYSTEM", description: "Interval in minutes between scheduled living loop runs." },
+  { key: "LIVING_LOOP_MIN_CONFIDENCE", value: "70", category: "SYSTEM", description: "Minimum confidence score (0-100) for a candidate to be proposed." },
+  { key: "LIVING_LOOP_MAX_CANDIDATES_PER_RUN", value: "10", category: "SYSTEM", description: "Maximum number of automation candidates created per loop run." },
+  { key: "LIVING_LOOP_MAX_DAILY_CANDIDATES", value: "50", category: "SYSTEM", description: "Maximum number of automation candidates per day." },
+  { key: "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", value: "false", category: "SYSTEM", description: "Auto-create validation jobs from candidates. Disabled in M17D-1." },
+  { key: "LIVING_LOOP_AUTO_SANDBOX_PATCH", value: "false", category: "SYSTEM", description: "Auto-run SANDBOX_PATCH jobs. Disabled in M17D-1." },
+  { key: "LIVING_LOOP_ALLOW_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Allow automatic branch push. Disabled in M17D-1." },
+  { key: "LIVING_LOOP_ALLOW_PR_CREATE", value: "false", category: "SYSTEM", description: "Allow automatic PR creation. Disabled in M17D-1." },
+  { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Allow loop to use paid providers for observations. Disabled in M17D-1." }
 ];
 
 // Keys that were removed from active settings and should be cleaned up from existing databases.

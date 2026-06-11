@@ -1,4 +1,4 @@
-import { AlertTriangle, Archive, CheckCircle2, ClipboardList, Crown, FileText, FolderKanban, Inbox, Landmark, Scroll, ScrollText, Shield, Sparkles, Vault, ArrowRight, Clock } from "lucide-react";
+import { Activity, AlertTriangle, Archive, CheckCircle2, ClipboardList, Crown, FileText, FolderKanban, Inbox, Landmark, Scroll, ScrollText, Shield, Sparkles, Vault, ArrowRight, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { AgentPortrait } from "@/components/AgentPortrait";
@@ -275,6 +275,50 @@ function AgentOperationCard({ activity }: { activity: CurrentAgentActivityDto })
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+export function RunLivingLoopButton() {
+  const [running, setRunning] = useState(false);
+  async function runOnce() {
+    setRunning(true);
+    try { await api.runLivingLoopOnce(); } catch (e) { console.error(e); }
+    setRunning(false);
+  }
+  return (
+    <Button variant="outline" className="h-8 text-xs" onClick={runOnce} disabled={running}>
+      {running ? "Running..." : "Run Once"}
+    </Button>
+  );
+}
+
+export function LivingLoopDashboardCard() {
+  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null } | null>(null);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    api.livingLoopStatus()
+      .then(res => setStatus({
+        pending: res.status.pendingCandidates,
+        highCritical: res.status.highCriticalCandidates,
+        runnerIssues: res.status.runnerIssues,
+        providerIssues: res.status.providerIssues,
+        lastRun: res.status.lastResult
+      }))
+      .catch(() => { /* ignore */ })
+      .finally(() => setLoading(false));
+  }, []);
+  if (loading) return <div className="text-xs text-muted-foreground">Loading...</div>;
+  if (!status) return <div className="text-xs text-muted-foreground">Could not load loop status.</div>;
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard className="bg-transparent border-none p-0" title="Pending" value={status.pending} />
+        <StatCard className="bg-transparent border-none p-0" title="High/Critical" value={status.highCritical} trend={status.highCritical > 0 ? { value: "Urgent", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Runner Issues" value={status.runnerIssues} trend={status.runnerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={status.providerIssues} trend={status.providerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
+      </div>
+      {status.lastRun && <div className="text-xs text-muted-foreground">Last run: {status.lastRun}</div>}
     </div>
   );
 }
@@ -604,6 +648,24 @@ export function DashboardPage() {
             <Link to="/work-orders"><Button variant="secondary" className="h-9">Review Handoffs</Button></Link>
           </div>
         </SectionCard>
+
+        {/* Living Loop */}
+        {(user?.role === "KING" || user?.role === "CROWN_PRINCE") && (
+          <SectionCard
+            title="Living Loop"
+            icon={Activity}
+            action={
+              <div className="flex items-center gap-2">
+                {user?.role === "KING" && <RunLivingLoopButton />}
+                <Link to="/living-loop">
+                  <Button variant="outline" className="h-8 text-xs">Open</Button>
+                </Link>
+              </div>
+            }
+          >
+            <LivingLoopDashboardCard />
+          </SectionCard>
+        )}
       </div>
 
       {/* Recent decrees */}

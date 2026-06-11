@@ -45,6 +45,8 @@ import runnersRouter from "./routes/runners.js";
 import automationJobsRouter from "./routes/automationJobs.js";
 import runnerJobsRouter from "./routes/runnerJobs.js";
 import patchArtifactsRouter from "./routes/patchArtifacts.js";
+import livingLoopRouter from "./routes/livingLoop.js";
+import automationCandidatesRouter from "./routes/automationCandidates.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -133,6 +135,9 @@ export function createApp() {
   app.use("/api/secretary", requireAuth, secretaryRouter);
   app.use("/api/notices", requireAuth, noticesRouter);
   app.use("/api/matters", requireAuth, mattersRouter);
+  // Living Loop — observe + candidate queue (M17D-1)
+  app.use("/api/living-loop", requireAuth, livingLoopRouter);
+  app.use("/api/automation-candidates", requireAuth, automationCandidatesRouter);
   app.use("/api", requireAuth, charterRouter);
   app.use(errorHandler);
 

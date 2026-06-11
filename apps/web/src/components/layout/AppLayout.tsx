@@ -44,6 +44,7 @@ const navCategories = [
       { to: "/external-agents", label: "External Agents", icon: Bot, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/work-orders", label: "Work Orders", icon: ClipboardList, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/automation-jobs", label: "Automation Jobs", icon: Activity, roles: ["KING"] },
+      { to: "/living-loop", label: "Living Loop", icon: Activity, roles: ["KING"] },
     ]
   },
   {

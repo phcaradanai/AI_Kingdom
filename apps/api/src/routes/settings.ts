@@ -56,7 +56,7 @@ router.patch("/:key", async (req, res, next) => {
     });
     await auditLog({
       userId: req.user?.id,
-      action: "update_setting",
+      action: setting.key.startsWith("LIVING_LOOP_") ? "living_loop_settings_updated" : "update_setting",
       resourceType: "setting",
       resourceId: setting.key,
       metadata: { key: setting.key, category: setting.category }
@@ -67,7 +67,7 @@ router.patch("/:key", async (req, res, next) => {
   }
 });
 
-const BOOLEAN_SETTING_KEYS = ["AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS", "AUTO_PLAN_WORK_ORDERS", "ROUTING_DEBUG_MODE", "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX"];
+const BOOLEAN_SETTING_KEYS = ["AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS", "AUTO_PLAN_WORK_ORDERS", "ROUTING_DEBUG_MODE", "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", "LIVING_LOOP_ENABLED", "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", "LIVING_LOOP_AUTO_SANDBOX_PATCH", "LIVING_LOOP_ALLOW_BRANCH_PUSH", "LIVING_LOOP_ALLOW_PR_CREATE", "LIVING_LOOP_ALLOW_PAID_PROVIDERS"];
 
 function validateSettingValue(key: string, value: string): string | null {
   if (key === "AI_COST_MODE" && !["low", "balanced", "quality"].includes(value)) return "AI_COST_MODE must be low, balanced, or quality";

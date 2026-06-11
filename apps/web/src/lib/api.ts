@@ -78,7 +78,10 @@ import type {
   AutomationJobDto,
   AutomationJobPayload,
   AgentRunnerDto,
-  PatchArtifactDto
+  PatchArtifactDto,
+  LivingLoopStatusDto,
+  LivingLoopRunDto,
+  AutomationCandidateDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -596,7 +599,29 @@ export const api = {
       body: JSON.stringify({ reviewNote })
     }),
   createPatchPr: (id: string) =>
-    apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/create-pr`, { method: "POST" })
+    apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/create-pr`, { method: "POST" }),
+
+  // ── M17D-1: Living Loop ──────────────────────────────────────────────────────
+  livingLoopStatus: () => apiRequest<{ status: LivingLoopStatusDto }>("/living-loop/status"),
+  livingLoopRuns: (limit = 20) => apiRequest<{ runs: LivingLoopRunDto[] }>(`/living-loop/runs?limit=${limit}`),
+  runLivingLoopOnce: () => apiRequest<{ run: LivingLoopRunDto; candidates: AutomationCandidateDto[] }>("/living-loop/run", { method: "POST" }),
+  automationCandidates: (params?: { status?: string; kind?: string; limit?: number; offset?: number }) => {
+    const search = new URLSearchParams();
+    if (params?.status) search.set("status", params.status);
+    if (params?.kind) search.set("kind", params.kind);
+    if (params?.limit) search.set("limit", String(params.limit));
+    if (params?.offset) search.set("offset", String(params.offset));
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<{ candidates: AutomationCandidateDto[]; total: number }>(`/automation-candidates${suffix}`);
+  },
+  approveAutomationCandidate: (id: string) =>
+    apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/approve`, { method: "POST" }),
+  rejectAutomationCandidate: (id: string) =>
+    apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/reject`, { method: "POST" }),
+  archiveAutomationCandidate: (id: string) =>
+    apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/archive`, { method: "POST" }),
+  applyAutomationCandidate: (id: string) =>
+    apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/apply`, { method: "POST" })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

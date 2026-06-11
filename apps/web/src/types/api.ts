@@ -1572,3 +1572,70 @@ export type PatchArtifactDto = {
   workOrder: { id: string; title: string };
   reviewedByUser: { id: string; displayName: string } | null;
 };
+
+// ── M17D-1: Living Loop ─────────────────────────────────────────────────────────
+
+export type LivingLoopStatus = "STARTED" | "COMPLETED" | "FAILED" | "SKIPPED";
+export type LivingLoopTriggerType = "MANUAL" | "SCHEDULED";
+export type AutomationCandidateKind =
+  | "WORK_ORDER_REVIEW" | "VALIDATION_JOB" | "PATCH_REVIEW"
+  | "MEMORY_REVIEW" | "CLEANUP_REVIEW" | "PROVIDER_REVIEW"
+  | "PROJECT_REVIEW" | "RUNNER_REVIEW";
+export type AutomationCandidatePriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type AutomationCandidateRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type AutomationCandidateStatus = "PENDING" | "APPROVED" | "REJECTED" | "APPLIED" | "ARCHIVED";
+
+export type LivingLoopRunDto = {
+  id: string;
+  status: LivingLoopStatus;
+  triggerType: LivingLoopTriggerType;
+  startedAt: string;
+  completedAt: string | null;
+  summary: string | null;
+  observedCounts: Record<string, number> | null;
+  proposedCandidates: number;
+  skippedCandidates: number;
+  createdJobs: number;
+  skippedReasons: string[] | null;
+  error: string | null;
+  createdAt: string;
+};
+
+export type AutomationCandidateDto = {
+  id: string;
+  kind: AutomationCandidateKind;
+  title: string;
+  summary: string;
+  reason: string;
+  confidence: number;
+  priority: AutomationCandidatePriority;
+  riskLevel: AutomationCandidateRiskLevel;
+  sourceType: string;
+  sourceId: string;
+  projectId: string | null;
+  agentId: string | null;
+  workOrderId: string | null;
+  automationJobId: string | null;
+  patchArtifactId: string | null;
+  proposedAction: Record<string, unknown>;
+  provenance: Record<string, unknown>;
+  dataQuality: string;
+  status: AutomationCandidateStatus;
+  loopRunId: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LivingLoopStatusDto = {
+  enabled: boolean;
+  lastRun: LivingLoopRunDto | null;
+  lastResult: string | null;
+  todayCandidates: number;
+  pendingCandidates: number;
+  highCriticalCandidates: number;
+  runnerIssues: number;
+  providerIssues: number;
+};
+

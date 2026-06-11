@@ -269,6 +269,51 @@ enum ArtifactType {
   GENERAL_NOTE
 }
 
+enum LivingLoopStatus {
+  STARTED
+  COMPLETED
+  FAILED
+  SKIPPED
+}
+
+enum LivingLoopTriggerType {
+  MANUAL
+  SCHEDULED
+}
+
+enum AutomationCandidateKind {
+  WORK_ORDER_REVIEW
+  VALIDATION_JOB
+  PATCH_REVIEW
+  MEMORY_REVIEW
+  CLEANUP_REVIEW
+  PROVIDER_REVIEW
+  PROJECT_REVIEW
+  RUNNER_REVIEW
+}
+
+enum AutomationCandidatePriority {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AutomationCandidateRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum AutomationCandidateStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+  ARCHIVED
+}
+
 model Notice {
   id               String         @id @default(cuid())
   projectId        String?
@@ -1360,4 +1405,64 @@ model PatchArtifact {
   @@index([projectId])
   @@index([riskLevel])
   @@index([validationStatus])
+}
+
+model LivingLoopRun {
+  id                 String               @id @default(cuid())
+  status             LivingLoopStatus      @default(STARTED)
+  triggerType        LivingLoopTriggerType
+  startedAt          DateTime             @default(now())
+  completedAt        DateTime?
+  summary            String?
+  observedCounts     Json?
+  proposedCandidates Int                  @default(0)
+  skippedCandidates  Int                  @default(0)
+  createdJobs        Int                  @default(0)
+  skippedReasons     Json?
+  error              String?
+  createdAt          DateTime             @default(now())
+
+  candidates         AutomationCandidate[]
+
+  @@index([status])
+  @@index([triggerType])
+  @@index([startedAt])
+}
+
+model AutomationCandidate {
+  id               String                     @id @default(cuid())
+  kind             AutomationCandidateKind
+  title            String
+  summary          String
+  reason           String
+  confidence       Int
+  priority         AutomationCandidatePriority @default(MEDIUM)
+  riskLevel        AutomationCandidateRiskLevel @default(MEDIUM)
+  sourceType       String
+  sourceId         String
+  projectId        String?
+  agentId          String?
+  workOrderId      String?
+  automationJobId  String?
+  patchArtifactId  String?
+  proposedAction   Json
+  provenance       Json
+  dataQuality      String                     @default("REVIEW_REQUIRED")
+  status           AutomationCandidateStatus  @default(PENDING)
+  loopRunId        String?
+  reviewedByUserId String?
+  reviewedAt       DateTime?
+  createdAt        DateTime                   @default(now())
+  updatedAt        DateTime                   @updatedAt
+
+  loopRun          LivingLoopRun?             @relation(fields: [loopRunId], references: [id], onDelete: SetNull)
+
+  @@index([kind])
+  @@index([sourceType, sourceId, kind])
+  @@index([status])
+  @@index([confidence])
+  @@index([priority])
+  @@index([riskLevel])
+  @@index([loopRunId])
+  @@index([createdAt])
 }
