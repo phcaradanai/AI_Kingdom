@@ -10,7 +10,7 @@
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces",
-    "test": "npm run test --workspace @ai-kingdom/api && npm run test --workspace @ai-kingdom/web",
+    "test": "npm run test --workspace @ai-kingdom/api && npm run test --workspace @ai-kingdom/runner && npm run test --workspace @ai-kingdom/web",
     "test:api": "npm run test:api --workspace @ai-kingdom/api",
     "test:web": "npm run test --workspace @ai-kingdom/web",
     "test:db:prepare": "node scripts/prepare-test-db.mjs",

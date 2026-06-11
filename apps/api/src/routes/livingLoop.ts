@@ -36,7 +36,7 @@ router.get("/runs", requireAuth, requireRole("KING", "CROWN_PRINCE"), async (req
 router.post("/run", requireAuth, requireRole("KING"), async (req, res, next) => {
   try {
     const result = await runLivingLoopOnce("MANUAL", req.user?.id);
-    res.json({ run: result.run, candidates: result.candidates });
+    res.json({ run: result.run, candidates: result.candidates, autoValidation: result.autoValidation });
   } catch (error) {
     next(error);
   }

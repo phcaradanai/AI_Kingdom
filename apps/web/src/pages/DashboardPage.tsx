@@ -294,7 +294,7 @@ export function RunLivingLoopButton() {
 }
 
 export function LivingLoopDashboardCard() {
-  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null } | null>(null);
+  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null; autoValidationToday: number; validationFailures: number } | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     api.livingLoopStatus()
@@ -303,7 +303,9 @@ export function LivingLoopDashboardCard() {
         highCritical: res.status.highCriticalCandidates,
         runnerIssues: res.status.runnerIssues,
         providerIssues: res.status.providerIssues,
-        lastRun: res.status.lastResult
+        lastRun: res.status.lastResult,
+        autoValidationToday: res.status.autoValidation?.dailyCount ?? 0,
+        validationFailures: res.status.autoValidation?.validationFailuresNeedingReview ?? 0
       }))
       .catch(() => { /* ignore */ })
       .finally(() => setLoading(false));
@@ -317,6 +319,8 @@ export function LivingLoopDashboardCard() {
         <StatCard className="bg-transparent border-none p-0" title="High/Critical" value={status.highCritical} trend={status.highCritical > 0 ? { value: "Urgent", isPositive: false } : undefined} />
         <StatCard className="bg-transparent border-none p-0" title="Runner Issues" value={status.runnerIssues} trend={status.runnerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
         <StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={status.providerIssues} trend={status.providerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Auto Validation Today" value={status.autoValidationToday} />
+        <StatCard className="bg-transparent border-none p-0" title="Validation Failures" value={status.validationFailures} trend={status.validationFailures > 0 ? { value: "Review", isPositive: false } : undefined} />
       </div>
       {status.lastRun && <div className="text-xs text-muted-foreground">Last run: {status.lastRun}</div>}
     </div>

@@ -1,0 +1,197 @@
+/**
+ * VALIDATION_ONLY job executor (M17D-2).
+ *
+ * Hard constraints:
+ * - Runs allowlisted validation commands only
+ * - No model-driven file edits
+ * - No git add/commit/push
+ * - No patch artifact submission
+ * - Workspace copy is the only filesystem mutation (temporary setup)
+ */
+
+export interface ValidationCommandSpec {
+  command: string;
+  args: string[];
+  /** Counts toward the PASSED/FAILED/PARTIAL test result */
+  isTest: boolean;
+}
+
+export const BASE_VALIDATION_COMMANDS: ValidationCommandSpec[] = [
+  { command: "git", args: ["status"], isTest: false },
+  { command: "git", args: ["diff", "--stat"], isTest: false },
+  { command: "npm", args: ["run", "typecheck"], isTest: true },
+  { command: "npm", args: ["run", "test"], isTest: true },
+  { command: "npm", args: ["run", "build"], isTest: true }
+];
+
+export const LINT_COMMAND: ValidationCommandSpec = { command: "npm", args: ["run", "lint"], isTest: true };
+
+const ALLOWED_NPM_VALIDATION_SCRIPTS = new Set(["typecheck", "test", "build", "lint"]);
+
+/**
+ * Strict allowlist for VALIDATION_ONLY jobs. Narrower than the global sandbox
+ * allowlist: git is read-only here (no checkout/add/commit/push) and npm may
+ * only run the approved validation scripts.
+ */
+export function isAllowedValidationCommand(command: string, args: string[]): boolean {
+  if (command === "git") {
+    if (args.length === 1 && args[0] === "status") return true;
+    if (args.length === 2 && args[0] === "diff" && args[1] === "--stat") return true;
+    return false;
+  }
+  if (command === "npm") {
+    return args.length === 2 && args[0] === "run" && ALLOWED_NPM_VALIDATION_SCRIPTS.has(args[1] ?? "");
+  }
+  return false;
+}
+
+export function buildValidationCommands(hasLintScript: boolean): ValidationCommandSpec[] {
+  return hasLintScript ? [...BASE_VALIDATION_COMMANDS, LINT_COMMAND] : [...BASE_VALIDATION_COMMANDS];
+}
+
+export type ValidationTestResult = "NOT_RUN" | "PASSED" | "FAILED" | "PARTIAL";
+
+export interface ValidationJobApi {
+  updateStatus(jobId: string, status: string, data?: { logsPreview?: string }): Promise<unknown>;
+  recordStep(jobId: string, step: {
+    sequence: number;
+    stepType: string;
+    title: string;
+    status: string;
+    command?: string | null;
+    args?: string[];
+    output?: string | null;
+    exitCode?: number | null;
+    durationMs?: number | null;
+  }): Promise<unknown>;
+  submitReport(jobId: string, report: {
+    summary: string;
+    filesChanged: string[];
+    commandsRun: string[];
+    testsRun: string[];
+    testResult: ValidationTestResult;
+    errors: string[];
+    decisionsMade: string[];
+    remainingWork: string[];
+    nextRecommendedAction?: string | null;
+    rawOutput?: string | null;
+    logsPreview?: string | null;
+  }): Promise<unknown>;
+}
+
+export interface ValidationCommandResult {
+  exitCode: number;
+  output: string;
+  durationMs: number;
+}
+
+export interface ExecuteValidationOnlyDeps {
+  api: ValidationJobApi;
+  runCommand: (command: string, args: string[]) => Promise<ValidationCommandResult>;
+  /** Copies the repository into the temporary workspace. Must not touch the source repo. */
+  prepareWorkspace: () => Promise<void>;
+  /** Whether the workspace package.json declares a lint script. */
+  hasLintScript: () => boolean;
+  sanitize?: (text: string) => string;
+  log?: (msg: string) => void;
+}
+
+export interface ValidationOnlyJob {
+  id: string;
+  mode: string;
+  workOrder: { id: string; title: string };
+}
+
+export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: ExecuteValidationOnlyDeps): Promise<void> {
+  const sanitize = deps.sanitize ?? ((t: string) => t);
+  const log = deps.log ?? (() => undefined);
+  const commandsRun: string[] = [];
+  const testsRun: string[] = [];
+  const errors: string[] = [];
+  const logLines: string[] = [];
+
+  await deps.api.updateStatus(job.id, "RUNNING");
+  log(`[Job ${job.id}] VALIDATION_ONLY mode — no file edits, no patch artifact, no git mutations.`);
+
+  try {
+    await deps.prepareWorkspace();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(`Workspace setup failed: ${msg}`);
+    await deps.api.submitReport(job.id, {
+      summary: `Validation-only run for "${job.workOrder.title}" could not start: workspace setup failed.`,
+      filesChanged: [],
+      commandsRun: [],
+      testsRun: [],
+      testResult: "NOT_RUN",
+      errors,
+      decisionsMade: [],
+      remainingWork: ["Configure runner workspace source (RUNNER_REPO_PATH) and re-run validation."],
+      nextRecommendedAction: "Fix runner workspace configuration",
+      logsPreview: sanitize(msg).slice(0, 2000)
+    });
+    return;
+  }
+
+  const commands = buildValidationCommands(deps.hasLintScript());
+  let sequence = 0;
+  let testPasses = 0;
+  let testFailures = 0;
+
+  for (const spec of commands) {
+    sequence++;
+    const label = `${spec.command} ${spec.args.join(" ")}`;
+
+    // Defense in depth: every command re-checked against the validation allowlist.
+    if (!isAllowedValidationCommand(spec.command, spec.args)) {
+      errors.push(`Blocked non-validation command: ${label}`);
+      await deps.api.recordStep(job.id, {
+        sequence, stepType: "COMMAND", title: label, status: "BLOCKED",
+        command: spec.command, args: spec.args, output: "[BLOCKED] Not an allowlisted validation command", exitCode: -1
+      });
+      continue;
+    }
+
+    log(`[Job ${job.id}] Validation step ${sequence}: ${label}`);
+    const result = await deps.runCommand(spec.command, spec.args);
+    commandsRun.push(label);
+    if (spec.isTest) {
+      testsRun.push(label);
+      if (result.exitCode === 0) testPasses++; else testFailures++;
+    }
+    if (result.exitCode !== 0) errors.push(`Exit ${result.exitCode}: ${label}`);
+    logLines.push(`$ ${label}\n${result.output}`);
+
+    await deps.api.recordStep(job.id, {
+      sequence, stepType: "COMMAND", title: label,
+      status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
+      command: spec.command, args: spec.args,
+      output: sanitize(result.output).slice(0, 4000),
+      exitCode: result.exitCode, durationMs: result.durationMs
+    });
+  }
+
+  let testResult: ValidationTestResult = "NOT_RUN";
+  if (testPasses > 0 && testFailures === 0) testResult = "PASSED";
+  else if (testFailures > 0 && testPasses === 0) testResult = "FAILED";
+  else if (testPasses > 0 && testFailures > 0) testResult = "PARTIAL";
+
+  const summary = `Validation-only run for "${job.workOrder.title}": ${testsRun.length} check(s) run, result ${testResult}. No files modified, no patch generated.`;
+  const logsPreview = sanitize(logLines.join("\n")).slice(-9000);
+
+  await deps.api.submitReport(job.id, {
+    summary,
+    filesChanged: [],
+    commandsRun,
+    testsRun,
+    testResult,
+    errors,
+    decisionsMade: [],
+    remainingWork: testFailures > 0 ? ["Review failing validation commands before approving the work order."] : [],
+    nextRecommendedAction: testFailures > 0 ? "Review validation failures in the implementation report" : "Review validation results and work order",
+    rawOutput: logsPreview,
+    logsPreview
+  });
+
+  log(`[Job ${job.id}] Validation report submitted (${testResult}). Job is NEEDS_REVIEW.`);
+}

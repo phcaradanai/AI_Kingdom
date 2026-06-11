@@ -1628,6 +1628,17 @@ export type AutomationCandidateDto = {
   updatedAt: string;
 };
 
+// ── M17D-2: Auto Validation ─────────────────────────────────────────────────────
+
+export type AutoValidationStatusDto = {
+  enabled: boolean;
+  dailyCount: number;
+  dailyLimit: number;
+  cooldownMinutes: number;
+  jobsCreatedLastRun: number;
+  validationFailuresNeedingReview: number;
+};
+
 export type LivingLoopStatusDto = {
   enabled: boolean;
   lastRun: LivingLoopRunDto | null;
@@ -1637,5 +1648,6 @@ export type LivingLoopStatusDto = {
   highCriticalCandidates: number;
   runnerIssues: number;
   providerIssues: number;
+  autoValidation: AutoValidationStatusDto;
 };
 

@@ -11,7 +11,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationCandidateDto, AutomationCandidateKind, LivingLoopRunDto, LivingLoopStatusDto, SettingDto } from "@/types/api";
+import type { AutomationCandidateDto, AutomationCandidateKind, AutoValidationStatusDto, LivingLoopRunDto, LivingLoopStatusDto, SettingDto } from "@/types/api";
 
 const LIVING_LOOP_SETTING_KEYS = [
   "LIVING_LOOP_ENABLED",
@@ -20,6 +20,8 @@ const LIVING_LOOP_SETTING_KEYS = [
   "LIVING_LOOP_MAX_CANDIDATES_PER_RUN",
   "LIVING_LOOP_MAX_DAILY_CANDIDATES",
   "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS",
+  "LIVING_LOOP_MAX_DAILY_VALIDATION_JOBS",
+  "LIVING_LOOP_VALIDATION_JOB_COOLDOWN_MINUTES",
   "LIVING_LOOP_AUTO_SANDBOX_PATCH",
   "LIVING_LOOP_ALLOW_BRANCH_PUSH",
   "LIVING_LOOP_ALLOW_PR_CREATE",
@@ -53,9 +55,20 @@ function KindBadge({ kind }: { kind: AutomationCandidateKind }) {
   return <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider", m.color)}><Icon className="h-3 w-3" />{m.label}</span>;
 }
 
-function CandidateCard({ c, isKing, onAction }: { c: AutomationCandidateDto; isKing: boolean; onAction: (id: string, action: string) => void }) {
+function autoValidationSkipNote(c: AutomationCandidateDto, autoValidation: AutoValidationStatusDto | null, lastRunSkippedReasons: string[] | null): string | null {
+  if (c.kind !== "VALIDATION_JOB" || c.status !== "PENDING") return null;
+  const matched = (lastRunSkippedReasons ?? []).find((r) => r.startsWith("AutoValidation:") && c.workOrderId && r.includes(c.workOrderId));
+  if (matched) return matched.replace("AutoValidation:", "Not auto-created:");
+  if (!autoValidation) return null;
+  if (!autoValidation.enabled) return "Not auto-created: auto validation is disabled";
+  if (autoValidation.dailyCount >= autoValidation.dailyLimit) return "Not auto-created: daily validation job limit reached";
+  return null;
+}
+
+function CandidateCard({ c, isKing, onAction, autoValidation, lastRunSkippedReasons }: { c: AutomationCandidateDto; isKing: boolean; onAction: (id: string, action: string) => void; autoValidation?: AutoValidationStatusDto | null; lastRunSkippedReasons?: string[] | null }) {
   const canAct = isKing && c.status === "PENDING";
   const canApply = isKing && c.status === "APPROVED";
+  const skipNote = autoValidationSkipNote(c, autoValidation ?? null, lastRunSkippedReasons ?? null);
   return (
     <div className="rounded-xl border border-border bg-card/70 p-4 transition-all hover:border-primary/30">
       <div className="flex items-start justify-between gap-4">
@@ -77,6 +90,16 @@ function CandidateCard({ c, isKing, onAction }: { c: AutomationCandidateDto; isK
             <summary className="cursor-pointer font-semibold text-primary/70 hover:text-primary">Proposed Action</summary>
             <pre className="mt-1 overflow-x-auto rounded-lg bg-muted/30 p-2 text-[10px]">{JSON.stringify(c.proposedAction, null, 2)}</pre>
           </details>
+          {c.kind === "VALIDATION_JOB" && c.status === "APPLIED" && c.automationJobId && (
+            <Link to="/automation-jobs" className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/10 px-2 py-1 text-[11px] font-semibold text-purple-400 hover:border-purple-500/60">
+              <Zap className="h-3 w-3" />Auto-created job: {c.automationJobId.slice(0, 8)}
+            </Link>
+          )}
+          {skipNote && (
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-400">
+              <AlertTriangle className="h-3 w-3" />{skipNote}
+            </div>
+          )}
           <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
             <span>Source: {c.sourceType}/{c.sourceId.slice(0, 8)}</span>
             <span>Status: {c.status}</span>
@@ -173,7 +196,7 @@ export function LivingLoopPage() {
 
   async function load() {
     const [s, r, c] = await Promise.all([
-      api.livingLoopStatus().catch(() => ({ status: { enabled: false, lastRun: null, lastResult: null, todayCandidates: 0, pendingCandidates: 0, highCriticalCandidates: 0, runnerIssues: 0, providerIssues: 0 } })),
+      api.livingLoopStatus().catch(() => ({ status: { enabled: false, lastRun: null, lastResult: null, todayCandidates: 0, pendingCandidates: 0, highCriticalCandidates: 0, runnerIssues: 0, providerIssues: 0, autoValidation: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, jobsCreatedLastRun: 0, validationFailuresNeedingReview: 0 } } })),
       api.livingLoopRuns(10).catch(() => ({ runs: [] })),
       api.automationCandidates({ limit: 50 }).catch(() => ({ candidates: [], total: 0 }))
     ]);
@@ -195,18 +218,39 @@ export function LivingLoopPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
-      <PageHeader eyebrow="M17D-1" title="Living Loop" description="Observe + Propose: Kingdom state monitoring and automation candidate queue." />
+      <PageHeader eyebrow="M17D-2" title="Living Loop" description="Observe + Propose + Auto Validate: Kingdom state monitoring, automation candidate queue, and safe validation-only jobs." />
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard title="Loop Status" icon={Activity} action={<Button variant="outline" className="h-8 text-xs" onClick={runOnce} disabled={running}><Zap className={cn("mr-1.5 h-3.5 w-3.5", running && "animate-spin")} />{running ? "Running..." : "Run Once"}</Button>}>
           {status && <div className="space-y-4"><div className="grid grid-cols-2 gap-4 sm:grid-cols-4"><StatCard className="bg-transparent border-none p-0" title="Enabled" value={status.enabled ? "Yes" : "No"} /><StatCard className="bg-transparent border-none p-0" title="Pending" value={status.pendingCandidates} /><StatCard className="bg-transparent border-none p-0" title="High/Critical" value={status.highCriticalCandidates} /><StatCard className="bg-transparent border-none p-0" title="Today" value={status.todayCandidates} /></div><div className="grid grid-cols-3 gap-4"><StatCard className="bg-transparent border-none p-0" title="Runner Issues" value={status.runnerIssues} /><StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={status.providerIssues} /><StatCard className="bg-transparent border-none p-0" title="Last Result" value={status.lastResult ?? "N/A"} /></div>{status.lastRun?.skippedReasons && status.lastRun.skippedReasons.length > 0 && <div className="text-[11px] text-amber-400/80">Last run skipped: {status.lastRun.skippedReasons.join("; ")}</div>}{status.lastRun?.error && <div className="text-[11px] text-destructive">Last run error: {status.lastRun.error}</div>}</div>}
         </SectionCard>
-        <SectionCard title="Constraints" icon={AlertTriangle}><div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-2">M17D-1: Observe + Propose Only</div><ul className="space-y-1 text-xs text-muted-foreground"><li>✓ No auto-patch, auto-merge, auto-deploy, auto-delete</li><li>✓ Every candidate has provenance + data quality gate</li><li>✓ GET routes never create candidates</li><li>✓ KING remains decision owner</li></ul></div></SectionCard>
+        <SectionCard title="Constraints" icon={AlertTriangle}><div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-2">M17D-2: Auto Validation Only</div><ul className="space-y-1 text-xs text-muted-foreground"><li>✓ Only VALIDATION_ONLY jobs may auto-run (no file edits, no patches)</li><li>✓ No auto-patch, branch push, PR, merge, deploy, or trusted memory</li><li>✓ Every candidate has provenance + data quality gate</li><li>✓ GET routes never create candidates or jobs</li><li>✓ KING remains decision owner</li></ul></div></SectionCard>
       </div>
+      <SectionCard title="Auto Validation" icon={Shield}>
+        {status?.autoValidation ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+              <StatCard className="bg-transparent border-none p-0" title="Status" value={status.autoValidation.enabled ? "Enabled" : "Disabled"} />
+              <StatCard className="bg-transparent border-none p-0" title="Jobs Today" value={`${status.autoValidation.dailyCount} / ${status.autoValidation.dailyLimit}`} />
+              <StatCard className="bg-transparent border-none p-0" title="Cooldown" value={`${status.autoValidation.cooldownMinutes}m`} />
+              <StatCard className="bg-transparent border-none p-0" title="Created Last Run" value={status.autoValidation.jobsCreatedLastRun} />
+              <StatCard className="bg-transparent border-none p-0" title="Failures To Review" value={status.autoValidation.validationFailuresNeedingReview} />
+            </div>
+            {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoValidation:")).length > 0 && (
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-400">
+                <div className="mb-1 font-semibold uppercase tracking-wider">Auto validation skipped reasons (last run)</div>
+                <ul className="space-y-0.5">
+                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoValidation:")).map((r, i) => <li key={i}>{r.replace("AutoValidation: ", "")}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        ) : <div className="text-xs text-muted-foreground">Auto validation status unavailable.</div>}
+      </SectionCard>
       <SectionCard title="Living Loop Settings" icon={SettingsIcon}>
         <LivingLoopSettingsPanel isKing={isKing} />
       </SectionCard>
       <SectionCard title={`Candidate Queue (${candidates.length})`} icon={Eye}>
-        {candidates.length > 0 ? (<div className="space-y-4">{(["PENDING", "APPROVED", "APPLIED", "REJECTED", "ARCHIVED"] as const).map(sg => { const g = candidates.filter(x => x.status === sg); if (!g.length) return null; return <div key={sg} className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{sg} ({g.length})</h4><div className="space-y-2">{g.map(x => <CandidateCard key={x.id} c={x} isKing={isKing} onAction={act} />)}</div></div>; })}</div>) : <EmptyState title="No Candidates" description="Run the living loop to generate candidates." action={<Button variant="outline" onClick={runOnce} disabled={running}><Zap className="mr-1.5 h-3.5 w-3.5" />Run Once</Button>} />}
+        {candidates.length > 0 ? (<div className="space-y-4">{(["PENDING", "APPROVED", "APPLIED", "REJECTED", "ARCHIVED"] as const).map(sg => { const g = candidates.filter(x => x.status === sg); if (!g.length) return null; return <div key={sg} className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{sg} ({g.length})</h4><div className="space-y-2">{g.map(x => <CandidateCard key={x.id} c={x} isKing={isKing} onAction={act} autoValidation={status?.autoValidation} lastRunSkippedReasons={status?.lastRun?.skippedReasons} />)}</div></div>; })}</div>) : <EmptyState title="No Candidates" description="Run the living loop to generate candidates." action={<Button variant="outline" onClick={runOnce} disabled={running}><Zap className="mr-1.5 h-3.5 w-3.5" />Run Once</Button>} />}
       </SectionCard>
       <SectionCard title="Run History" icon={Clock}>
         {runs.length > 0 ? <div className="space-y-2">{runs.map(r => {

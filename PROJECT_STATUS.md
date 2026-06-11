@@ -73,3 +73,7 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
 - The Grand Vizier appears twice per session in the UsageRecord table (once as a specialist agent call, once for the final synthesis pass), so per-agent call counts reflect actual AI invocations, not council participation.
 - The `Budget` model is schema-only; budget limits are stored as `Setting` keys (`DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`). No write API for `Budget` records exists yet.
 - Usage records only cover sessions processed after M10 was deployed; historical sessions have no cost data.
+
+## Known non-blocking:
+- Vitest 4.x with Vite 5.x emits deprecation warnings. Tests pass; consider pinning Vitest to a Vite 5-compatible version or upgrading Vite later.
+- One pre-existing backend test expects LivingLoopRun status COMPLETED; if shared test DB candidate counts hit daily cap, it may become SKIPPED. Consider isolating test data or resetting candidate counts in a follow-up.

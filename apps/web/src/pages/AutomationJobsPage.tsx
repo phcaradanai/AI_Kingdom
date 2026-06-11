@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Activity, AlertTriangle, Bot, CheckCircle, Clock, GitBranch, Play, RefreshCw, Shield, X, XCircle, AlertCircle, Eye, Cpu } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Activity, AlertTriangle, Bot, CheckCircle, Clock, GitBranch, Play, RefreshCw, Shield, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -53,6 +54,34 @@ function modeLabel(mode: string): string {
     case "VALIDATION_ONLY": return "Validation Only";
     default: return mode;
   }
+}
+
+type AutoValidationProvenance = { source?: string; loopRunId?: string; candidateId?: string };
+
+function autoValidationProvenance(job: AutomationJobDto): AutoValidationProvenance | null {
+  const p = job.provenance as AutoValidationProvenance | null | undefined;
+  return p && p.source === "LIVING_LOOP_AUTO_VALIDATION" ? p : null;
+}
+
+function ModeBadge({ mode }: { mode: string }) {
+  if (mode === "VALIDATION_ONLY") {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border text-purple-700 bg-purple-50 border-purple-200">
+        <Shield className="h-3 w-3" />
+        {modeLabel(mode)}
+      </span>
+    );
+  }
+  return <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{modeLabel(mode)}</span>;
+}
+
+function LivingLoopSourceBadge() {
+  return (
+    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border text-indigo-700 bg-indigo-50 border-indigo-200">
+      <Zap className="h-3 w-3" />
+      Living Loop Auto Validation
+    </span>
+  );
 }
 
 export function AutomationJobsPage() {
@@ -295,7 +324,8 @@ export function AutomationJobsPage() {
                         {statusIcon(job.status)}
                         {job.status}
                       </span>
-                      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{modeLabel(job.mode)}</span>
+                      <ModeBadge mode={job.mode} />
+                      {autoValidationProvenance(job) && <LivingLoopSourceBadge />}
                       {job.runner && (
                         <span className="text-xs text-muted-foreground">Runner: {job.runner.name}</span>
                       )}
@@ -365,6 +395,17 @@ export function AutomationJobsPage() {
                   </dd>
                 </div>
                 <div><dt className="text-muted-foreground">Mode</dt><dd className="mt-0.5 font-medium">{modeLabel(selectedJob.mode)}</dd></div>
+                {autoValidationProvenance(selectedJob) && (
+                  <div>
+                    <dt className="text-muted-foreground">Source</dt>
+                    <dd className="mt-0.5 space-y-1">
+                      <LivingLoopSourceBadge />
+                      <Link to="/living-loop" className="block text-primary hover:underline">
+                        Candidate {autoValidationProvenance(selectedJob)?.candidateId?.slice(0, 8)} · Run {autoValidationProvenance(selectedJob)?.loopRunId?.slice(0, 8)} →
+                      </Link>
+                    </dd>
+                  </div>
+                )}
                 <div><dt className="text-muted-foreground">Created</dt><dd className="mt-0.5">{formatDate(selectedJob.createdAt)}</dd></div>
                 {selectedJob.startedAt && <div><dt className="text-muted-foreground">Started</dt><dd className="mt-0.5">{formatDate(selectedJob.startedAt)}</dd></div>}
                 {selectedJob.completedAt && <div><dt className="text-muted-foreground">Completed</dt><dd className="mt-0.5">{formatDate(selectedJob.completedAt)}</dd></div>}

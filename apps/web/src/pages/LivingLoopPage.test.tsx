@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AutomationCandidateDto, LivingLoopRunDto, LivingLoopStatusDto, PublicUser } from "@/types/api";
 import { LivingLoopPage } from "./LivingLoopPage";
@@ -11,7 +12,15 @@ const mockStatus: LivingLoopStatusDto = {
   pendingCandidates: 1,
   highCriticalCandidates: 0,
   runnerIssues: 0,
-  providerIssues: 0
+  providerIssues: 0,
+  autoValidation: {
+    enabled: true,
+    dailyCount: 2,
+    dailyLimit: 10,
+    cooldownMinutes: 60,
+    jobsCreatedLastRun: 1,
+    validationFailuresNeedingReview: 0
+  }
 };
 
 const mockRuns: LivingLoopRunDto[] = [
@@ -148,6 +157,61 @@ describe("LivingLoopPage", () => {
     expect(screen.queryByRole("button", { name: /Approve/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Reject/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Apply/ })).not.toBeInTheDocument();
+  });
+
+  it("shows the Auto Validation section with daily count and cooldown", async () => {
+    setUser("KING");
+    setupApiMocks([]);
+
+    render(<MemoryRouter><LivingLoopPage /></MemoryRouter>);
+
+    expect(await screen.findByText("Auto Validation")).toBeInTheDocument();
+    expect(screen.getByText("2 / 10")).toBeInTheDocument();
+    expect(screen.getByText("60m")).toBeInTheDocument();
+    expect(screen.getByText("Created Last Run")).toBeInTheDocument();
+    expect(screen.getByText("Failures To Review")).toBeInTheDocument();
+  });
+
+  it("shows an auto-created job link on an APPLIED VALIDATION_JOB candidate", async () => {
+    setUser("KING");
+    const appliedValidationCandidate: AutomationCandidateDto = {
+      ...mockCandidate,
+      id: "candidate-validation-1",
+      kind: "VALIDATION_JOB",
+      status: "APPLIED",
+      title: "Validate Work Order: Feature X",
+      automationJobId: "job-auto-12345678"
+    };
+    setupApiMocks([appliedValidationCandidate]);
+
+    render(<MemoryRouter><LivingLoopPage /></MemoryRouter>);
+
+    await screen.findByText(appliedValidationCandidate.title);
+    const link = screen.getByRole("link", { name: /Auto-created job/ });
+    expect(link).toHaveAttribute("href", "/automation-jobs");
+  });
+
+  it("shows a skip note on a pending VALIDATION_JOB candidate when auto validation is disabled", async () => {
+    setUser("KING");
+    apiMocks.livingLoopStatus.mockResolvedValue({
+      status: { ...mockStatus, autoValidation: { ...mockStatus.autoValidation, enabled: false } }
+    });
+    apiMocks.livingLoopRuns.mockResolvedValue({ runs: mockRuns });
+    const pendingValidationCandidate: AutomationCandidateDto = {
+      ...mockCandidate,
+      id: "candidate-validation-2",
+      kind: "VALIDATION_JOB",
+      status: "PENDING",
+      title: "Validate Work Order: Feature Y",
+      automationJobId: null
+    };
+    apiMocks.automationCandidates.mockResolvedValue({ candidates: [pendingValidationCandidate], total: 1 });
+    apiMocks.settings.mockResolvedValue({ settings: [] });
+
+    render(<MemoryRouter><LivingLoopPage /></MemoryRouter>);
+
+    await screen.findByText(pendingValidationCandidate.title);
+    expect(screen.getByText(/auto validation is disabled/)).toBeInTheDocument();
   });
 
   it("calls runLivingLoopOnce when Run Once is clicked", async () => {

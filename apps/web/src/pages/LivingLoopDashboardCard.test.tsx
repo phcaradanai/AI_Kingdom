@@ -11,7 +11,15 @@ const mockStatus: LivingLoopStatusDto = {
   pendingCandidates: 2,
   highCriticalCandidates: 1,
   runnerIssues: 0,
-  providerIssues: 0
+  providerIssues: 0,
+  autoValidation: {
+    enabled: true,
+    dailyCount: 4,
+    dailyLimit: 10,
+    cooldownMinutes: 60,
+    jobsCreatedLastRun: 1,
+    validationFailuresNeedingReview: 3
+  }
 };
 
 const apiMocks = vi.hoisted(() => ({
@@ -36,6 +44,17 @@ describe("LivingLoopDashboardCard", () => {
     expect(screen.getByText("High/Critical")).toBeInTheDocument();
     expect(screen.getByText("1")).toBeInTheDocument();
     expect(screen.getByText(/Last run: COMPLETED/)).toBeInTheDocument();
+  });
+
+  it("shows auto validation jobs today and validation failures needing review", async () => {
+    apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
+
+    render(<LivingLoopDashboardCard />);
+
+    expect(await screen.findByText("Auto Validation Today")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+    expect(screen.getByText("Validation Failures")).toBeInTheDocument();
+    expect(screen.getByText("3")).toBeInTheDocument();
   });
 });
 

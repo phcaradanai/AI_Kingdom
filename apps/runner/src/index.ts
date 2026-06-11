@@ -19,6 +19,7 @@ import { runCommand } from "./sandbox.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
 import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
+import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -92,6 +93,10 @@ async function sendHeartbeat() {
 }
 
 async function executeJob(job: AutomationJob) {
+  if (job.mode === "VALIDATION_ONLY") {
+    await executeValidationJob(job);
+    return;
+  }
   const workspaceDir = path.join(WORKSPACE_BASE, job.id);
   const commandsRun: string[] = [];
   const testsRun: string[] = [];
@@ -249,6 +254,54 @@ async function executeJob(job: AutomationJob) {
       await api.updateStatus(job.id, "FAILED", {
         logsPreview: sanitizeLogOutput([...logLines, `ERROR: ${errMsg}`].slice(-50).join("\n"))
       });
+    } catch {
+      // Best effort
+    }
+  } finally {
+    try {
+      fs.rmSync(workspaceDir, { recursive: true, force: true });
+    } catch {
+      // Best effort
+    }
+  }
+}
+
+/**
+ * VALIDATION_ONLY (M17D-2): copy workspace, run allowlisted validation commands,
+ * submit a report. Never edits files, never creates a patch artifact, never
+ * runs git add/commit/push.
+ */
+async function executeValidationJob(job: AutomationJob) {
+  const workspaceDir = path.join(WORKSPACE_BASE, job.id);
+  try {
+    await executeValidationOnlyJob(job, {
+      api,
+      runCommand: async (command, args) => {
+        const result = await runCommand(command, args, { workspaceRoot: workspaceDir, jobAllowedCommands: job.allowedCommands });
+        return { exitCode: result.exitCode, output: result.output, durationMs: result.durationMs };
+      },
+      prepareWorkspace: async () => {
+        fs.mkdirSync(workspaceDir, { recursive: true });
+        const repoPath = process.env.RUNNER_REPO_PATH;
+        if (!repoPath) throw new Error("RUNNER_REPO_PATH is not configured; cannot copy workspace for validation.");
+        fs.cpSync(repoPath, workspaceDir, { recursive: true });
+      },
+      hasLintScript: () => {
+        try {
+          const pkg = JSON.parse(fs.readFileSync(path.join(workspaceDir, "package.json"), "utf8")) as { scripts?: Record<string, string> };
+          return Boolean(pkg.scripts?.lint);
+        } catch {
+          return false;
+        }
+      },
+      sanitize: sanitizeLogOutput,
+      log: (msg) => console.log(msg)
+    });
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[Job ${job.id}] Validation job fatal error:`, errMsg);
+    try {
+      await api.updateStatus(job.id, "FAILED", { logsPreview: sanitizeLogOutput(`ERROR: ${errMsg}`) });
     } catch {
       // Best effort
     }

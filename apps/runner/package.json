@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "start": "node --import tsx dist/index.js",
-    "test": "echo \"No tests in runner workspace\" && exit 0"
+    "test": "node --import tsx --test src/*.test.ts"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

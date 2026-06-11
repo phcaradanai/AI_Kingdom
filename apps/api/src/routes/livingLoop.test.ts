@@ -43,7 +43,7 @@ async function login(baseUrl: string, email: string) {
   return body?.token;
 }
 
-test("GET /api/living-loop/status creates no candidates", async () => {
+test("GET /api/living-loop/status creates no candidates and no jobs", async () => {
   const user = await createUser("KING");
   try {
     await withServer(async (baseUrl) => {
@@ -51,16 +51,27 @@ test("GET /api/living-loop/status creates no candidates", async () => {
       assert.ok(token);
 
       const before = await prisma.automationCandidate.count();
+      const jobsBefore = await prisma.automationJob.count();
 
       const res = await fetch(`${baseUrl}/api/living-loop/status`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       assert.equal(res.status, 200);
-      const body = (await res.json()) as { status: { enabled: boolean; pendingCandidates: number } };
+      const body = (await res.json()) as { status: { enabled: boolean; pendingCandidates: number; autoValidation: { enabled: boolean; dailyCount: number; dailyLimit: number; cooldownMinutes: number } } };
       assert.ok(typeof body.status.enabled === "boolean");
+      assert.ok(body.status.autoValidation, "status should include autoValidation info");
+      assert.ok(typeof body.status.autoValidation.enabled === "boolean");
+      assert.ok(typeof body.status.autoValidation.dailyCount === "number");
+
+      const runsRes = await fetch(`${baseUrl}/api/living-loop/runs`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(runsRes.status, 200);
 
       const after = await prisma.automationCandidate.count();
+      const jobsAfter = await prisma.automationJob.count();
       assert.equal(after, before);
+      assert.equal(jobsAfter, jobsBefore, "GET routes must not create automation jobs");
     });
   } finally {
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
