@@ -13,6 +13,9 @@ npm workspaces monorepo: `apps/api` (Express + Prisma) and `apps/web` (React + V
 - `npm run test`: API test suite (Node built-in runner + `tsx`).
 - `npm run db:migrate`: apply migrations and generate Prisma Client (dev only).
 - `npm run db:seed`: reset seeded King account, internal agents, external agent registry metadata, provider registry metadata, default projects, and settings.
+- `npm run runner:bootstrap`: create/update the local AgentRunner from `RUNNER_TOKEN` for manual runner acceptance.
+
+Migrations create schema only. Seeds and bootstrap scripts create runtime data such as users, agents, settings, providers, projects, and the local runner row.
 
 ## Coding Style
 
@@ -32,6 +35,7 @@ Project routing must stay explainable. Use deterministic project name/codename/a
 
 ## Project Context Binding + Local Docs (M17E)
 
+- Before manual SANDBOX_PATCH acceptance, put `RUNNER_TOKEN` in root `.env`, run `npm run runner:bootstrap`, start the API and runner with the same token, and confirm `/automation-jobs` shows `Online Runners = 1`.
 - **Mandatory**: agents must check the project's context binding before planning or patching. A WorkOrder's `contextBindingStatus` must be `FRESH` before any `SANDBOX_PATCH` job is created or executed; `STALE`, `MISSING`, or `PARTIAL` context blocks patching. Use `POST /api/work-orders/:id/bind-context` (KING/CROWN_PRINCE) after a local docs scan to refresh the binding.
 - **Migration rule**: every new Prisma migration must be applied to the `ai_kingdom_test` database (`npm run test:db:prepare`, or `prisma migrate deploy` with the test `DATABASE_URL`) *before* running root `npm run test`. Otherwise route tests fail with 500s from schema drift.
 - **Local docs safety**: never request arbitrary filesystem paths. All local file access goes through approved `LocalDocumentRoot` records and the safe path resolver (`safePathService.ts`) — no path traversal, no symlinks outside roots, no `.env`/keys/node_modules/build output.

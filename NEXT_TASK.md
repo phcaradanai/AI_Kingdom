@@ -22,14 +22,15 @@ Goal: make repository/local document snapshot binding mandatory for planning, va
 
 ## Manual acceptance checklist
 
-1. Open project detail and confirm latest Local Docs snapshot is READY.
-2. Create a WorkOrder linked to that project.
-3. Confirm the WorkOrder has a Project Context panel with FRESH status.
-4. Mark local docs stale (or use Mark Context Stale).
-5. Confirm the WorkOrder context warning appears.
-6. Try creating a SANDBOX_PATCH job; it must be refused while stale.
-7. Click Bind/Refresh Context (after a fresh scan).
-8. Confirm status returns to FRESH.
-9. Create a VALIDATION_ONLY job and confirm context provenance appears on the job.
-10. Create a LOW-risk SANDBOX_PATCH and confirm the PatchArtifact shows "Base Context Used".
-11. Generate a Royal Brief and confirm context health decisions appear.
+1. Put `RUNNER_TOKEN` in root `.env`, run `npm run runner:bootstrap`, start the API and runner with the same token, and confirm Automation Jobs shows `Online Runners = 1`.
+2. Open project detail and confirm latest Local Docs snapshot is READY.
+3. Create a WorkOrder linked to that project.
+4. Confirm the WorkOrder has a Project Context panel with FRESH status.
+5. Mark local docs stale (or use Mark Context Stale).
+6. Confirm the WorkOrder context warning appears.
+7. Try creating a SANDBOX_PATCH job; it must be refused while stale.
+8. Click Bind/Refresh Context (after a fresh scan).
+9. Confirm status returns to FRESH.
+10. Create a VALIDATION_ONLY job and confirm context provenance appears on the job.
+11. Create a LOW-risk SANDBOX_PATCH and confirm the PatchArtifact shows "Base Context Used".
+12. Generate a Royal Brief and confirm context health decisions appear.

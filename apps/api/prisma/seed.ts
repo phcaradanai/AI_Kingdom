@@ -6,6 +6,7 @@ import { ensureDefaultAIProviders } from "../src/services/aiProviderRegistry.js"
 import { ensureDefaultExternalAgents } from "../src/services/externalAgentWorkOrderService.js";
 import { ensureDefaultProjects } from "../src/services/projectService.js";
 import { ensureDefaultModelPricing } from "../src/services/modelPricingService.js";
+import { bootstrapLocalRunner, printRunnerBootstrapSuccess } from "../src/services/runnerBootstrapService.js";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -312,6 +313,15 @@ async function main() {
   await ensureDefaultExternalAgents();
   await ensureDefaultProjects();
   await ensureDefaultModelPricing();
+
+  const runnerBootstrap = await bootstrapLocalRunner({
+    prisma,
+    runnerToken: process.env.RUNNER_TOKEN,
+    requireToken: false
+  });
+  if (runnerBootstrap) {
+    printRunnerBootstrapSuccess(runnerBootstrap);
+  }
 
   await seedKingdomDocuments();
 }

@@ -33,6 +33,22 @@ king@aikingdom.local
 password123
 ```
 
+## Local Runner Setup
+
+Manual automation acceptance needs a local `AgentRunner` row in the database. Migrations create the schema; `db:seed` and `runner:bootstrap` create runtime data.
+
+```env
+RUNNER_TOKEN=replace-with-a-long-random-token
+RUNNER_REPO_PATH=/absolute/path/to/my_ai_kingdom
+```
+
+```bash
+npm run runner:bootstrap
+npm run dev --workspace @ai-kingdom/runner
+```
+
+Start the API as well (`npm run dev --workspace @ai-kingdom/api`, or root `npm run dev`). After the runner heartbeats, `/automation-jobs` should show `Online Runners = 1`.
+
 ## AI Provider Registry and Routing
 
 The app defaults to the mock provider so local development works without an API key. Provider metadata is stored in the `AIProvider` registry, while credentials stay server-side in environment variables.

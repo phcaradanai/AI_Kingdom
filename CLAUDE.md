@@ -12,9 +12,11 @@ docker compose up -d
 npm run db:generate
 npm run db:migrate
 npm run db:seed
+npm run runner:bootstrap
 
 # Development
 npm run dev          # starts both API (port 4000) and Vite (port 5173)
+npm run runner:bootstrap # create/update Local Runner from RUNNER_TOKEN
 npm run typecheck    # TypeScript checks across all workspaces
 npm run test         # API test suite (Node built-in runner + tsx)
 npm run lint         # alias for typecheck in both workspaces
@@ -22,6 +24,7 @@ npm run lint         # alias for typecheck in both workspaces
 # Database
 npm run db:migrate   # apply migrations + generate Prisma client (dev only)
 npm run db:seed      # reset seeded King user and royal agents
+npm run runner:bootstrap # create/update local AgentRunner runtime data
 
 # Single workspace targets
 npm run dev --workspace @ai-kingdom/api
@@ -29,6 +32,17 @@ npm run test --workspace @ai-kingdom/api
 ```
 
 Seeded login: `king@aikingdom.local` / `password123`
+
+Local runner startup:
+
+```bash
+# root .env must contain RUNNER_TOKEN
+npm run runner:bootstrap
+npm run dev --workspace @ai-kingdom/api
+npm run dev --workspace @ai-kingdom/runner
+```
+
+Use the same `RUNNER_TOKEN` for bootstrap and the runner process. The bootstrap stores only the sha256 token hash.
 
 ## Architecture
 
