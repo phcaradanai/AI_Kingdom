@@ -81,7 +81,8 @@ import type {
   PatchArtifactDto,
   LivingLoopStatusDto,
   LivingLoopRunDto,
-  AutomationCandidateDto
+  AutomationCandidateDto,
+  RoyalBriefDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -621,7 +622,14 @@ export const api = {
   archiveAutomationCandidate: (id: string) =>
     apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/archive`, { method: "POST" }),
   applyAutomationCandidate: (id: string) =>
-    apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/apply`, { method: "POST" })
+    apiRequest<{ candidate: AutomationCandidateDto }>(`/automation-candidates/${id}/apply`, { method: "POST" }),
+
+  // ── M17D-4: Royal Brief ──────────────────────────────────────────────────────
+  latestRoyalBrief: () => apiRequest<{ brief: RoyalBriefDto | null }>("/royal-brief/latest"),
+  royalBriefs: (limit = 20) => apiRequest<{ briefs: RoyalBriefDto[] }>(`/royal-brief?limit=${limit}`),
+  royalBrief: (id: string) => apiRequest<{ brief: RoyalBriefDto }>(`/royal-brief/${id}`),
+  generateRoyalBrief: () => apiRequest<{ brief: RoyalBriefDto }>("/royal-brief/generate", { method: "POST" }),
+  archiveRoyalBrief: (id: string) => apiRequest<{ brief: RoyalBriefDto }>(`/royal-brief/${id}/archive`, { method: "POST" })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

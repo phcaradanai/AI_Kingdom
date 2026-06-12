@@ -16,7 +16,7 @@ import { getProviderModelDisplay } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { AgentActivityStatus, AgentDto, CurrentAgentActivityDto, HandoffBriefDto, ProjectDto, ProjectInboxItemDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
+import type { AgentActivityStatus, AgentDto, CurrentAgentActivityDto, HandoffBriefDto, ProjectDto, ProjectInboxItemDto, RoyalBriefDto, SecretaryBriefDto, WorkOrderDto } from "@/types/api";
 
 const SEVERITY_COLORS = {
   critical: "text-destructive bg-destructive/10 border-destructive/30",
@@ -331,6 +331,73 @@ export function LivingLoopDashboardCard() {
   );
 }
 
+export function RoyalBriefDashboardCard() {
+  const [brief, setBrief] = useState<RoyalBriefDto | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    api.latestRoyalBrief()
+      .then((res) => setBrief(res.brief))
+      .catch(() => { /* ignore */ })
+      .finally(() => setLoading(false));
+  }, []);
+
+  async function generateNow() {
+    setGenerating(true);
+    try {
+      const res = await api.generateRoyalBrief();
+      setBrief(res.brief);
+    } catch (e) {
+      console.error(e);
+    }
+    setGenerating(false);
+  }
+
+  if (loading) return <div className="text-xs text-muted-foreground">Loading...</div>;
+
+  if (!brief) {
+    return (
+      <div className="space-y-3">
+        <EmptyState title="No Royal Brief Yet" description="Generate the first Daily Royal Brief to see a summary of Kingdom activity." />
+        {user?.role === "KING" && (
+          <Button variant="outline" className="h-8 text-xs" onClick={generateNow} disabled={generating}>
+            {generating ? "Generating..." : "Generate Now"}
+          </Button>
+        )}
+      </div>
+    );
+  }
+
+  const runnerStatus = brief.runnerStatus as { onlineCount: number; offlineCount: number; errorCount: number };
+  const patchSummary = brief.patchSummary as { patchesNeedingReview: unknown[] };
+  const validationSummary = brief.validationSummary as { jobsFailed: number };
+  const providerSummary = brief.providerSummary as { recentErrorCounts: unknown[] };
+
+  return (
+    <div className="space-y-3">
+      <div className="text-sm text-foreground">{brief.summary}</div>
+      <div className="grid grid-cols-2 gap-3">
+        <StatCard className="bg-transparent border-none p-0" title="Decisions Needed" value={brief.decisionsNeeded.items.length} trend={brief.decisionsNeeded.items.length > 0 ? { value: "Review", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Patches Needing Review" value={patchSummary.patchesNeedingReview.length} trend={patchSummary.patchesNeedingReview.length > 0 ? { value: "Review", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Failed Validations" value={validationSummary.jobsFailed} trend={validationSummary.jobsFailed > 0 ? { value: "Check", isPositive: false } : undefined} />
+        <StatCard className="bg-transparent border-none p-0" title="Runners Online" value={`${runnerStatus.onlineCount}`} description={`${runnerStatus.offlineCount} offline, ${runnerStatus.errorCount} error`} />
+        <StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={providerSummary.recentErrorCounts.length} trend={providerSummary.recentErrorCounts.length > 0 ? { value: "Check", isPositive: false } : undefined} />
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="text-xs text-muted-foreground">Generated {formatDate(brief.createdAt)}</div>
+        <Link to="/royal-brief"><Button variant="outline" className="h-8 text-xs">Open Brief</Button></Link>
+        {user?.role === "KING" && (
+          <Button variant="outline" className="h-8 text-xs" onClick={generateNow} disabled={generating}>
+            {generating ? "Generating..." : "Generate Now"}
+          </Button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function DashboardPage() {
   const { agents, tasks, reports, memories } = useKingdomStore();
   const user = useAuthStore((state) => state.user);
@@ -444,6 +511,15 @@ export function DashboardPage() {
           </Link>
         </div>
       )}
+
+      {/* Daily Royal Brief */}
+      <SectionCard
+        title="Daily Royal Brief"
+        icon={Crown}
+        action={<Link to="/royal-brief" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Open Brief</Link>}
+      >
+        <RoyalBriefDashboardCard />
+      </SectionCard>
 
       {/* Quick stats */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">

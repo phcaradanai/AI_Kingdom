@@ -315,6 +315,17 @@ enum AutomationCandidateStatus {
   ARCHIVED
 }
 
+enum RoyalBriefStatus {
+  DRAFT
+  READY
+  ARCHIVED
+}
+
+enum RoyalBriefGeneratedBy {
+  SYSTEM
+  KING
+}
+
 model Notice {
   id               String         @id @default(cuid())
   projectId        String?
@@ -383,6 +394,7 @@ model User {
   createdAutomationJobs  AutomationJob[] @relation("AutomationJobCreatedBy")
   approvedAutomationJobs AutomationJob[] @relation("AutomationJobApprovedBy")
   reviewedPatchArtifacts PatchArtifact[] @relation("PatchArtifactReviewedBy")
+  royalBriefs            RoyalBrief[]    @relation("RoyalBriefGeneratedByUser")
 }
 
 model RefreshToken {
@@ -1466,4 +1478,33 @@ model AutomationCandidate {
   @@index([riskLevel])
   @@index([loopRunId])
   @@index([createdAt])
+}
+
+model RoyalBrief {
+  id                 String                @id @default(cuid())
+  title              String
+  briefDate          DateTime
+  status             RoyalBriefStatus      @default(DRAFT)
+  summary            String
+  highlights         Json
+  decisionsNeeded    Json
+  runnerStatus       Json
+  livingLoopSummary  Json
+  validationSummary  Json
+  patchSummary       Json
+  providerSummary    Json
+  treasurySummary    Json
+  memorySummary      Json
+  riskSummary        Json
+  livingAgentDigest  Json
+  provenance         Json
+  generatedBy        RoyalBriefGeneratedBy @default(SYSTEM)
+  generatedByUserId  String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  generatedByUser    User?                 @relation("RoyalBriefGeneratedByUser", fields: [generatedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([briefDate])
+  @@index([status])
 }

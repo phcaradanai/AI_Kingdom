@@ -221,3 +221,73 @@ export type PatchArtifactDto = {
   workOrder: { id: string; title: string };
   reviewedByUser: { id: string; displayName: string } | null;
 };
+
+// ── M17D-4: Royal Brief ──────────────────────────────────────────────────────────
+
+export type RoyalBriefStatus = "DRAFT" | "READY" | "ARCHIVED";
+export type RoyalBriefGeneratedBy = "SYSTEM" | "KING";
+export type RoyalBriefRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type RoyalBriefDecision = {
+  id: string;
+  title: string;
+  why: string;
+  sourceLink: string;
+  riskLevel: RoyalBriefRiskLevel;
+  recommendedAction: string;
+  availableActions: string[];
+  provenance: { source: string; id: string | null; observedAt: string };
+};
+
+export type RoyalBriefHighlight = {
+  title: string;
+  detail: string;
+  provenance: { source: string; observedAt: string };
+};
+
+export type LivingAgentDigestEntryDto = {
+  agentId: string;
+  slug: string;
+  displayName: string;
+  displayTitle: string;
+  role: string;
+  avatarUrl: string | null;
+  actionsProposed: number;
+  jobsExecuted: number;
+  reportsProduced: number;
+  candidatesCreated: number;
+  failures: number;
+  status: "IDLE" | "THINKING" | "EXECUTING" | "WAITING_REVIEW" | "BLOCKED";
+};
+
+export type RoyalBriefRunnerStatus = {
+  runners: Array<{ id: string; name: string; status: string; lastHeartbeatAt: string | null; isStale: boolean }>;
+  onlineCount: number;
+  offlineCount: number;
+  errorCount: number;
+  staleCount: number;
+};
+
+export type RoyalBriefDto = {
+  id: string;
+  title: string;
+  briefDate: string;
+  status: RoyalBriefStatus;
+  summary: string;
+  highlights: { items: RoyalBriefHighlight[] };
+  decisionsNeeded: { items: RoyalBriefDecision[] };
+  runnerStatus: RoyalBriefRunnerStatus;
+  livingLoopSummary: Record<string, unknown>;
+  validationSummary: Record<string, unknown>;
+  patchSummary: Record<string, unknown>;
+  providerSummary: Record<string, unknown>;
+  treasurySummary: Record<string, unknown>;
+  memorySummary: Record<string, unknown>;
+  riskSummary: Record<string, unknown>;
+  livingAgentDigest: { items: LivingAgentDigestEntryDto[] };
+  provenance: Record<string, unknown>;
+  generatedBy: RoyalBriefGeneratedBy;
+  generatedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
