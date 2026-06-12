@@ -1727,11 +1727,77 @@ export type RoyalBriefDto = {
   treasurySummary: Record<string, unknown>;
   memorySummary: Record<string, unknown>;
   riskSummary: Record<string, unknown>;
+  localDocsSummary: Record<string, unknown>;
   livingAgentDigest: { items: LivingAgentDigestEntryDto[] };
   provenance: Record<string, unknown>;
   generatedBy: RoyalBriefGeneratedBy;
   generatedByUserId: string | null;
   createdAt: string;
   updatedAt: string;
+};
+
+// ── M17E-1: Local Project Documents + Repository Intelligence ────────────────────
+
+export type LocalDocumentScanStatusDto = "READY" | "FAILED" | "PARTIAL" | "STALE";
+export type LocalDocumentRiskLevelDto = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type LocalDocumentRootDto = {
+  id: string;
+  projectId: string;
+  name: string;
+  rootPath: string;
+  rootPathHash: string;
+  isActive: boolean;
+  allowedGlobs: string[];
+  blockedGlobs: string[];
+  maxFileBytes: number;
+  maxTotalBytes: number;
+  lastScannedAt: string | null;
+  lastError: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type LocalDocumentSnapshotDto = {
+  id: string;
+  projectId: string;
+  localDocumentRootId: string;
+  scanStatus: LocalDocumentScanStatusDto;
+  scannedAt: string;
+  fileCount: number;
+  totalBytes: number;
+  summary: string;
+  importantFiles: { relativePath: string; fileType: string }[];
+  detectedStack: string[] | null;
+  packageScripts: Record<string, string> | null;
+  riskZones: { relativePath: string; riskLevel: string; reason: string }[] | null;
+  provenance: Record<string, unknown>;
+  isStale: boolean;
+  createdAt: string;
+};
+
+export type LocalDocumentInsightDto = {
+  id: string;
+  snapshotId: string;
+  projectId: string;
+  relativePath: string;
+  fileType: string;
+  sizeBytes: number;
+  modifiedAt: string;
+  contentHash: string;
+  summary: string | null;
+  tags: string[];
+  riskLevel: LocalDocumentRiskLevelDto;
+  isDoc: boolean;
+  isCode: boolean;
+  isConfig: boolean;
+  isBlocked: boolean;
+  provenance: Record<string, unknown>;
+  createdAt: string;
+};
+
+export type LocalDocumentOverviewDto = {
+  roots: LocalDocumentRootDto[];
+  snapshot: LocalDocumentSnapshotDto | null;
 };
 

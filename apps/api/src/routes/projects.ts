@@ -5,6 +5,15 @@ import { requireRole } from "../middleware/rbac.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultProjects, exportProjectObsidian, getProjectOverview } from "../services/projectService.js";
 import { getLatestSnapshot, scanAndSaveSnapshot } from "../services/repositoryScanService.js";
+import {
+  createLocalDocumentRoot,
+  listLocalDocumentRoots,
+  updateLocalDocumentRoot,
+  scanLocalDocumentRoot,
+  getLatestLocalDocumentSnapshot,
+  listLocalDocumentInsights,
+  readLocalDocumentFile
+} from "../services/localDocumentAccessService.js";
 
 const router = Router();
 
@@ -165,6 +174,159 @@ router.post("/:id/export/obsidian", async (req, res, next) => {
       res.status(404).json({ error: error.message });
       return;
     }
+    next(error);
+  }
+});
+
+const createRootSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  rootPath: z.string().trim().min(1).max(1000),
+  allowedGlobs: z.array(z.string()).optional(),
+  blockedGlobs: z.array(z.string()).optional(),
+  maxFileBytes: z.number().int().positive().optional(),
+  maxTotalBytes: z.number().int().positive().optional(),
+  isActive: z.boolean().optional()
+});
+
+const updateRootSchema = z.object({
+  name: z.string().trim().min(1).max(200).optional(),
+  isActive: z.boolean().optional(),
+  allowedGlobs: z.array(z.string()).optional(),
+  blockedGlobs: z.array(z.string()).optional(),
+  maxFileBytes: z.number().int().positive().optional(),
+  maxTotalBytes: z.number().int().positive().optional()
+});
+
+const readFileSchema = z.object({
+  rootId: z.string().min(1),
+  relativePath: z.string().min(1)
+});
+
+/** GET /api/projects/:id/local-docs — roots + latest snapshot summary (no scan) */
+router.get("/:id/local-docs", async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const [roots, snapshot] = await Promise.all([
+      listLocalDocumentRoots(projectId),
+      getLatestLocalDocumentSnapshot(projectId)
+    ]);
+    res.json({ roots, snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /api/projects/:id/local-docs/roots — KING/CROWN_PRINCE add a local document root */
+router.post("/:id/local-docs/roots", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const body = createRootSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+    const root = await createLocalDocumentRoot(req.params.id as string, body.data);
+    res.status(201).json(root);
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** PATCH /api/projects/:id/local-docs/roots/:rootId — KING/CROWN_PRINCE update a root */
+router.patch("/:id/local-docs/roots/:rootId", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const body = updateRootSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+    const root = await updateLocalDocumentRoot(req.params.rootId as string, body.data);
+    res.json(root);
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** POST /api/projects/:id/local-docs/roots/:rootId/scan — KING/CROWN_PRINCE trigger a scan */
+router.post("/:id/local-docs/roots/:rootId/scan", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const snapshot = await scanLocalDocumentRoot(req.params.rootId as string);
+    res.status(201).json(snapshot);
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** GET /api/projects/:id/local-docs/snapshots/latest — latest snapshot (no scan) */
+router.get("/:id/local-docs/snapshots/latest", async (req, res, next) => {
+  try {
+    const snapshot = await getLatestLocalDocumentSnapshot(req.params.id);
+    res.json({ snapshot });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /api/projects/:id/local-docs/insights — insights for latest (or given) snapshot */
+router.get("/:id/local-docs/insights", async (req, res, next) => {
+  try {
+    const snapshotId = typeof req.query.snapshotId === "string" ? req.query.snapshotId : undefined;
+    const insights = await listLocalDocumentInsights(req.params.id, snapshotId);
+    res.json({ insights });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /api/projects/:id/local-docs/read-file — KING only, guarded full-content read */
+router.post("/:id/local-docs/read-file", requireRole("KING"), async (req, res, next) => {
+  try {
+    const body = readFileSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+
+    const root = await prisma.localDocumentRoot.findFirst({ where: { id: body.data.rootId, projectId: req.params.id } });
+    if (!root) {
+      res.status(404).json({ error: "LocalDocumentRoot not found" });
+      return;
+    }
+
+    const result = await readLocalDocumentFile(body.data.rootId, body.data.relativePath);
+    if (!result.ok) {
+      await auditLog({
+        userId: req.user?.id,
+        action: "local_document_file_read_blocked",
+        resourceType: "LocalDocumentRoot",
+        resourceId: body.data.rootId,
+        metadata: { projectId: req.params.id, relativePath: body.data.relativePath, reason: result.reason }
+      }).catch(() => undefined);
+      res.status(403).json({ error: result.reason });
+      return;
+    }
+
+    await auditLog({
+      userId: req.user?.id,
+      action: "local_document_file_read",
+      resourceType: "LocalDocumentRoot",
+      resourceId: body.data.rootId,
+      metadata: { projectId: req.params.id, relativePath: body.data.relativePath, sizeBytes: result.sizeBytes }
+    }).catch(() => undefined);
+
+    res.json({ relativePath: result.relativePath, content: result.content, sizeBytes: result.sizeBytes });
+  } catch (error) {
     next(error);
   }
 });

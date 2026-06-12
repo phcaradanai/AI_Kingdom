@@ -82,7 +82,11 @@ import type {
   LivingLoopStatusDto,
   LivingLoopRunDto,
   AutomationCandidateDto,
-  RoyalBriefDto
+  RoyalBriefDto,
+  LocalDocumentOverviewDto,
+  LocalDocumentRootDto,
+  LocalDocumentSnapshotDto,
+  LocalDocumentInsightDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -226,6 +230,32 @@ export const api = {
   exportProjectObsidian: (id: string) => apiRequest<ObsidianExportDto>(`/projects/${id}/export/obsidian`, { method: "POST" }),
   getProjectRepositorySnapshot: (id: string) => apiRequest<{ snapshot: RepositorySnapshotDto | null }>(`/projects/${id}/repository`),
   scanProjectRepository: (id: string) => apiRequest<{ snapshot: RepositorySnapshotDto }>(`/projects/${id}/repository/scan`, { method: "POST" }),
+  getProjectLocalDocs: (id: string) => apiRequest<LocalDocumentOverviewDto>(`/projects/${id}/local-docs`),
+  addProjectLocalDocumentRoot: (id: string, payload: {
+    name: string;
+    rootPath: string;
+    allowedGlobs?: string[];
+    blockedGlobs?: string[];
+    maxFileBytes?: number;
+    maxTotalBytes?: number;
+    isActive?: boolean;
+  }) => apiRequest<LocalDocumentRootDto>(`/projects/${id}/local-docs/roots`, { method: "POST", body: JSON.stringify(payload) }),
+  updateProjectLocalDocumentRoot: (id: string, rootId: string, payload: {
+    name?: string;
+    isActive?: boolean;
+    allowedGlobs?: string[];
+    blockedGlobs?: string[];
+    maxFileBytes?: number;
+    maxTotalBytes?: number;
+  }) => apiRequest<LocalDocumentRootDto>(`/projects/${id}/local-docs/roots/${rootId}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  scanProjectLocalDocumentRoot: (id: string, rootId: string) =>
+    apiRequest<LocalDocumentSnapshotDto>(`/projects/${id}/local-docs/roots/${rootId}/scan`, { method: "POST" }),
+  getProjectLocalDocumentSnapshot: (id: string) =>
+    apiRequest<{ snapshot: LocalDocumentSnapshotDto | null }>(`/projects/${id}/local-docs/snapshots/latest`),
+  getProjectLocalDocumentInsights: (id: string, snapshotId?: string) =>
+    apiRequest<{ insights: LocalDocumentInsightDto[] }>(`/projects/${id}/local-docs/insights${snapshotId ? `?snapshotId=${encodeURIComponent(snapshotId)}` : ""}`),
+  readProjectLocalDocumentFile: (id: string, payload: { rootId: string; relativePath: string }) =>
+    apiRequest<{ relativePath: string; content: string; sizeBytes: number }>(`/projects/${id}/local-docs/read-file`, { method: "POST", body: JSON.stringify(payload) }),
   projectInbox: (params?: { status?: string; dataQuality?: DataQuality; includeTestData?: boolean; includeDebug?: boolean; routingQuality?: string; confidenceMin?: number; confidenceMax?: number; sourceType?: string; suggestedProjectId?: string }) => {
     const search = new URLSearchParams();
     if (params?.status) search.set("status", params.status);

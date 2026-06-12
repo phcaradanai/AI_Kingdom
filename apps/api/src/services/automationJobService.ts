@@ -1,4 +1,4 @@
-import type { AutomationJobMode, AutomationJobStatus } from "@prisma/client";
+import type { AutomationJobMode, AutomationJobStatus, Prisma } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
@@ -13,6 +13,7 @@ import {
   failAIUsageTrace
 } from "./aiUsageTraceService.js";
 import { auditLog } from "./auditService.js";
+import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localDocumentAccessService.js";
 
 /** Statuses that count as "active" for duplicate prevention */
 export const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = [
@@ -46,6 +47,24 @@ export interface SubmitReportInput {
   rawOutput?: string | null;
   patchSummary?: string | null;
   logsPreview?: string | null;
+}
+
+/** Builds local-docs provenance for AutomationJob.provenance: snapshot id, root names/ids, scannedAt. */
+export async function buildLocalDocsProvenance(projectId: string | null): Promise<Record<string, unknown> | null> {
+  if (!projectId) return null;
+
+  const [snapshot, roots] = await Promise.all([
+    getLatestLocalDocumentSnapshot(projectId),
+    listLocalDocumentRoots(projectId)
+  ]);
+
+  return {
+    localDocumentSnapshotId: snapshot?.id ?? null,
+    localDocumentRootIds: roots.map((r) => r.id),
+    localDocumentRootNames: roots.map((r) => r.name),
+    localDocumentSnapshotScannedAt: snapshot?.scannedAt ?? null,
+    localDocumentSnapshotStale: snapshot?.isStale ?? true
+  };
 }
 
 export async function createAutomationJob(input: CreateAutomationJobInput) {
@@ -88,16 +107,20 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
     });
   }
 
+  const projectId = input.projectId ?? workOrder.projectId;
+  const localDocsProvenance = await buildLocalDocsProvenance(projectId);
+
   const job = await prisma.automationJob.create({
     data: {
       workOrderId: input.workOrderId,
-      projectId: input.projectId ?? workOrder.projectId,
+      projectId,
       agentId: planningAgentId,
       status: "QUEUED",
       mode: input.mode ?? "SANDBOX_PATCH",
       commandPolicy: input.commandPolicy,
       allowedCommands: input.allowedCommands ?? [],
       planJson: planJson ?? undefined,
+      provenance: localDocsProvenance ? (localDocsProvenance as Prisma.InputJsonValue) : undefined,
       createdByUserId: input.createdByUserId
     },
     include: jobInclude

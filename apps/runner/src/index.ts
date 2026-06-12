@@ -20,7 +20,7 @@ import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
 import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
-import { evaluateBranchPushEligibility, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
+import { evaluateBranchPushEligibility, evaluateFreshLocalContext, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -36,6 +36,7 @@ const APPROVAL_WAIT_MS = parseInt(process.env.APPROVAL_WAIT_MS ?? "300000", 10);
 
 // Server-side settings (fetched at startup)
 let ALLOW_BRANCH_PUSH = false;
+let REQUIRE_FRESH_LOCAL_CONTEXT = false;
 
 if (!RUNNER_TOKEN) {
   console.error("[Runner] RUNNER_TOKEN is required. Set it in .env or environment.");
@@ -59,7 +60,8 @@ async function main() {
   try {
     const settings = await api.getRunnerSettings();
     ALLOW_BRANCH_PUSH = settings.allowBranchPush;
-    console.log(`[Runner] Settings: branch push=${ALLOW_BRANCH_PUSH}, pr create=${settings.allowPrCreate}`);
+    REQUIRE_FRESH_LOCAL_CONTEXT = settings.requireFreshLocalContext;
+    console.log(`[Runner] Settings: branch push=${ALLOW_BRANCH_PUSH}, pr create=${settings.allowPrCreate}, require fresh local context=${REQUIRE_FRESH_LOCAL_CONTEXT}`);
   } catch (err) {
     console.warn("[Runner] Could not fetch server settings, using defaults:", err instanceof Error ? err.message : String(err));
   }
@@ -98,6 +100,27 @@ async function executeJob(job: AutomationJob) {
     await executeValidationJob(job);
     return;
   }
+
+  if (job.mode === "SANDBOX_PATCH") {
+    const provenance = job.provenance ?? {};
+    const freshness = evaluateFreshLocalContext({
+      requireFreshLocalContext: REQUIRE_FRESH_LOCAL_CONTEXT,
+      localDocumentSnapshotId: provenance.localDocumentSnapshotId as string | null | undefined,
+      localDocumentSnapshotStale: provenance.localDocumentSnapshotStale as boolean | undefined
+    });
+    if (!freshness.proceed) {
+      console.warn(`[Job ${job.id}] Refusing SANDBOX_PATCH: ${freshness.reason}`);
+      try {
+        await api.updateStatus(job.id, "FAILED", {
+          logsPreview: sanitizeLogOutput(`Refused: ${freshness.reason} Run a local docs scan before retrying this SANDBOX_PATCH job.`)
+        });
+      } catch {
+        // Best effort
+      }
+      return;
+    }
+  }
+
   const workspaceDir = path.join(WORKSPACE_BASE, job.id);
   const commandsRun: string[] = [];
   const testsRun: string[] = [];
@@ -120,6 +143,11 @@ async function executeJob(job: AutomationJob) {
 
     if (job.project) {
       log(`[Job ${job.id}] Project: ${job.project.name}`);
+    }
+
+    const localDocumentSnapshotId = (job.provenance?.localDocumentSnapshotId as string | null | undefined) ?? null;
+    if (localDocumentSnapshotId) {
+      log(`[Job ${job.id}] Local document snapshot: ${localDocumentSnapshotId}`);
     }
 
     // Execute plan steps

@@ -21,6 +21,7 @@ export interface AutomationJob {
   planJson: unknown;
   patchSummary: string | null;
   logsPreview: string | null;
+  provenance: Record<string, unknown> | null;
   workOrder: {
     id: string;
     title: string;
@@ -122,7 +123,7 @@ export class ApiClient {
     return this.request("GET", `/api/runner/patch-artifacts/${artifactId}`);
   }
 
-  async getRunnerSettings(): Promise<{ allowBranchPush: boolean; allowPrCreate: boolean }> {
+  async getRunnerSettings(): Promise<{ allowBranchPush: boolean; allowPrCreate: boolean; requireFreshLocalContext: boolean }> {
     return this.request("GET", "/api/runner/settings");
   }
 }

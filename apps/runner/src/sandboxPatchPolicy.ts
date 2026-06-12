@@ -40,3 +40,29 @@ export interface ApprovalArtifactState {
 export function shouldPushWithoutApproval(artifact: ApprovalArtifactState): boolean {
   return artifact.riskLevel === "LOW" && artifact.validationStatus === "PENDING";
 }
+
+export interface FreshLocalContextInput {
+  requireFreshLocalContext: boolean;
+  localDocumentSnapshotId: string | null | undefined;
+  localDocumentSnapshotStale: boolean | undefined;
+}
+
+export interface FreshLocalContextResult {
+  proceed: boolean;
+  reason?: string;
+}
+
+/**
+ * M17E-1: when REQUIRE_FRESH_LOCAL_CONTEXT is enabled, a SANDBOX_PATCH job may
+ * only run if its provenance carries a non-stale local document snapshot id.
+ */
+export function evaluateFreshLocalContext(input: FreshLocalContextInput): FreshLocalContextResult {
+  if (!input.requireFreshLocalContext) return { proceed: true };
+  if (!input.localDocumentSnapshotId) {
+    return { proceed: false, reason: "No local document snapshot is recorded for this job's project." };
+  }
+  if (input.localDocumentSnapshotStale) {
+    return { proceed: false, reason: "The local document snapshot for this job's project is stale." };
+  }
+  return { proceed: true };
+}

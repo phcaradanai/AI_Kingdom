@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateBranchPushEligibility, shouldPushWithoutApproval, SANDBOX_PATCH_NO_PUSH } from "./sandboxPatchPolicy.js";
+import { evaluateBranchPushEligibility, evaluateFreshLocalContext, shouldPushWithoutApproval, SANDBOX_PATCH_NO_PUSH } from "./sandboxPatchPolicy.js";
 
 test("M17D-3: SANDBOX_PATCH_NO_PUSH blocks branch push even if branch push is enabled", () => {
   const result = evaluateBranchPushEligibility({
@@ -47,4 +47,35 @@ test("M17D-3: a patch that escalates to MEDIUM/HIGH/CRITICAL risk requires King 
 
 test("LOW risk PENDING patches may push without waiting for explicit approval", () => {
   assert.equal(shouldPushWithoutApproval({ riskLevel: "LOW", validationStatus: "PENDING" }), true);
+});
+
+test("M17E-1: SANDBOX_PATCH is refused when fresh local context is required but no snapshot id is in provenance", () => {
+  const result = evaluateFreshLocalContext({
+    requireFreshLocalContext: true,
+    localDocumentSnapshotId: null,
+    localDocumentSnapshotStale: undefined
+  });
+  assert.equal(result.proceed, false);
+  assert.equal(result.reason, "No local document snapshot is recorded for this job's project.");
+});
+
+test("M17E-1: SANDBOX_PATCH is refused when fresh local context is required and the snapshot is stale", () => {
+  const result = evaluateFreshLocalContext({
+    requireFreshLocalContext: true,
+    localDocumentSnapshotId: "snapshot-123",
+    localDocumentSnapshotStale: true
+  });
+  assert.equal(result.proceed, false);
+  assert.equal(result.reason, "The local document snapshot for this job's project is stale.");
+});
+
+test("M17E-1: SANDBOX_PATCH proceeds with a fresh snapshot, and always proceeds when the flag is disabled", () => {
+  assert.equal(
+    evaluateFreshLocalContext({ requireFreshLocalContext: true, localDocumentSnapshotId: "snapshot-123", localDocumentSnapshotStale: false }).proceed,
+    true
+  );
+  assert.equal(
+    evaluateFreshLocalContext({ requireFreshLocalContext: false, localDocumentSnapshotId: null, localDocumentSnapshotStale: undefined }).proceed,
+    true
+  );
 });

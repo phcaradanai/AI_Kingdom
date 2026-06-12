@@ -95,6 +95,7 @@ const mockBrief: RoyalBriefDto = {
   treasurySummary: { totalCostUSD: 0.1234, dailyBudgetLimitUSD: 5, monthlyBudgetLimitUSD: 100, overDailyBudget: false },
   memorySummary: { pendingCandidates: 0, approvedInWindow: 0, rejectedInWindow: 0 },
   riskSummary: { pendingByRiskLevel: { HIGH: 1 }, highCriticalPending: 1 },
+  localDocsSummary: { issues: [], projectsMissingRoot: 0, projectsMissingSnapshot: 0, projectsWithFailedScan: 0, projectsWithStaleSnapshot: 0, projectsWithChangedDocs: 0, workOrdersBlocked: [] },
   livingAgentDigest: { items: [mockDigestEntry] },
   provenance: {
     generatedAt: observedAt,

@@ -294,11 +294,12 @@ router.post("/jobs/:jobId/patch-artifacts/:artifactId/branch-pushed", async (req
 /** GET /api/runner/settings — runner fetches server-side settings */
 router.get("/settings", async (_req, res, next) => {
   try {
-    const [allowBranchPush, allowPrCreate] = await Promise.all([
+    const [allowBranchPush, allowPrCreate, requireFreshLocalContext] = await Promise.all([
       getBooleanSetting("ALLOW_RUNNER_BRANCH_PUSH", false),
-      getBooleanSetting("ALLOW_RUNNER_PR_CREATE", false)
+      getBooleanSetting("ALLOW_RUNNER_PR_CREATE", false),
+      getBooleanSetting("LIVING_LOOP_REQUIRE_FRESH_LOCAL_CONTEXT", false)
     ]);
-    res.json({ allowBranchPush, allowPrCreate });
+    res.json({ allowBranchPush, allowPrCreate, requireFreshLocalContext });
   } catch (err) {
     next(err);
   }

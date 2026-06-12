@@ -4,6 +4,14 @@ import { prisma } from "../db/prisma.js";
 import { auditLog, sanitizeMetadata } from "./auditService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { isAutoPatchEligible } from "./livingLoopRiskPolicyService.js";
+import { buildLocalDocsProvenance } from "./automationJobService.js";
+import {
+  getLatestLocalDocumentSnapshot,
+  listLocalDocumentRoots,
+  markLocalSnapshotStale,
+  detectLocalDocsChangedSinceSnapshot,
+  LOCAL_DOCS_STALE_HOURS
+} from "./localDocumentAccessService.js";
 
 const STALE_RUNNER_HOURS = 24;
 const STALE_WORK_ORDER_HOURS = 1;
@@ -24,6 +32,8 @@ export type Observation = {
   workOrdersReadyForPatch: Array<any>;
   mattersAwaitingDecision: Array<any>;
   reportsWithRemainingWork: Array<any>;
+  localDocsIssues: Array<{ projectId: string; projectName: string; issue: "MISSING_ROOT" | "MISSING_SNAPSHOT" | "SCAN_FAILED" | "STALE_SNAPSHOT" | "DOCS_CHANGED"; detail: string }>;
+  workOrdersMissingLocalContext: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }>;
 };
 
 type CandidateInput = {
@@ -141,7 +151,64 @@ export async function observeKingdomState(): Promise<Observation> {
     }
     providerIssues = Array.from(m.values()).filter(p => p.errorCount >= 3);
   } catch { /* best-effort */ }
-  return { workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, providerIssues, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork, workOrdersReadyForPatch };
+
+  const localDocsIssues: Observation["localDocsIssues"] = [];
+  const workOrdersMissingLocalContext: Observation["workOrdersMissingLocalContext"] = [];
+  try {
+    const projectIds = new Set<string>();
+    for (const w of [...workOrdersNeedingReview, ...workOrdersReadyForPatch]) {
+      if (w.projectId) projectIds.add(w.projectId);
+    }
+    for (const projectId of projectIds) {
+      const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true } });
+      if (!project) continue;
+
+      const issue = await checkProjectLocalDocsHealth(project.id, project.name);
+      if (issue) {
+        localDocsIssues.push(issue);
+        for (const w of workOrdersReadyForPatch) {
+          if (w.projectId === projectId) {
+            workOrdersMissingLocalContext.push({ id: w.id, title: w.title, priority: w.priority, projectId, projectName: project.name });
+          }
+        }
+      }
+    }
+  } catch { /* best-effort */ }
+
+  return { workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, providerIssues, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork, workOrdersReadyForPatch, localDocsIssues, workOrdersMissingLocalContext };
+}
+
+/**
+ * Checks a project's local document context freshness. Returns an issue descriptor
+ * if the project's local docs are missing, failed, stale, or changed since last scan;
+ * returns null if local docs context is fresh and usable.
+ */
+export async function checkProjectLocalDocsHealth(projectId: string, projectName: string): Promise<Observation["localDocsIssues"][number] | null> {
+  const [roots, snapshot] = await Promise.all([
+    listLocalDocumentRoots(projectId),
+    getLatestLocalDocumentSnapshot(projectId)
+  ]);
+
+  if (roots.length === 0) {
+    return { projectId, projectName, issue: "MISSING_ROOT", detail: "No Local Document Root is configured for this project." };
+  }
+  if (!snapshot) {
+    return { projectId, projectName, issue: "MISSING_SNAPSHOT", detail: "No local docs snapshot has been scanned yet." };
+  }
+  if (snapshot.scanStatus === "FAILED") {
+    return { projectId, projectName, issue: "SCAN_FAILED", detail: "The most recent local docs scan failed." };
+  }
+  if (snapshot.isStale) {
+    return { projectId, projectName, issue: "STALE_SNAPSHOT", detail: `Local docs snapshot is older than ${LOCAL_DOCS_STALE_HOURS}h.` };
+  }
+
+  const changed = await detectLocalDocsChangedSinceSnapshot(projectId);
+  if (changed.changed) {
+    await markLocalSnapshotStale(projectId, `${changed.relativePath ?? "a tracked file"} changed since last scan`);
+    return { projectId, projectName, issue: "DOCS_CHANGED", detail: `${changed.relativePath ?? "A tracked doc"} in root "${changed.rootName ?? "?"}" changed since the last scan.` };
+  }
+
+  return null;
 }
 
 /** Non-actionable work order states for auto validation */
@@ -169,6 +236,48 @@ export async function proposeAutomationCandidates(obs: Observation, settings: { 
   for (const w of obs.workOrdersNeedingReview) { if (!w.projectId) push({ kind: "PROJECT_REVIEW", title: `Missing Project: ${w.title}`, summary: "Work order has no project.", reason: "Missing project context.", confidence: 65, priority: "LOW", riskLevel: "LOW", sourceType: "WorkOrder", sourceId: w.id, workOrderId: w.id, proposedAction: { action: "assign_project", targetId: w.id, options: ["assign_to_project", "archive"] }, provenance: { source: "WorkOrder", id: w.id, kind: "PROJECT_REVIEW", observedAt: now.toISOString() } }); }
   for (const r of obs.reportsWithRemainingWork) { if (r.decisionsMade.length > 0) push({ kind: "MEMORY_REVIEW", title: `Memory: ${(r.decisionsMade[0] ?? "Knowledge").slice(0, 80)}`, summary: `Report has ${r.decisionsMade.length} decisions.`, reason: "Decisions worth preserving.", confidence: 70, priority: "LOW", riskLevel: "LOW", sourceType: "ImplementationReport", sourceId: r.id, workOrderId: r.workOrderId, proposedAction: { action: "create_memory_candidate", targetId: r.id, decisionsCount: r.decisionsMade.length, options: ["review", "dismiss"] }, provenance: { source: "ImplementationReport", id: r.id, kind: "MEMORY_REVIEW", observedAt: now.toISOString(), decisionsCount: r.decisionsMade.length } }); }
   for (const i of obs.staleInboxItems) { push({ kind: "CLEANUP_REVIEW", title: `Stale Inbox: ${i.title}`, summary: `Pending since ${i.createdAt.toISOString().split("T")[0]}.`, reason: "Pending over 24h.", confidence: 60, priority: "LOW", riskLevel: "LOW", sourceType: "ProjectInboxItem", sourceId: i.id, proposedAction: { action: "archive_target", targetId: i.id, options: ["archive", "dismiss"] }, provenance: { source: "ProjectInboxItem", id: i.id, kind: "CLEANUP_REVIEW", observedAt: now.toISOString() } }); }
+
+  for (const issue of obs.localDocsIssues) {
+    const titleByIssue: Record<typeof issue.issue, string> = {
+      MISSING_ROOT: `Local Docs Root Missing: ${issue.projectName}`,
+      MISSING_SNAPSHOT: `Local Docs Not Scanned: ${issue.projectName}`,
+      SCAN_FAILED: `Local Docs Scan Failed: ${issue.projectName}`,
+      STALE_SNAPSHOT: `Local Docs Stale: ${issue.projectName}`,
+      DOCS_CHANGED: `Local Docs Changed: ${issue.projectName}`
+    };
+    push({
+      kind: "PROJECT_REVIEW",
+      title: titleByIssue[issue.issue],
+      summary: issue.detail,
+      reason: `Local document context for project "${issue.projectName}" is not ready: ${issue.detail}`,
+      confidence: issue.issue === "SCAN_FAILED" ? 85 : 75,
+      priority: issue.issue === "MISSING_ROOT" || issue.issue === "SCAN_FAILED" ? "MEDIUM" : "LOW",
+      riskLevel: "LOW",
+      sourceType: "Project",
+      sourceId: issue.projectId,
+      projectId: issue.projectId,
+      proposedAction: { action: "review_local_docs", targetId: issue.projectId, issue: issue.issue, options: ["add_root", "scan_now", "dismiss"] },
+      provenance: { source: "Project", id: issue.projectId, kind: "PROJECT_REVIEW", observedAt: now.toISOString(), localDocsIssue: issue.issue }
+    });
+  }
+
+  for (const w of obs.workOrdersMissingLocalContext) {
+    push({
+      kind: "WORK_ORDER_REVIEW",
+      title: `Work Order Blocked: ${w.title}`,
+      summary: `Work order is ready for patching but project "${w.projectName}" has no fresh local document context.`,
+      reason: "WorkOrder requires fresh local document context before a SANDBOX_PATCH job can run safely.",
+      confidence: 75,
+      priority: w.priority === "CRITICAL" || w.priority === "HIGH" ? w.priority : "MEDIUM",
+      riskLevel: "LOW",
+      sourceType: "WorkOrder",
+      sourceId: w.id,
+      projectId: w.projectId,
+      workOrderId: w.id,
+      proposedAction: { action: "review_local_docs_blocker", targetId: w.id, options: ["scan_local_docs", "proceed_anyway", "dismiss"] },
+      provenance: { source: "WorkOrder", id: w.id, kind: "WORK_ORDER_REVIEW", observedAt: now.toISOString(), reason: "missing_local_context" }
+    });
+  }
 
   for (const w of obs.workOrdersReadyForPatch) {
     if (!isWorkOrderEligibleForValidation(w).eligible) continue;
@@ -301,6 +410,7 @@ export async function autoCreateValidationJobs(loopRunId: string, candidates: Au
     if (recentValidationJob) { await skip(candidate, `Validation job within ${cooldownMinutes}m cooldown`, "validation_job_cooldown_blocked"); continue; }
 
     // Create directly (no AI plan generation — keeps auto validation provider-free).
+    const localDocsProvenance = await buildLocalDocsProvenance(candidate.projectId ?? workOrder.projectId);
     const job = await prisma.automationJob.create({
       data: {
         workOrderId: workOrder.id,
@@ -310,7 +420,7 @@ export async function autoCreateValidationJobs(loopRunId: string, candidates: Au
         mode: "VALIDATION_ONLY",
         commandPolicy: "VALIDATION_ONLY",
         allowedCommands: ["npm", "git"],
-        provenance: toMeta({ source: AUTO_VALIDATION_PROVENANCE_SOURCE, loopRunId, candidateId: candidate.id, workOrderId: workOrder.id, createdAt: new Date().toISOString() })
+        provenance: toMeta({ source: AUTO_VALIDATION_PROVENANCE_SOURCE, loopRunId, candidateId: candidate.id, workOrderId: workOrder.id, createdAt: new Date().toISOString(), ...(localDocsProvenance ?? {}) })
       }
     });
     todayJobCount++;
@@ -385,6 +495,8 @@ export async function autoCreateSandboxPatchJobs(loopRunId: string, candidates: 
       continue;
     }
 
+    const localDocsProvenance = await buildLocalDocsProvenance(candidate.projectId ?? workOrder.projectId);
+
     const job = await prisma.automationJob.create({
       data: {
         workOrderId: workOrder.id,
@@ -394,7 +506,15 @@ export async function autoCreateSandboxPatchJobs(loopRunId: string, candidates: 
         mode: "SANDBOX_PATCH",
         commandPolicy: "SANDBOX_PATCH_NO_PUSH",
         allowedCommands: ["npm", "git"],
-        provenance: toMeta({ source: AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE, loopRunId, candidateId: candidate.id, workOrderId: workOrder.id, createdAt: new Date().toISOString(), riskPolicyVersion: "1.0" })
+        provenance: toMeta({
+          source: AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE,
+          loopRunId,
+          candidateId: candidate.id,
+          workOrderId: workOrder.id,
+          createdAt: new Date().toISOString(),
+          riskPolicyVersion: "1.0",
+          ...(localDocsProvenance ?? {})
+        })
       }
     });
     todayJobCount++;

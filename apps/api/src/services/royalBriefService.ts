@@ -5,7 +5,8 @@ import { getNumberSetting, getBooleanSetting, getSettingValue } from "./settings
 import {
   AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE,
   countAutoValidationJobsToday,
-  countAutoSandboxPatchJobsToday
+  countAutoSandboxPatchJobsToday,
+  checkProjectLocalDocsHealth
 } from "./livingLoopService.js";
 import { getCurrentAgentActivities, type AgentActivityStatus } from "./agentActivityService.js";
 
@@ -251,6 +252,59 @@ async function buildRiskSummary() {
   };
 }
 
+type LocalDocsIssue = { projectId: string; projectName: string; issue: "MISSING_ROOT" | "MISSING_SNAPSHOT" | "SCAN_FAILED" | "STALE_SNAPSHOT" | "DOCS_CHANGED"; detail: string };
+
+async function buildLocalDocsSummary(): Promise<{
+  issues: LocalDocsIssue[];
+  projectsMissingRoot: number;
+  projectsMissingSnapshot: number;
+  projectsWithFailedScan: number;
+  projectsWithStaleSnapshot: number;
+  projectsWithChangedDocs: number;
+  workOrdersBlocked: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }>;
+}> {
+  const projects = await prisma.project.findMany({
+    where: { status: { in: ["ACTIVE", "PAUSED"] } },
+    select: { id: true, name: true }
+  });
+
+  const issues: LocalDocsIssue[] = [];
+  const issuesByProject = new Map<string, LocalDocsIssue>();
+
+  for (const project of projects) {
+    const issue = await checkProjectLocalDocsHealth(project.id, project.name);
+    if (issue) {
+      issues.push(issue);
+      issuesByProject.set(project.id, issue);
+    }
+  }
+
+  const workOrdersBlocked: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }> = [];
+  if (issuesByProject.size > 0) {
+    const workOrders = await prisma.workOrder.findMany({
+      where: { status: { in: ["READY", "IN_PROGRESS"] }, projectId: { in: Array.from(issuesByProject.keys()) } },
+      select: { id: true, title: true, priority: true, projectId: true },
+      take: 50
+    });
+    for (const w of workOrders) {
+      const issue = w.projectId ? issuesByProject.get(w.projectId) : undefined;
+      if (issue && w.projectId) {
+        workOrdersBlocked.push({ id: w.id, title: w.title, priority: w.priority, projectId: w.projectId, projectName: issue.projectName });
+      }
+    }
+  }
+
+  return {
+    issues,
+    projectsMissingRoot: issues.filter((i) => i.issue === "MISSING_ROOT").length,
+    projectsMissingSnapshot: issues.filter((i) => i.issue === "MISSING_SNAPSHOT").length,
+    projectsWithFailedScan: issues.filter((i) => i.issue === "SCAN_FAILED").length,
+    projectsWithStaleSnapshot: issues.filter((i) => i.issue === "STALE_SNAPSHOT").length,
+    projectsWithChangedDocs: issues.filter((i) => i.issue === "DOCS_CHANGED").length,
+    workOrdersBlocked
+  };
+}
+
 type RunnerInfo = { id: string; name: string; status: string; lastHeartbeatAt: Date | null };
 
 async function buildRunnerStatus(): Promise<{ runners: { id: string; name: string; status: string; lastHeartbeatAt: string | null; isStale: boolean }[]; onlineCount: number; offlineCount: number; errorCount: number; staleCount: number }> {
@@ -335,6 +389,7 @@ function buildDecisionsNeeded(input: {
   pendingMemoryCandidates: number;
   validationSummary: Awaited<ReturnType<typeof buildValidationSummary>>;
   patchSummary: Awaited<ReturnType<typeof buildPatchSummary>>;
+  localDocsSummary: Awaited<ReturnType<typeof buildLocalDocsSummary>>;
   observedAt: string;
 }): DecisionNeeded[] {
   const decisions: DecisionNeeded[] = [];
@@ -434,6 +489,40 @@ function buildDecisionsNeeded(input: {
     });
   }
 
+  const localDocsIssueTitles: Record<LocalDocsIssue["issue"], string> = {
+    MISSING_ROOT: "Local Docs Root Missing",
+    MISSING_SNAPSHOT: "Local Docs Not Scanned",
+    SCAN_FAILED: "Local Docs Scan Failed",
+    STALE_SNAPSHOT: "Local Docs Stale",
+    DOCS_CHANGED: "Local Docs Changed"
+  };
+
+  for (const issue of input.localDocsSummary.issues.slice(0, 10)) {
+    decisions.push({
+      id: `local-docs:${issue.projectId}:${issue.issue}`,
+      title: `${localDocsIssueTitles[issue.issue]}: ${issue.projectName}`,
+      why: issue.detail,
+      sourceLink: `/projects/${issue.projectId}`,
+      riskLevel: issue.issue === "SCAN_FAILED" ? "MEDIUM" : "LOW",
+      recommendedAction: "Review the project's Local Docs section and run a fresh scan.",
+      availableActions: ["scan_now", "review"],
+      provenance: { source: "Project", id: issue.projectId, observedAt: input.observedAt }
+    });
+  }
+
+  for (const w of input.localDocsSummary.workOrdersBlocked.slice(0, 10)) {
+    decisions.push({
+      id: `work-order-blocked:${w.id}`,
+      title: `Work Order Blocked by Local Docs: ${w.title}`,
+      why: `Project "${w.projectName}" has no fresh local document context, blocking SANDBOX_PATCH for this work order.`,
+      sourceLink: "/work-orders",
+      riskLevel: w.priority === "CRITICAL" || w.priority === "HIGH" ? "HIGH" : "MEDIUM",
+      recommendedAction: "Run a local docs scan for the project before this work order proceeds to patch.",
+      availableActions: ["scan_local_docs", "proceed_anyway"],
+      provenance: { source: "WorkOrder", id: w.id, observedAt: input.observedAt }
+    });
+  }
+
   const order: Record<DecisionRiskLevel, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
   decisions.sort((a, b) => order[a.riskLevel] - order[b.riskLevel]);
   return decisions;
@@ -444,6 +533,7 @@ function buildHighlights(input: {
   validationSummary: Awaited<ReturnType<typeof buildValidationSummary>>;
   patchSummary: Awaited<ReturnType<typeof buildPatchSummary>>;
   treasurySummary: Awaited<ReturnType<typeof buildTreasurySummary>>;
+  localDocsSummary: Awaited<ReturnType<typeof buildLocalDocsSummary>>;
   observedAt: string;
 }): { title: string; detail: string; provenance: { source: string; observedAt: string } }[] {
   const highlights: { title: string; detail: string; provenance: { source: string; observedAt: string } }[] = [];
@@ -476,6 +566,14 @@ function buildHighlights(input: {
     provenance: { source: "TreasuryLedger", observedAt: input.observedAt }
   });
 
+  if (input.localDocsSummary.issues.length > 0) {
+    highlights.push({
+      title: "Local Docs Context",
+      detail: `${input.localDocsSummary.issues.length} project(s) need local docs attention: ${input.localDocsSummary.projectsMissingRoot} missing root, ${input.localDocsSummary.projectsMissingSnapshot} not scanned, ${input.localDocsSummary.projectsWithFailedScan} failed scan, ${input.localDocsSummary.projectsWithStaleSnapshot} stale, ${input.localDocsSummary.projectsWithChangedDocs} changed since scan.${input.localDocsSummary.workOrdersBlocked.length > 0 ? ` ${input.localDocsSummary.workOrdersBlocked.length} work order(s) blocked.` : ""}`,
+      provenance: { source: "LocalDocumentSnapshot", observedAt: input.observedAt }
+    });
+  }
+
   return highlights;
 }
 
@@ -484,7 +582,7 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
   const observedAt = date.toISOString();
 
   try {
-    const [patchesNeedingReview, workOrdersNeedingReview, livingLoopSummary, validationSummary, treasurySummary, memorySummary, riskSummary, runnerStatus, providerSummary, livingAgentDigest] = await Promise.all([
+    const [patchesNeedingReview, workOrdersNeedingReview, livingLoopSummary, validationSummary, treasurySummary, memorySummary, riskSummary, runnerStatus, providerSummary, livingAgentDigest, localDocsSummary] = await Promise.all([
       prisma.patchArtifact.findMany({
         where: { OR: [{ validationStatus: "PENDING" }, { riskLevel: { in: ["HIGH", "CRITICAL"] } }] },
         select: { id: true, title: true, riskLevel: true, validationStatus: true, workOrderId: true, projectId: true, automationJobId: true, createdAt: true },
@@ -504,7 +602,8 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
       buildRiskSummary(),
       buildRunnerStatus(),
       buildProviderSummary(since),
-      buildLivingAgentActivityDigest(since)
+      buildLivingAgentActivityDigest(since),
+      buildLocalDocsSummary()
     ]);
 
     const patchSummary = await buildPatchSummary(since, patchesNeedingReview);
@@ -517,10 +616,11 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
       pendingMemoryCandidates: memorySummary.pendingCandidates,
       validationSummary,
       patchSummary,
+      localDocsSummary,
       observedAt
     });
 
-    const highlights = buildHighlights({ livingLoopSummary, validationSummary, patchSummary, treasurySummary, observedAt });
+    const highlights = buildHighlights({ livingLoopSummary, validationSummary, patchSummary, treasurySummary, localDocsSummary, observedAt });
 
     const summary = `In the last ${BRIEF_WINDOW_HOURS}h: ${livingLoopSummary.runsInWindow} Living Loop run(s), ${livingLoopSummary.candidatesCreated} candidate(s) proposed, ${patchSummary.patchesNeedingReview.length} patch(es) awaiting review, ${decisionsNeeded.length} decision(s) needed, ${runnerStatus.onlineCount}/${runnerStatus.runners.length} runner(s) online.`;
 
@@ -528,7 +628,7 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
       generatedAt: observedAt,
       windowHours: BRIEF_WINDOW_HOURS,
       since: since.toISOString(),
-      sources: ["LivingLoopRun", "AutomationCandidate", "AutomationJob", "PatchArtifact", "AgentRunner", "ProviderHealthSnapshot", "AIUsageTrace", "TreasuryLedger", "WorkOrder", "AgentKnowledgeCandidate", "AgentActivity"]
+      sources: ["LivingLoopRun", "AutomationCandidate", "AutomationJob", "PatchArtifact", "AgentRunner", "ProviderHealthSnapshot", "AIUsageTrace", "TreasuryLedger", "WorkOrder", "AgentKnowledgeCandidate", "AgentActivity", "Project", "LocalDocumentRoot", "LocalDocumentSnapshot"]
     };
 
     const generatedBy = userId ? "KING" : "SYSTEM";
@@ -549,6 +649,7 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
         treasurySummary: toMeta(treasurySummary),
         memorySummary: toMeta(memorySummary),
         riskSummary: toMeta(riskSummary),
+        localDocsSummary: toMeta(localDocsSummary),
         livingAgentDigest: toMeta({ items: livingAgentDigest }),
         provenance: toMeta(provenance),
         generatedBy,

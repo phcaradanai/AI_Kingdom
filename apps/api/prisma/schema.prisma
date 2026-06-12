@@ -508,6 +508,9 @@ model Project {
   routingCandidates ProjectRoutingCandidate[]
   repositorySnapshots RepositorySnapshot[]
   patchArtifacts      PatchArtifact[]
+  localDocumentRoots     LocalDocumentRoot[]
+  localDocumentSnapshots LocalDocumentSnapshot[]
+  localDocumentInsights  LocalDocumentInsight[]
 }
 
 model RepositorySnapshot {
@@ -1496,6 +1499,7 @@ model RoyalBrief {
   treasurySummary    Json
   memorySummary      Json
   riskSummary        Json
+  localDocsSummary   Json                  @default("{}")
   livingAgentDigest  Json
   provenance         Json
   generatedBy        RoyalBriefGeneratedBy @default(SYSTEM)
@@ -1507,4 +1511,94 @@ model RoyalBrief {
 
   @@index([briefDate])
   @@index([status])
+}
+
+enum LocalDocumentScanStatus {
+  READY
+  FAILED
+  PARTIAL
+  STALE
+}
+
+enum LocalDocumentRiskLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+model LocalDocumentRoot {
+  id             String    @id @default(cuid())
+  projectId      String
+  name           String
+  rootPath       String
+  rootPathHash   String
+  isActive       Boolean   @default(true)
+  allowedGlobs   Json
+  blockedGlobs   Json
+  maxFileBytes   Int       @default(200000)
+  maxTotalBytes  Int       @default(5000000)
+  lastScannedAt  DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  project   Project                 @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  snapshots LocalDocumentSnapshot[]
+
+  @@index([projectId])
+  @@index([isActive])
+}
+
+model LocalDocumentSnapshot {
+  id                  String                   @id @default(cuid())
+  projectId           String
+  localDocumentRootId String
+  scanStatus          LocalDocumentScanStatus  @default(READY)
+  scannedAt           DateTime                 @default(now())
+  fileCount           Int
+  totalBytes          Int
+  summary             String
+  importantFiles      Json
+  detectedStack       Json?
+  packageScripts      Json?
+  riskZones           Json?
+  provenance          Json
+  createdAt           DateTime                 @default(now())
+
+  project   Project           @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  root      LocalDocumentRoot @relation(fields: [localDocumentRootId], references: [id], onDelete: Cascade)
+  insights  LocalDocumentInsight[]
+
+  @@index([projectId])
+  @@index([localDocumentRootId])
+  @@index([scannedAt])
+}
+
+model LocalDocumentInsight {
+  id           String                 @id @default(cuid())
+  snapshotId   String
+  projectId    String
+  relativePath String
+  fileType     String
+  sizeBytes    Int
+  modifiedAt   DateTime
+  contentHash  String
+  summary      String?
+  tags         String[]              @default([])
+  riskLevel    LocalDocumentRiskLevel @default(LOW)
+  isDoc        Boolean                @default(false)
+  isCode       Boolean                @default(false)
+  isConfig     Boolean                @default(false)
+  isBlocked    Boolean                @default(false)
+  provenance   Json
+  createdAt    DateTime               @default(now())
+
+  snapshot LocalDocumentSnapshot @relation(fields: [snapshotId], references: [id], onDelete: Cascade)
+  project  Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([snapshotId])
+  @@index([projectId])
+  @@index([relativePath])
+  @@index([riskLevel])
 }
