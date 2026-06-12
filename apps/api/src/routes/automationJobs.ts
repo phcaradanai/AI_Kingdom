@@ -80,6 +80,10 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
       res.status(409).json({ error: err.message });
       return;
     }
+    if (err instanceof Error && err.name === "ContextBindingError") {
+      res.status(409).json({ error: err.message, code: "CONTEXT_BINDING" });
+      return;
+    }
     next(err);
   }
 });

@@ -14,6 +14,7 @@ import {
   listLocalDocumentInsights,
   readLocalDocumentFile
 } from "../services/localDocumentAccessService.js";
+import { explainContextBindingStatus } from "../services/projectContextBindingService.js";
 
 const router = Router();
 
@@ -200,6 +201,37 @@ const updateRootSchema = z.object({
 const readFileSchema = z.object({
   rootId: z.string().min(1),
   relativePath: z.string().min(1)
+});
+
+/** GET /api/projects/:id/context-health — read-only project context binding health */
+router.get("/:id/context-health", async (req, res, next) => {
+  try {
+    const projectId = req.params.id;
+    const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true, name: true } });
+    if (!project) {
+      res.status(404).json({ error: "Project not found" });
+      return;
+    }
+    const explanation = await explainContextBindingStatus(projectId);
+    const openWorkOrders = await prisma.workOrder.findMany({
+      where: { projectId, status: { in: ["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW"] } },
+      select: { id: true, title: true, status: true, contextBindingStatus: true, contextBoundAt: true, localDocumentSnapshotId: true },
+      orderBy: { updatedAt: "desc" },
+      take: 50
+    });
+    const latestSnapshotId = explanation.binding.localDocumentSnapshotId;
+    res.json({
+      status: explanation.status,
+      lines: explanation.lines,
+      binding: explanation.binding,
+      openWorkOrders: openWorkOrders.map((w) => ({
+        ...w,
+        boundToLatestSnapshot: Boolean(latestSnapshotId && w.localDocumentSnapshotId === latestSnapshotId)
+      }))
+    });
+  } catch (error) {
+    next(error);
+  }
 });
 
 /** GET /api/projects/:id/local-docs — roots + latest snapshot summary (no scan) */

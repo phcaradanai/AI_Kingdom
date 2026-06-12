@@ -78,6 +78,11 @@ function autoSandboxPatchSkipNote(c: AutomationCandidateDto, autoPatch: AutoSand
   if (autoPatch.dailyCount >= autoPatch.dailyLimit) return "Not auto-created: daily sandbox patch job limit reached";
   return null;
 }
+function needsContextRefresh(c: AutomationCandidateDto): boolean {
+  const action = c.proposedAction && typeof c.proposedAction === "object" ? (c.proposedAction as { action?: string }).action : undefined;
+  return action === "bind_work_order_context" || action === "review_local_docs" || action === "review_local_docs_blocker";
+}
+
 function CandidateCard({ c, isKing, onAction, autoValidation, autoSandboxPatch, lastRunSkippedReasons }: { c: AutomationCandidateDto; isKing: boolean; onAction: (id: string, action: string) => void; autoValidation?: AutoValidationStatusDto | null; autoSandboxPatch?: AutoSandboxPatchStatusDto | null, lastRunSkippedReasons?: string[] | null }) {
   const canAct = isKing && c.status === "PENDING";
   const canApply = isKing && c.status === "APPROVED";
@@ -93,6 +98,11 @@ function CandidateCard({ c, isKing, onAction, autoValidation, autoSandboxPatch, 
             <span className="inline-flex items-center rounded-md border border-border/60 bg-muted/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{c.confidence}%</span>
           </div>
           <div className="font-semibold text-foreground">{c.title}</div>
+          {needsContextRefresh(c) && (
+            <div className="inline-flex items-center gap-1.5 rounded-md border border-cyan-500/30 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-400">
+              <Shield className="h-3 w-3" />Context refresh required before patching
+            </div>
+          )}
           <div className="text-sm text-muted-foreground line-clamp-2">{c.summary}</div>
           <div className="text-xs text-muted-foreground/75 italic">Reason: {c.reason}</div>
           <details className="text-xs text-muted-foreground">
@@ -276,6 +286,15 @@ export function LivingLoopPage() {
                 <ul className="space-y-0.5">
                   {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).map((r, i) => <li key={i}>{r.replace("AutoSandboxPatch: ", "")}</li>)}
                 </ul>
+              </div>
+            )}
+            {(status.lastRun?.skippedReasons ?? []).filter((r) => r.includes("ContextBinding:")).length > 0 && (
+              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-[11px] text-cyan-400">
+                <div className="mb-1 font-semibold uppercase tracking-wider">Context binding skips (last run)</div>
+                <ul className="space-y-0.5">
+                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.includes("ContextBinding:")).map((r, i) => <li key={i}>{r}</li>)}
+                </ul>
+                <div className="mt-1 text-cyan-400/70">Jobs were skipped because project context was missing, stale, or partial. Scan local docs and rebind work order context.</div>
               </div>
             )}
           </div>

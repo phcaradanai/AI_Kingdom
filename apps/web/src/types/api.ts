@@ -1146,6 +1146,12 @@ export type WorkOrderDto = {
   archivedAt?: string | null;
   traceId?: string | null;
   provenance?: Record<string, unknown> | null;
+  localDocumentSnapshotId?: string | null;
+  repositorySnapshotId?: string | null;
+  contextBoundAt?: string | null;
+  contextBindingStatus?: "FRESH" | "STALE" | "MISSING" | "PARTIAL";
+  contextBindingSummary?: Record<string, unknown> | null;
+  contextBindingProvenance?: Record<string, unknown> | null;
   dataQualityBadge?: DataQualityBadgeDto;
   humanReadableSource?: string;
   sourceLink?: SourceLinkDto;
@@ -1510,6 +1516,11 @@ export type AutomationJobDto = {
   planJson: unknown;
   patchSummary: string | null;
   logsPreview: string | null;
+  localDocumentSnapshotId?: string | null;
+  repositorySnapshotId?: string | null;
+  contextRequired?: boolean;
+  contextValidationStatus?: "FRESH" | "STALE" | "MISSING" | "PARTIAL" | "NOT_REQUIRED";
+  contextValidationSummary?: Record<string, unknown> | null;
   createdByUserId: string | null;
   approvedByUserId: string | null;
   startedAt: string | null;
@@ -1566,6 +1577,10 @@ export type PatchArtifactDto = {
   branchName: string | null;
   branchPushed: boolean;
   prUrl: string | null;
+  localDocumentSnapshotId?: string | null;
+  repositorySnapshotId?: string | null;
+  baseContextStatus?: "FRESH" | "STALE" | "MISSING" | "PARTIAL";
+  baseContextProvenance?: Record<string, unknown> | null;
   createdAt: string;
   updatedAt: string;
   automationJob: { id: string; status: string; workOrderId: string };
@@ -1728,6 +1743,7 @@ export type RoyalBriefDto = {
   memorySummary: Record<string, unknown>;
   riskSummary: Record<string, unknown>;
   localDocsSummary: Record<string, unknown>;
+  contextHealthSummary?: Record<string, unknown>;
   livingAgentDigest: { items: LivingAgentDigestEntryDto[] };
   provenance: Record<string, unknown>;
   generatedBy: RoyalBriefGeneratedBy;
@@ -1799,5 +1815,56 @@ export type LocalDocumentInsightDto = {
 export type LocalDocumentOverviewDto = {
   roots: LocalDocumentRootDto[];
   snapshot: LocalDocumentSnapshotDto | null;
+};
+
+// ── M17E-2: Project Context Binding ─────────────────────────────────────────────
+
+export type ContextBindingStatusDto = "FRESH" | "STALE" | "MISSING" | "PARTIAL";
+export type ContextValidationStatusDto = ContextBindingStatusDto | "NOT_REQUIRED";
+
+export type ProjectContextBindingDto = {
+  status: ContextBindingStatusDto;
+  projectId: string;
+  localDocumentSnapshotId: string | null;
+  repositorySnapshotId: string | null;
+  localSnapshotScannedAt: string | null;
+  repositoryCommitSha: string | null;
+  repositoryBranch: string | null;
+  detectedStack: string[];
+  packageScripts: Record<string, string>;
+  riskZones: { relativePath: string; riskLevel: string; reason: string }[];
+  importantDocs: string[];
+  rootIds: string[];
+  rootNames: string[];
+  rootPathHashes: string[];
+  localDocsChanged: boolean;
+  warnings: string[];
+};
+
+export type WorkOrderContextDto = {
+  id: string;
+  projectId: string | null;
+  contextBindingStatus: ContextBindingStatusDto;
+  contextBoundAt: string | null;
+  localDocumentSnapshotId: string | null;
+  repositorySnapshotId: string | null;
+  contextBindingSummary: Record<string, unknown> | null;
+  contextBindingProvenance: Record<string, unknown> | null;
+  current: { status: ContextBindingStatusDto; lines: string[]; binding: ProjectContextBindingDto } | null;
+};
+
+export type ProjectContextHealthDto = {
+  status: ContextBindingStatusDto;
+  lines: string[];
+  binding: ProjectContextBindingDto;
+  openWorkOrders: Array<{
+    id: string;
+    title: string;
+    status: string;
+    contextBindingStatus: ContextBindingStatusDto;
+    contextBoundAt: string | null;
+    localDocumentSnapshotId: string | null;
+    boundToLatestSnapshot: boolean;
+  }>;
 };
 

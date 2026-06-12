@@ -83,6 +83,21 @@ Prisma schema at `apps/api/prisma/schema.prisma`. `scripts/with-root-env.mjs` lo
 
 Tests use Node's built-in test runner via `tsx`. Place test files next to the module as `*.test.ts`. Tests must not require a real OpenAI key — use `mockAIProvider` or stub providers. Run `npm run test` before shipping backend changes.
 
+**Test DB migrations:** the test suite runs against the `ai_kingdom_test` database. Every new Prisma migration must be deployed there before root tests pass: run `npm run test:db:prepare` (or `prisma migrate deploy` with the test `DATABASE_URL`) after creating a migration, then `npm run test`.
+
+## Agent Workflow (Claude/Codex-style agents)
+
+Before doing project work in this repository or via Kingdom work orders:
+
+1. Read `AGENTS.md` (mandatory rules, including context binding and local docs safety).
+2. Confirm the project's local docs snapshot is READY and not stale (Project detail → Local Docs, or `GET /api/projects/:id/local-docs`).
+3. Bind the WorkOrder context (`POST /api/work-orders/:id/bind-context`) so the work order carries the exact snapshot ids it plans against.
+4. Run validation (VALIDATION_ONLY job or root `npm run test` / `typecheck` / `build`).
+5. Patch only in sandbox — SANDBOX_PATCH jobs through the runner; never push, merge, or deploy automatically.
+6. Report snapshot ids and provenance in the ImplementationReport (`contextUsed`, `localDocumentSnapshotId`, `repositorySnapshotId`).
+
+**Do not proceed to SANDBOX_PATCH if context is stale or missing.** The API rejects job creation, the Living Loop skips auto-patch (`ContextBinding:*` skip reasons), and the runner refuses execution — do not work around these gates.
+
 ## AI Provider (local dev)
 
 Default is `AI_PROVIDER=mock` — no API key required. To use OpenAI-compatible:

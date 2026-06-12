@@ -8,6 +8,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { buildContextSourceTrace, formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { createArtifact } from "./projectService.js";
 import { evaluateRecordValue } from "./dataValueGateService.js";
+import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
 
 type WorkOrderWithRelations = WorkOrder & {
   assignedExternalAgent?: ExternalAgent | null;
@@ -578,7 +579,7 @@ export async function createWorkOrder(
           createdBySystem
         }
       });
-      return { status: "CREATED", workOrder };
+      return { status: "CREATED", workOrder: await bindWorkOrderContextBestEffort(workOrder) };
     }
     return { status: "PREVIEW_ONLY", reason: gateDecision.reason };
   }
@@ -602,5 +603,16 @@ export async function createWorkOrder(
     }
   });
 
-  return { status: "CREATED", workOrder };
+  return { status: "CREATED", workOrder: await bindWorkOrderContextBestEffort(workOrder) };
+}
+
+/** Binds latest project snapshots to a freshly created work order; never fails creation. */
+async function bindWorkOrderContextBestEffort(workOrder: WorkOrder): Promise<WorkOrder> {
+  if (!workOrder.projectId) return workOrder;
+  try {
+    const { workOrder: bound } = await bindFreshContextToWorkOrder(workOrder.id, { userId: workOrder.createdByUserId });
+    return bound;
+  } catch {
+    return workOrder;
+  }
 }

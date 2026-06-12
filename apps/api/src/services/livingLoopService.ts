@@ -5,6 +5,7 @@ import { auditLog, sanitizeMetadata } from "./auditService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { isAutoPatchEligible } from "./livingLoopRiskPolicyService.js";
 import { buildLocalDocsProvenance } from "./automationJobService.js";
+import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
 import {
   getLatestLocalDocumentSnapshot,
   listLocalDocumentRoots,
@@ -34,6 +35,11 @@ export type Observation = {
   reportsWithRemainingWork: Array<any>;
   localDocsIssues: Array<{ projectId: string; projectName: string; issue: "MISSING_ROOT" | "MISSING_SNAPSHOT" | "SCAN_FAILED" | "STALE_SNAPSHOT" | "DOCS_CHANGED"; detail: string }>;
   workOrdersMissingLocalContext: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }>;
+  workOrdersWithMissingContext: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }>;
+  workOrdersWithStaleContext: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }>;
+  jobsMissingContextProvenance: Array<{ id: string; mode: string; workOrderId: string; projectId: string }>;
+  patchesMissingBaseContext: Array<{ id: string; title: string; riskLevel: string; baseContextStatus: string; workOrderId: string; projectId: string | null; automationJobId: string }>;
+  workOrdersWithChangedDocsSinceBinding: Array<{ id: string; title: string; priority: string; projectId: string; projectName: string }>;
 };
 
 type CandidateInput = {
@@ -152,6 +158,62 @@ export async function observeKingdomState(): Promise<Observation> {
     providerIssues = Array.from(m.values()).filter(p => p.errorCount >= 3);
   } catch { /* best-effort */ }
 
+  // M17E-2: context binding observations.
+  const [contextMissingWOs, contextStaleWOs, jobsMissingContext, patchesMissingContext, boundWOs] = await Promise.all([
+    prisma.workOrder.findMany({
+      where: { status: { in: ["READY", "IN_PROGRESS"] }, projectId: { not: null }, contextBindingStatus: "MISSING" },
+      select: { id: true, title: true, priority: true, projectId: true, project: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" }, take: 10
+    }),
+    prisma.workOrder.findMany({
+      where: { status: { in: ["READY", "IN_PROGRESS"] }, projectId: { not: null }, contextBindingStatus: "STALE" },
+      select: { id: true, title: true, priority: true, projectId: true, project: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" }, take: 10
+    }),
+    prisma.automationJob.findMany({
+      where: { status: { in: ["QUEUED", "APPROVED", "CLAIMED", "RUNNING", "NEEDS_REVIEW"] }, projectId: { not: null }, localDocumentSnapshotId: null },
+      select: { id: true, mode: true, workOrderId: true, projectId: true },
+      orderBy: { createdAt: "desc" }, take: 10
+    }),
+    prisma.patchArtifact.findMany({
+      where: { validationStatus: "PENDING", baseContextStatus: { in: ["MISSING", "STALE"] } },
+      select: { id: true, title: true, riskLevel: true, baseContextStatus: true, workOrderId: true, projectId: true, automationJobId: true },
+      orderBy: { createdAt: "desc" }, take: 10
+    }),
+    prisma.workOrder.findMany({
+      where: { status: { in: ["READY", "IN_PROGRESS"] }, projectId: { not: null }, localDocumentSnapshotId: { not: null }, contextBindingStatus: "FRESH" },
+      select: { id: true, title: true, priority: true, projectId: true, localDocumentSnapshotId: true, project: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" }, take: 20
+    })
+  ]);
+
+  const workOrdersWithMissingContext: Observation["workOrdersWithMissingContext"] = contextMissingWOs.map((w) => ({
+    id: w.id, title: w.title, priority: w.priority, projectId: w.projectId!, projectName: w.project?.name ?? "?"
+  }));
+  const workOrdersWithStaleContext: Observation["workOrdersWithStaleContext"] = contextStaleWOs.map((w) => ({
+    id: w.id, title: w.title, priority: w.priority, projectId: w.projectId!, projectName: w.project?.name ?? "?"
+  }));
+  const jobsMissingContextProvenance: Observation["jobsMissingContextProvenance"] = jobsMissingContext.map((j) => ({
+    id: j.id, mode: j.mode, workOrderId: j.workOrderId, projectId: j.projectId!
+  }));
+  const patchesMissingBaseContext: Observation["patchesMissingBaseContext"] = patchesMissingContext;
+
+  const workOrdersWithChangedDocsSinceBinding: Observation["workOrdersWithChangedDocsSinceBinding"] = [];
+  try {
+    const latestByProject = new Map<string, string | null>();
+    for (const w of boundWOs) {
+      if (!w.projectId) continue;
+      if (!latestByProject.has(w.projectId)) {
+        const latest = await getLatestLocalDocumentSnapshot(w.projectId);
+        latestByProject.set(w.projectId, latest?.id ?? null);
+      }
+      const latestId = latestByProject.get(w.projectId);
+      if (latestId && w.localDocumentSnapshotId !== latestId) {
+        workOrdersWithChangedDocsSinceBinding.push({ id: w.id, title: w.title, priority: w.priority, projectId: w.projectId, projectName: w.project?.name ?? "?" });
+      }
+    }
+  } catch { /* best-effort */ }
+
   const localDocsIssues: Observation["localDocsIssues"] = [];
   const workOrdersMissingLocalContext: Observation["workOrdersMissingLocalContext"] = [];
   try {
@@ -175,7 +237,7 @@ export async function observeKingdomState(): Promise<Observation> {
     }
   } catch { /* best-effort */ }
 
-  return { workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, providerIssues, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork, workOrdersReadyForPatch, localDocsIssues, workOrdersMissingLocalContext };
+  return { workOrdersNeedingReview, staleWorkOrders, failedJobs, needsReviewJobs, staleJobs, patchesPendingReview, staleRunners, providerIssues, staleInboxItems, mattersAwaitingDecision, reportsWithRemainingWork, workOrdersReadyForPatch, localDocsIssues, workOrdersMissingLocalContext, workOrdersWithMissingContext, workOrdersWithStaleContext, jobsMissingContextProvenance, patchesMissingBaseContext, workOrdersWithChangedDocsSinceBinding };
 }
 
 /**
@@ -276,6 +338,62 @@ export async function proposeAutomationCandidates(obs: Observation, settings: { 
       workOrderId: w.id,
       proposedAction: { action: "review_local_docs_blocker", targetId: w.id, options: ["scan_local_docs", "proceed_anyway", "dismiss"] },
       provenance: { source: "WorkOrder", id: w.id, kind: "WORK_ORDER_REVIEW", observedAt: now.toISOString(), reason: "missing_local_context" }
+    });
+  }
+
+  // M17E-2: context binding candidates.
+  for (const w of [...obs.workOrdersWithMissingContext, ...obs.workOrdersWithStaleContext]) {
+    const isMissing = obs.workOrdersWithMissingContext.some((m) => m.id === w.id);
+    push({
+      kind: "WORK_ORDER_REVIEW",
+      title: `${isMissing ? "Bind Context" : "Refresh Context"}: ${w.title}`,
+      summary: `Work order in project "${w.projectName}" has ${isMissing ? "no" : "a stale"} project context binding. Bind or refresh context before validation or patching.`,
+      reason: "Work order context binding must be FRESH before SANDBOX_PATCH jobs can run.",
+      confidence: 75,
+      priority: w.priority === "CRITICAL" || w.priority === "HIGH" ? w.priority : "MEDIUM",
+      riskLevel: "LOW",
+      sourceType: "WorkOrder",
+      sourceId: w.id,
+      projectId: w.projectId,
+      workOrderId: w.id,
+      proposedAction: { action: "bind_work_order_context", targetId: w.id, options: ["bind_context", "scan_local_docs", "dismiss"] },
+      provenance: { source: "WorkOrder", id: w.id, kind: "WORK_ORDER_REVIEW", observedAt: now.toISOString(), reason: isMissing ? "context_missing" : "context_stale" }
+    });
+  }
+  for (const w of obs.workOrdersWithChangedDocsSinceBinding) {
+    push({
+      kind: "WORK_ORDER_REVIEW",
+      title: `Rebind Context: ${w.title}`,
+      summary: `Local docs of project "${w.projectName}" changed since this work order's context was bound; the binding no longer reflects the latest snapshot.`,
+      reason: "Work order is bound to an older local docs snapshot than the latest scan.",
+      confidence: 75,
+      priority: "MEDIUM",
+      riskLevel: "LOW",
+      sourceType: "WorkOrder",
+      sourceId: w.id,
+      projectId: w.projectId,
+      workOrderId: w.id,
+      proposedAction: { action: "bind_work_order_context", targetId: w.id, options: ["bind_context", "dismiss"] },
+      provenance: { source: "WorkOrder", id: w.id, kind: "WORK_ORDER_REVIEW", observedAt: now.toISOString(), reason: "local_docs_changed_since_binding" }
+    });
+  }
+  for (const p of obs.patchesMissingBaseContext) {
+    push({
+      kind: "PATCH_REVIEW",
+      title: `Patch From ${p.baseContextStatus} Context: ${p.title}`,
+      summary: `Patch artifact was created from ${p.baseContextStatus} base context and is pending review. Verify the patch against the current project state.`,
+      reason: `Patch base context is ${p.baseContextStatus}; the patch may not reflect the current repository state.`,
+      confidence: 80,
+      priority: p.riskLevel === "CRITICAL" || p.riskLevel === "HIGH" ? "HIGH" : "MEDIUM",
+      riskLevel: p.riskLevel === "CRITICAL" ? "CRITICAL" : p.riskLevel === "HIGH" ? "HIGH" : "MEDIUM",
+      sourceType: "PatchArtifact",
+      sourceId: p.id,
+      projectId: p.projectId,
+      workOrderId: p.workOrderId,
+      automationJobId: p.automationJobId,
+      patchArtifactId: p.id,
+      proposedAction: { action: "review_patch_context", targetId: p.id, options: ["review_patch", "request_revision", "dismiss"] },
+      provenance: { source: "PatchArtifact", id: p.id, kind: "PATCH_REVIEW", observedAt: now.toISOString(), reason: "base_context_" + p.baseContextStatus.toLowerCase() }
     });
   }
 
@@ -410,6 +528,13 @@ export async function autoCreateValidationJobs(loopRunId: string, candidates: Au
     if (recentValidationJob) { await skip(candidate, `Validation job within ${cooldownMinutes}m cooldown`, "validation_job_cooldown_blocked"); continue; }
 
     // Create directly (no AI plan generation — keeps auto validation provider-free).
+    // M17E-2: VALIDATION_ONLY may proceed with PARTIAL/STALE/MISSING context, but the
+    // binding outcome (and its warnings) is attached to the job.
+    const contextOutcome = await validateContextForAutomationJob(workOrder.id, "VALIDATION_ONLY");
+    const contextSummary = buildContextValidationSummary(contextOutcome);
+    if (contextOutcome.status !== "FRESH" && contextOutcome.status !== "NOT_REQUIRED") {
+      summary.skippedReasons.push(`AutoValidation warning: ContextBinding:${contextOutcome.status.toLowerCase()} (${workOrder.id}) — job created with warning`);
+    }
     const localDocsProvenance = await buildLocalDocsProvenance(candidate.projectId ?? workOrder.projectId);
     const job = await prisma.automationJob.create({
       data: {
@@ -420,7 +545,12 @@ export async function autoCreateValidationJobs(loopRunId: string, candidates: Au
         mode: "VALIDATION_ONLY",
         commandPolicy: "VALIDATION_ONLY",
         allowedCommands: ["npm", "git"],
-        provenance: toMeta({ source: AUTO_VALIDATION_PROVENANCE_SOURCE, loopRunId, candidateId: candidate.id, workOrderId: workOrder.id, createdAt: new Date().toISOString(), ...(localDocsProvenance ?? {}) })
+        localDocumentSnapshotId: contextOutcome.binding?.localDocumentSnapshotId ?? null,
+        repositorySnapshotId: contextOutcome.binding?.repositorySnapshotId ?? null,
+        contextRequired: false,
+        contextValidationStatus: contextOutcome.status,
+        contextValidationSummary: toMeta(contextSummary),
+        provenance: toMeta({ source: AUTO_VALIDATION_PROVENANCE_SOURCE, loopRunId, candidateId: candidate.id, workOrderId: workOrder.id, createdAt: new Date().toISOString(), ...(localDocsProvenance ?? {}), contextBinding: contextSummary })
       }
     });
     todayJobCount++;
@@ -495,6 +625,14 @@ export async function autoCreateSandboxPatchJobs(loopRunId: string, candidates: 
       continue;
     }
 
+    // M17E-2: auto sandbox patch must skip unless project context is FRESH.
+    const contextOutcome = await validateContextForAutomationJob(workOrder.id, "SANDBOX_PATCH");
+    if (!contextOutcome.ok) {
+      await skip(candidate, `ContextBinding:${contextOutcome.skipToken ?? "missing"}`, "living_loop_auto_sandbox_patch_context_blocked");
+      continue;
+    }
+    const contextSummary = buildContextValidationSummary(contextOutcome);
+
     const localDocsProvenance = await buildLocalDocsProvenance(candidate.projectId ?? workOrder.projectId);
 
     const job = await prisma.automationJob.create({
@@ -506,6 +644,11 @@ export async function autoCreateSandboxPatchJobs(loopRunId: string, candidates: 
         mode: "SANDBOX_PATCH",
         commandPolicy: "SANDBOX_PATCH_NO_PUSH",
         allowedCommands: ["npm", "git"],
+        localDocumentSnapshotId: contextOutcome.binding?.localDocumentSnapshotId ?? null,
+        repositorySnapshotId: contextOutcome.binding?.repositorySnapshotId ?? null,
+        contextRequired: true,
+        contextValidationStatus: contextOutcome.status,
+        contextValidationSummary: toMeta(contextSummary),
         provenance: toMeta({
           source: AUTO_SANDBOX_PATCH_PROVENANCE_SOURCE,
           loopRunId,
@@ -513,7 +656,8 @@ export async function autoCreateSandboxPatchJobs(loopRunId: string, candidates: 
           workOrderId: workOrder.id,
           createdAt: new Date().toISOString(),
           riskPolicyVersion: "1.0",
-          ...(localDocsProvenance ?? {})
+          ...(localDocsProvenance ?? {}),
+          contextBinding: contextSummary
         })
       }
     });

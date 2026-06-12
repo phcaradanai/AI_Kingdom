@@ -145,3 +145,51 @@ test("buildValidationCommands includes lint only when the script exists", () => 
   assert.ok(buildValidationCommands(true).some((c) => c.args[1] === "lint"));
   assert.ok(!buildValidationCommands(false).some((c) => c.args[1] === "lint"));
 });
+
+// ── M17E-2: context binding warnings ─────────────────────────────────────────────
+
+test("VALIDATION_ONLY proceeds with PARTIAL context and reports a context warning", async () => {
+  const partialJob: ValidationOnlyJob = {
+    id: "job-validation-partial",
+    mode: "VALIDATION_ONLY",
+    workOrder: { id: "wo-2", title: "Verify with partial context" },
+    localDocumentSnapshotId: "snap-1",
+    repositorySnapshotId: null,
+    contextValidationStatus: "PARTIAL"
+  };
+  const { deps, apiCalls, ranCommands } = makeDeps();
+  await executeValidationOnlyJob(partialJob, deps);
+
+  assert.ok(ranCommands.length > 0, "validation must still run with PARTIAL context");
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
+    summary: string;
+    contextUsed: { localDocumentSnapshotId: string | null; contextValidationStatus: string; warnings: string[] };
+  };
+  assert.ok(report.summary.includes("PARTIAL project context"), "summary must carry the context warning");
+  assert.equal(report.contextUsed.contextValidationStatus, "PARTIAL");
+  assert.equal(report.contextUsed.localDocumentSnapshotId, "snap-1");
+  assert.ok(report.contextUsed.warnings.some((w) => w.includes("PARTIAL")), "contextUsed must include the warning");
+});
+
+test("VALIDATION_ONLY report includes contextUsed snapshot ids when context is FRESH", async () => {
+  const freshJob: ValidationOnlyJob = {
+    id: "job-validation-fresh",
+    mode: "VALIDATION_ONLY",
+    workOrder: { id: "wo-3", title: "Verify with fresh context" },
+    localDocumentSnapshotId: "snap-fresh",
+    repositorySnapshotId: "repo-snap-1",
+    contextValidationStatus: "FRESH"
+  };
+  const { deps, apiCalls } = makeDeps();
+  await executeValidationOnlyJob(freshJob, deps);
+
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
+    summary: string;
+    contextUsed: { localDocumentSnapshotId: string | null; repositorySnapshotId: string | null; contextValidationStatus: string; warnings: string[] };
+  };
+  assert.equal(report.contextUsed.localDocumentSnapshotId, "snap-fresh");
+  assert.equal(report.contextUsed.repositorySnapshotId, "repo-snap-1");
+  assert.equal(report.contextUsed.contextValidationStatus, "FRESH");
+  assert.deepEqual(report.contextUsed.warnings, []);
+  assert.ok(!report.summary.includes("project context"), "no context warning for FRESH context");
+});

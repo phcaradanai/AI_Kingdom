@@ -76,7 +76,8 @@ const apiMocks = vi.hoisted(() => ({
   getProjectLocalDocs: vi.fn(),
   addProjectLocalDocumentRoot: vi.fn(),
   scanProjectLocalDocumentRoot: vi.fn(),
-  readProjectLocalDocumentFile: vi.fn()
+  readProjectLocalDocumentFile: vi.fn(),
+  getProjectContextHealth: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -100,6 +101,12 @@ function mockBaseApi(localDocs: { roots: LocalDocumentRootDto[]; snapshot: Local
   apiMocks.projectArtifacts.mockResolvedValue({ artifacts: [] });
   apiMocks.getProjectRepositorySnapshot.mockResolvedValue({ snapshot: null });
   apiMocks.getProjectLocalDocs.mockResolvedValue(localDocs);
+  apiMocks.getProjectContextHealth.mockResolvedValue({
+    status: "FRESH",
+    lines: [],
+    binding: null,
+    openWorkOrders: []
+  });
 }
 
 function renderPage() {

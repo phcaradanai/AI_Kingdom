@@ -101,6 +101,34 @@ Jobs created by `autoCreateSandboxPatchJobs()` are always created with `commandP
 
 The Living Loop dashboard card and `/living-loop` page surface `autoSandboxPatch` status (enabled, daily count/limit, cooldown, min confidence, jobs created last run) and `patchesPendingReview` (count of `PatchArtifact` rows with `validationStatus: "PENDING"`), and the Automation Jobs page tags auto-created jobs with a "Living Loop Auto Sandbox Patch" provenance badge plus a "No branch push / no PR auto-create" notice.
 
+## Project Context Binding (M17E-2)
+
+Context binding makes "know the current project state before acting" an enforceable policy. Local document intelligence (M17E-1: `LocalDocumentRoot` → scanner → `LocalDocumentSnapshot` + `LocalDocumentInsight`, all access through the safe path resolver) and `RepositorySnapshot` provide the project state; M17E-2 binds that state to every actor that plans, validates, patches, or reports.
+
+### Data model
+
+- **WorkOrder** carries `localDocumentSnapshotId`, `repositorySnapshotId`, `contextBoundAt`, `contextBindingStatus` (`FRESH | STALE | MISSING | PARTIAL`), `contextBindingSummary` (project id, snapshot ids, scan time, detected stack, package scripts, risk zones, important docs), and `contextBindingProvenance` (`source: PROJECT_CONTEXT_BINDING`, boundAt, root ids/names, root path **hashes** — never raw paths or secrets).
+- **AutomationJob** carries `localDocumentSnapshotId`, `repositorySnapshotId`, `contextRequired`, `contextValidationStatus` (`FRESH | STALE | MISSING | PARTIAL | NOT_REQUIRED`), and `contextValidationSummary`.
+- **PatchArtifact** carries `localDocumentSnapshotId`, `repositorySnapshotId`, `baseContextStatus`, and `baseContextProvenance` — the exact base context the patch was generated from.
+- **ImplementationReport** carries `localDocumentSnapshotId`, `repositorySnapshotId`, and `contextUsed` (status + warnings reported by the runner).
+
+### Binding flow (`projectContextBindingService.ts`)
+
+`getProjectContextBinding(projectId)` computes the live status (read-only, safe for GET routes): no local root → `PARTIAL`; no/failed snapshot → `MISSING`; aged-out snapshot or docs changed since scan → `STALE`; partial scan → `PARTIAL`; otherwise `FRESH`. `bindFreshContextToWorkOrder()` stores the binding on the work order (auto-invoked on work order creation and on project reassignment; explicitly via `POST /api/work-orders/:id/bind-context`, KING/CROWN_PRINCE). `markWorkOrderContextStale()` lets the King invalidate a binding.
+
+### Enforcement
+
+`validateContextForAutomationJob(workOrderId, mode)` runs before every job creation (manual route and Living Loop auto-create):
+
+- **SANDBOX_PATCH requires project linkage and FRESH context.** STALE/MISSING/PARTIAL context rejects the job (`ContextBindingError` → HTTP 409) and auto sandbox patch skips with `ContextBinding:missing|stale|partial|project_missing|local_docs_changed` skip reasons.
+- **VALIDATION_ONLY proceeds with degraded context** but carries warnings in `contextValidationSummary` and in the runner's report.
+- The runner re-checks (`evaluateJobContextBinding()` in `sandboxPatchPolicy.ts`): when fresh local context is required, SANDBOX_PATCH jobs with STALE/MISSING/PARTIAL `contextValidationStatus` are refused with a FAILED status; legacy jobs without the field fall back to the M17E-1 provenance check. The runner reports `contextUsed` on every ImplementationReport.
+- `createPatchArtifact()` attaches the job's binding as the artifact's base context, so patch review always shows which snapshots the diff was generated from.
+
+### Why this prevents stale-context patching
+
+Without binding, an agent could plan against docs scanned days ago, patch a repository whose files changed since, and the King could not verify which project state was used. With binding, every WorkOrder, AutomationJob, PatchArtifact, and ImplementationReport names its exact snapshots; freshness is validated at job creation *and* at runner execution; stale or missing context blocks patching outright; and the Living Loop + Royal Brief surface every blocked work order, skipped auto job, and stale-context patch as decisions (`GET /api/projects/:id/context-health`, brief `contextHealthSummary`, "Refresh project context before patching" decisions).
+
 ## Deployment
 
 Local development uses `docker-compose.yml` for PostgreSQL and npm scripts for API/web dev servers. Staging uses `docker-compose.staging.yml` with internal PostgreSQL, backend, frontend Nginx static serving, persistent database volume, health checks, and no public database port.

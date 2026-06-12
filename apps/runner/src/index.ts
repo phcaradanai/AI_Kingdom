@@ -20,7 +20,7 @@ import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
 import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
-import { evaluateBranchPushEligibility, evaluateFreshLocalContext, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
+import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -103,16 +103,18 @@ async function executeJob(job: AutomationJob) {
 
   if (job.mode === "SANDBOX_PATCH") {
     const provenance = job.provenance ?? {};
-    const freshness = evaluateFreshLocalContext({
+    const contextCheck = evaluateJobContextBinding({
+      mode: job.mode,
       requireFreshLocalContext: REQUIRE_FRESH_LOCAL_CONTEXT,
-      localDocumentSnapshotId: provenance.localDocumentSnapshotId as string | null | undefined,
+      contextValidationStatus: job.contextValidationStatus,
+      localDocumentSnapshotId: (job.localDocumentSnapshotId ?? provenance.localDocumentSnapshotId) as string | null | undefined,
       localDocumentSnapshotStale: provenance.localDocumentSnapshotStale as boolean | undefined
     });
-    if (!freshness.proceed) {
-      console.warn(`[Job ${job.id}] Refusing SANDBOX_PATCH: ${freshness.reason}`);
+    if (!contextCheck.proceed) {
+      console.warn(`[Job ${job.id}] Refusing SANDBOX_PATCH: ${contextCheck.reason}`);
       try {
         await api.updateStatus(job.id, "FAILED", {
-          logsPreview: sanitizeLogOutput(`Refused: ${freshness.reason} Run a local docs scan before retrying this SANDBOX_PATCH job.`)
+          logsPreview: sanitizeLogOutput(`Refused: ${contextCheck.reason} Run a local docs scan and rebind the work order context before retrying this SANDBOX_PATCH job.`)
         });
       } catch {
         // Best effort
@@ -145,9 +147,12 @@ async function executeJob(job: AutomationJob) {
       log(`[Job ${job.id}] Project: ${job.project.name}`);
     }
 
-    const localDocumentSnapshotId = (job.provenance?.localDocumentSnapshotId as string | null | undefined) ?? null;
+    const localDocumentSnapshotId = job.localDocumentSnapshotId ?? (job.provenance?.localDocumentSnapshotId as string | null | undefined) ?? null;
     if (localDocumentSnapshotId) {
       log(`[Job ${job.id}] Local document snapshot: ${localDocumentSnapshotId}`);
+    }
+    if (job.contextValidationStatus) {
+      log(`[Job ${job.id}] Context binding: ${job.contextValidationStatus}`);
     }
 
     // Execute plan steps
@@ -265,7 +270,8 @@ async function executeJob(job: AutomationJob) {
       nextRecommendedAction: errors.length > 0 ? "Review errors in implementation report" : "Review patch artifact",
       logsPreview,
       rawOutput: logsPreview,
-      patchSummary: patchPayload.summary
+      patchSummary: patchPayload.summary,
+      contextUsed: buildContextUsed(job)
     });
 
     log(`[Job ${job.id}] Report submitted. Job is NEEDS_REVIEW.`);

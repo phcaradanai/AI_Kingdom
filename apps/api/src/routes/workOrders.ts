@@ -14,6 +14,11 @@ import {
   createWorkOrder
 } from "../services/externalAgentWorkOrderService.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
+import {
+  bindFreshContextToWorkOrder,
+  explainContextBindingStatus,
+  markWorkOrderContextStale
+} from "../services/projectContextBindingService.js";
 
 const router = Router();
 
@@ -160,7 +165,7 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
     const archiveReason = finalStatus === "ARCHIVED" ? (payload.constraints || existing.archiveReason || "Manually archived") : existing.archiveReason;
     const workQuality = finalStatus === "ARCHIVED" ? "COMPLETED_ARCHIVE" : existing.workQuality;
 
-    const workOrder = await prisma.workOrder.update({
+    let workOrder = await prisma.workOrder.update({
       where: { id: existing.id },
       data: {
         ...payload,
@@ -170,6 +175,10 @@ router.patch("/:id", requireRole("KING", "CROWN_PRINCE"), async (req, res, next)
       },
       include
     });
+    if ("projectId" in payload && payload.projectId !== existing.projectId) {
+      await bindFreshContextToWorkOrder(workOrder.id, { userId: req.user?.id }).catch(() => undefined);
+      workOrder = (await prisma.workOrder.findUnique({ where: { id: workOrder.id }, include })) ?? workOrder;
+    }
     if (payload.status === "COMPLETED") {
       await createWorkOrderCompletionReport(workOrder.id);
     }
@@ -274,6 +283,64 @@ router.post("/:id/build-prompt/:externalAgentId", requireRole("KING", "CROWN_PRI
   }
 });
 
+/** GET /api/work-orders/:id/context — read-only context binding view (any authenticated role). */
+router.get("/:id/context", async (req, res, next) => {
+  try {
+    const workOrder = await prisma.workOrder.findUnique({
+      where: { id: req.params.id },
+      select: {
+        id: true,
+        projectId: true,
+        contextBindingStatus: true,
+        contextBoundAt: true,
+        localDocumentSnapshotId: true,
+        repositorySnapshotId: true,
+        contextBindingSummary: true,
+        contextBindingProvenance: true
+      }
+    });
+    if (!workOrder) {
+      res.status(404).json({ error: "Work order not found" });
+      return;
+    }
+    const current = workOrder.projectId ? await explainContextBindingStatus(workOrder.projectId, workOrder.id) : null;
+    res.json({ context: { ...workOrder, current } });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** POST /api/work-orders/:id/bind-context — bind/rebind latest snapshots (KING/CROWN_PRINCE). */
+router.post("/:id/bind-context", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const { workOrder, binding } = await bindFreshContextToWorkOrder(req.params.id as string, { userId: req.user?.id });
+    res.json({ workOrder, binding });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+const markStaleSchema = z.object({ reason: z.string().trim().min(1).max(500).default("Manually marked stale") });
+
+/** POST /api/work-orders/:id/mark-context-stale — KING/CROWN_PRINCE. */
+router.post("/:id/mark-context-stale", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const { reason } = markStaleSchema.parse(req.body ?? {});
+    const workOrder = await markWorkOrderContextStale(req.params.id as string, reason, req.user?.id);
+    res.json({ workOrder });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
 const automationJobCreateSchema = z.object({
   agentId: z.string().trim().optional().nullable(),
   mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY"]).default("SANDBOX_PATCH"),
@@ -305,6 +372,10 @@ router.post("/:id/automation-job", requireRole("KING"), async (req, res, next) =
     }
     if (error instanceof Error && error.name === "ConflictError") {
       res.status(409).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.name === "ContextBindingError") {
+      res.status(409).json({ error: error.message, code: "CONTEXT_BINDING" });
       return;
     }
     next(error);

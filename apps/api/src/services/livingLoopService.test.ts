@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import bcrypt from "bcryptjs";
 import { prisma } from "../db/prisma.js";
+import { createLocalDocumentRoot, scanLocalDocumentRoot } from "./localDocumentAccessService.js";
 import {
   runLivingLoopOnce,
   observeKingdomState,
@@ -327,6 +331,11 @@ test("living loop run lifecycle writes audit log entries", async () => {
 test("autoCreateSandboxPatchJobs creates a job for LOW-risk candidates, skips MEDIUM-risk candidates", async () => {
   const user = await createKingUser();
   const project = await prisma.project.create({ data: { name: "Test Project", aliases: ["test-proj"] } });
+  // M17E-2: SANDBOX_PATCH requires FRESH project context — give the project a scanned local docs root.
+  const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "living-loop-context-"));
+  await fs.writeFile(path.join(repoDir, "README.md"), "# Living Loop Context Fixture");
+  const localRoot = await createLocalDocumentRoot(project.id, { name: "repo", rootPath: repoDir });
+  await scanLocalDocumentRoot(localRoot.id);
   const workOrderLow = await prisma.workOrder.create({
     data: { title: "Low Risk Task", objective: "Fix typo", status: "READY", projectId: project.id }
   });
@@ -421,6 +430,7 @@ test("autoCreateSandboxPatchJobs creates a job for LOW-risk candidates, skips ME
     await prisma.automationJob.deleteMany({ where: { workOrderId: { in: [workOrderLow.id, workOrderMed.id] } } });
     await prisma.workOrder.deleteMany({ where: { id: { in: [workOrderLow.id, workOrderMed.id] } } });
     await prisma.project.delete({ where: { id: project.id } }).catch(() => undefined);
+    await fs.rm(repoDir, { recursive: true, force: true }).catch(() => undefined);
     await prisma.agentRunner.delete({ where: { id: runner.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
   }
@@ -513,6 +523,68 @@ test("autoCreateSandboxPatchJobs respects the risk-policy gates: no runner, acti
     await prisma.workOrder.deleteMany({ where: { id: { in: cleanupWorkOrderIds } } });
     if (runner) await prisma.agentRunner.delete({ where: { id: runner.id } }).catch(() => undefined);
     await prisma.project.delete({ where: { id: project.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("autoCreateSandboxPatchJobs skips candidates whose project context is missing (M17E-2)", async () => {
+  const user = await createKingUser();
+  const { autoCreateSandboxPatchJobs } = await import("./livingLoopService.js");
+
+  await prisma.setting.upsert({ where: { key: "LIVING_LOOP_AUTO_SANDBOX_PATCH" }, update: { value: "true" }, create: { key: "LIVING_LOOP_AUTO_SANDBOX_PATCH", value: "true", category: "SYSTEM" } });
+  await prisma.setting.upsert({ where: { key: "LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE" }, update: { value: "70" }, create: { key: "LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", value: "70", category: "SYSTEM" } });
+  await prisma.setting.upsert({ where: { key: "LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS" }, update: { value: "10" }, create: { key: "LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS", value: "10", category: "SYSTEM" } });
+
+  const run = await prisma.livingLoopRun.create({ data: { status: "STARTED", triggerType: "MANUAL" } });
+  const project = await prisma.project.create({ data: { name: `Context Skip Project ${randomUUID()}` } });
+  const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "context-skip-"));
+  await fs.writeFile(path.join(repoDir, "README.md"), "# Context Skip Fixture");
+  // Root exists but is never scanned → context binding is MISSING.
+  await createLocalDocumentRoot(project.id, { name: "repo", rootPath: repoDir });
+  const workOrder = await prisma.workOrder.create({
+    data: { title: `Context Skip WO ${randomUUID()}`, objective: "Fix typo", status: "READY", projectId: project.id }
+  });
+  const runner = await prisma.agentRunner.create({
+    data: { name: `Context Skip Runner ${randomUUID()}`, status: "ONLINE", tokenHash: randomUUID(), lastHeartbeatAt: new Date() }
+  });
+
+  try {
+    const candidate = await prisma.automationCandidate.create({
+      data: {
+        kind: "SANDBOX_PATCH",
+        title: "Sandbox Patch: Context Skip",
+        summary: "test",
+        reason: "test",
+        confidence: 85,
+        priority: "LOW",
+        riskLevel: "LOW",
+        sourceType: "WorkOrder",
+        sourceId: workOrder.id,
+        projectId: project.id,
+        workOrderId: workOrder.id,
+        status: "PENDING",
+        proposedAction: { action: "create_sandbox_patch_job", targetId: workOrder.id, mode: "SANDBOX_PATCH" },
+        provenance: { source: "WorkOrder", id: workOrder.id }
+      }
+    });
+
+    const summary = await autoCreateSandboxPatchJobs(run.id, [candidate] as any, user.id);
+    assert.equal(summary.createdJobs.length, 0, "no job may be created without fresh context");
+    assert.ok(
+      summary.skippedReasons.some((r) => r.includes("ContextBinding:missing")),
+      `expected a ContextBinding:missing skip reason, got: ${summary.skippedReasons.join(" | ")}`
+    );
+
+    const job = await prisma.automationJob.findFirst({ where: { workOrderId: workOrder.id } });
+    assert.equal(job, null);
+  } finally {
+    await prisma.livingLoopRun.delete({ where: { id: run.id } }).catch(() => undefined);
+    await prisma.automationCandidate.deleteMany({ where: { workOrderId: workOrder.id } });
+    await prisma.automationJob.deleteMany({ where: { workOrderId: workOrder.id } });
+    await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
+    await prisma.project.delete({ where: { id: project.id } }).catch(() => undefined);
+    await fs.rm(repoDir, { recursive: true, force: true }).catch(() => undefined);
+    await prisma.agentRunner.delete({ where: { id: runner.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
   }
 });

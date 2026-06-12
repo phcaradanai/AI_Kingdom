@@ -332,6 +332,32 @@ Living Loop settings (`/settings`, all default disabled / conservative):
 
 Every auto-created `SANDBOX_PATCH` job carries `commandPolicy: "SANDBOX_PATCH_NO_PUSH"`. The runner refuses to attempt a branch push for these jobs regardless of the server's `LIVING_LOOP_ALLOW_BRANCH_PUSH` setting — it generates a `PatchArtifact`, runs validation, and submits an `ImplementationReport`, leaving the job `NEEDS_REVIEW`. Use `/automation-jobs` to see jobs (with a "Living Loop Auto Sandbox Patch" provenance badge for auto-created ones) and the Patch Review panel on a `PatchArtifact` to approve, reject, request revisions, or create a PR — only the King can take those actions, and a PR is only ever created by an explicit King action, never automatically.
 
+## Local Docs + Context Binding
+
+The Kingdom reads approved local project documentation before planning or patching, and binds every WorkOrder/AutomationJob/PatchArtifact to the exact snapshots it used (M17E-1 + M17E-2).
+
+**Usage:**
+
+1. On a project's detail page (`/projects/:id`), add a Local Document Root (KING/CROWN_PRINCE) pointing at the project's absolute path, then click **Scan Now**. The scanner indexes approved docs/config/code (README, AGENTS.md, docs/, package.json, selected source dirs) into a `LocalDocumentSnapshot` with detected stack, package scripts, important docs, and risk zones.
+2. Create a WorkOrder linked to the project — the latest READY snapshot is bound automatically. The WorkOrder detail page shows a **Project Context** panel (FRESH/STALE/MISSING/PARTIAL) with a **Bind/Refresh Context** button (KING/CROWN_PRINCE).
+3. SANDBOX_PATCH jobs require FRESH context: stale or missing context rejects job creation, makes the Living Loop skip auto-patch (`ContextBinding:*` reasons), and makes the runner refuse execution. VALIDATION_ONLY jobs may run with degraded context but carry warnings.
+4. Patch review shows the **Base Context Used** (snapshot ids, status, stale warnings); the Royal Brief includes a Context Health section with "Refresh project context before patching" decisions.
+
+**Environment / config notes:**
+
+- `RUNNER_REPO_PATH` — absolute path the runner copies as its validation workspace (`apps/runner/.env`).
+- `LIVING_LOOP_REQUIRE_FRESH_LOCAL_CONTEXT` — when enabled (Settings), the runner refuses SANDBOX_PATCH jobs whose context binding is stale or missing.
+- `ENABLE_LIVING_LOOP_SCHEDULER` — reserved for a future scheduled Living Loop; the loop currently runs via `POST /api/living-loop/run` or the scheduled trigger path.
+
+**Test DB migrations:** the test suite uses the `ai_kingdom_test` database. After adding a Prisma migration, deploy it there before running tests:
+
+```bash
+npm run test:db:prepare   # or, manually:
+cd apps/api && DATABASE_URL="postgres://.../ai_kingdom_test" npx prisma migrate deploy
+```
+
+**Security:** file access only happens inside approved `LocalDocumentRoot` paths through the safe path resolver — no path traversal, no symlinks outside roots, and `.env` files, keys, secrets, node_modules, and build output are always blocked. Snapshots and bindings store snapshot ids, root names, and content/path hashes (provenance) — never raw secret material.
+
 ## Useful Commands
 
 ```bash
@@ -339,6 +365,7 @@ npm run dev
 npm run build
 npm run typecheck
 npm run test
+npm run test:db:prepare
 npm run db:migrate
 npm run db:seed
 ```

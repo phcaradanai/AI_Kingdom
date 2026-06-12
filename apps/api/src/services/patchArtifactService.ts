@@ -10,6 +10,7 @@ import { auditLog } from "./auditService.js";
 import { detectBlockedPaths } from "./blockedPathService.js";
 import { scoreRisk } from "./patchRiskService.js";
 import { sanitizeLogOutput, redactSecrets } from "./secretRedactorService.js";
+import { attachContextToPatchArtifact } from "./projectContextBindingService.js";
 
 const DIFF_PREVIEW_MAX = 10_000;   // 10KB preview stored inline
 const FULL_PATCH_MAX = 200_000;    // 200KB full patch stored inline
@@ -80,7 +81,7 @@ export async function createPatchArtifact(input: CreatePatchArtifactInput) {
 
   const riskLevel = scoreRisk(input.filesChanged);
 
-  const artifact = await prisma.patchArtifact.create({
+  let artifact = await prisma.patchArtifact.create({
     data: {
       automationJobId: input.automationJobId,
       workOrderId: job.workOrderId,
@@ -102,6 +103,10 @@ export async function createPatchArtifact(input: CreatePatchArtifactInput) {
     include: artifactInclude
   });
 
+  // M17E-2: record exactly which snapshots this patch was built against.
+  await attachContextToPatchArtifact(artifact.id, job);
+  artifact = (await prisma.patchArtifact.findUniqueOrThrow({ where: { id: artifact.id }, include: artifactInclude }));
+
   await auditLog({
     action: "patch_artifact_created",
     resourceType: "PatchArtifact",
@@ -110,7 +115,10 @@ export async function createPatchArtifact(input: CreatePatchArtifactInput) {
       automationJobId: job.id,
       workOrderId: job.workOrderId,
       riskLevel,
-      filesChanged: input.filesChanged.length
+      filesChanged: input.filesChanged.length,
+      baseContextStatus: artifact.baseContextStatus,
+      localDocumentSnapshotId: artifact.localDocumentSnapshotId,
+      repositorySnapshotId: artifact.repositorySnapshotId
     }
   }).catch(() => undefined);
 

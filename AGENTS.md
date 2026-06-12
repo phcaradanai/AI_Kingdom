@@ -30,6 +30,13 @@ External agent work orders are manual handoff artifacts only. Do not add backend
 
 Project routing must stay explainable. Use deterministic project name/codename/alias/keyword/source-ancestry matching until a future milestone explicitly adds embeddings. Low-confidence routing belongs in Project Inbox; do not auto-assign when confidence is weak. Artifacts and Obsidian export payloads must not store or emit secrets.
 
+## Project Context Binding + Local Docs (M17E)
+
+- **Mandatory**: agents must check the project's context binding before planning or patching. A WorkOrder's `contextBindingStatus` must be `FRESH` before any `SANDBOX_PATCH` job is created or executed; `STALE`, `MISSING`, or `PARTIAL` context blocks patching. Use `POST /api/work-orders/:id/bind-context` (KING/CROWN_PRINCE) after a local docs scan to refresh the binding.
+- **Migration rule**: every new Prisma migration must be applied to the `ai_kingdom_test` database (`npm run test:db:prepare`, or `prisma migrate deploy` with the test `DATABASE_URL`) *before* running root `npm run test`. Otherwise route tests fail with 500s from schema drift.
+- **Local docs safety**: never request arbitrary filesystem paths. All local file access goes through approved `LocalDocumentRoot` records and the safe path resolver (`safePathService.ts`) — no path traversal, no symlinks outside roots, no `.env`/keys/node_modules/build output.
+- **No raw secrets / no raw root paths**: binding summaries, provenance, reports, and logs must carry snapshot ids, root names, and content/path hashes only. Never store or print raw secret material or raw local root paths in public report output.
+
 ## Commits and PRs
 
 Use clear imperative commits (e.g. `Add audit log API`). PRs should list affected areas (`api`, `web`, `prisma`, docs), verification commands, and screenshots for visible UI changes.

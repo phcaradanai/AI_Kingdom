@@ -80,6 +80,26 @@ function ModeBadge({ mode }: { mode: string }) {
   return <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full">{modeLabel(mode)}</span>;
 }
 
+function contextStatusColor(status: string): string {
+  switch (status) {
+    case "FRESH": return "text-green-700 bg-green-50 border-green-200";
+    case "PARTIAL": return "text-yellow-700 bg-yellow-50 border-yellow-200";
+    case "STALE": return "text-orange-700 bg-orange-50 border-orange-200";
+    case "MISSING": return "text-red-700 bg-red-50 border-red-200";
+    default: return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function ContextBadge({ status }: { status: string | null | undefined }) {
+  if (!status || status === "NOT_REQUIRED") return null;
+  return (
+    <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border", contextStatusColor(status))}>
+      <Shield className="h-3 w-3" />
+      Context: {status}
+    </span>
+  );
+}
+
 function LivingLoopSourceBadge() {
   return (
     <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border text-indigo-700 bg-indigo-50 border-indigo-200">
@@ -339,6 +359,7 @@ export function AutomationJobsPage() {
                         {job.status}
                       </span>
                       <ModeBadge mode={job.mode} />
+                      <ContextBadge status={job.contextValidationStatus} />
                       {autoValidationProvenance(job) && <LivingLoopSourceBadge />}
                       {autoSandboxPatchProvenance(job) && <AutoSandboxPatchBadge />}
                       {job.runner && (
@@ -443,6 +464,37 @@ export function AutomationJobsPage() {
                 {selectedJob.runner && <div><dt className="text-muted-foreground">Runner</dt><dd className="mt-0.5">{selectedJob.runner.name}</dd></div>}
                 {selectedJob.approvedByUser && <div><dt className="text-muted-foreground">Approved By</dt><dd className="mt-0.5">{selectedJob.approvedByUser.displayName}</dd></div>}
               </dl>
+
+              {/* M17E-2: Context binding */}
+              {(selectedJob.contextValidationStatus && selectedJob.contextValidationStatus !== "NOT_REQUIRED") || selectedJob.localDocumentSnapshotId ? (
+                <div className="rounded border border-border bg-muted/20 p-3 space-y-1.5">
+                  <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <Shield className="h-3.5 w-3.5" /> Context Binding
+                  </h4>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <ContextBadge status={selectedJob.contextValidationStatus} />
+                    {selectedJob.contextRequired ? <span className="text-xs text-muted-foreground">required for this mode</span> : null}
+                  </div>
+                  {selectedJob.mode === "VALIDATION_ONLY" && selectedJob.contextValidationStatus && ["PARTIAL", "STALE", "MISSING"].includes(selectedJob.contextValidationStatus) ? (
+                    <div className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+                      <AlertTriangle className="h-3.5 w-3.5" />
+                      Validation-only job ran with {selectedJob.contextValidationStatus} project context — results may not reflect the full project state.
+                    </div>
+                  ) : null}
+                  <div className="grid gap-0.5 text-xs text-muted-foreground font-mono">
+                    <div>Local docs snapshot: {selectedJob.localDocumentSnapshotId ?? "—"}</div>
+                    <div>Repository snapshot: {selectedJob.repositorySnapshotId ?? "—"}</div>
+                  </div>
+                  {selectedJob.contextValidationSummary ? (
+                    <details className="text-xs text-muted-foreground">
+                      <summary className="cursor-pointer hover:underline">Context provenance</summary>
+                      <pre className="mt-1 bg-muted rounded p-2 overflow-auto max-h-32 font-mono whitespace-pre-wrap">
+                        {JSON.stringify(selectedJob.contextValidationSummary, null, 2)}
+                      </pre>
+                    </details>
+                  ) : null}
+                </div>
+              ) : null}
 
               {/* Step timeline */}
               {selectedJob.steps && selectedJob.steps.length > 0 && (
@@ -637,6 +689,24 @@ function PatchReviewCard({
           HIGH/CRITICAL risk — King approval required before branch push
         </div>
       )}
+
+      {/* M17E-2: Base Context Used */}
+      <div className="rounded border border-border bg-muted/30 p-2 space-y-1">
+        <p className="font-medium text-muted-foreground">Base Context Used</p>
+        <span className={cn("inline-flex px-2 py-0.5 rounded-full font-medium border", contextStatusColor(artifact.baseContextStatus ?? "MISSING"))}>
+          {artifact.baseContextStatus ?? "MISSING"}
+        </span>
+        {(artifact.baseContextStatus === "STALE" || artifact.baseContextStatus === "MISSING" || !artifact.baseContextStatus) && (
+          <div className="flex items-center gap-1.5 text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+            <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+            Patch created from {artifact.baseContextStatus ?? "MISSING"} project context — verify against current repository state before approving.
+          </div>
+        )}
+        <div className="grid gap-0.5 text-muted-foreground font-mono">
+          <div>Local docs snapshot: {artifact.localDocumentSnapshotId ?? "—"}</div>
+          <div>Repository snapshot: {artifact.repositorySnapshotId ?? "—"}</div>
+        </div>
+      </div>
 
       {artifact.diffPreview && (
         <div>

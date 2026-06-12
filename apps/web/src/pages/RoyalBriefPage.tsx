@@ -139,6 +139,7 @@ export function RoyalBriefPage() {
   const treasury = brief.treasurySummary as Record<string, any>;
   const memory = brief.memorySummary as Record<string, any>;
   const runner = brief.runnerStatus as Record<string, any>;
+  const contextHealth = (brief.contextHealthSummary ?? {}) as Record<string, any>;
   const decisions = brief.decisionsNeeded.items;
   const highlights = brief.highlights.items;
   const digest = brief.livingAgentDigest.items;
@@ -224,6 +225,36 @@ export function RoyalBriefPage() {
           <StatCard className="bg-transparent border-none p-0" title="Auto Validation Today" value={validation.autoValidation?.dailyCount ?? 0} description={`limit ${validation.autoValidation?.dailyLimit ?? 0}`} />
           <StatCard className="bg-transparent border-none p-0" title="Auto Patch Today" value={patch.autoSandboxPatch?.dailyCount ?? 0} description={`limit ${patch.autoSandboxPatch?.dailyLimit ?? 0}`} />
         </div>
+      </SectionCard>
+
+      {/* 5b. Context binding health (M17E-2) */}
+      <SectionCard title="Context Health" icon={Shield}>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-4">
+          <StatCard className="bg-transparent border-none p-0" title="WOs Blocked by Context" value={contextHealth.workOrdersBlockedByContext?.length ?? 0} trend={(contextHealth.workOrdersBlockedByContext?.length ?? 0) > 0 ? { value: "Refresh", isPositive: false } : undefined} />
+          <StatCard className="bg-transparent border-none p-0" title="Auto Jobs Skipped" value={contextHealth.autoJobsSkippedForContext ?? 0} />
+          <StatCard className="bg-transparent border-none p-0" title="Stale-Context Patches" value={contextHealth.patchesWithStaleBaseContext?.length ?? 0} />
+          <StatCard className="bg-transparent border-none p-0" title="Projects Need Refresh" value={contextHealth.projectsNeedingContextRefresh?.length ?? 0} />
+        </div>
+        {(contextHealth.workOrdersBlockedByContext?.length ?? 0) > 0 ? (
+          <div className="space-y-2">
+            {contextHealth.workOrdersBlockedByContext.map((w: any) => (
+              <div key={w.id} className="flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-2 text-sm">
+                <span className="font-semibold text-foreground">{w.title}</span>
+                <span className="text-xs text-amber-400">{w.contextBindingStatus} context · {w.projectName}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={CheckCircle2} title="Context Healthy" description="No work orders are blocked by missing or stale project context." />
+        )}
+        {(contextHealth.contextSkippedReasons?.length ?? 0) > 0 && (
+          <div className="mt-3 rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-[11px] text-cyan-400">
+            <div className="mb-1 font-semibold uppercase tracking-wider">Context binding skips (24h)</div>
+            <ul className="space-y-0.5">
+              {contextHealth.contextSkippedReasons.map((r: string, i: number) => <li key={i}>{r}</li>)}
+            </ul>
+          </div>
+        )}
       </SectionCard>
 
       {/* 6. Patch review queue */}

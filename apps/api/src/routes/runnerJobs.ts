@@ -82,7 +82,8 @@ const reportSchema = z.object({
   nextRecommendedAction: z.string().trim().max(1000).optional().nullable(),
   rawOutput: z.string().max(20000).optional().nullable(),
   patchSummary: z.string().trim().max(5000).optional().nullable(),
-  logsPreview: z.string().max(10000).optional().nullable()
+  logsPreview: z.string().max(10000).optional().nullable(),
+  contextUsed: z.record(z.unknown()).optional().nullable()
 });
 
 /** POST /api/runner/jobs/:id/report — runner submits implementation report */

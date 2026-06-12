@@ -9,6 +9,7 @@ import {
   checkProjectLocalDocsHealth
 } from "./livingLoopService.js";
 import { getCurrentAgentActivities, type AgentActivityStatus } from "./agentActivityService.js";
+import { getLatestLocalDocumentSnapshot } from "./localDocumentAccessService.js";
 
 const BRIEF_WINDOW_HOURS = 24;
 const STALE_RUNNER_HOURS = 24;
@@ -305,6 +306,95 @@ async function buildLocalDocsSummary(): Promise<{
   };
 }
 
+type ContextBlockedWorkOrder = { id: string; title: string; priority: string; projectId: string; projectName: string; contextBindingStatus: string };
+
+async function buildContextHealthSummary(since: Date): Promise<{
+  workOrdersBlockedByContext: ContextBlockedWorkOrder[];
+  autoJobsSkippedForContext: number;
+  contextSkippedReasons: string[];
+  patchesWithStaleBaseContext: Array<{ id: string; title: string; riskLevel: string; baseContextStatus: string; workOrderId: string; projectId: string | null }>;
+  projectsNeedingContextRefresh: Array<{ projectId: string; projectName: string; reason: string }>;
+}> {
+  const [blockedWOs, stalePatches, recentRuns, boundWOs] = await Promise.all([
+    prisma.workOrder.findMany({
+      where: { status: { in: ["READY", "IN_PROGRESS"] }, projectId: { not: null }, contextBindingStatus: { in: ["MISSING", "STALE"] } },
+      select: { id: true, title: true, priority: true, projectId: true, contextBindingStatus: true, project: { select: { name: true } } },
+      orderBy: { updatedAt: "desc" },
+      take: 20
+    }),
+    prisma.patchArtifact.findMany({
+      where: { validationStatus: "PENDING", baseContextStatus: { in: ["MISSING", "STALE"] } },
+      select: { id: true, title: true, riskLevel: true, baseContextStatus: true, workOrderId: true, projectId: true },
+      orderBy: { createdAt: "desc" },
+      take: 20
+    }),
+    prisma.livingLoopRun.findMany({
+      where: { startedAt: { gte: since } },
+      select: { skippedReasons: true },
+      take: 50
+    }),
+    prisma.workOrder.findMany({
+      where: { status: { in: ["READY", "IN_PROGRESS"] }, projectId: { not: null }, localDocumentSnapshotId: { not: null }, contextBindingStatus: "FRESH" },
+      select: { id: true, projectId: true, localDocumentSnapshotId: true, project: { select: { name: true } } },
+      take: 50
+    })
+  ]);
+
+  const contextSkippedReasons: string[] = [];
+  for (const run of recentRuns) {
+    if (Array.isArray(run.skippedReasons)) {
+      for (const reason of run.skippedReasons) {
+        if (typeof reason === "string" && reason.includes("ContextBinding:")) contextSkippedReasons.push(reason);
+      }
+    }
+  }
+
+  const projectsNeedingContextRefresh: Array<{ projectId: string; projectName: string; reason: string }> = [];
+  const seenProjects = new Set<string>();
+  const latestByProject = new Map<string, string | null>();
+  for (const w of boundWOs) {
+    if (!w.projectId || seenProjects.has(w.projectId)) continue;
+    if (!latestByProject.has(w.projectId)) {
+      const latest = await getLatestLocalDocumentSnapshot(w.projectId).catch(() => null);
+      latestByProject.set(w.projectId, latest?.id ?? null);
+    }
+    const latestId = latestByProject.get(w.projectId);
+    if (latestId && w.localDocumentSnapshotId !== latestId) {
+      seenProjects.add(w.projectId);
+      projectsNeedingContextRefresh.push({
+        projectId: w.projectId,
+        projectName: w.project?.name ?? "?",
+        reason: "Local docs changed since open work orders were bound; rebind context before patching."
+      });
+    }
+  }
+  for (const w of blockedWOs) {
+    if (w.projectId && !seenProjects.has(w.projectId)) {
+      seenProjects.add(w.projectId);
+      projectsNeedingContextRefresh.push({
+        projectId: w.projectId,
+        projectName: w.project?.name ?? "?",
+        reason: `Open work order(s) have ${w.contextBindingStatus} context binding.`
+      });
+    }
+  }
+
+  return {
+    workOrdersBlockedByContext: blockedWOs.map((w) => ({
+      id: w.id,
+      title: w.title,
+      priority: w.priority,
+      projectId: w.projectId!,
+      projectName: w.project?.name ?? "?",
+      contextBindingStatus: w.contextBindingStatus
+    })),
+    autoJobsSkippedForContext: contextSkippedReasons.length,
+    contextSkippedReasons: contextSkippedReasons.slice(0, 20),
+    patchesWithStaleBaseContext: stalePatches,
+    projectsNeedingContextRefresh
+  };
+}
+
 type RunnerInfo = { id: string; name: string; status: string; lastHeartbeatAt: Date | null };
 
 async function buildRunnerStatus(): Promise<{ runners: { id: string; name: string; status: string; lastHeartbeatAt: string | null; isStale: boolean }[]; onlineCount: number; offlineCount: number; errorCount: number; staleCount: number }> {
@@ -390,6 +480,7 @@ function buildDecisionsNeeded(input: {
   validationSummary: Awaited<ReturnType<typeof buildValidationSummary>>;
   patchSummary: Awaited<ReturnType<typeof buildPatchSummary>>;
   localDocsSummary: Awaited<ReturnType<typeof buildLocalDocsSummary>>;
+  contextHealthSummary: Awaited<ReturnType<typeof buildContextHealthSummary>>;
   observedAt: string;
 }): DecisionNeeded[] {
   const decisions: DecisionNeeded[] = [];
@@ -523,6 +614,46 @@ function buildDecisionsNeeded(input: {
     });
   }
 
+  // M17E-2: context binding decisions.
+  for (const project of input.contextHealthSummary.projectsNeedingContextRefresh.slice(0, 10)) {
+    decisions.push({
+      id: `context-refresh:${project.projectId}`,
+      title: `Refresh project context before patching: ${project.projectName}`,
+      why: project.reason,
+      sourceLink: `/projects/${project.projectId}`,
+      riskLevel: "MEDIUM",
+      recommendedAction: "Run a fresh local docs scan, then bind/refresh context on the project's open work orders.",
+      availableActions: ["scan_local_docs", "bind_context"],
+      provenance: { source: "ProjectContextBinding", id: project.projectId, observedAt: input.observedAt }
+    });
+  }
+
+  for (const w of input.contextHealthSummary.workOrdersBlockedByContext.slice(0, 10)) {
+    decisions.push({
+      id: `context-blocked:${w.id}`,
+      title: `Work order blocked by ${w.contextBindingStatus} context: ${w.title}`,
+      why: `Work order in project "${w.projectName}" has ${w.contextBindingStatus} context binding; SANDBOX_PATCH cannot run until it is FRESH.`,
+      sourceLink: "/work-orders",
+      riskLevel: w.priority === "CRITICAL" || w.priority === "HIGH" ? "HIGH" : "MEDIUM",
+      recommendedAction: "Bind or refresh the work order's project context after scanning local docs.",
+      availableActions: ["bind_context", "scan_local_docs"],
+      provenance: { source: "WorkOrder", id: w.id, observedAt: input.observedAt }
+    });
+  }
+
+  for (const p of input.contextHealthSummary.patchesWithStaleBaseContext.slice(0, 10)) {
+    decisions.push({
+      id: `patch-context:${p.id}`,
+      title: `Patch built from ${p.baseContextStatus} context: ${p.title}`,
+      why: `Patch artifact was created from ${p.baseContextStatus} base context and may not reflect the current repository state.`,
+      sourceLink: "/automation-jobs",
+      riskLevel: p.riskLevel === "CRITICAL" || p.riskLevel === "HIGH" ? "HIGH" : "MEDIUM",
+      recommendedAction: "Review the patch carefully against the current project state, or request a revision after a fresh scan.",
+      availableActions: ["review_patch", "request_revision"],
+      provenance: { source: "PatchArtifact", id: p.id, observedAt: input.observedAt }
+    });
+  }
+
   const order: Record<DecisionRiskLevel, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 };
   decisions.sort((a, b) => order[a.riskLevel] - order[b.riskLevel]);
   return decisions;
@@ -534,6 +665,7 @@ function buildHighlights(input: {
   patchSummary: Awaited<ReturnType<typeof buildPatchSummary>>;
   treasurySummary: Awaited<ReturnType<typeof buildTreasurySummary>>;
   localDocsSummary: Awaited<ReturnType<typeof buildLocalDocsSummary>>;
+  contextHealthSummary: Awaited<ReturnType<typeof buildContextHealthSummary>>;
   observedAt: string;
 }): { title: string; detail: string; provenance: { source: string; observedAt: string } }[] {
   const highlights: { title: string; detail: string; provenance: { source: string; observedAt: string } }[] = [];
@@ -574,6 +706,15 @@ function buildHighlights(input: {
     });
   }
 
+  const ch = input.contextHealthSummary;
+  if (ch.workOrdersBlockedByContext.length > 0 || ch.autoJobsSkippedForContext > 0 || ch.patchesWithStaleBaseContext.length > 0 || ch.projectsNeedingContextRefresh.length > 0) {
+    highlights.push({
+      title: "Context Binding Health",
+      detail: `${ch.workOrdersBlockedByContext.length} work order(s) blocked by missing/stale context, ${ch.autoJobsSkippedForContext} auto job(s) skipped for context, ${ch.patchesWithStaleBaseContext.length} pending patch(es) built from stale/missing context, ${ch.projectsNeedingContextRefresh.length} project(s) need a context refresh.`,
+      provenance: { source: "ProjectContextBinding", observedAt: input.observedAt }
+    });
+  }
+
   return highlights;
 }
 
@@ -582,7 +723,7 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
   const observedAt = date.toISOString();
 
   try {
-    const [patchesNeedingReview, workOrdersNeedingReview, livingLoopSummary, validationSummary, treasurySummary, memorySummary, riskSummary, runnerStatus, providerSummary, livingAgentDigest, localDocsSummary] = await Promise.all([
+    const [patchesNeedingReview, workOrdersNeedingReview, livingLoopSummary, validationSummary, treasurySummary, memorySummary, riskSummary, runnerStatus, providerSummary, livingAgentDigest, localDocsSummary, contextHealthSummary] = await Promise.all([
       prisma.patchArtifact.findMany({
         where: { OR: [{ validationStatus: "PENDING" }, { riskLevel: { in: ["HIGH", "CRITICAL"] } }] },
         select: { id: true, title: true, riskLevel: true, validationStatus: true, workOrderId: true, projectId: true, automationJobId: true, createdAt: true },
@@ -603,7 +744,8 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
       buildRunnerStatus(),
       buildProviderSummary(since),
       buildLivingAgentActivityDigest(since),
-      buildLocalDocsSummary()
+      buildLocalDocsSummary(),
+      buildContextHealthSummary(since)
     ]);
 
     const patchSummary = await buildPatchSummary(since, patchesNeedingReview);
@@ -617,10 +759,11 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
       validationSummary,
       patchSummary,
       localDocsSummary,
+      contextHealthSummary,
       observedAt
     });
 
-    const highlights = buildHighlights({ livingLoopSummary, validationSummary, patchSummary, treasurySummary, localDocsSummary, observedAt });
+    const highlights = buildHighlights({ livingLoopSummary, validationSummary, patchSummary, treasurySummary, localDocsSummary, contextHealthSummary, observedAt });
 
     const summary = `In the last ${BRIEF_WINDOW_HOURS}h: ${livingLoopSummary.runsInWindow} Living Loop run(s), ${livingLoopSummary.candidatesCreated} candidate(s) proposed, ${patchSummary.patchesNeedingReview.length} patch(es) awaiting review, ${decisionsNeeded.length} decision(s) needed, ${runnerStatus.onlineCount}/${runnerStatus.runners.length} runner(s) online.`;
 
@@ -628,7 +771,7 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
       generatedAt: observedAt,
       windowHours: BRIEF_WINDOW_HOURS,
       since: since.toISOString(),
-      sources: ["LivingLoopRun", "AutomationCandidate", "AutomationJob", "PatchArtifact", "AgentRunner", "ProviderHealthSnapshot", "AIUsageTrace", "TreasuryLedger", "WorkOrder", "AgentKnowledgeCandidate", "AgentActivity", "Project", "LocalDocumentRoot", "LocalDocumentSnapshot"]
+      sources: ["LivingLoopRun", "AutomationCandidate", "AutomationJob", "PatchArtifact", "AgentRunner", "ProviderHealthSnapshot", "AIUsageTrace", "TreasuryLedger", "WorkOrder", "AgentKnowledgeCandidate", "AgentActivity", "Project", "LocalDocumentRoot", "LocalDocumentSnapshot", "ProjectContextBinding"]
     };
 
     const generatedBy = userId ? "KING" : "SYSTEM";
@@ -650,6 +793,7 @@ export async function generateDailyRoyalBrief(date: Date = new Date(), userId?: 
         memorySummary: toMeta(memorySummary),
         riskSummary: toMeta(riskSummary),
         localDocsSummary: toMeta(localDocsSummary),
+        contextHealthSummary: toMeta(contextHealthSummary),
         livingAgentDigest: toMeta({ items: livingAgentDigest }),
         provenance: toMeta(provenance),
         generatedBy,

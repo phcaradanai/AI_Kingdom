@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationJobDto, ExternalAgentDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, ExternalAgentDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -84,6 +84,8 @@ export function WorkOrdersPage() {
   const [approvingJob, setApprovingJob] = useState<string | null>(null);
   const [patchArtifacts, setPatchArtifacts] = useState<PatchArtifactDto[]>([]);
   const [patchActionId, setPatchActionId] = useState<string | null>(null);
+  const [workOrderContext, setWorkOrderContext] = useState<WorkOrderContextDto | null>(null);
+  const [contextBusy, setContextBusy] = useState(false);
 
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
 
@@ -125,9 +127,50 @@ export function WorkOrdersPage() {
         setAutomationJobs([]);
         setPatchArtifacts([]);
       });
+      api.getWorkOrderContext(order.id)
+        .then((response) => setWorkOrderContext(response.context))
+        .catch(() => setWorkOrderContext(null));
     } else {
       setAutomationJobs([]);
       setPatchArtifacts([]);
+      setWorkOrderContext(null);
+    }
+  }
+
+  async function refreshContext(workOrderId: string) {
+    try {
+      const response = await api.getWorkOrderContext(workOrderId);
+      setWorkOrderContext(response.context);
+    } catch {
+      setWorkOrderContext(null);
+    }
+  }
+
+  async function bindContext() {
+    if (!selected || !canCreate) return;
+    setContextBusy(true);
+    setError(null);
+    try {
+      await api.bindWorkOrderContext(selected.id);
+      await refreshContext(selected.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to bind context");
+    } finally {
+      setContextBusy(false);
+    }
+  }
+
+  async function markContextStale() {
+    if (!selected || !canCreate) return;
+    setContextBusy(true);
+    setError(null);
+    try {
+      await api.markWorkOrderContextStale(selected.id, "Manually marked stale from work order detail");
+      await refreshContext(selected.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to mark context stale");
+    } finally {
+      setContextBusy(false);
     }
   }
 
@@ -582,6 +625,61 @@ export function WorkOrdersPage() {
                 </Card>
               )}
 
+              {/* M17E-2: Project Context binding panel */}
+              <Card>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <h2 className="font-display text-lg flex items-center gap-2">
+                    <Shield className="h-4 w-4 text-muted-foreground" />
+                    Project Context
+                  </h2>
+                  {canCreate ? (
+                    <div className="flex gap-2">
+                      <Button variant="outline" disabled={contextBusy || !selected.projectId} onClick={() => void bindContext()}>
+                        {contextBusy ? "Working…" : "Bind/Refresh Context"}
+                      </Button>
+                      <Button variant="outline" disabled={contextBusy} onClick={() => void markContextStale()}>
+                        Mark Context Stale
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+                {workOrderContext ? (
+                  <div className="mt-3 space-y-2 text-sm">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", contextStatusColor(workOrderContext.contextBindingStatus))}>
+                        Context: {workOrderContext.contextBindingStatus}
+                      </span>
+                      {workOrderContext.contextBoundAt ? (
+                        <span className="text-xs text-muted-foreground">bound {formatDate(workOrderContext.contextBoundAt)}</span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">never bound</span>
+                      )}
+                    </div>
+                    {workOrderContext.contextBindingStatus !== "FRESH" ? (
+                      <div className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+                        <AlertTriangle className="h-3.5 w-3.5" />
+                        Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH. Scan local docs and bind/refresh context.
+                      </div>
+                    ) : null}
+                    <div className="grid gap-1 text-xs text-muted-foreground font-mono">
+                      <div>Local snapshot: {workOrderContext.localDocumentSnapshotId ?? "—"}</div>
+                      <div>Repository snapshot: {workOrderContext.repositorySnapshotId ?? "—"}</div>
+                      {renderContextSummary(workOrderContext.contextBindingSummary)}
+                    </div>
+                    {workOrderContext.current && workOrderContext.current.lines.length > 0 ? (
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer hover:underline">Current project context</summary>
+                        <ul className="mt-1 space-y-0.5 list-disc pl-4">
+                          {workOrderContext.current.lines.map((line, i) => <li key={i}>{line}</li>)}
+                        </ul>
+                      </details>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-muted-foreground">No context binding information available for this work order.</p>
+                )}
+              </Card>
+
               <Card>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h2 className="font-display text-lg">External Prompt</h2>
@@ -787,6 +885,38 @@ function riskColor(risk: string) {
   }
 }
 
+export function contextStatusColor(status: string) {
+  switch (status) {
+    case "FRESH": return "text-green-700 bg-green-50 border-green-200";
+    case "PARTIAL": return "text-yellow-700 bg-yellow-50 border-yellow-200";
+    case "STALE": return "text-orange-700 bg-orange-50 border-orange-200";
+    case "MISSING": return "text-red-700 bg-red-50 border-red-200";
+    default: return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function renderContextSummary(summary: Record<string, unknown> | null | undefined) {
+  if (!summary) return null;
+  const scannedAt = typeof summary.localSnapshotScannedAt === "string" ? summary.localSnapshotScannedAt : null;
+  const branch = typeof summary.repositoryBranch === "string" ? summary.repositoryBranch : null;
+  const commit = typeof summary.repositoryCommitSha === "string" ? summary.repositoryCommitSha : null;
+  const stack = Array.isArray(summary.detectedStack) ? (summary.detectedStack as string[]) : [];
+  const docs = Array.isArray(summary.importantDocs) ? (summary.importantDocs as string[]) : [];
+  const scripts = summary.packageScripts && typeof summary.packageScripts === "object" ? Object.keys(summary.packageScripts as Record<string, string>) : [];
+  const riskZones = Array.isArray(summary.riskZones) ? (summary.riskZones as { relativePath: string; riskLevel: string }[]) : [];
+  return (
+    <>
+      {scannedAt ? <div>Scanned at: {formatDate(scannedAt)}</div> : null}
+      {commit ? <div>Repository commit: {commit}</div> : null}
+      {branch ? <div>Repository branch: {branch}</div> : null}
+      {stack.length > 0 ? <div>Stack: {stack.join(", ")}</div> : null}
+      {docs.length > 0 ? <div>Important docs: {docs.slice(0, 8).join(", ")}{docs.length > 8 ? ` +${docs.length - 8} more` : ""}</div> : null}
+      {scripts.length > 0 ? <div>Package scripts: {scripts.join(", ")}</div> : null}
+      {riskZones.length > 0 ? <div>Risk zones: {riskZones.slice(0, 5).map((z) => `${z.relativePath} (${z.riskLevel})`).join(", ")}</div> : null}
+    </>
+  );
+}
+
 function validationStatusColor(status: string) {
   switch (status) {
     case "APPROVED": return "text-green-700 bg-green-50 border-green-200";
@@ -794,6 +924,21 @@ function validationStatusColor(status: string) {
     case "REVISION_REQUESTED": return "text-orange-700 bg-orange-50 border-orange-200";
     default: return "text-purple-700 bg-purple-50 border-purple-200";
   }
+}
+
+function renderRiskZonesTouched(artifact: PatchArtifactDto) {
+  const provenance = artifact.baseContextProvenance;
+  const summary = provenance && typeof provenance === "object" ? (provenance as Record<string, unknown>).contextValidationSummary : null;
+  const riskZones = summary && typeof summary === "object" && Array.isArray((summary as Record<string, unknown>).riskZones)
+    ? ((summary as Record<string, unknown>).riskZones as { relativePath: string; riskLevel: string; reason?: string }[])
+    : [];
+  const touched = riskZones.filter((zone) => artifact.filesChanged.some((file) => file === zone.relativePath || file.endsWith(zone.relativePath) || zone.relativePath.endsWith(file)));
+  if (touched.length === 0) return null;
+  return (
+    <div className="text-xs text-orange-700">
+      Risk zones touched: {touched.map((z) => `${z.relativePath} (${z.riskLevel})`).join(", ")}
+    </div>
+  );
 }
 
 function PatchArtifactCard({
@@ -851,6 +996,27 @@ function PatchArtifactCard({
           HIGH/CRITICAL risk — King approval required before branch push
         </div>
       )}
+
+      {/* M17E-2: Base Context Used */}
+      <div className="rounded border border-border bg-muted/20 p-2 space-y-1">
+        <p className="text-xs font-medium text-muted-foreground">Base Context Used</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className={cn("px-2 py-0.5 rounded-full text-xs font-medium border", contextStatusColor(artifact.baseContextStatus ?? "MISSING"))}>
+            {artifact.baseContextStatus ?? "MISSING"}
+          </span>
+        </div>
+        {(artifact.baseContextStatus === "STALE" || artifact.baseContextStatus === "MISSING" || !artifact.baseContextStatus) && (
+          <div className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            Patch was created from {artifact.baseContextStatus ?? "MISSING"} project context — verify against the current repository state before approving.
+          </div>
+        )}
+        <div className="grid gap-0.5 text-xs text-muted-foreground font-mono">
+          <div>Local docs snapshot: {artifact.localDocumentSnapshotId ?? "—"}</div>
+          <div>Repository snapshot: {artifact.repositorySnapshotId ?? "—"}</div>
+        </div>
+        {renderRiskZonesTouched(artifact)}
+      </div>
 
       {artifact.diffPreview && (
         <div>

@@ -39,6 +39,21 @@ enum AutomationJobMode {
   VALIDATION_ONLY
 }
 
+enum ContextBindingStatus {
+  FRESH
+  STALE
+  MISSING
+  PARTIAL
+}
+
+enum ContextValidationStatus {
+  FRESH
+  STALE
+  MISSING
+  PARTIAL
+  NOT_REQUIRED
+}
+
 enum AgentRunnerStatus {
   ONLINE
   OFFLINE
@@ -630,6 +645,12 @@ model WorkOrder {
   archivedAt              DateTime?
   traceId                 String?
   provenance              Json?
+  localDocumentSnapshotId String?
+  repositorySnapshotId    String?
+  contextBoundAt          DateTime?
+  contextBindingStatus    ContextBindingStatus   @default(MISSING)
+  contextBindingSummary   Json?
+  contextBindingProvenance Json?
   createdAt               DateTime               @default(now())
   updatedAt               DateTime               @updatedAt
   project                 Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -678,6 +699,9 @@ model ImplementationReport {
   remainingWork         String[]                 @default([])
   nextRecommendedAction String?
   rawOutput             String?
+  localDocumentSnapshotId String?
+  repositorySnapshotId  String?
+  contextUsed           Json?
   createdAt             DateTime                 @default(now())
   updatedAt             DateTime                 @updatedAt
   project               Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
@@ -1339,6 +1363,11 @@ model AutomationJob {
   planJson         Json?
   patchSummary     String?
   logsPreview      String?
+  localDocumentSnapshotId String?
+  repositorySnapshotId    String?
+  contextRequired         Boolean                 @default(false)
+  contextValidationStatus ContextValidationStatus @default(NOT_REQUIRED)
+  contextValidationSummary Json?
   createdByUserId  String?
   approvedByUserId String?
   startedAt        DateTime?
@@ -1408,6 +1437,10 @@ model PatchArtifact {
   branchName           String?
   branchPushed         Boolean   @default(false)
   prUrl                String?
+  localDocumentSnapshotId String?
+  repositorySnapshotId    String?
+  baseContextStatus       ContextBindingStatus @default(MISSING)
+  baseContextProvenance   Json?
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
@@ -1500,6 +1533,7 @@ model RoyalBrief {
   memorySummary      Json
   riskSummary        Json
   localDocsSummary   Json                  @default("{}")
+  contextHealthSummary Json                @default("{}")
   livingAgentDigest  Json
   provenance         Json
   generatedBy        RoyalBriefGeneratedBy @default(SYSTEM)

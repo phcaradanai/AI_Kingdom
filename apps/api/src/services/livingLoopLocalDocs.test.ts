@@ -40,7 +40,12 @@ function emptyObservation(): Observation {
     mattersAwaitingDecision: [],
     reportsWithRemainingWork: [],
     localDocsIssues: [],
-    workOrdersMissingLocalContext: []
+    workOrdersMissingLocalContext: [],
+    workOrdersWithMissingContext: [],
+    workOrdersWithStaleContext: [],
+    jobsMissingContextProvenance: [],
+    patchesMissingBaseContext: [],
+    workOrdersWithChangedDocsSinceBinding: []
   };
 }
 
@@ -170,4 +175,58 @@ test("work orders blocked by missing local context propose WORK_ORDER_REVIEW can
   assert.equal(candidate!.priority, "HIGH");
   assert.equal((candidate!.provenance as Record<string, unknown>).reason, "missing_local_context");
   assert.equal((candidate!.proposedAction as Record<string, unknown>).action, "review_local_docs_blocker");
+});
+
+// ── M17E-2: context binding candidates ───────────────────────────────────────────
+
+test("work orders with missing or stale context binding propose bind/refresh candidates", async () => {
+  const obs = emptyObservation();
+  obs.workOrdersWithMissingContext.push({ id: "wo-m", title: "Forge the gate", priority: "HIGH", projectId: "project-1", projectName: "Castle" });
+  obs.workOrdersWithStaleContext.push({ id: "wo-s", title: "Polish the gate", priority: "LOW", projectId: "project-1", projectName: "Castle" });
+
+  const candidates = await proposeAutomationCandidates(obs, { minConfidence: 70, maxCandidatesPerRun: 50, maxDailyCandidates: 1000, todayCount: 0 });
+
+  const missing = candidates.find((c) => c.kind === "WORK_ORDER_REVIEW" && c.sourceId === "wo-m");
+  assert.ok(missing, "expected a bind-context candidate for the missing-context work order");
+  assert.equal(missing!.title, "Bind Context: Forge the gate");
+  assert.equal((missing!.proposedAction as Record<string, unknown>).action, "bind_work_order_context");
+  assert.equal((missing!.provenance as Record<string, unknown>).reason, "context_missing");
+
+  const stale = candidates.find((c) => c.kind === "WORK_ORDER_REVIEW" && c.sourceId === "wo-s");
+  assert.ok(stale, "expected a refresh-context candidate for the stale-context work order");
+  assert.equal(stale!.title, "Refresh Context: Polish the gate");
+  assert.equal((stale!.provenance as Record<string, unknown>).reason, "context_stale");
+});
+
+test("work orders whose docs changed since binding propose rebind candidates", async () => {
+  const obs = emptyObservation();
+  obs.workOrdersWithChangedDocsSinceBinding.push({ id: "wo-c", title: "Raise the wall", priority: "MEDIUM", projectId: "project-1", projectName: "Castle" });
+
+  const candidates = await proposeAutomationCandidates(obs, { minConfidence: 70, maxCandidatesPerRun: 50, maxDailyCandidates: 1000, todayCount: 0 });
+  const candidate = candidates.find((c) => c.kind === "WORK_ORDER_REVIEW" && c.sourceId === "wo-c");
+  assert.ok(candidate, "expected a rebind candidate");
+  assert.equal(candidate!.title, "Rebind Context: Raise the wall");
+  assert.equal((candidate!.provenance as Record<string, unknown>).reason, "local_docs_changed_since_binding");
+  assert.equal((candidate!.proposedAction as Record<string, unknown>).action, "bind_work_order_context");
+});
+
+test("patches built from missing/stale base context propose PATCH_REVIEW candidates", async () => {
+  const obs = emptyObservation();
+  obs.patchesMissingBaseContext.push({
+    id: "patch-1",
+    title: "Drawbridge patch",
+    riskLevel: "HIGH",
+    baseContextStatus: "STALE",
+    workOrderId: "wo-p",
+    projectId: "project-1",
+    automationJobId: "job-1"
+  });
+
+  const candidates = await proposeAutomationCandidates(obs, { minConfidence: 70, maxCandidatesPerRun: 50, maxDailyCandidates: 1000, todayCount: 0 });
+  const candidate = candidates.find((c) => c.kind === "PATCH_REVIEW" && c.sourceId === "patch-1");
+  assert.ok(candidate, "expected a PATCH_REVIEW candidate for the stale-context patch");
+  assert.equal(candidate!.title, "Patch From STALE Context: Drawbridge patch");
+  assert.equal(candidate!.patchArtifactId, "patch-1");
+  assert.equal((candidate!.provenance as Record<string, unknown>).reason, "base_context_stale");
+  assert.equal((candidate!.proposedAction as Record<string, unknown>).action, "review_patch_context");
 });

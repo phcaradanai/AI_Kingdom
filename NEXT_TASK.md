@@ -1,28 +1,35 @@
 # Next Task
 
-## M17D-4: Daily Royal Brief + Living Agent Activity Digest
+## M17E-2: Repository Snapshot + WorkOrder Context Binding (current)
 
-Goal: give the King a single daily summary of what the Living Loop observed, proposed, auto-validated, auto-patched, and what still needs review — without adding any new automated write/push/merge capability.
+Goal: make repository/local document snapshot binding mandatory for planning, validation, sandbox patching, reporting, and patch review, so agents never act on stale or unknown project state.
 
 ## Scope
 
-1. **Daily Digest Generation**: extend `royalSecretaryService.ts` (or a new `livingActivityDigestService.ts`) to summarize, per day: Living Loop runs, candidates proposed/approved/rejected/skipped (with top skip reasons), auto-created `VALIDATION_ONLY` and `SANDBOX_PATCH` jobs, job outcomes (PASSED/FAILED/NEEDS_REVIEW), and `PatchArtifact` review status counts.
-
-2. **Daily Brief Integration**: surface the digest in `generateDailyBrief()` / `GET /api/secretary/brief`, and as a `Notice` (INFO severity) when there is new Living Loop activity since the last digest, with 24h dedup.
-
-3. **Dashboard / Living Loop Page**: add a "Today's Living Agent Activity" panel summarizing the digest (counts + top skip reasons + link to Patches Needing Review).
-
-4. **Tests**:
-   - digest aggregation correctness for a mix of candidates/jobs/patches across a day boundary
-   - daily brief includes the digest summary
-   - notice dedup (no duplicate digest notices within 24h)
-   - dashboard/living-loop page renders the digest panel
-
-5. **Documentation**: update PROJECT_STATUS.md, ARCHITECTURE.md, and NEXT_TASK.md (set next milestone) when complete.
+1. **Data model**: snapshot binding fields on `WorkOrder` (`contextBindingStatus`/summary/provenance), `AutomationJob` (`contextValidationStatus`/summary), `PatchArtifact` (`baseContextStatus`/provenance), `ImplementationReport` (`contextUsed`), plus `RoyalBrief.contextHealthSummary`.
+2. **Binding service**: `projectContextBindingService.ts` — bind/validate/explain/mark-stale; FRESH/STALE/MISSING/PARTIAL semantics.
+3. **Enforcement**: SANDBOX_PATCH requires project linkage + FRESH context (API reject, Living Loop `ContextBinding:*` skips, runner refusal); VALIDATION_ONLY proceeds with warnings.
+4. **API**: `GET /api/work-orders/:id/context`, `POST /api/work-orders/:id/bind-context`, `POST /api/work-orders/:id/mark-context-stale`, `GET /api/projects/:id/context-health`.
+5. **UI**: WorkOrder Project Context panel + Bind/Refresh; Automation Jobs context badges; Patch Review "Base Context Used"; Living Loop context skips; Royal Brief Context Health; Project detail bound-snapshot indicator.
+6. **Docs + tests**: AGENTS/CLAUDE/ARCHITECTURE/README/PROJECT_STATUS updates; backend/runner/frontend tests; root `npm run test`, `npm run typecheck`, `npm run build`.
 
 ## Constraints
 
-- No new auto-act capability: this milestone is read/summarize only.
-- No branch push, PR creation, merge, or deploy — unchanged from M17D-3.
-- `LIVING_LOOP_AUTO_SANDBOX_PATCH` and `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS` remain opt-in and default disabled.
-- Root `npm run test`, `npm run typecheck`, and `npm run build` must pass before completion.
+- No auto-merge, auto-deploy, or auto-PR creation; auto sandbox patch safety unchanged.
+- No arbitrary local path reads (LocalDocumentRoot + safe resolver only); no raw secrets or raw root paths stored.
+- No SANDBOX_PATCH when required context is stale/missing; no job creation from GET/page load.
+- New Prisma migrations must be deployed to dev **and** `ai_kingdom_test` before running root tests.
+
+## Manual acceptance checklist
+
+1. Open project detail and confirm latest Local Docs snapshot is READY.
+2. Create a WorkOrder linked to that project.
+3. Confirm the WorkOrder has a Project Context panel with FRESH status.
+4. Mark local docs stale (or use Mark Context Stale).
+5. Confirm the WorkOrder context warning appears.
+6. Try creating a SANDBOX_PATCH job; it must be refused while stale.
+7. Click Bind/Refresh Context (after a fresh scan).
+8. Confirm status returns to FRESH.
+9. Create a VALIDATION_ONLY job and confirm context provenance appears on the job.
+10. Create a LOW-risk SANDBOX_PATCH and confirm the PatchArtifact shows "Base Context Used".
+11. Generate a Royal Brief and confirm context health decisions appear.

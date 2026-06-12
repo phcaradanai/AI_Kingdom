@@ -14,6 +14,7 @@ import {
 } from "./aiUsageTraceService.js";
 import { auditLog } from "./auditService.js";
 import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localDocumentAccessService.js";
+import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
 
 /** Statuses that count as "active" for duplicate prevention */
 export const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = [
@@ -47,6 +48,7 @@ export interface SubmitReportInput {
   rawOutput?: string | null;
   patchSummary?: string | null;
   logsPreview?: string | null;
+  contextUsed?: Record<string, unknown> | null;
 }
 
 /** Builds local-docs provenance for AutomationJob.provenance: snapshot id, root names/ids, scannedAt. */
@@ -92,6 +94,24 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
     throw err;
   }
 
+  // M17E-2: context binding is validated before any job is created.
+  // SANDBOX_PATCH requires project linkage and FRESH local context;
+  // VALIDATION_ONLY may proceed with degraded context but carries warnings.
+  const mode = input.mode ?? "SANDBOX_PATCH";
+  const contextOutcome = await validateContextForAutomationJob(input.workOrderId, mode);
+  if (!contextOutcome.ok) {
+    await auditLog({
+      userId: input.createdByUserId,
+      action: "automation_job_context_rejected",
+      resourceType: "work_order",
+      resourceId: input.workOrderId,
+      metadata: { mode, contextStatus: contextOutcome.status, reason: contextOutcome.reason ?? "Context not fresh" }
+    }).catch(() => undefined);
+    const err = new Error(contextOutcome.reason ?? "Project context is not fresh enough for this job mode.");
+    err.name = "ContextBindingError";
+    throw err;
+  }
+
   // Determine which agent to use for planning
   const planningAgentId = input.agentId ?? workOrder.assignedAgentId;
 
@@ -109,6 +129,7 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
 
   const projectId = input.projectId ?? workOrder.projectId;
   const localDocsProvenance = await buildLocalDocsProvenance(projectId);
+  const contextValidationSummary = buildContextValidationSummary(contextOutcome);
 
   const job = await prisma.automationJob.create({
     data: {
@@ -116,11 +137,19 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
       projectId,
       agentId: planningAgentId,
       status: "QUEUED",
-      mode: input.mode ?? "SANDBOX_PATCH",
+      mode,
       commandPolicy: input.commandPolicy,
       allowedCommands: input.allowedCommands ?? [],
       planJson: planJson ?? undefined,
-      provenance: localDocsProvenance ? (localDocsProvenance as Prisma.InputJsonValue) : undefined,
+      provenance: {
+        ...(localDocsProvenance ?? {}),
+        contextBinding: contextValidationSummary
+      } as Prisma.InputJsonValue,
+      localDocumentSnapshotId: contextOutcome.binding?.localDocumentSnapshotId ?? null,
+      repositorySnapshotId: contextOutcome.binding?.repositorySnapshotId ?? null,
+      contextRequired: contextOutcome.contextRequired,
+      contextValidationStatus: contextOutcome.status,
+      contextValidationSummary: contextValidationSummary as Prisma.InputJsonValue,
       createdByUserId: input.createdByUserId
     },
     include: jobInclude
@@ -131,7 +160,7 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
     action: "automation_job_created",
     resourceType: "AutomationJob",
     resourceId: job.id,
-    metadata: { workOrderId: input.workOrderId, mode: job.mode, hasPlan: Boolean(planJson) }
+    metadata: { workOrderId: input.workOrderId, mode: job.mode, hasPlan: Boolean(planJson), contextStatus: contextOutcome.status }
   }).catch(() => undefined);
 
   return job;
@@ -290,7 +319,15 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
       errors: report.errors,
       decisionsMade: report.decisionsMade,
       remainingWork: report.remainingWork,
-      nextRecommendedAction: report.nextRecommendedAction
+      nextRecommendedAction: report.nextRecommendedAction,
+      // M17E-2: every report records exactly which snapshots the job ran against.
+      localDocumentSnapshotId: job.localDocumentSnapshotId,
+      repositorySnapshotId: job.repositorySnapshotId,
+      contextUsed: (report.contextUsed ?? {
+        localDocumentSnapshotId: job.localDocumentSnapshotId,
+        repositorySnapshotId: job.repositorySnapshotId,
+        contextValidationStatus: job.contextValidationStatus
+      }) as Prisma.InputJsonValue
     }
   });
 

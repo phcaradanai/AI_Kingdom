@@ -86,7 +86,10 @@ import type {
   LocalDocumentOverviewDto,
   LocalDocumentRootDto,
   LocalDocumentSnapshotDto,
-  LocalDocumentInsightDto
+  LocalDocumentInsightDto,
+  ProjectContextBindingDto,
+  ProjectContextHealthDto,
+  WorkOrderContextDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -336,6 +339,12 @@ export const api = {
     apiRequest<{ workOrder?: WorkOrderDto; status?: "PREVIEW_ONLY" | "REJECTED"; reason?: string }>(`/work-orders/from-task/${taskId}`, { method: "POST" }),
   workOrderFromMatter: (matterId: string) =>
     apiRequest<{ workOrder?: WorkOrderDto; status?: "PREVIEW_ONLY" | "REJECTED"; reason?: string }>(`/work-orders/from-matter/${matterId}`, { method: "POST" }),
+  getWorkOrderContext: (id: string) => apiRequest<{ context: WorkOrderContextDto }>(`/work-orders/${id}/context`),
+  bindWorkOrderContext: (id: string) =>
+    apiRequest<{ workOrder: WorkOrderDto; binding: ProjectContextBindingDto | null }>(`/work-orders/${id}/bind-context`, { method: "POST" }),
+  markWorkOrderContextStale: (id: string, reason?: string) =>
+    apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}/mark-context-stale`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) }),
+  getProjectContextHealth: (id: string) => apiRequest<ProjectContextHealthDto>(`/projects/${id}/context-health`),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>
     apiRequest<{ prompt: string }>(`/work-orders/${id}/build-prompt/${externalAgentId}`, { method: "POST" }),
   createHandoffBrief: (id: string) => apiRequest<{ handoffBrief: HandoffBriefDto }>(`/work-orders/${id}/handoff`, { method: "POST" }),

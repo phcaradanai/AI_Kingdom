@@ -22,6 +22,11 @@ export interface AutomationJob {
   patchSummary: string | null;
   logsPreview: string | null;
   provenance: Record<string, unknown> | null;
+  localDocumentSnapshotId?: string | null;
+  repositorySnapshotId?: string | null;
+  contextRequired?: boolean;
+  contextValidationStatus?: string | null;
+  contextValidationSummary?: Record<string, unknown> | null;
   workOrder: {
     id: string;
     title: string;
@@ -98,6 +103,7 @@ export class ApiClient {
     rawOutput?: string | null;
     patchSummary?: string | null;
     logsPreview?: string | null;
+    contextUsed?: Record<string, unknown> | null;
   }): Promise<void> {
     await this.request("POST", `/api/runner/jobs/${jobId}/report`, report);
   }

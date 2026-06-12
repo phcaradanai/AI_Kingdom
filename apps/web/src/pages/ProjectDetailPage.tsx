@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { ArtifactDto, LocalDocumentRootDto, LocalDocumentSnapshotDto, MatterDto, MemoryDto, ObsidianExportDto, ProjectOverviewDto, RepositorySnapshotDto, ReportDto, TaskDto, WorkOrderDto } from "@/types/api";
+import type { ArtifactDto, LocalDocumentRootDto, LocalDocumentSnapshotDto, MatterDto, MemoryDto, ObsidianExportDto, ProjectContextHealthDto, ProjectOverviewDto, RepositorySnapshotDto, ReportDto, TaskDto, WorkOrderDto } from "@/types/api";
 
 type WorkspaceData = {
   overview: ProjectOverviewDto;
@@ -36,6 +36,7 @@ export function ProjectDetailPage() {
   const [localDocRoots, setLocalDocRoots] = useState<LocalDocumentRootDto[]>([]);
   const [localDocSnapshot, setLocalDocSnapshot] = useState<LocalDocumentSnapshotDto | null>(null);
   const [localDocsError, setLocalDocsError] = useState<string | null>(null);
+  const [contextHealth, setContextHealth] = useState<ProjectContextHealthDto | null>(null);
   const [localDocsScanningRootId, setLocalDocsScanningRootId] = useState<string | null>(null);
   const [showAddRootForm, setShowAddRootForm] = useState(false);
   const [newRootName, setNewRootName] = useState("");
@@ -75,6 +76,9 @@ export function ProjectDetailPage() {
     setRepoSnapshot(repoResult.snapshot);
     setLocalDocRoots(localDocsResult.roots);
     setLocalDocSnapshot(localDocsResult.snapshot);
+    api.getProjectContextHealth(id)
+      .then(setContextHealth)
+      .catch(() => setContextHealth(null));
   }
 
   async function scanLocalDocsRoot(rootId: string) {
@@ -285,6 +289,29 @@ export function ProjectDetailPage() {
         </div>
 
         {localDocsError ? <p className="mt-3 text-sm text-red-400">{localDocsError}</p> : null}
+
+        {/* M17E-2: open work order context bindings vs latest snapshot */}
+        {contextHealth ? (
+          <div className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
+            <div className="font-semibold">Context binding: {contextHealth.status}</div>
+            {contextHealth.openWorkOrders.length > 0 ? (
+              <div className="mt-1 space-y-0.5 text-muted-foreground">
+                {contextHealth.openWorkOrders.slice(0, 8).map((w) => (
+                  <div key={w.id}>
+                    {w.title} — {w.contextBindingStatus}
+                    {localDocSnapshot
+                      ? w.boundToLatestSnapshot
+                        ? " · bound to latest snapshot"
+                        : " · NOT bound to latest snapshot"
+                      : ""}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-1 text-muted-foreground">No open work orders bound to this project.</p>
+            )}
+          </div>
+        ) : null}
 
         {showAddRootForm ? (
           <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">

@@ -76,6 +76,7 @@ export interface ValidationJobApi {
     nextRecommendedAction?: string | null;
     rawOutput?: string | null;
     logsPreview?: string | null;
+    contextUsed?: Record<string, unknown> | null;
   }): Promise<unknown>;
 }
 
@@ -100,6 +101,25 @@ export interface ValidationOnlyJob {
   id: string;
   mode: string;
   workOrder: { id: string; title: string };
+  /** M17E-2 context binding metadata (absent on legacy jobs). */
+  localDocumentSnapshotId?: string | null;
+  repositorySnapshotId?: string | null;
+  contextValidationStatus?: string | null;
+  contextValidationSummary?: Record<string, unknown> | null;
+}
+
+/** M17E-2: validation-only jobs proceed with degraded context but must surface a warning. */
+export function buildValidationContextWarnings(contextValidationStatus: string | null | undefined): string[] {
+  if (contextValidationStatus === "PARTIAL") {
+    return ["Context warning: validation ran with PARTIAL project context; results may not reflect the full project state."];
+  }
+  if (contextValidationStatus === "STALE") {
+    return ["Context warning: validation ran with STALE project context; re-scan local docs before trusting results."];
+  }
+  if (contextValidationStatus === "MISSING") {
+    return ["Context warning: validation ran without a bound project context snapshot."];
+  }
+  return [];
 }
 
 export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: ExecuteValidationOnlyDeps): Promise<void> {
@@ -176,7 +196,10 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
   else if (testFailures > 0 && testPasses === 0) testResult = "FAILED";
   else if (testPasses > 0 && testFailures > 0) testResult = "PARTIAL";
 
-  const summary = `Validation-only run for "${job.workOrder.title}": ${testsRun.length} check(s) run, result ${testResult}. No files modified, no patch generated.`;
+  const contextWarnings = buildValidationContextWarnings(job.contextValidationStatus);
+  for (const warning of contextWarnings) log(`[Job ${job.id}] ${warning}`);
+
+  const summary = `Validation-only run for "${job.workOrder.title}": ${testsRun.length} check(s) run, result ${testResult}. No files modified, no patch generated.${contextWarnings.length > 0 ? ` ${contextWarnings.join(" ")}` : ""}`;
   const logsPreview = sanitize(logLines.join("\n")).slice(-9000);
 
   await deps.api.submitReport(job.id, {
@@ -190,7 +213,13 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
     remainingWork: testFailures > 0 ? ["Review failing validation commands before approving the work order."] : [],
     nextRecommendedAction: testFailures > 0 ? "Review validation failures in the implementation report" : "Review validation results and work order",
     rawOutput: logsPreview,
-    logsPreview
+    logsPreview,
+    contextUsed: {
+      localDocumentSnapshotId: job.localDocumentSnapshotId ?? null,
+      repositorySnapshotId: job.repositorySnapshotId ?? null,
+      contextValidationStatus: job.contextValidationStatus ?? "NOT_REQUIRED",
+      warnings: contextWarnings
+    }
   });
 
   log(`[Job ${job.id}] Validation report submitted (${testResult}). Job is NEEDS_REVIEW.`);
