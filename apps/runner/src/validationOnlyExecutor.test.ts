@@ -22,6 +22,7 @@ function makeDeps(opts?: {
   hasLint?: boolean;
   failPrepare?: boolean;
   install?: { skipped?: boolean; success?: boolean; exitCode?: number; output?: string };
+  preValidation?: { success?: boolean; exitCode?: number; output?: string; cwd?: string };
 }) {
   const calls: Call[] = [];
   const apiCalls: Call[] = [];
@@ -61,6 +62,24 @@ function makeDeps(opts?: {
         exitCode: opts.install?.exitCode ?? 0,
         output: opts.install?.output ?? "installed",
         durationMs: 7
+      };
+    },
+    runPreValidation: opts?.preValidation === undefined ? undefined : async () => {
+      events.push("prevalidate");
+      const success = opts.preValidation?.success ?? true;
+      return {
+        success,
+        failureMessage: success ? null : "Runner pre-validation failed: npm run db:generate",
+        steps: [{
+          displayCommand: "npm run db:generate",
+          cwd: opts.preValidation?.cwd ?? "/tmp/runner/job-1",
+          exitCode: opts.preValidation?.exitCode ?? 0,
+          stdout: opts.preValidation?.output ?? "generated",
+          stderr: "",
+          output: opts.preValidation?.output ?? "generated",
+          durationMs: 11,
+          success
+        }]
       };
     },
     hasLintScript: () => opts?.hasLint ?? false
@@ -198,6 +217,47 @@ test("VALIDATION_ONLY install failure reports clearly and does not run validatio
   assert.deepEqual(report.commandsRun, ["npm ci"]);
   assert.ok(report.errors.some((e) => e.includes("Runner dependency installation failed")));
   assert.doesNotMatch(report.logsPreview, /RUNNER_TOKEN=secret/);
+});
+
+test("VALIDATION_ONLY runs pre-validation after install and before validation", async () => {
+  const { deps, events, ranCommands, apiCalls } = makeDeps({
+    install: { success: true },
+    preValidation: { success: true, cwd: "/tmp/runner/jobs/job-validation-1" }
+  });
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events.slice(0, 4), ["prepare", "install", "prevalidate", "run:git status"]);
+  assert.ok(ranCommands.includes("npm run typecheck"));
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as { commandsRun: string[]; rawOutput: string };
+  assert.equal(report.commandsRun[0], "npm ci");
+  assert.equal(report.commandsRun[1], "npm run db:generate");
+  assert.ok(report.rawOutput.includes("CWD: /tmp/runner/jobs/job-validation-1"));
+});
+
+test("VALIDATION_ONLY skips validation if pre-validation fails", async () => {
+  const { deps, events, ranCommands, apiCalls } = makeDeps({
+    install: { success: true },
+    preValidation: {
+      success: false,
+      exitCode: 13,
+      output: "generate failed RUNNER_TOKEN=secret-token",
+      cwd: "/tmp/runner/jobs/job-validation-1"
+    }
+  });
+  deps.sanitize = (text) => text.replace(/RUNNER_TOKEN=\S+/g, "RUNNER_TOKEN=[REDACTED]");
+
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events, ["prepare", "install", "prevalidate"]);
+  assert.deepEqual(ranCommands, []);
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
+    summary: string; errors: string[]; testResult: string; logsPreview: string; commandsRun: string[];
+  };
+  assert.match(report.summary, /Runner pre-validation failed: npm run db:generate/);
+  assert.equal(report.testResult, "NOT_RUN");
+  assert.deepEqual(report.commandsRun, ["npm ci", "npm run db:generate"]);
+  assert.ok(report.errors.some((e) => e.includes("Runner pre-validation failed")));
+  assert.doesNotMatch(report.logsPreview, /RUNNER_TOKEN=secret-token/);
 });
 
 // ── M17E-2: context binding warnings ─────────────────────────────────────────────

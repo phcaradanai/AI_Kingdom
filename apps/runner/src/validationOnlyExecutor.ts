@@ -95,6 +95,23 @@ export interface ValidationDependencyInstallResult {
   durationMs: number;
 }
 
+export interface ValidationPreValidationStepResult {
+  displayCommand: string;
+  cwd: string;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  output: string;
+  durationMs: number;
+  success: boolean;
+}
+
+export interface ValidationPreValidationResult {
+  success: boolean;
+  failureMessage: string | null;
+  steps: ValidationPreValidationStepResult[];
+}
+
 export interface ExecuteValidationOnlyDeps {
   api: ValidationJobApi;
   runCommand: (command: string, args: string[]) => Promise<ValidationCommandResult>;
@@ -102,6 +119,8 @@ export interface ExecuteValidationOnlyDeps {
   prepareWorkspace: () => Promise<void>;
   /** Installs dependencies in the prepared workspace before validation commands run. */
   installDependencies?: () => Promise<ValidationDependencyInstallResult>;
+  /** Runs generated-code setup after dependencies are installed and before validation. */
+  runPreValidation?: () => Promise<ValidationPreValidationResult>;
   /** Whether the workspace package.json declares a lint script. */
   hasLintScript: () => boolean;
   sanitize?: (text: string) => string;
@@ -140,6 +159,7 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
   const testsRun: string[] = [];
   const errors: string[] = [];
   const logLines: string[] = [];
+  let sequence = 0;
 
   await deps.api.updateStatus(job.id, "RUNNING");
   log(`[Job ${job.id}] VALIDATION_ONLY mode — no file edits, no patch artifact, no git mutations.`);
@@ -199,8 +219,52 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
     }
   }
 
+  if (deps.runPreValidation) {
+    const preValidationResult = await deps.runPreValidation();
+    for (const step of preValidationResult.steps) {
+      sequence++;
+      commandsRun.push(step.displayCommand);
+      logLines.push(`$ ${step.displayCommand}\nCWD: ${step.cwd}\nSTDOUT:\n${step.stdout}\nSTDERR:\n${step.stderr}`);
+      await deps.api.recordStep(job.id, {
+        sequence,
+        stepType: "COMMAND",
+        title: `Pre-validation: ${step.displayCommand}`,
+        status: step.success ? "COMPLETED" : "FAILED",
+        command: "npm",
+        args: ["run", "db:generate"],
+        output: sanitize(step.output).slice(0, 4000),
+        exitCode: step.exitCode,
+        durationMs: step.durationMs
+      });
+    }
+
+    if (!preValidationResult.success) {
+      const failureMessage = preValidationResult.failureMessage ?? "Runner pre-validation failed";
+      errors.push(failureMessage);
+      const logsPreview = sanitize(logLines.join("\n")).slice(-9000);
+      await deps.api.submitReport(job.id, {
+        summary: `Validation-only run for "${job.workOrder.title}" could not continue: ${failureMessage}.`,
+        filesChanged: [],
+        commandsRun,
+        testsRun,
+        testResult: "NOT_RUN",
+        errors,
+        decisionsMade: [],
+        remainingWork: ["Review pre-validation output and retry validation after generated clients can be prepared."],
+        nextRecommendedAction: "Fix runner pre-validation",
+        rawOutput: logsPreview,
+        logsPreview,
+        contextUsed: {
+          localDocumentSnapshotId: job.localDocumentSnapshotId ?? null,
+          repositorySnapshotId: job.repositorySnapshotId ?? null,
+          contextValidationStatus: job.contextValidationStatus ?? "NOT_REQUIRED"
+        }
+      });
+      return;
+    }
+  }
+
   const commands = buildValidationCommands(deps.hasLintScript());
-  let sequence = 0;
   let testPasses = 0;
   let testFailures = 0;
 

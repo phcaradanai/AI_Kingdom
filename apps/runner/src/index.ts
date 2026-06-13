@@ -23,6 +23,7 @@ import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
 import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
 import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDependencies } from "./dependencyInstaller.js";
+import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationCommands } from "./preValidationRunner.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -195,6 +196,45 @@ async function executeJob(job: AutomationJob) {
         log(`[Job ${job.id}] ${DEPENDENCY_INSTALL_FAILURE}`);
         return;
       }
+    }
+
+    const preValidationResult = await runPreValidationForJob(job.id, workspaceDir, log);
+    for (const step of preValidationResult.steps) {
+      sequence++;
+      commandsRun.push(step.displayCommand);
+      await api.recordStep(job.id, {
+        sequence,
+        stepType: "COMMAND",
+        title: `Pre-validation: ${step.displayCommand}`,
+        status: step.success ? "COMPLETED" : "FAILED",
+        command: "npm",
+        args: ["run", "db:generate"],
+        output: step.output.slice(0, 4000),
+        exitCode: step.exitCode,
+        durationMs: step.durationMs
+      });
+      log(`[Job ${job.id}] Pre-validation ${step.success ? "completed" : "failed"}: ${step.displayCommand} (${step.durationMs}ms)`);
+      logLines.push(`$ ${step.displayCommand}\nCWD: ${step.cwd}\nSTDOUT:\n${step.stdout}\nSTDERR:\n${step.stderr}`);
+    }
+    if (!preValidationResult.success) {
+      const failureMessage = preValidationResult.failureMessage ?? PREVALIDATION_FAILURE_PREFIX;
+      errors.push(failureMessage);
+      const logsPreview = sanitizeLogOutput(logLines.slice(-80).join("\n"));
+      await api.submitReport(job.id, {
+        summary: `Sandbox run for "${job.workOrder.title}" could not continue: ${failureMessage}.`,
+        filesChanged: [],
+        commandsRun,
+        testsRun,
+        testResult: "NOT_RUN",
+        errors,
+        decisionsMade: [],
+        remainingWork: ["Review pre-validation output and retry the job after Prisma Client generation can complete."],
+        nextRecommendedAction: "Fix runner pre-validation",
+        logsPreview,
+        rawOutput: logsPreview,
+        contextUsed: buildContextUsed(job)
+      });
+      return;
     }
 
     if (job.project) {
@@ -382,6 +422,9 @@ async function executeValidationJob(job: AutomationJob) {
       installDependencies: async () => {
         return installDependenciesForJob(job, workspaceDir, (msg) => console.log(msg));
       },
+      runPreValidation: async () => {
+        return runPreValidationForJob(job.id, workspaceDir, (msg) => console.log(msg));
+      },
       hasLintScript: () => {
         try {
           const pkg = JSON.parse(fs.readFileSync(path.join(workspaceDir, "package.json"), "utf8")) as { scripts?: Record<string, string> };
@@ -424,6 +467,26 @@ async function installDependenciesForJob(
   const result = await installRunnerDependencies({ workspaceRoot: workspaceDir, mode: job.mode });
   if (!result.skipped && !result.success) {
     log(`[Job ${job.id}] ${DEPENDENCY_INSTALL_FAILURE}: exit ${result.exitCode}`);
+  }
+  return result;
+}
+
+async function runPreValidationForJob(
+  jobId: string,
+  workspaceDir: string,
+  log: (msg: string) => void
+) {
+  try {
+    const config = getPreValidationConfig();
+    for (const command of config.commands) {
+      log(`[Job ${jobId}] Running pre-validation: ${command.displayCommand}`);
+    }
+  } catch {
+    // runPreValidationCommands converts invalid config into a reportable failure.
+  }
+  const result = await runPreValidationCommands({ workspaceRoot: workspaceDir });
+  if (!result.success) {
+    log(`[Job ${jobId}] ${result.failureMessage ?? PREVALIDATION_FAILURE_PREFIX}`);
   }
   return result;
 }
