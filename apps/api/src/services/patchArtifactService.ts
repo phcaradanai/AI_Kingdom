@@ -21,6 +21,9 @@ export interface ValidationResult {
   command: string;
   exitCode: number;
   durationMs: number;
+  cwd?: string;
+  stdout?: string;
+  stderr?: string;
   output: string;
   success: boolean;
 }

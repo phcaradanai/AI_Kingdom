@@ -725,10 +725,17 @@ function PatchReviewCard({
       {artifact.validationResults && artifact.validationResults.length > 0 && (
         <div className="space-y-0.5">
           {artifact.validationResults.map((vr, i) => (
-            <div key={i} className="flex items-center gap-2">
-              {vr.success ? <CheckCircle className="h-3.5 w-3.5 text-green-600 flex-shrink-0" /> : <XCircle className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />}
-              <span className="font-mono">{vr.command}</span>
-              <span className="text-muted-foreground">{vr.durationMs}ms</span>
+            <div key={i} className="space-y-1">
+              <div className="flex items-center gap-2">
+                {vr.success ? <CheckCircle className="h-3.5 w-3.5 text-green-600 flex-shrink-0" /> : <XCircle className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />}
+                <span className="font-mono">{vr.command}</span>
+                <span className="text-muted-foreground">{vr.durationMs}ms</span>
+              </div>
+              {!vr.success && (
+                <pre className="bg-muted rounded p-2 overflow-auto max-h-36 font-mono whitespace-pre-wrap text-[11px]">
+                  {`CWD: ${vr.cwd ?? "unknown"}\nSTDERR:\n${vr.stderr?.trim() || vr.output || "(no stderr)"}`}
+                </pre>
+              )}
             </div>
           ))}
         </div>

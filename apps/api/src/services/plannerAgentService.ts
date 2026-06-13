@@ -403,7 +403,13 @@ export async function createDraftWorkOrders(
           "No API keys, tokens, passwords, or secrets are exposed.",
           "Validation commands are run or clearly reported as not run."
         ],
-        validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
+        validationCommands: [
+          "npm run typecheck",
+          "npm run test --workspace @ai-kingdom/api",
+          "npm run test --workspace @ai-kingdom/runner",
+          "npm run test --workspace @ai-kingdom/web",
+          "npm run build"
+        ],
         projectId: task.projectId,
         sourceType: "COUNCIL_SESSION",
         sourceId: session.id,

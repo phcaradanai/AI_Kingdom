@@ -77,7 +77,15 @@ function allowedNpmSubcommands(args: string[]): boolean {
   if (sub === "install" && args.length === 1) return true;
   if (sub === "run" && args.length === 2) {
     const script = args[1] as string;
-    return APPROVED_NPM_SCRIPTS.has(script);
+    return APPROVED_ROOT_NPM_SCRIPTS.has(script);
+  }
+  if (sub === "run" && args.length === 4) {
+    const script = args[1] as string;
+    const workspaceFlag = args[2] as string;
+    const workspace = args[3] as string;
+    return APPROVED_NPM_SCRIPTS.has(script)
+      && workspaceFlag === "--workspace"
+      && APPROVED_NPM_WORKSPACES.has(workspace);
   }
   return false;
 }
@@ -87,6 +95,18 @@ export const APPROVED_NPM_SCRIPTS = new Set([
   "test",
   "build",
   "lint"
+]);
+
+export const APPROVED_ROOT_NPM_SCRIPTS = new Set([
+  "typecheck",
+  "build",
+  "lint"
+]);
+
+export const APPROVED_NPM_WORKSPACES = new Set([
+  "@ai-kingdom/api",
+  "@ai-kingdom/runner",
+  "@ai-kingdom/web"
 ]);
 
 const SHELL_INJECTION_PATTERNS = [

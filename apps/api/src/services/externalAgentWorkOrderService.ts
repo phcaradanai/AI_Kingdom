@@ -135,7 +135,13 @@ export async function generateWorkOrderFromTask(taskId: string, userId?: string 
       "No API keys, tokens, passwords, or secrets are exposed.",
       "Validation commands are run or clearly reported as not run."
     ],
-    validationCommands: ["npm run typecheck", "npm run test", "npm run build"],
+    validationCommands: [
+      "npm run typecheck",
+      "npm run test --workspace @ai-kingdom/api",
+      "npm run test --workspace @ai-kingdom/runner",
+      "npm run test --workspace @ai-kingdom/web",
+      "npm run build"
+    ],
     projectId: task.projectId,
     targetProject: task.projectId ? null : "AI Kingdom",
     sourceType: "TASK",
@@ -173,7 +179,12 @@ export async function generateWorkOrderFromMatter(matterId: string, userId?: str
       "No secrets are exposed.",
       "Validation commands are run or clearly reported as not run."
     ],
-    validationCommands: ["npm run typecheck", "npm run test"],
+    validationCommands: [
+      "npm run typecheck",
+      "npm run test --workspace @ai-kingdom/api",
+      "npm run test --workspace @ai-kingdom/runner",
+      "npm run test --workspace @ai-kingdom/web"
+    ],
     projectId: matter.projectId,
     targetProject: matter.projectId ? null : "AI Kingdom",
     sourceType: "MATTER",

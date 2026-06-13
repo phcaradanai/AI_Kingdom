@@ -20,7 +20,13 @@ const blankWorkOrder: WorkOrderPayload = {
   instructions: "",
   constraints: "",
   acceptanceCriteria: [],
-  validationCommands: ["npm run typecheck", "npm run test"],
+  validationCommands: [
+    "npm run typecheck",
+    "npm run test --workspace @ai-kingdom/api",
+    "npm run test --workspace @ai-kingdom/runner",
+    "npm run test --workspace @ai-kingdom/web",
+    "npm run build"
+  ],
   targetProject: "",
   targetRepository: "",
   status: "DRAFT",
@@ -589,7 +595,7 @@ export function WorkOrdersPage() {
               </FormField>
 
               <FormField id="wo-validation" label="Validation Commands" description="One command per line.">
-                <Textarea id="wo-validation" disabled={!canCreate} value={draft.validationCommands?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, validationCommands: lines(e.target.value) })} placeholder="npm run typecheck&#10;npm run test&#10;npm run build" />
+                <Textarea id="wo-validation" disabled={!canCreate} value={draft.validationCommands?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, validationCommands: lines(e.target.value) })} placeholder="npm run typecheck&#10;npm run test --workspace @ai-kingdom/api&#10;npm run test --workspace @ai-kingdom/runner&#10;npm run test --workspace @ai-kingdom/web&#10;npm run build" />
               </FormField>
 
               {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
@@ -1039,13 +1045,20 @@ function PatchArtifactCard({
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground">Validation</p>
           {artifact.validationResults.map((vr, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
-              {vr.success
-                ? <CheckCircle className="h-3.5 w-3.5 text-green-600" />
-                : <XCircle className="h-3.5 w-3.5 text-red-600" />
-              }
-              <span className="font-mono">{vr.command}</span>
-              <span className="text-muted-foreground">{vr.durationMs}ms</span>
+            <div key={i} className="space-y-1 text-xs">
+              <div className="flex items-center gap-2">
+                {vr.success
+                  ? <CheckCircle className="h-3.5 w-3.5 text-green-600" />
+                  : <XCircle className="h-3.5 w-3.5 text-red-600" />
+                }
+                <span className="font-mono">{vr.command}</span>
+                <span className="text-muted-foreground">{vr.durationMs}ms</span>
+              </div>
+              {!vr.success && (
+                <pre className="bg-muted/50 rounded p-2 overflow-auto max-h-36 font-mono whitespace-pre-wrap text-[11px]">
+                  {`CWD: ${vr.cwd ?? "unknown"}\nSTDERR:\n${vr.stderr?.trim() || vr.output || "(no stderr)"}`}
+                </pre>
+              )}
             </div>
           ))}
         </div>

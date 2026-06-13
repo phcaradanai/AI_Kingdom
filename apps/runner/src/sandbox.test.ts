@@ -63,7 +63,7 @@ test("validation receives DATABASE_URL when TEST_DATABASE_URL is missing", async
   const markerFile = path.join(makeTempDir("runner-sandbox-marker-"), "env.txt");
   const binDir = makeFakeNpm(markerFile);
   try {
-    const result = await runCommand("npm", ["run", "test"], {
+    const result = await runCommand("npm", ["run", "test", "--workspace", "@ai-kingdom/runner"], {
       workspaceRoot: workspace,
       env: {
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
@@ -79,6 +79,42 @@ test("validation receives DATABASE_URL when TEST_DATABASE_URL is missing", async
     fs.rmSync(workspace, { recursive: true, force: true });
     fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
     fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("workspace validation commands run at the workspace root with forwarded env", async () => {
+  const workspace = makeWorkspace();
+  const markerFile = path.join(makeTempDir("runner-sandbox-marker-"), "env.txt");
+  const binDir = makeFakeNpm(markerFile);
+  try {
+    const result = await runCommand("npm", ["run", "test", "--workspace", "@ai-kingdom/api"], {
+      workspaceRoot: workspace,
+      env: {
+        PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        TEST_DATABASE_URL: "postgresql://user:pass@localhost:5432/test",
+        NODE_ENV: "test"
+      }
+    });
+
+    assert.equal(result.exitCode, 0, result.output);
+    assert.equal(result.cwd, path.resolve(workspace));
+    const forwarded = fs.readFileSync(markerFile, "utf8");
+    assert.match(forwarded, /TEST_DATABASE_URL=postgresql:\/\/user:pass@localhost:5432\/test/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("root npm run test is no longer an allowlisted validation command", async () => {
+  const workspace = makeWorkspace();
+  try {
+    const result = await runCommand("npm", ["run", "test"], { workspaceRoot: workspace });
+    assert.equal(result.allowed, false);
+    assert.match(result.output, /BLOCKED/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
   }
 });
 

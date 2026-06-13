@@ -577,7 +577,7 @@ Produce a JSON execution plan with this exact structure:
       "type": "COMMAND",
       "description": "Why this command is run",
       "command": "npm",
-      "args": ["run", "test"]
+      "args": ["run", "test", "--workspace", "@ai-kingdom/api"]
     }
   ]
 }

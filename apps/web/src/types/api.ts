@@ -1549,6 +1549,9 @@ export type PatchValidationResult = {
   command: string;
   exitCode: number;
   durationMs: number;
+  cwd?: string;
+  stdout?: string;
+  stderr?: string;
   output: string;
   success: boolean;
 };
@@ -1867,4 +1870,3 @@ export type ProjectContextHealthDto = {
     boundToLatestSnapshot: boolean;
   }>;
 };
-

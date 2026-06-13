@@ -364,6 +364,12 @@ async function executeJob(job: AutomationJob) {
       testsRun.push(vr.command);
       if (testResult === "NOT_RUN") testResult = vr.success ? "PASSED" : "FAILED";
       else if (!vr.success) testResult = testResult === "PASSED" ? "PARTIAL" : "FAILED";
+      if (!vr.success) {
+        errors.push(vr.stderr.trim()
+          ? `Exit ${vr.exitCode}: ${vr.command}\nSTDERR:\n${vr.stderr.trim()}`
+          : `Exit ${vr.exitCode}: ${vr.command}`);
+      }
+      logLines.push(`$ ${vr.command}\nCWD: ${vr.cwd}\nSTDOUT:\n${vr.stdout}\nSTDERR:\n${vr.stderr}`);
     }
 
     // Submit patch artifact
@@ -437,7 +443,14 @@ async function executeValidationJob(job: AutomationJob) {
       api,
       runCommand: async (command, args) => {
         const result = await runCommand(command, args, { workspaceRoot: workspaceDir, jobAllowedCommands: job.allowedCommands });
-        return { exitCode: result.exitCode, output: result.output, durationMs: result.durationMs };
+        return {
+          exitCode: result.exitCode,
+          stdout: result.stdout,
+          stderr: result.stderr,
+          output: result.output,
+          durationMs: result.durationMs,
+          cwd: result.cwd
+        };
       },
       prepareWorkspace: async () => {
         const prepared = prepareRunnerWorkspace({ jobId: job.id, workspaceBase: WORKSPACE_BASE });

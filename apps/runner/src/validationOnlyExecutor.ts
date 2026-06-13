@@ -17,16 +17,18 @@ export interface ValidationCommandSpec {
 }
 
 export const BASE_VALIDATION_COMMANDS: ValidationCommandSpec[] = [
-  { command: "git", args: ["status"], isTest: false },
-  { command: "git", args: ["diff", "--stat"], isTest: false },
   { command: "npm", args: ["run", "typecheck"], isTest: true },
-  { command: "npm", args: ["run", "test"], isTest: true },
+  { command: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/api"], isTest: true },
+  { command: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/runner"], isTest: true },
+  { command: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/web"], isTest: true },
   { command: "npm", args: ["run", "build"], isTest: true }
 ];
 
 export const LINT_COMMAND: ValidationCommandSpec = { command: "npm", args: ["run", "lint"], isTest: true };
 
 const ALLOWED_NPM_VALIDATION_SCRIPTS = new Set(["typecheck", "test", "build", "lint"]);
+const ALLOWED_ROOT_NPM_VALIDATION_SCRIPTS = new Set(["typecheck", "build", "lint"]);
+const ALLOWED_NPM_WORKSPACES = new Set(["@ai-kingdom/api", "@ai-kingdom/runner", "@ai-kingdom/web"]);
 
 /**
  * Strict allowlist for VALIDATION_ONLY jobs. Narrower than the global sandbox
@@ -40,7 +42,14 @@ export function isAllowedValidationCommand(command: string, args: string[]): boo
     return false;
   }
   if (command === "npm") {
-    return args.length === 2 && args[0] === "run" && ALLOWED_NPM_VALIDATION_SCRIPTS.has(args[1] ?? "");
+    if (args.length === 2 && args[0] === "run" && ALLOWED_ROOT_NPM_VALIDATION_SCRIPTS.has(args[1] ?? "")) {
+      return true;
+    }
+    return args.length === 4
+      && args[0] === "run"
+      && ALLOWED_NPM_VALIDATION_SCRIPTS.has(args[1] ?? "")
+      && args[2] === "--workspace"
+      && ALLOWED_NPM_WORKSPACES.has(args[3] ?? "");
   }
   return false;
 }
@@ -82,8 +91,11 @@ export interface ValidationJobApi {
 
 export interface ValidationCommandResult {
   exitCode: number;
+  stdout: string;
+  stderr: string;
   output: string;
   durationMs: number;
+  cwd: string;
 }
 
 export interface ValidationDependencyInstallResult {
@@ -320,14 +332,17 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
       testsRun.push(label);
       if (result.exitCode === 0) testPasses++; else testFailures++;
     }
-    if (result.exitCode !== 0) errors.push(`Exit ${result.exitCode}: ${label}`);
-    logLines.push(`$ ${label}\n${result.output}`);
+    if (result.exitCode !== 0) {
+      const stderr = result.stderr.trim();
+      errors.push(stderr ? `Exit ${result.exitCode}: ${label}\nSTDERR:\n${stderr}` : `Exit ${result.exitCode}: ${label}`);
+    }
+    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
 
     await deps.api.recordStep(job.id, {
       sequence, stepType: "COMMAND", title: label,
       status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
       command: spec.command, args: spec.args,
-      output: sanitize(result.output).slice(0, 4000),
+      output: sanitize(`CWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 4000),
       exitCode: result.exitCode, durationMs: result.durationMs
     });
   }

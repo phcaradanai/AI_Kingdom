@@ -48,7 +48,14 @@ function makeDeps(opts?: {
       events.push(`run:${command} ${args.join(" ")}`);
       ranCommands.push(`${command} ${args.join(" ")}`);
       const exitCode = opts?.exitCodeFor ? opts.exitCodeFor(command, args) : 0;
-      return { exitCode, output: `output of ${command}`, durationMs: 5 };
+      return {
+        exitCode,
+        stdout: `stdout of ${command} ${args.join(" ")}`,
+        stderr: exitCode === 0 ? "" : `stderr of ${command} ${args.join(" ")}`,
+        output: `output of ${command}`,
+        durationMs: 5,
+        cwd: "/tmp/runner/jobs/job-validation-1"
+      };
     },
     prepareWorkspace: async () => {
       events.push("prepare");
@@ -99,10 +106,10 @@ test("VALIDATION_ONLY runs allowlisted validation commands only", async () => {
   await executeValidationOnlyJob(job, deps);
 
   assert.deepEqual(ranCommands, [
-    "git status",
-    "git diff --stat",
     "npm run typecheck",
-    "npm run test",
+    "npm run test --workspace @ai-kingdom/api",
+    "npm run test --workspace @ai-kingdom/runner",
+    "npm run test --workspace @ai-kingdom/web",
     "npm run build",
     "npm run lint"
   ]);
@@ -193,17 +200,26 @@ test("report submission includes validation result and commands run", async () =
     testResult: string; testsRun: string[]; commandsRun: string[]; summary: string;
   };
   assert.equal(passedReport.testResult, "PASSED");
-  assert.deepEqual(passedReport.testsRun, ["npm run typecheck", "npm run test", "npm run build"]);
-  assert.ok(passedReport.commandsRun.includes("git status"));
+  assert.deepEqual(passedReport.testsRun, [
+    "npm run typecheck",
+    "npm run test --workspace @ai-kingdom/api",
+    "npm run test --workspace @ai-kingdom/runner",
+    "npm run test --workspace @ai-kingdom/web",
+    "npm run build"
+  ]);
+  assert.ok(passedReport.commandsRun.includes("npm run test --workspace @ai-kingdom/api"));
   assert.ok(passedReport.summary.includes("Validation-only"));
 
-  const mixed = makeDeps({ exitCodeFor: (_cmd, args) => (args[1] === "test" ? 1 : 0) });
+  const mixed = makeDeps({ exitCodeFor: (_cmd, args) => (args[1] === "test" && args[3] === "@ai-kingdom/web" ? 1 : 0) });
   await executeValidationOnlyJob(job, mixed.deps);
   const mixedReport = mixed.apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
-    testResult: string; errors: string[]; remainingWork: string[];
+    testResult: string; errors: string[]; remainingWork: string[]; rawOutput: string;
   };
   assert.equal(mixedReport.testResult, "PARTIAL");
-  assert.ok(mixedReport.errors.some((e) => e.includes("npm run test")));
+  assert.ok(mixedReport.errors.some((e) => e.includes("npm run test --workspace @ai-kingdom/web")));
+  assert.ok(mixedReport.errors.some((e) => e.includes("STDERR:")));
+  assert.ok(mixedReport.rawOutput.includes("CWD: /tmp/runner/jobs/job-validation-1"));
+  assert.ok(mixedReport.rawOutput.includes("stderr of npm run test --workspace @ai-kingdom/web"));
   assert.ok(mixedReport.remainingWork.length > 0);
 
   const notRun = makeDeps({ failPrepare: true });
@@ -224,18 +240,18 @@ test("VALIDATION_ONLY installs dependencies before validation commands when enab
   const { deps, events, ranCommands, apiCalls } = makeDeps({ install: { success: true } });
   await executeValidationOnlyJob(job, deps);
 
-  assert.deepEqual(events.slice(0, 3), ["prepare", "install", "run:git status"]);
+  assert.deepEqual(events.slice(0, 3), ["prepare", "install", "run:npm run typecheck"]);
   assert.ok(ranCommands.includes("npm run typecheck"));
   const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as { commandsRun: string[] };
   assert.equal(report.commandsRun[0], "npm ci");
-  assert.ok(report.commandsRun.includes("git status"));
+  assert.ok(report.commandsRun.includes("npm run test --workspace @ai-kingdom/api"));
 });
 
 test("VALIDATION_ONLY runs validation after install is skipped", async () => {
   const { deps, events, ranCommands } = makeDeps({ install: { skipped: true } });
   await executeValidationOnlyJob(job, deps);
 
-  assert.deepEqual(events.slice(0, 3), ["prepare", "install", "run:git status"]);
+  assert.deepEqual(events.slice(0, 3), ["prepare", "install", "run:npm run typecheck"]);
   assert.ok(ranCommands.includes("npm run build"));
 });
 
@@ -266,7 +282,7 @@ test("VALIDATION_ONLY runs pre-validation after install and before validation", 
   });
   await executeValidationOnlyJob(job, deps);
 
-  assert.deepEqual(events.slice(0, 4), ["prepare", "install", "prevalidate", "run:git status"]);
+  assert.deepEqual(events.slice(0, 4), ["prepare", "install", "prevalidate", "run:npm run typecheck"]);
   assert.ok(ranCommands.includes("npm run typecheck"));
   const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as { commandsRun: string[]; rawOutput: string };
   assert.equal(report.commandsRun[0], "npm ci");

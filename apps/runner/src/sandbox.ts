@@ -23,6 +23,7 @@ export interface ExecutionResult {
   stderr: string;
   output: string;
   durationMs: number;
+  cwd: string;
   allowed: boolean;
   blockReason?: string;
 }
@@ -58,6 +59,7 @@ export async function runCommand(
       stderr: "",
       output: `[BLOCKED] ${validation.reason}`,
       durationMs: 0,
+      cwd: path.resolve(opts.cwd ?? opts.workspaceRoot),
       allowed: false,
       blockReason: validation.reason
     };
@@ -102,6 +104,7 @@ export async function runCommand(
         stderr: sanitizeLogOutput(stderr),
         output: sanitizeLogOutput(rawOutput),
         durationMs,
+        cwd: path.resolve(effectiveCwd),
         allowed: true
       });
     });
@@ -115,6 +118,7 @@ export async function runCommand(
         stderr: sanitizeLogOutput(err.message),
         output: sanitizeLogOutput(err.message),
         durationMs,
+        cwd: path.resolve(effectiveCwd),
         allowed: true
       });
     });

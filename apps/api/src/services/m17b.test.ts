@@ -244,9 +244,14 @@ describe("M17B Test 4: Duplicate active job for same WorkOrder is rejected", () 
 // ── Test group: Command validator (pure, no DB) ───────────────────────────────
 
 describe("M17B Tests 5-7: Command validator", () => {
-  it("Test 5: Allows npm run test", () => {
-    const result = validateCommand("npm", ["run", "test"]);
+  it("Test 5: Allows workspace npm run test", () => {
+    const result = validateCommand("npm", ["run", "test", "--workspace", "@ai-kingdom/api"]);
     assert.equal(result.allowed, true);
+  });
+
+  it("Test 5a: Blocks root npm run test", () => {
+    const result = validateCommand("npm", ["run", "test"]);
+    assert.equal(result.allowed, false);
   });
 
   it("Test 5b: Allows npm run typecheck", () => {

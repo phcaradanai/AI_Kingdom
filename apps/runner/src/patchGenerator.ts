@@ -20,6 +20,9 @@ export interface ValidationResult {
   command: string;
   exitCode: number;
   durationMs: number;
+  cwd: string;
+  stdout: string;
+  stderr: string;
   output: string;
   success: boolean;
 }
@@ -85,7 +88,9 @@ export async function generatePatch(opts: PatchGeneratorOptions): Promise<PatchP
 export async function runValidation(workspaceRoot: string): Promise<ValidationResult[]> {
   const commands: Array<{ cmd: string; args: string[] }> = [
     { cmd: "npm", args: ["run", "typecheck"] },
-    { cmd: "npm", args: ["run", "test"] },
+    { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/api"] },
+    { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/runner"] },
+    { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/web"] },
     { cmd: "npm", args: ["run", "build"] }
   ];
 
@@ -97,7 +102,10 @@ export async function runValidation(workspaceRoot: string): Promise<ValidationRe
       command: `${cmd} ${args.join(" ")}`,
       exitCode: result.exitCode,
       durationMs: result.durationMs,
-      output: sanitizeLogOutput(result.output).slice(0, 3000),
+      cwd: result.cwd,
+      stdout: sanitizeLogOutput(result.stdout).slice(0, 3000),
+      stderr: sanitizeLogOutput(result.stderr).slice(0, 3000),
+      output: sanitizeLogOutput(`CWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 5000),
       success: result.exitCode === 0
     });
   }
