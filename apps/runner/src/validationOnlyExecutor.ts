@@ -86,11 +86,22 @@ export interface ValidationCommandResult {
   durationMs: number;
 }
 
+export interface ValidationDependencyInstallResult {
+  skipped: boolean;
+  success: boolean;
+  displayCommand: string;
+  exitCode: number;
+  output: string;
+  durationMs: number;
+}
+
 export interface ExecuteValidationOnlyDeps {
   api: ValidationJobApi;
   runCommand: (command: string, args: string[]) => Promise<ValidationCommandResult>;
   /** Copies the repository into the temporary workspace. Must not touch the source repo. */
   prepareWorkspace: () => Promise<void>;
+  /** Installs dependencies in the prepared workspace before validation commands run. */
+  installDependencies?: () => Promise<ValidationDependencyInstallResult>;
   /** Whether the workspace package.json declares a lint script. */
   hasLintScript: () => boolean;
   sanitize?: (text: string) => string;
@@ -150,7 +161,42 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
       nextRecommendedAction: "Fix runner workspace configuration",
       logsPreview: sanitize(msg).slice(0, 2000)
     });
+    await deps.api.updateStatus(job.id, "FAILED", { logsPreview: sanitize(msg).slice(0, 2000) });
     return;
+  }
+
+  if (deps.installDependencies) {
+    const installResult = await deps.installDependencies();
+    if (installResult.skipped) {
+      log(`[Job ${job.id}] Dependency installation skipped.`);
+    } else {
+      commandsRun.push(installResult.displayCommand);
+      logLines.push(`$ ${installResult.displayCommand}\n${installResult.output}`);
+      if (!installResult.success) {
+        errors.push("Runner dependency installation failed");
+        errors.push(`Exit ${installResult.exitCode}: ${installResult.displayCommand}`);
+        const logsPreview = sanitize(logLines.join("\n")).slice(-9000);
+        await deps.api.submitReport(job.id, {
+          summary: `Validation-only run for "${job.workOrder.title}" could not continue: Runner dependency installation failed.`,
+          filesChanged: [],
+          commandsRun,
+          testsRun,
+          testResult: "NOT_RUN",
+          errors,
+          decisionsMade: [],
+          remainingWork: ["Review dependency installation output and retry validation after dependencies can be installed."],
+          nextRecommendedAction: "Fix runner dependency installation",
+          rawOutput: logsPreview,
+          logsPreview,
+          contextUsed: {
+            localDocumentSnapshotId: job.localDocumentSnapshotId ?? null,
+            repositorySnapshotId: job.repositorySnapshotId ?? null,
+            contextValidationStatus: job.contextValidationStatus ?? "NOT_REQUIRED"
+          }
+        });
+        return;
+      }
+    }
   }
 
   const commands = buildValidationCommands(deps.hasLintScript());

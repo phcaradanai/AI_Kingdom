@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { assignWorkOrderAgent, selectAgent } from "./workOrderAssignmentService.js";
 
-const prisma = new PrismaClient();
 const suffix = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 
 async function createTestAgent(slug: string, specialty: string, skills: string[]) {

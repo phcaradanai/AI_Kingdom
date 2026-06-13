@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
 import bcrypt from "bcryptjs";
-import { PrismaClient, type UserRole } from "@prisma/client";
+import type { UserRole } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { assertSafeTestDatabase } from "../test/testDb.js";
 import { createApp } from "../app.js";
 
 assertSafeTestDatabase();
 
-const prisma = new PrismaClient();
 
 async function withServer(fn: (baseUrl: string) => Promise<void>) {
   const app = createApp();

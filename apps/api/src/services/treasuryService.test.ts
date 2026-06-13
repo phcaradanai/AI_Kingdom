@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
 import { calculateCostDetailed, calculateCostUSD, getPricing } from "../pricing/providerPricing.js";
 import { getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview } from "./treasuryService.js";
 
-const prisma = new PrismaClient();
 
 async function withTestServer(fn: (baseUrl: string, kingToken: string) => Promise<void>) {
   const app = createApp();

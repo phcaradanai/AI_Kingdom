@@ -44,6 +44,23 @@ if (!dbName.includes("test") && !dbName.includes("ci")) {
   process.exit(1);
 }
 
+function withSafeTestConnectionLimits(databaseUrl) {
+  try {
+    const url = new URL(databaseUrl);
+    if ((url.protocol === "postgres:" || url.protocol === "postgresql:") && !url.searchParams.has("connection_limit")) {
+      url.searchParams.set("connection_limit", "1");
+    }
+    return url.toString();
+  } catch {
+    if (databaseUrl.includes("connection_limit=")) {
+      return databaseUrl;
+    }
+    return `${databaseUrl}${databaseUrl.includes("?") ? "&" : "?"}connection_limit=1`;
+  }
+}
+
+testDbUrl = withSafeTestConnectionLimits(testDbUrl);
+
 process.env.DATABASE_URL = testDbUrl;
 process.env.TEST_DATABASE_URL = testDbUrl;
 process.env.NODE_ENV = "test";

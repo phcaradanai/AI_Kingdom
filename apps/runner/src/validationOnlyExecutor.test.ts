@@ -21,10 +21,12 @@ function makeDeps(opts?: {
   exitCodeFor?: (command: string, args: string[]) => number;
   hasLint?: boolean;
   failPrepare?: boolean;
+  install?: { skipped?: boolean; success?: boolean; exitCode?: number; output?: string };
 }) {
   const calls: Call[] = [];
   const apiCalls: Call[] = [];
   const ranCommands: string[] = [];
+  const events: string[] = [];
 
   // Proxy records every API method invocation so we can assert that no
   // patch-artifact or branch-push style method is ever called.
@@ -40,17 +42,30 @@ function makeDeps(opts?: {
   const deps: ExecuteValidationOnlyDeps = {
     api,
     runCommand: async (command, args) => {
+      events.push(`run:${command} ${args.join(" ")}`);
       ranCommands.push(`${command} ${args.join(" ")}`);
       const exitCode = opts?.exitCodeFor ? opts.exitCodeFor(command, args) : 0;
       return { exitCode, output: `output of ${command}`, durationMs: 5 };
     },
     prepareWorkspace: async () => {
+      events.push("prepare");
       calls.push({ method: "prepareWorkspace", args: [] });
       if (opts?.failPrepare) throw new Error("no repo configured");
     },
+    installDependencies: opts?.install === undefined ? undefined : async () => {
+      events.push("install");
+      return {
+        skipped: opts.install?.skipped ?? false,
+        success: opts.install?.success ?? true,
+        displayCommand: "npm ci",
+        exitCode: opts.install?.exitCode ?? 0,
+        output: opts.install?.output ?? "installed",
+        durationMs: 7
+      };
+    },
     hasLintScript: () => opts?.hasLint ?? false
   };
-  return { deps, apiCalls, ranCommands };
+  return { deps, apiCalls, ranCommands, events };
 }
 
 test("VALIDATION_ONLY runs allowlisted validation commands only", async () => {
@@ -144,6 +159,45 @@ test("report submission includes validation result and commands run", async () =
 test("buildValidationCommands includes lint only when the script exists", () => {
   assert.ok(buildValidationCommands(true).some((c) => c.args[1] === "lint"));
   assert.ok(!buildValidationCommands(false).some((c) => c.args[1] === "lint"));
+});
+
+test("VALIDATION_ONLY installs dependencies before validation commands when enabled", async () => {
+  const { deps, events, ranCommands, apiCalls } = makeDeps({ install: { success: true } });
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events.slice(0, 3), ["prepare", "install", "run:git status"]);
+  assert.ok(ranCommands.includes("npm run typecheck"));
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as { commandsRun: string[] };
+  assert.equal(report.commandsRun[0], "npm ci");
+  assert.ok(report.commandsRun.includes("git status"));
+});
+
+test("VALIDATION_ONLY runs validation after install is skipped", async () => {
+  const { deps, events, ranCommands } = makeDeps({ install: { skipped: true } });
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events.slice(0, 3), ["prepare", "install", "run:git status"]);
+  assert.ok(ranCommands.includes("npm run build"));
+});
+
+test("VALIDATION_ONLY install failure reports clearly and does not run validation", async () => {
+  const { deps, events, ranCommands, apiCalls } = makeDeps({
+    install: { success: false, exitCode: 9, output: "npm error RUNNER_TOKEN=secret" }
+  });
+  deps.sanitize = (text) => text.replace(/RUNNER_TOKEN=\S+/g, "RUNNER_TOKEN=[REDACTED]");
+
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events, ["prepare", "install"]);
+  assert.deepEqual(ranCommands, []);
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
+    summary: string; errors: string[]; testResult: string; logsPreview: string; commandsRun: string[];
+  };
+  assert.match(report.summary, /Runner dependency installation failed/);
+  assert.equal(report.testResult, "NOT_RUN");
+  assert.deepEqual(report.commandsRun, ["npm ci"]);
+  assert.ok(report.errors.some((e) => e.includes("Runner dependency installation failed")));
+  assert.doesNotMatch(report.logsPreview, /RUNNER_TOKEN=secret/);
 });
 
 // ── M17E-2: context binding warnings ─────────────────────────────────────────────

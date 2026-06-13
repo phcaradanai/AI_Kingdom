@@ -6,11 +6,11 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import bcrypt from "bcryptjs";
-import { PrismaClient, type Project, type User, type UserRole, type WorkOrder } from "@prisma/client";
+import type { Project, User, UserRole, WorkOrder } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { createLocalDocumentRoot, scanLocalDocumentRoot } from "../services/localDocumentAccessService.js";
 
-const prisma = new PrismaClient();
 
 let server: ReturnType<ReturnType<typeof createApp>["listen"]>;
 let baseUrl: string;

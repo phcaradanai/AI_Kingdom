@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { CouncilSession, Task } from "@prisma/client";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { MockAIProvider } from "../ai/mockAIProvider.js";
 import { extractMemoryCandidates, findRelevantMemories, isDuplicate } from "./memoryService.js";
 
-const prisma = new PrismaClient();
 
 test("create, search, and delete memory", async () => {
   const user = await prisma.user.create({

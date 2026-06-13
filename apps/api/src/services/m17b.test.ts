@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net";
 import crypto from "node:crypto";
 import path from "node:path";
 import os from "node:os";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken } from "../middleware/auth.js";
 import { hashToken } from "../middleware/runnerAuth.js";
@@ -17,7 +17,6 @@ import { validateCommand } from "./commandValidatorService.js";
 import { redactSecrets } from "./secretRedactorService.js";
 import { checkPathSafety } from "./workspacePathService.js";
 
-const prisma = new PrismaClient();
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

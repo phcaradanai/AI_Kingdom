@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
 import { formatKingdomContext, getCharter, getVision, seedKingdomDocuments } from "./charterService.js";
 
-const prisma = new PrismaClient();
 
 async function makeUser(suffix: string, role: "KING" | "SCRIBE" = "KING") {
   const user = await prisma.user.create({

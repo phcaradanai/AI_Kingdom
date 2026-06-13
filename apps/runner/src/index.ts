@@ -12,8 +12,8 @@
 
 import dotenv from "dotenv";
 import path from "node:path";
-import os from "node:os";
 import fs from "node:fs";
+import os from "node:os";
 import { ApiClient, type AutomationJob } from "./apiClient.js";
 import { runCommand } from "./sandbox.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
@@ -21,6 +21,8 @@ import { validateCommand } from "./commandValidator.js";
 import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
 import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
+import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
+import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDependencies } from "./dependencyInstaller.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -29,7 +31,7 @@ const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:4000";
 const RUNNER_TOKEN = process.env.RUNNER_TOKEN;
 const HEARTBEAT_INTERVAL_MS = parseInt(process.env.HEARTBEAT_INTERVAL_MS ?? "15000", 10);
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_MS ?? "5000", 10);
-const WORKSPACE_BASE = process.env.WORKSPACE_BASE ?? path.join(os.tmpdir(), "ai-kingdom-runner");
+const WORKSPACE_BASE = getRunnerWorkspaceBase();
 
 // How long to wait for King approval before giving up on branch push (ms)
 const APPROVAL_WAIT_MS = parseInt(process.env.APPROVAL_WAIT_MS ?? "300000", 10); // 5 minutes
@@ -123,7 +125,7 @@ async function executeJob(job: AutomationJob) {
     }
   }
 
-  const workspaceDir = path.join(WORKSPACE_BASE, job.id);
+  const workspaceDir = getRunnerJobWorkspaceDir(job.id, WORKSPACE_BASE);
   const commandsRun: string[] = [];
   const testsRun: string[] = [];
   const errors: string[] = [];
@@ -141,7 +143,59 @@ async function executeJob(job: AutomationJob) {
     log(`[Job ${job.id}] Starting execution in ${workspaceDir}`);
     log(`[Job ${job.id}] Mode: ${job.mode}`);
 
-    fs.mkdirSync(workspaceDir, { recursive: true });
+    try {
+      const prepared = prepareRunnerWorkspace({ jobId: job.id, workspaceBase: WORKSPACE_BASE });
+      log(`[Job ${job.id}] Workspace prepared: ${prepared.workspaceDir}`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      log(`[Job ${job.id}] ${errMsg}`);
+      const logsPreview = sanitizeLogOutput(logLines.slice(-50).join("\n"));
+      await api.submitReport(job.id, {
+        summary: `Sandbox run for "${job.workOrder.title}" could not start: workspace preparation failed.`,
+        filesChanged: [],
+        commandsRun: [],
+        testsRun: [],
+        testResult: "NOT_RUN",
+        errors: [errMsg],
+        decisionsMade: [],
+        remainingWork: ["Configure RUNNER_REPO_PATH to a repository root with package.json and retry the job."],
+        nextRecommendedAction: "Fix runner workspace configuration",
+        logsPreview,
+        rawOutput: logsPreview,
+        contextUsed: buildContextUsed(job)
+      });
+      await api.updateStatus(job.id, "FAILED", { logsPreview }).catch(() => undefined);
+      return;
+    }
+
+    const installResult = await installDependenciesForJob(job, workspaceDir, log);
+    if (installResult.skipped) {
+      log(`[Job ${job.id}] Dependency installation skipped.`);
+    } else {
+      commandsRun.push(installResult.displayCommand);
+      if (!installResult.success) {
+        errors.push(DEPENDENCY_INSTALL_FAILURE);
+        const logsPreview = sanitizeLogOutput(
+          [...logLines, `${DEPENDENCY_INSTALL_FAILURE}\n${installResult.output}`].slice(-50).join("\n")
+        );
+        await api.submitReport(job.id, {
+          summary: `Sandbox run for "${job.workOrder.title}" could not continue: ${DEPENDENCY_INSTALL_FAILURE}.`,
+          filesChanged: [],
+          commandsRun,
+          testsRun,
+          testResult: "NOT_RUN",
+          errors: [DEPENDENCY_INSTALL_FAILURE, `Exit ${installResult.exitCode}: ${installResult.displayCommand}`],
+          decisionsMade: [],
+          remainingWork: ["Review dependency installation output and retry the job after the sandbox can install dependencies."],
+          nextRecommendedAction: "Fix runner dependency installation",
+          logsPreview,
+          rawOutput: logsPreview,
+          contextUsed: buildContextUsed(job)
+        });
+        log(`[Job ${job.id}] ${DEPENDENCY_INSTALL_FAILURE}`);
+        return;
+      }
+    }
 
     if (job.project) {
       log(`[Job ${job.id}] Project: ${job.project.name}`);
@@ -301,10 +355,8 @@ async function executeJob(job: AutomationJob) {
       // Best effort
     }
   } finally {
-    try {
-      fs.rmSync(workspaceDir, { recursive: true, force: true });
-    } catch {
-      // Best effort
+    if (fs.existsSync(workspaceDir)) {
+      console.log(`[Job ${job.id}] Workspace retained: ${workspaceDir}`);
     }
   }
 }
@@ -315,7 +367,7 @@ async function executeJob(job: AutomationJob) {
  * runs git add/commit/push.
  */
 async function executeValidationJob(job: AutomationJob) {
-  const workspaceDir = path.join(WORKSPACE_BASE, job.id);
+  const workspaceDir = getRunnerJobWorkspaceDir(job.id, WORKSPACE_BASE);
   try {
     await executeValidationOnlyJob(job, {
       api,
@@ -324,10 +376,11 @@ async function executeValidationJob(job: AutomationJob) {
         return { exitCode: result.exitCode, output: result.output, durationMs: result.durationMs };
       },
       prepareWorkspace: async () => {
-        fs.mkdirSync(workspaceDir, { recursive: true });
-        const repoPath = process.env.RUNNER_REPO_PATH;
-        if (!repoPath) throw new Error("RUNNER_REPO_PATH is not configured; cannot copy workspace for validation.");
-        fs.cpSync(repoPath, workspaceDir, { recursive: true });
+        const prepared = prepareRunnerWorkspace({ jobId: job.id, workspaceBase: WORKSPACE_BASE });
+        console.log(`[Job ${job.id}] Workspace prepared: ${prepared.workspaceDir}`);
+      },
+      installDependencies: async () => {
+        return installDependenciesForJob(job, workspaceDir, (msg) => console.log(msg));
       },
       hasLintScript: () => {
         try {
@@ -349,12 +402,30 @@ async function executeValidationJob(job: AutomationJob) {
       // Best effort
     }
   } finally {
-    try {
-      fs.rmSync(workspaceDir, { recursive: true, force: true });
-    } catch {
-      // Best effort
+    if (fs.existsSync(workspaceDir)) {
+      console.log(`[Job ${job.id}] Workspace retained: ${workspaceDir}`);
     }
   }
+}
+
+async function installDependenciesForJob(
+  job: AutomationJob,
+  workspaceDir: string,
+  log: (msg: string) => void
+) {
+  try {
+    const config = getDependencyInstallConfig(job.mode);
+    if (config.enabled) {
+      log(`[Job ${job.id}] Installing dependencies with ${config.displayCommand}`);
+    }
+  } catch {
+    // installRunnerDependencies converts invalid config into a reportable failure.
+  }
+  const result = await installRunnerDependencies({ workspaceRoot: workspaceDir, mode: job.mode });
+  if (!result.skipped && !result.success) {
+    log(`[Job ${job.id}] ${DEPENDENCY_INSTALL_FAILURE}: exit ${result.exitCode}`);
+  }
+  return result;
 }
 
 async function attemptBranchPush(

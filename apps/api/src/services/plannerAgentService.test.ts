@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createDraftWorkOrders, parsePlannerResponse, planFromSession, runPlannerAgent } from "./plannerAgentService.js";
 import type { PlannerDraft } from "./plannerAgentService.js";
 
-const prisma = new PrismaClient();
 
 const suffix = () => `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 

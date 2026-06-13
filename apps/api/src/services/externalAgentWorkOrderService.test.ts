@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
 import {
@@ -13,7 +13,6 @@ import {
   generateWorkOrderFromTask
 } from "./externalAgentWorkOrderService.js";
 
-const prisma = new PrismaClient();
 
 async function createUser(role: "KING" | "CROWN_PRINCE" | "MINISTER" | "SCRIBE" = "KING") {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;

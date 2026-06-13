@@ -29,7 +29,7 @@ import assert from "node:assert/strict";
 import { describe, it, before, after } from "node:test";
 import type { AddressInfo } from "node:net";
 import crypto from "node:crypto";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken } from "../middleware/auth.js";
 import { hashToken } from "../middleware/runnerAuth.js";
@@ -39,7 +39,6 @@ import { isBlockedPath, detectBlockedPaths } from "./blockedPathService.js";
 import { scoreRisk } from "./patchRiskService.js";
 import { createPatchArtifact } from "./patchArtifactService.js";
 
-const prisma = new PrismaClient();
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 

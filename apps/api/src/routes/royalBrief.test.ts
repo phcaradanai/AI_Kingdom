@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import { after, before, test } from "node:test";
 import bcrypt from "bcryptjs";
-import { PrismaClient, type User, type UserRole } from "@prisma/client";
+import type { User, UserRole } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 
-const prisma = new PrismaClient();
 
 let server: ReturnType<ReturnType<typeof createApp>["listen"]>;
 let baseUrl: string;

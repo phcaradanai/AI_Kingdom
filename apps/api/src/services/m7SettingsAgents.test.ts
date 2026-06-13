@@ -1,12 +1,11 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
 import { processTaskWithGrandVizier } from "./grandVizierOrchestrator.js";
 
-const prisma = new PrismaClient();
 
 async function withTestServer(fn: (baseUrl: string, token: string) => Promise<void>) {
   const app = createApp();

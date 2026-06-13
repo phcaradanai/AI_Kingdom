@@ -1,11 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "../db/prisma.js";
 import { getEnvProviderConfigs, listAIProviders, type AIProviderConfig } from "./aiProviderRegistry.js";
 import { LOCAL_SANDBOX_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_NAME, OPENROUTER_FREE_PROVIDER_ID, OPENROUTER_FREE_PROVIDER_NAME } from "./aiProviderRegistry.js";
 import { orderByPolicy, selectAIProviderRoute } from "./aiProviderRouter.js";
 
-const prisma = new PrismaClient();
 
 function provider(id: string, costTier: AIProviderConfig["costTier"], priority: number): AIProviderConfig {
   return {
