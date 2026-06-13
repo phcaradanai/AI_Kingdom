@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeLogOutput } from "./secretRedactor.js";
+import { buildValidationChildEnv } from "./validationEnv.js";
 
 export const PREVALIDATION_FAILURE_PREFIX = "Runner pre-validation failed";
 
@@ -161,28 +162,6 @@ function assertWorkspaceRoot(workspaceRoot: string): void {
   }
 }
 
-function sanitizeChildEnv(sourceEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const blocked = new Set([
-    "RUNNER_TOKEN",
-    "DATABASE_URL",
-    "TEST_DATABASE_URL",
-    "JWT_SECRET",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GEMINI_API_KEY",
-    "OPENAI_COMPATIBLE_API_KEY",
-    "OPENAI_COMPATIBLE_BASE_URL"
-  ]);
-
-  const safe: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(sourceEnv)) {
-    if (!blocked.has(key) && value !== undefined) safe[key] = value;
-  }
-  return safe;
-}
-
 function spawnPreValidationCommand(
   command: PreValidationCommand,
   workspaceRoot: string,
@@ -198,7 +177,7 @@ function spawnPreValidationCommand(
 
     const child = spawn(command.command, command.args, {
       cwd,
-      env: sanitizeChildEnv(env),
+      env: buildValidationChildEnv(env).env,
       shell: false
     });
 

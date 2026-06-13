@@ -24,12 +24,13 @@ function makeWorkspace(): string {
   return workspace;
 }
 
-function makeFakeNpm(opts: { exitCode?: number; output?: string; markerFile: string; argsFile?: string }): string {
+function makeFakeNpm(opts: { exitCode?: number; output?: string; markerFile: string; argsFile?: string; envFile?: string }): string {
   const binDir = makeTempDir("runner-prevalidation-bin-");
   const script = [
     "#!/bin/sh",
     `echo "$PWD" > ${JSON.stringify(opts.markerFile)}`,
     opts.argsFile ? `printf '%s\\n' "$@" > ${JSON.stringify(opts.argsFile)}` : "",
+    opts.envFile ? `printf 'TEST_DATABASE_URL=%s\\nDATABASE_URL=%s\\nRUNNER_TOKEN=%s\\n' "$TEST_DATABASE_URL" "$DATABASE_URL" "$RUNNER_TOKEN" > ${JSON.stringify(opts.envFile)}` : "",
     `echo ${JSON.stringify(opts.output ?? "generated")}`,
     `exit ${opts.exitCode ?? 0}`
   ].filter(Boolean).join("\n");
@@ -94,6 +95,34 @@ test("pre-validation failure returns clear sanitized output", async () => {
     assert.match(result.steps[0]?.output ?? "", /REDACTED/);
   } finally {
     delete process.env.RUNNER_TOKEN;
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("pre-validation receives allowlisted validation database env", async () => {
+  const workspace = makeWorkspace();
+  const markerFile = path.join(makeTempDir("runner-prevalidation-env-marker-"), "cwd.txt");
+  const envFile = path.join(path.dirname(markerFile), "env.txt");
+  const binDir = makeFakeNpm({ markerFile, envFile });
+  try {
+    const result = await runPreValidationCommands({
+      workspaceRoot: workspace,
+      env: {
+        PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        DATABASE_URL: "postgresql://user:pass@localhost:5432/dev",
+        RUNNER_TOKEN: "plain-runner-token",
+        RUNNER_PREVALIDATION_TIMEOUT_MS: "5000"
+      }
+    });
+
+    assert.equal(result.success, true, result.steps[0]?.output);
+    const forwarded = fs.readFileSync(envFile, "utf8");
+    assert.match(forwarded, /TEST_DATABASE_URL=\n/);
+    assert.match(forwarded, /DATABASE_URL=postgresql:\/\/user:pass@localhost:5432\/dev/);
+    assert.match(forwarded, /RUNNER_TOKEN=\n/);
+  } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
     fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
     fs.rmSync(binDir, { recursive: true, force: true });

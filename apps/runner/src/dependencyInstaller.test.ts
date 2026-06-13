@@ -24,14 +24,15 @@ function makeWorkspace(): string {
   return workspace;
 }
 
-function makeFakeNpm(opts: { exitCode?: number; output?: string; markerFile: string }): string {
+function makeFakeNpm(opts: { exitCode?: number; output?: string; markerFile: string; envFile?: string }): string {
   const binDir = makeTempDir("runner-install-bin-");
   const script = [
     "#!/bin/sh",
     `echo "$PWD" > ${JSON.stringify(opts.markerFile)}`,
+    opts.envFile ? `printf 'TEST_DATABASE_URL=%s\\nDATABASE_URL=%s\\nRUNNER_TOKEN=%s\\n' "$TEST_DATABASE_URL" "$DATABASE_URL" "$RUNNER_TOKEN" > ${JSON.stringify(opts.envFile)}` : "",
     `echo ${JSON.stringify(opts.output ?? "fake npm ok")}`,
     `exit ${opts.exitCode ?? 0}`
-  ].join("\n");
+  ].filter(Boolean).join("\n");
   const npmPath = path.join(binDir, "npm");
   fs.writeFileSync(npmPath, script, { mode: 0o755 });
   return binDir;
@@ -83,6 +84,34 @@ test("dependency install command runs with cwd equal to workspace root", async (
       fs.realpathSync(fs.readFileSync(markerFile, "utf8").trim()),
       fs.realpathSync(workspace)
     );
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("dependency install receives allowlisted validation database env", async () => {
+  const workspace = makeWorkspace();
+  const markerFile = path.join(makeTempDir("runner-install-env-marker-"), "cwd.txt");
+  const envFile = path.join(path.dirname(markerFile), "env.txt");
+  const binDir = makeFakeNpm({ markerFile, envFile });
+  try {
+    const result = await installRunnerDependencies({
+      workspaceRoot: workspace,
+      mode: "SANDBOX_PATCH",
+      env: {
+        PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
+        TEST_DATABASE_URL: "postgresql://user:pass@localhost:5432/test",
+        RUNNER_TOKEN: "plain-runner-token",
+        RUNNER_INSTALL_TIMEOUT_MS: "5000"
+      }
+    });
+
+    assert.equal(result.success, true, result.output);
+    const forwarded = fs.readFileSync(envFile, "utf8");
+    assert.match(forwarded, /TEST_DATABASE_URL=postgresql:\/\/user:pass@localhost:5432\/test/);
+    assert.match(forwarded, /RUNNER_TOKEN=\n/);
   } finally {
     fs.rmSync(workspace, { recursive: true, force: true });
     fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });

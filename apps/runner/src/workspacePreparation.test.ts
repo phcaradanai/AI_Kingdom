@@ -90,6 +90,8 @@ test("workspace preparation does not copy excluded paths", () => {
     }
     writeFile(path.join(sourceRepo, ".env"), "RUNNER_TOKEN=plain-token");
     writeFile(path.join(sourceRepo, ".env.local"), "OPENAI_API_KEY=secret");
+    writeFile(path.join(sourceRepo, "apps", "api", ".env"), "DATABASE_URL=postgresql://user:pass@localhost/db");
+    writeFile(path.join(sourceRepo, "apps", "web", ".env.test"), "VITE_SECRET=secret");
     writeFile(path.join(sourceRepo, "src", "index.ts"), "export {};\n");
 
     const prepared = prepareRunnerWorkspace({
@@ -103,6 +105,8 @@ test("workspace preparation does not copy excluded paths", () => {
     }
     assert.equal(fs.existsSync(path.join(prepared.workspaceDir, ".env")), false);
     assert.equal(fs.existsSync(path.join(prepared.workspaceDir, ".env.local")), false);
+    assert.equal(fs.existsSync(path.join(prepared.workspaceDir, "apps", "api", ".env")), false);
+    assert.equal(fs.existsSync(path.join(prepared.workspaceDir, "apps", "web", ".env.test")), false);
     assert.ok(fs.existsSync(path.join(prepared.workspaceDir, "src", "index.ts")));
   } finally {
     fs.rmSync(sourceRepo, { recursive: true, force: true });

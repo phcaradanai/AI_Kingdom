@@ -24,6 +24,7 @@ import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBind
 import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
 import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDependencies } from "./dependencyInstaller.js";
 import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationCommands } from "./preValidationRunner.js";
+import { buildValidationChildEnv, formatForwardedValidationEnvNames, validateValidationDatabaseEnv } from "./validationEnv.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -168,6 +169,29 @@ async function executeJob(job: AutomationJob) {
       await api.updateStatus(job.id, "FAILED", { logsPreview }).catch(() => undefined);
       return;
     }
+
+    const envCheck = validateValidationDatabaseEnv();
+    if (!envCheck.ok) {
+      log(`[Job ${job.id}] ${envCheck.message}`);
+      const logsPreview = sanitizeLogOutput(logLines.slice(-50).join("\n"));
+      await api.submitReport(job.id, {
+        summary: `Sandbox run for "${job.workOrder.title}" could not start: ${envCheck.message}.`,
+        filesChanged: [],
+        commandsRun: [],
+        testsRun: [],
+        testResult: "NOT_RUN",
+        errors: [envCheck.message],
+        decisionsMade: [],
+        remainingWork: ["Start the runner with TEST_DATABASE_URL or DATABASE_URL available in its process environment."],
+        nextRecommendedAction: "Fix runner validation environment",
+        logsPreview,
+        rawOutput: logsPreview,
+        contextUsed: buildContextUsed(job)
+      });
+      await api.updateStatus(job.id, "FAILED", { logsPreview }).catch(() => undefined);
+      return;
+    }
+    log(`[Job ${job.id}] ${formatForwardedValidationEnvNames()}`);
 
     const installResult = await installDependenciesForJob(job, workspaceDir, log);
     if (installResult.skipped) {
@@ -419,6 +443,8 @@ async function executeValidationJob(job: AutomationJob) {
         const prepared = prepareRunnerWorkspace({ jobId: job.id, workspaceBase: WORKSPACE_BASE });
         console.log(`[Job ${job.id}] Workspace prepared: ${prepared.workspaceDir}`);
       },
+      validateEnvironment: () => validateValidationDatabaseEnv(),
+      getForwardedEnvNames: () => buildValidationChildEnv().forwardedNames,
       installDependencies: async () => {
         return installDependenciesForJob(job, workspaceDir, (msg) => console.log(msg));
       },

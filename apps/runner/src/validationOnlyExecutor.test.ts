@@ -21,6 +21,8 @@ function makeDeps(opts?: {
   exitCodeFor?: (command: string, args: string[]) => number;
   hasLint?: boolean;
   failPrepare?: boolean;
+  envCheck?: { ok: true } | { ok: false; message: string };
+  forwardedNames?: string[];
   install?: { skipped?: boolean; success?: boolean; exitCode?: number; output?: string };
   preValidation?: { success?: boolean; exitCode?: number; output?: string; cwd?: string };
 }) {
@@ -53,6 +55,11 @@ function makeDeps(opts?: {
       calls.push({ method: "prepareWorkspace", args: [] });
       if (opts?.failPrepare) throw new Error("no repo configured");
     },
+    validateEnvironment: opts?.envCheck === undefined ? undefined : () => {
+      events.push("env");
+      return opts.envCheck!;
+    },
+    getForwardedEnvNames: opts?.forwardedNames === undefined ? undefined : () => opts.forwardedNames!,
     installDependencies: opts?.install === undefined ? undefined : async () => {
       events.push("install");
       return {
@@ -144,6 +151,39 @@ test("VALIDATION_ONLY does not create a patch artifact or push a branch", async 
   const report = apiCalls.find((c) => c.method === "submitReport");
   const reportBody = report!.args[1] as { filesChanged: string[] };
   assert.deepEqual(reportBody.filesChanged, [], "validation must not change files");
+});
+
+test("VALIDATION_ONLY fails clearly when validation database env is missing", async () => {
+  const { deps, events, ranCommands, apiCalls } = makeDeps({
+    envCheck: { ok: false, message: "Runner validation env missing: TEST_DATABASE_URL or DATABASE_URL" },
+    install: { success: true }
+  });
+
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events, ["prepare", "env"]);
+  assert.deepEqual(ranCommands, []);
+  const report = apiCalls.find((c) => c.method === "submitReport");
+  assert.ok(report);
+  const reportBody = report!.args[1] as { summary: string; errors: string[]; rawOutput: string };
+  assert.match(reportBody.summary, /Runner validation env missing: TEST_DATABASE_URL or DATABASE_URL/);
+  assert.ok(reportBody.errors.includes("Runner validation env missing: TEST_DATABASE_URL or DATABASE_URL"));
+  assert.match(reportBody.rawOutput, /Runner validation env missing/);
+});
+
+test("VALIDATION_ONLY logs forwarded env names without values", async () => {
+  const logs: string[] = [];
+  const { deps, events } = makeDeps({
+    envCheck: { ok: true },
+    forwardedNames: ["TEST_DATABASE_URL", "NODE_ENV"]
+  });
+  deps.log = (msg) => logs.push(msg);
+
+  await executeValidationOnlyJob(job, deps);
+
+  assert.deepEqual(events.slice(0, 2), ["prepare", "env"]);
+  assert.ok(logs.some((line) => line.includes("Forwarded validation env: TEST_DATABASE_URL, NODE_ENV")));
+  assert.ok(!logs.some((line) => line.includes("postgresql://")));
 });
 
 test("report submission includes validation result and commands run", async () => {

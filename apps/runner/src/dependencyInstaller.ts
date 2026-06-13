@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { sanitizeLogOutput } from "./secretRedactor.js";
+import { buildValidationChildEnv } from "./validationEnv.js";
 
 export const DEPENDENCY_INSTALL_FAILURE = "Runner dependency installation failed";
 
@@ -162,28 +163,6 @@ function assertWorkspaceRoot(workspaceRoot: string): void {
   }
 }
 
-function sanitizeChildEnv(sourceEnv: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
-  const blocked = new Set([
-    "RUNNER_TOKEN",
-    "DATABASE_URL",
-    "TEST_DATABASE_URL",
-    "JWT_SECRET",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GEMINI_API_KEY",
-    "OPENAI_COMPATIBLE_API_KEY",
-    "OPENAI_COMPATIBLE_BASE_URL"
-  ]);
-
-  const safe: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(sourceEnv)) {
-    if (!blocked.has(key) && value !== undefined) safe[key] = value;
-  }
-  return safe;
-}
-
 function spawnInstall(
   config: DependencyInstallConfig,
   workspaceRoot: string,
@@ -196,7 +175,7 @@ function spawnInstall(
 
     const child = spawn(config.command, config.args, {
       cwd: path.resolve(workspaceRoot),
-      env: sanitizeChildEnv(env),
+      env: buildValidationChildEnv(env).env,
       shell: false
     });
 

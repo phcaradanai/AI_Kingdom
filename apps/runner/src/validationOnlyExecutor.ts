@@ -117,6 +117,8 @@ export interface ExecuteValidationOnlyDeps {
   runCommand: (command: string, args: string[]) => Promise<ValidationCommandResult>;
   /** Copies the repository into the temporary workspace. Must not touch the source repo. */
   prepareWorkspace: () => Promise<void>;
+  validateEnvironment?: () => { ok: true } | { ok: false; message: string };
+  getForwardedEnvNames?: () => string[];
   /** Installs dependencies in the prepared workspace before validation commands run. */
   installDependencies?: () => Promise<ValidationDependencyInstallResult>;
   /** Runs generated-code setup after dependencies are installed and before validation. */
@@ -184,6 +186,35 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
     await deps.api.updateStatus(job.id, "FAILED", { logsPreview: sanitize(msg).slice(0, 2000) });
     return;
   }
+
+  const envCheck = deps.validateEnvironment?.();
+  if (envCheck && !envCheck.ok) {
+    errors.push(envCheck.message);
+    const logsPreview = sanitize(envCheck.message).slice(0, 2000);
+    await deps.api.submitReport(job.id, {
+      summary: `Validation-only run for "${job.workOrder.title}" could not start: ${envCheck.message}.`,
+      filesChanged: [],
+      commandsRun: [],
+      testsRun: [],
+      testResult: "NOT_RUN",
+      errors,
+      decisionsMade: [],
+      remainingWork: ["Start the runner with TEST_DATABASE_URL or DATABASE_URL available in its process environment."],
+      nextRecommendedAction: "Fix runner validation environment",
+      rawOutput: logsPreview,
+      logsPreview,
+      contextUsed: {
+        localDocumentSnapshotId: job.localDocumentSnapshotId ?? null,
+        repositorySnapshotId: job.repositorySnapshotId ?? null,
+        contextValidationStatus: job.contextValidationStatus ?? "NOT_REQUIRED"
+      }
+    });
+    await deps.api.updateStatus(job.id, "FAILED", { logsPreview });
+    return;
+  }
+
+  const forwardedNames = deps.getForwardedEnvNames?.() ?? [];
+  log(`[Job ${job.id}] Forwarded validation env: ${forwardedNames.length > 0 ? forwardedNames.join(", ") : "(none)"}`);
 
   if (deps.installDependencies) {
     const installResult = await deps.installDependencies();

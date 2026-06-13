@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import path from "node:path";
 import { validateCommand } from "./commandValidator.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
+import { buildValidationChildEnv } from "./validationEnv.js";
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
 
@@ -31,6 +32,7 @@ export interface RunCommandOptions {
   cwd?: string;
   jobAllowedCommands?: string[];
   timeoutMs?: number;
+  env?: NodeJS.ProcessEnv;
 }
 
 function assertCwdInWorkspace(workspaceRoot: string, cwd: string): void {
@@ -40,31 +42,6 @@ function assertCwdInWorkspace(workspaceRoot: string, cwd: string): void {
   if (resolved !== root && !resolved.startsWith(rootSep)) {
     throw new Error(`CWD escapes workspace: ${resolved} is outside ${root}`);
   }
-}
-
-/** Strip secrets from process environment before passing to child */
-function sanitizeEnv(): NodeJS.ProcessEnv {
-  const blocked = new Set([
-    "RUNNER_TOKEN",
-    "DATABASE_URL",
-    "TEST_DATABASE_URL",
-    "JWT_SECRET",
-    "OPENAI_API_KEY",
-    "OPENROUTER_API_KEY",
-    "DEEPSEEK_API_KEY",
-    "ANTHROPIC_API_KEY",
-    "GEMINI_API_KEY",
-    "OPENAI_COMPATIBLE_API_KEY",
-    "OPENAI_COMPATIBLE_BASE_URL"
-  ]);
-
-  const safe: NodeJS.ProcessEnv = {};
-  for (const [key, value] of Object.entries(process.env)) {
-    if (!blocked.has(key) && value !== undefined) {
-      safe[key] = value;
-    }
-  }
-  return safe;
 }
 
 export async function runCommand(
@@ -100,7 +77,7 @@ export async function runCommand(
 
     const child = spawn(command, args, {
       cwd: path.resolve(effectiveCwd),
-      env: sanitizeEnv(),
+      env: buildValidationChildEnv(opts.env).env,
       shell: false,           // NEVER shell: true
       timeout
     });
