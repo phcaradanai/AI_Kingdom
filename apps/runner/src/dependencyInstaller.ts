@@ -3,11 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { buildValidationChildEnv } from "./validationEnv.js";
+import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 
 export const DEPENDENCY_INSTALL_FAILURE = "Runner dependency installation failed";
 
 const DEFAULT_INSTALL_COMMAND = "npm ci";
-const DEFAULT_INSTALL_TIMEOUT_MS = 120_000;
 
 const SHELL_META_PATTERN = /[|&;`$<>]/;
 
@@ -22,11 +22,12 @@ export interface DependencyInstallConfig {
 export interface DependencyInstallResult extends DependencyInstallConfig {
   skipped: boolean;
   success: boolean;
-  exitCode: number;
+  exitCode: number | null;
   stdout: string;
   stderr: string;
   output: string;
   durationMs: number;
+  timedOut: boolean;
 }
 
 export function getDependencyInstallConfig(
@@ -39,10 +40,7 @@ export function getDependencyInstallConfig(
     : explicitEnabled !== "false";
 
   const rawCommand = (env.RUNNER_INSTALL_COMMAND?.trim() || DEFAULT_INSTALL_COMMAND).replace(/\s+/g, " ");
-  const parsedTimeout = Number.parseInt(env.RUNNER_INSTALL_TIMEOUT_MS ?? "", 10);
-  const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0
-    ? parsedTimeout
-    : DEFAULT_INSTALL_TIMEOUT_MS;
+  const timeoutMs = getCommandTimeoutMs(env);
 
   if (!enabled) {
     return { enabled, command: "", args: [], displayCommand: safeDisplayCommand(rawCommand), timeoutMs };
@@ -71,14 +69,15 @@ export async function installRunnerDependencies(opts: {
       command: "",
       args: [],
       displayCommand: safeDisplayCommand(opts.env?.RUNNER_INSTALL_COMMAND?.trim() || DEFAULT_INSTALL_COMMAND),
-      timeoutMs: DEFAULT_INSTALL_TIMEOUT_MS,
+      timeoutMs: getCommandTimeoutMs(opts.env),
       skipped: false,
       success: false,
       exitCode: -1,
       stdout: "",
       stderr: output,
       output,
-      durationMs: 0
+      durationMs: 0,
+      timedOut: false
     };
   }
   if (!config.enabled) {
@@ -90,7 +89,8 @@ export async function installRunnerDependencies(opts: {
       stdout: "",
       stderr: "",
       output: "Dependency installation skipped by RUNNER_INSTALL_DEPS=false",
-      durationMs: 0
+      durationMs: 0,
+      timedOut: false
     };
   }
 
@@ -106,7 +106,8 @@ export async function installRunnerDependencies(opts: {
       stdout: "",
       stderr: output,
       output,
-      durationMs: 0
+      durationMs: 0,
+      timedOut: false
     };
   }
 
@@ -167,7 +168,7 @@ function spawnInstall(
   config: DependencyInstallConfig,
   workspaceRoot: string,
   env: NodeJS.ProcessEnv = process.env
-): Promise<Pick<DependencyInstallResult, "exitCode" | "stdout" | "stderr" | "output">> {
+): Promise<Pick<DependencyInstallResult, "exitCode" | "stdout" | "stderr" | "output" | "timedOut">> {
   return new Promise((resolve) => {
     let stdout = "";
     let stderr = "";
@@ -190,13 +191,14 @@ function spawnInstall(
     child.on("close", (code) => {
       clearTimeout(timer);
       const rawOutput = timedOut
-        ? `[TIMEOUT after ${config.timeoutMs}ms]\n${stdout}\n${stderr}`
+        ? `[${formatTimeoutMessage(config.timeoutMs)}]\n${stdout}\n${stderr}`
         : `${stdout}\n${stderr}`;
       resolve({
-        exitCode: timedOut ? -2 : (code ?? -1),
+        exitCode: timedOut ? null : (code ?? -1),
         stdout: sanitizeLogOutput(stdout),
         stderr: sanitizeLogOutput(stderr),
-        output: sanitizeLogOutput(rawOutput)
+        output: sanitizeLogOutput(rawOutput),
+        timedOut
       });
     });
 
@@ -206,7 +208,8 @@ function spawnInstall(
         exitCode: -1,
         stdout: "",
         stderr: sanitizeLogOutput(err.message),
-        output: sanitizeLogOutput(err.message)
+        output: sanitizeLogOutput(err.message),
+        timedOut: false
       });
     });
   });

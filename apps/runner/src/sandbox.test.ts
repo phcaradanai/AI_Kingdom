@@ -118,6 +118,46 @@ test("root npm run test is no longer an allowlisted validation command", async (
   }
 });
 
+test("a command that exceeds RUNNER_COMMAND_TIMEOUT_MS is marked timed out with exitCode null", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-sandbox-bin-");
+  const npmPath = path.join(binDir, "npm");
+  fs.writeFileSync(npmPath, "#!/bin/sh\nsleep 5\n", { mode: 0o755 });
+  try {
+    const result = await runCommand("npm", ["run", "build"], {
+      workspaceRoot: workspace,
+      timeoutMs: 50,
+      env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` }
+    });
+
+    assert.equal(result.exitCode, null);
+    assert.equal(result.timedOut, true);
+    assert.match(result.output, /RUNNER_COMMAND_TIMEOUT_MS/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("a command that does not time out reports timedOut false", async () => {
+  const workspace = makeWorkspace();
+  const markerFile = path.join(makeTempDir("runner-sandbox-marker-"), "env.txt");
+  const binDir = makeFakeNpm(markerFile);
+  try {
+    const result = await runCommand("npm", ["run", "build"], {
+      workspaceRoot: workspace,
+      env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` }
+    });
+
+    assert.equal(result.timedOut, false);
+    assert.equal(result.exitCode, 0);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
 test("validation env values are redacted from command output", async () => {
   const workspace = makeWorkspace();
   const markerFile = path.join(makeTempDir("runner-sandbox-marker-"), "env.txt");

@@ -25,6 +25,7 @@ import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspac
 import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDependencies } from "./dependencyInstaller.js";
 import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationCommands } from "./preValidationRunner.js";
 import { buildValidationChildEnv, formatForwardedValidationEnvNames, validateValidationDatabaseEnv } from "./validationEnv.js";
+import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -365,11 +366,15 @@ async function executeJob(job: AutomationJob) {
       if (testResult === "NOT_RUN") testResult = vr.success ? "PASSED" : "FAILED";
       else if (!vr.success) testResult = testResult === "PASSED" ? "PARTIAL" : "FAILED";
       if (!vr.success) {
-        errors.push(vr.stderr.trim()
-          ? `Exit ${vr.exitCode}: ${vr.command}\nSTDERR:\n${vr.stderr.trim()}`
-          : `Exit ${vr.exitCode}: ${vr.command}`);
+        if (vr.timedOut) {
+          errors.push(`Timed out: ${vr.command}\n${formatTimeoutMessage(getCommandTimeoutMs())}`);
+        } else {
+          errors.push(vr.stderr.trim()
+            ? `Exit ${vr.exitCode}: ${vr.command}\nSTDERR:\n${vr.stderr.trim()}`
+            : `Exit ${vr.exitCode}: ${vr.command}`);
+        }
       }
-      logLines.push(`$ ${vr.command}\nCWD: ${vr.cwd}\nSTDOUT:\n${vr.stdout}\nSTDERR:\n${vr.stderr}`);
+      logLines.push(`$ ${vr.command}\nCWD: ${vr.cwd}\nTIMED_OUT: ${vr.timedOut}\nSTDOUT:\n${vr.stdout}\nSTDERR:\n${vr.stderr}`);
     }
 
     // Submit patch artifact
@@ -449,7 +454,8 @@ async function executeValidationJob(job: AutomationJob) {
           stderr: result.stderr,
           output: result.output,
           durationMs: result.durationMs,
-          cwd: result.cwd
+          cwd: result.cwd,
+          timedOut: result.timedOut
         };
       },
       prepareWorkspace: async () => {

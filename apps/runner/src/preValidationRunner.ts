@@ -3,11 +3,11 @@ import fs from "node:fs";
 import path from "node:path";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { buildValidationChildEnv } from "./validationEnv.js";
+import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 
 export const PREVALIDATION_FAILURE_PREFIX = "Runner pre-validation failed";
 
 const DEFAULT_PREVALIDATION_COMMANDS = ["npm run db:generate"];
-const DEFAULT_PREVALIDATION_TIMEOUT_MS = 120_000;
 const SHELL_META_PATTERN = /[|&;`$<>]/;
 const ALLOWED_PREVALIDATION_SCRIPTS = new Set(["db:generate"]);
 
@@ -24,12 +24,13 @@ export interface PreValidationConfig {
 
 export interface PreValidationStepResult extends PreValidationCommand {
   cwd: string;
-  exitCode: number;
+  exitCode: number | null;
   stdout: string;
   stderr: string;
   output: string;
   durationMs: number;
   success: boolean;
+  timedOut: boolean;
 }
 
 export interface PreValidationResult {
@@ -43,10 +44,7 @@ export function getPreValidationConfig(env: NodeJS.ProcessEnv = process.env): Pr
   const commandLines = rawCommands
     ? rawCommands.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
     : DEFAULT_PREVALIDATION_COMMANDS;
-  const parsedTimeout = Number.parseInt(env.RUNNER_PREVALIDATION_TIMEOUT_MS ?? "", 10);
-  const timeoutMs = Number.isFinite(parsedTimeout) && parsedTimeout > 0
-    ? parsedTimeout
-    : DEFAULT_PREVALIDATION_TIMEOUT_MS;
+  const timeoutMs = getCommandTimeoutMs(env);
 
   return {
     commands: commandLines.map(parsePreValidationCommand),
@@ -76,7 +74,8 @@ export async function runPreValidationCommands(opts: {
         stderr: output,
         output,
         durationMs: 0,
-        success: false
+        success: false,
+        timedOut: false
       }]
     };
   }
@@ -98,7 +97,8 @@ export async function runPreValidationCommands(opts: {
         stderr: output,
         output,
         durationMs: 0,
-        success: false
+        success: false,
+        timedOut: false
       }]
     };
   }
@@ -192,9 +192,9 @@ function spawnPreValidationCommand(
     child.on("close", (code) => {
       clearTimeout(timer);
       const rawOutput = timedOut
-        ? `[TIMEOUT after ${timeoutMs}ms]\n${stdout}\n${stderr}`
+        ? `[${formatTimeoutMessage(timeoutMs)}]\n${stdout}\n${stderr}`
         : `${stdout}\n${stderr}`;
-      const exitCode = timedOut ? -2 : (code ?? -1);
+      const exitCode = timedOut ? null : (code ?? -1);
       resolve({
         ...command,
         cwd,
@@ -203,7 +203,8 @@ function spawnPreValidationCommand(
         stderr: sanitizeLogOutput(stderr),
         output: sanitizeLogOutput(rawOutput),
         durationMs: Date.now() - startedAt,
-        success: exitCode === 0
+        success: exitCode === 0,
+        timedOut
       });
     });
 
@@ -217,7 +218,8 @@ function spawnPreValidationCommand(
         stderr: sanitizeLogOutput(err.message),
         output: sanitizeLogOutput(err.message),
         durationMs: Date.now() - startedAt,
-        success: false
+        success: false,
+        timedOut: false
       });
     });
   });

@@ -511,7 +511,9 @@ export function AutomationJobsPage() {
                           "bg-gray-50 text-gray-600"
                         )}>{step.stepType}</span>
                         <span className="flex-1">{step.title}</span>
-                        {step.exitCode !== null && (
+                        {Boolean((step.metadata as { timedOut?: boolean } | null)?.timedOut) ? (
+                          <span className="shrink-0 text-red-600">timed out</span>
+                        ) : step.exitCode !== null && (
                           <span className={cn("shrink-0", step.exitCode === 0 ? "text-green-600" : "text-red-600")}>
                             exit {step.exitCode}
                           </span>
@@ -729,11 +731,13 @@ function PatchReviewCard({
               <div className="flex items-center gap-2">
                 {vr.success ? <CheckCircle className="h-3.5 w-3.5 text-green-600 flex-shrink-0" /> : <XCircle className="h-3.5 w-3.5 text-red-600 flex-shrink-0" />}
                 <span className="font-mono">{vr.command}</span>
-                <span className="text-muted-foreground">{vr.durationMs}ms</span>
+                <span className="text-muted-foreground">
+                  {vr.timedOut ? "timed out" : `exit ${vr.exitCode ?? "?"}`} · {vr.durationMs}ms
+                </span>
               </div>
               {!vr.success && (
                 <pre className="bg-muted rounded p-2 overflow-auto max-h-36 font-mono whitespace-pre-wrap text-[11px]">
-                  {`CWD: ${vr.cwd ?? "unknown"}\nSTDERR:\n${vr.stderr?.trim() || vr.output || "(no stderr)"}`}
+                  {`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? "TIMED OUT\n" : ""}STDERR:\n${vr.stderr?.trim() || vr.output || "(no stderr)"}`}
                 </pre>
               )}
             </div>

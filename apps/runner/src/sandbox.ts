@@ -14,17 +14,17 @@ import path from "node:path";
 import { validateCommand } from "./commandValidator.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { buildValidationChildEnv } from "./validationEnv.js";
-
-const DEFAULT_COMMAND_TIMEOUT_MS = 120_000; // 2 minutes
+import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 
 export interface ExecutionResult {
-  exitCode: number;
+  exitCode: number | null;
   stdout: string;
   stderr: string;
   output: string;
   durationMs: number;
   cwd: string;
   allowed: boolean;
+  timedOut: boolean;
   blockReason?: string;
 }
 
@@ -61,6 +61,7 @@ export async function runCommand(
       durationMs: 0,
       cwd: path.resolve(opts.cwd ?? opts.workspaceRoot),
       allowed: false,
+      timedOut: false,
       blockReason: validation.reason
     };
   }
@@ -70,7 +71,7 @@ export async function runCommand(
   assertCwdInWorkspace(opts.workspaceRoot, effectiveCwd);
 
   const startedAt = Date.now();
-  const timeout = opts.timeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
+  const timeout = opts.timeoutMs ?? getCommandTimeoutMs(opts.env);
 
   return new Promise((resolve) => {
     let stdout = "";
@@ -96,16 +97,17 @@ export async function runCommand(
       clearTimeout(timer);
       const durationMs = Date.now() - startedAt;
       const rawOutput = timedOut
-        ? `[TIMEOUT after ${timeout}ms]\n${stdout}\n${stderr}`
+        ? `[${formatTimeoutMessage(timeout)}]\n${stdout}\n${stderr}`
         : `${stdout}\n${stderr}`;
       resolve({
-        exitCode: timedOut ? -2 : (code ?? -1),
+        exitCode: timedOut ? null : (code ?? -1),
         stdout: sanitizeLogOutput(stdout),
         stderr: sanitizeLogOutput(stderr),
         output: sanitizeLogOutput(rawOutput),
         durationMs,
         cwd: path.resolve(effectiveCwd),
-        allowed: true
+        allowed: true,
+        timedOut
       });
     });
 
@@ -119,7 +121,8 @@ export async function runCommand(
         output: sanitizeLogOutput(err.message),
         durationMs,
         cwd: path.resolve(effectiveCwd),
-        allowed: true
+        allowed: true,
+        timedOut: false
       });
     });
   });

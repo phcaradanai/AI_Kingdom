@@ -9,6 +9,8 @@
  * - Workspace copy is the only filesystem mutation (temporary setup)
  */
 
+import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
+
 export interface ValidationCommandSpec {
   command: string;
   args: string[];
@@ -72,6 +74,7 @@ export interface ValidationJobApi {
     output?: string | null;
     exitCode?: number | null;
     durationMs?: number | null;
+    metadata?: Record<string, unknown> | null;
   }): Promise<unknown>;
   submitReport(jobId: string, report: {
     summary: string;
@@ -90,32 +93,35 @@ export interface ValidationJobApi {
 }
 
 export interface ValidationCommandResult {
-  exitCode: number;
+  exitCode: number | null;
   stdout: string;
   stderr: string;
   output: string;
   durationMs: number;
   cwd: string;
+  timedOut: boolean;
 }
 
 export interface ValidationDependencyInstallResult {
   skipped: boolean;
   success: boolean;
   displayCommand: string;
-  exitCode: number;
+  exitCode: number | null;
   output: string;
   durationMs: number;
+  timedOut: boolean;
 }
 
 export interface ValidationPreValidationStepResult {
   displayCommand: string;
   cwd: string;
-  exitCode: number;
+  exitCode: number | null;
   stdout: string;
   stderr: string;
   output: string;
   durationMs: number;
   success: boolean;
+  timedOut: boolean;
 }
 
 export interface ValidationPreValidationResult {
@@ -277,7 +283,8 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
         args: ["run", "db:generate"],
         output: sanitize(step.output).slice(0, 4000),
         exitCode: step.exitCode,
-        durationMs: step.durationMs
+        durationMs: step.durationMs,
+        metadata: { cwd: step.cwd, timedOut: step.timedOut }
       });
     }
 
@@ -333,17 +340,22 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
       if (result.exitCode === 0) testPasses++; else testFailures++;
     }
     if (result.exitCode !== 0) {
-      const stderr = result.stderr.trim();
-      errors.push(stderr ? `Exit ${result.exitCode}: ${label}\nSTDERR:\n${stderr}` : `Exit ${result.exitCode}: ${label}`);
+      if (result.timedOut) {
+        errors.push(`Timed out: ${label}\n${formatTimeoutMessage(getCommandTimeoutMs())}`);
+      } else {
+        const stderr = result.stderr.trim();
+        errors.push(stderr ? `Exit ${result.exitCode}: ${label}\nSTDERR:\n${stderr}` : `Exit ${result.exitCode}: ${label}`);
+      }
     }
-    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
+    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
 
     await deps.api.recordStep(job.id, {
       sequence, stepType: "COMMAND", title: label,
       status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
       command: spec.command, args: spec.args,
-      output: sanitize(`CWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 4000),
-      exitCode: result.exitCode, durationMs: result.durationMs
+      output: sanitize(`CWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 4000),
+      exitCode: result.exitCode, durationMs: result.durationMs,
+      metadata: { cwd: result.cwd, timedOut: result.timedOut }
     });
   }
 

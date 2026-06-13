@@ -18,13 +18,14 @@ import type { ApiClient } from "./apiClient.js";
 
 export interface ValidationResult {
   command: string;
-  exitCode: number;
+  exitCode: number | null;
   durationMs: number;
   cwd: string;
   stdout: string;
   stderr: string;
   output: string;
   success: boolean;
+  timedOut: boolean;
 }
 
 export interface PatchPayload {
@@ -96,8 +97,7 @@ export async function runValidation(workspaceRoot: string): Promise<ValidationRe
 
   const results: ValidationResult[] = [];
   for (const { cmd, args } of commands) {
-    const start = Date.now();
-    const result = await runCommand(cmd, args, { workspaceRoot, timeoutMs: 180_000 });
+    const result = await runCommand(cmd, args, { workspaceRoot });
     results.push({
       command: `${cmd} ${args.join(" ")}`,
       exitCode: result.exitCode,
@@ -106,7 +106,8 @@ export async function runValidation(workspaceRoot: string): Promise<ValidationRe
       stdout: sanitizeLogOutput(result.stdout).slice(0, 3000),
       stderr: sanitizeLogOutput(result.stderr).slice(0, 3000),
       output: sanitizeLogOutput(`CWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 5000),
-      success: result.exitCode === 0
+      success: result.exitCode === 0,
+      timedOut: result.timedOut
     });
   }
   return results;

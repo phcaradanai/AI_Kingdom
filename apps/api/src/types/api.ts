@@ -185,13 +185,14 @@ export type SourceLinkDto = {
 
 export type PatchValidationResult = {
   command: string;
-  exitCode: number;
+  exitCode: number | null;
   durationMs: number;
   cwd?: string;
   stdout?: string;
   stderr?: string;
   output: string;
   success: boolean;
+  timedOut?: boolean;
 };
 
 export type PatchArtifactValidationStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVISION_REQUESTED";

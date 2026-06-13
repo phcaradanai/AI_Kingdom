@@ -19,6 +19,8 @@ type Call = { method: string; args: unknown[] };
 
 function makeDeps(opts?: {
   exitCodeFor?: (command: string, args: string[]) => number;
+  timedOutFor?: (command: string, args: string[]) => boolean;
+  stderrOnSuccess?: (command: string, args: string[]) => string | undefined;
   hasLint?: boolean;
   failPrepare?: boolean;
   envCheck?: { ok: true } | { ok: false; message: string };
@@ -47,14 +49,19 @@ function makeDeps(opts?: {
     runCommand: async (command, args) => {
       events.push(`run:${command} ${args.join(" ")}`);
       ranCommands.push(`${command} ${args.join(" ")}`);
-      const exitCode = opts?.exitCodeFor ? opts.exitCodeFor(command, args) : 0;
+      const timedOut = opts?.timedOutFor ? opts.timedOutFor(command, args) : false;
+      const exitCode = timedOut ? null : (opts?.exitCodeFor ? opts.exitCodeFor(command, args) : 0);
+      const stderr = exitCode === 0
+        ? (opts?.stderrOnSuccess?.(command, args) ?? "")
+        : (timedOut ? "" : `stderr of ${command} ${args.join(" ")}`);
       return {
         exitCode,
         stdout: `stdout of ${command} ${args.join(" ")}`,
-        stderr: exitCode === 0 ? "" : `stderr of ${command} ${args.join(" ")}`,
+        stderr,
         output: `output of ${command}`,
         durationMs: 5,
-        cwd: "/tmp/runner/jobs/job-validation-1"
+        cwd: "/tmp/runner/jobs/job-validation-1",
+        timedOut
       };
     },
     prepareWorkspace: async () => {
@@ -75,7 +82,8 @@ function makeDeps(opts?: {
         displayCommand: "npm ci",
         exitCode: opts.install?.exitCode ?? 0,
         output: opts.install?.output ?? "installed",
-        durationMs: 7
+        durationMs: 7,
+        timedOut: false
       };
     },
     runPreValidation: opts?.preValidation === undefined ? undefined : async () => {
@@ -92,7 +100,8 @@ function makeDeps(opts?: {
           stderr: "",
           output: opts.preValidation?.output ?? "generated",
           durationMs: 11,
-          success
+          success,
+          timedOut: false
         }]
       };
     },
@@ -229,6 +238,46 @@ test("report submission includes validation result and commands run", async () =
   };
   assert.equal(notRunReport.testResult, "NOT_RUN");
   assert.ok(notRunReport.errors.some((e) => e.includes("Workspace setup failed")));
+});
+
+test("a command with stderr but exitCode 0 is marked passed", async () => {
+  const { deps, apiCalls } = makeDeps({
+    stderrOnSuccess: (_cmd, args) => (args[1] === "test" && args[3] === "@ai-kingdom/api" ? "warning: noisy stderr" : undefined)
+  });
+  await executeValidationOnlyJob(job, deps);
+
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
+    testResult: string; errors: string[];
+  };
+  assert.equal(report.testResult, "PASSED");
+  assert.ok(!report.errors.some((e) => e.includes("@ai-kingdom/api")));
+
+  const step = apiCalls.find((c) =>
+    c.method === "recordStep" && (c.args[1] as { title: string }).title === "npm run test --workspace @ai-kingdom/api"
+  )!.args[1] as { status: string; exitCode: number | null };
+  assert.equal(step.status, "COMPLETED");
+  assert.equal(step.exitCode, 0);
+});
+
+test("a command that times out is marked failed with exitCode null and timedOut true", async () => {
+  const { deps, apiCalls } = makeDeps({
+    timedOutFor: (_cmd, args) => args[1] === "test" && args[3] === "@ai-kingdom/runner"
+  });
+  await executeValidationOnlyJob(job, deps);
+
+  const report = apiCalls.find((c) => c.method === "submitReport")!.args[1] as {
+    testResult: string; errors: string[]; rawOutput: string;
+  };
+  assert.notEqual(report.testResult, "PASSED");
+  assert.ok(report.errors.some((e) => e.includes("Timed out: npm run test --workspace @ai-kingdom/runner")));
+  assert.match(report.rawOutput, /TIMED_OUT: true/);
+
+  const step = apiCalls.find((c) =>
+    c.method === "recordStep" && (c.args[1] as { title: string }).title === "npm run test --workspace @ai-kingdom/runner"
+  )!.args[1] as { status: string; exitCode: number | null; metadata?: { timedOut?: boolean } };
+  assert.equal(step.status, "FAILED");
+  assert.equal(step.exitCode, null);
+  assert.equal(step.metadata?.timedOut, true);
 });
 
 test("buildValidationCommands includes lint only when the script exists", () => {

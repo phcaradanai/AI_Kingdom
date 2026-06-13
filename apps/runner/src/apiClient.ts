@@ -115,7 +115,7 @@ export class ApiClient {
     diffPreview?: string | null;
     fullPatch?: string | null;
     filesChanged: string[];
-    validationResults?: Array<{ command: string; exitCode: number; durationMs: number; cwd?: string; stdout?: string; stderr?: string; output: string; success: boolean }>;
+    validationResults?: Array<{ command: string; exitCode: number | null; durationMs: number; cwd?: string; stdout?: string; stderr?: string; output: string; success: boolean; timedOut?: boolean }>;
     branchName?: string | null;
   }): Promise<{ id: string }> {
     return this.request("POST", `/api/runner/jobs/${jobId}/patch-artifact`, payload);

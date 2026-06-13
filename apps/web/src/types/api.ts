@@ -1497,6 +1497,7 @@ export type AgentRunStepDto = {
   output: string | null;
   exitCode: number | null;
   durationMs: number | null;
+  metadata: unknown;
   startedAt: string | null;
   completedAt: string | null;
   createdAt: string;
@@ -1547,13 +1548,14 @@ export type AutomationJobPayload = {
 
 export type PatchValidationResult = {
   command: string;
-  exitCode: number;
+  exitCode: number | null;
   durationMs: number;
   cwd?: string;
   stdout?: string;
   stderr?: string;
   output: string;
   success: boolean;
+  timedOut?: boolean;
 };
 
 export type PatchArtifactValidationStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVISION_REQUESTED";

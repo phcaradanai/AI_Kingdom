@@ -55,6 +55,7 @@ test("patch validation runs explicit workspace test commands from workspace root
     ]);
     assert.ok(results.every((r) => r.success));
     assert.ok(results.every((r) => r.cwd === path.resolve(workspace)));
+    assert.ok(results.every((r) => r.timedOut === false));
 
     const recorded = fs.readFileSync(markerFile, "utf8");
     assert.match(recorded, new RegExp(`${path.resolve(workspace).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\|run test --workspace @ai-kingdom/api`));

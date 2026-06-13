@@ -218,13 +218,14 @@ router.post("/jobs/:id/step", async (req, res, next) => {
 
 const validationResultSchema = z.object({
   command: z.string().trim().min(1).max(200),
-  exitCode: z.number().int(),
+  exitCode: z.number().int().nullable(),
   durationMs: z.number().int().min(0),
   cwd: z.string().max(1000).optional(),
   stdout: z.string().max(5000).optional(),
   stderr: z.string().max(5000).optional(),
   output: z.string().max(5000),
-  success: z.boolean()
+  success: z.boolean(),
+  timedOut: z.boolean().optional()
 });
 
 const patchArtifactSchema = z.object({

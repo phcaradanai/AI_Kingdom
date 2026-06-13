@@ -74,7 +74,7 @@ test("dependency install command runs with cwd equal to workspace root", async (
       mode: "SANDBOX_PATCH",
       env: {
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        RUNNER_INSTALL_TIMEOUT_MS: "5000"
+        RUNNER_COMMAND_TIMEOUT_MS: "5000"
       }
     });
 
@@ -104,7 +104,7 @@ test("dependency install receives allowlisted validation database env", async ()
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
         TEST_DATABASE_URL: "postgresql://user:pass@localhost:5432/test",
         RUNNER_TOKEN: "plain-runner-token",
-        RUNNER_INSTALL_TIMEOUT_MS: "5000"
+        RUNNER_COMMAND_TIMEOUT_MS: "5000"
       }
     });
 
@@ -130,7 +130,7 @@ test("install failure returns clear sanitized output", async () => {
       mode: "VALIDATION_ONLY",
       env: {
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        RUNNER_INSTALL_TIMEOUT_MS: "5000"
+        RUNNER_COMMAND_TIMEOUT_MS: "5000"
       }
     });
 

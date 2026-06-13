@@ -19,13 +19,14 @@ export type ValidationStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVISION_R
 
 export interface ValidationResult {
   command: string;
-  exitCode: number;
+  exitCode: number | null;
   durationMs: number;
   cwd?: string;
   stdout?: string;
   stderr?: string;
   output: string;
   success: boolean;
+  timedOut?: boolean;
 }
 
 export interface CreatePatchArtifactInput {

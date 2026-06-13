@@ -55,7 +55,7 @@ test("pre-validation command runs with cwd equal to workspace root", async () =>
       workspaceRoot: workspace,
       env: {
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        RUNNER_PREVALIDATION_TIMEOUT_MS: "5000"
+        RUNNER_COMMAND_TIMEOUT_MS: "5000"
       }
     });
 
@@ -84,7 +84,7 @@ test("pre-validation failure returns clear sanitized output", async () => {
       workspaceRoot: workspace,
       env: {
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
-        RUNNER_PREVALIDATION_TIMEOUT_MS: "5000"
+        RUNNER_COMMAND_TIMEOUT_MS: "5000"
       }
     });
 
@@ -113,7 +113,7 @@ test("pre-validation receives allowlisted validation database env", async () => 
         PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}`,
         DATABASE_URL: "postgresql://user:pass@localhost:5432/dev",
         RUNNER_TOKEN: "plain-runner-token",
-        RUNNER_PREVALIDATION_TIMEOUT_MS: "5000"
+        RUNNER_COMMAND_TIMEOUT_MS: "5000"
       }
     });
 
