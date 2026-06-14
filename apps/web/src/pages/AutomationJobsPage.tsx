@@ -531,6 +531,12 @@ export function AutomationJobsPage() {
                         {(step.metadata as { message?: string } | null)?.message && (
                           <div className="ml-6 text-[11px] text-red-600">{(step.metadata as { message?: string }).message}</div>
                         )}
+                        {step.status === "FAILED" && (step.metadata as { failureSummary?: string } | null)?.failureSummary && (
+                          <div className="ml-6">
+                            <div className="text-[11px] font-medium text-red-700">Failure summary</div>
+                            <ValidationOutput text={(step.metadata as { failureSummary?: string }).failureSummary!} />
+                          </div>
+                        )}
                         {step.status === "FAILED" && step.output && (
                           <ValidationOutput text={step.output} className="ml-6" />
                         )}
@@ -753,6 +759,12 @@ function PatchReviewCard({
               </div>
               {vr.cwd && <div className="text-[11px] text-muted-foreground">cwd: {vr.cwd}</div>}
               {vr.timedOut && vr.message && <div className="text-[11px] text-red-600">{vr.message}</div>}
+              {!vr.success && vr.failureSummary && (
+                <div>
+                  <div className="text-[11px] font-medium text-red-700">Failure summary</div>
+                  <ValidationOutput text={vr.failureSummary} />
+                </div>
+              )}
               {!vr.success && (
                 <ValidationOutput
                   text={`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? `TIMED OUT: ${vr.message ?? ""}\n` : ""}STDOUT:\n${vr.stdout?.trim() || "(no stdout)"}\nSTDERR:\n${vr.stderr?.trim() || "(no stderr)"}`}

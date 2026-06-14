@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sanitizeLogOutput, tailLines, truncateOutput } from "./secretRedactor.js";
+import { extractFailureSummary, sanitizeLogOutput, tailLines, truncateOutput } from "./secretRedactor.js";
 
 test("tailLines returns text unchanged when within the line limit", () => {
   const text = "line1\nline2\nline3";
@@ -34,4 +34,42 @@ test("sanitizeLogOutput accepts a custom max length", () => {
 
 test("truncateOutput leaves short text untouched", () => {
   assert.equal(truncateOutput("short", 100), "short");
+});
+
+test("extractFailureSummary returns null when no failure indicators are present", () => {
+  const text = Array.from({ length: 50 }, (_, i) => `ok ${i + 1} - test ${i}`).join("\n");
+  assert.equal(extractFailureSummary(text), null);
+});
+
+test("extractFailureSummary captures a TAP 'not ok' block with its YAML diagnostics", () => {
+  const text = [
+    "ok 1 - some passing test",
+    "not ok 2 - addition is correct",
+    "  ---",
+    "  duration_ms: 1.234",
+    "  failureType: 'testCodeFailure'",
+    "  error: |-",
+    "    Expected values to be strictly equal:",
+    "    1 !== 2",
+    "  code: 'ERR_ASSERTION'",
+    "  ...",
+    "ok 3 - another passing test"
+  ].join("\n");
+
+  const summary = extractFailureSummary(text);
+  assert.ok(summary);
+  assert.match(summary!, /not ok 2 - addition is correct/);
+  assert.match(summary!, /ERR_ASSERTION/);
+  assert.match(summary!, /Expected values to be strictly equal/);
+  assert.doesNotMatch(summary!, /another passing test/);
+});
+
+test("extractFailureSummary caps very long failure blocks from the tail", () => {
+  const longBlock = Array.from({ length: 200 }, (_, i) => `  line ${i}`).join("\n");
+  const text = `not ok 1 - big failure\n${longBlock}`;
+
+  const summary = extractFailureSummary(text, 100);
+  assert.ok(summary);
+  assert.ok(summary!.length <= 100 + 50);
+  assert.match(summary!, /truncated \d+ earlier chars/);
 });

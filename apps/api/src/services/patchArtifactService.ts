@@ -27,6 +27,9 @@ export interface ValidationResult {
   output: string;
   success: boolean;
   timedOut?: boolean;
+  outputTruncated?: boolean;
+  message?: string;
+  failureSummary?: string;
 }
 
 export interface CreatePatchArtifactInput {

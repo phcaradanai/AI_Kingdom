@@ -330,7 +330,7 @@ async function executeJob(job: AutomationJob) {
             output: sanitizeLogOutput(result.output, 30000),
             exitCode: result.exitCode,
             durationMs: result.durationMs,
-            metadata: { cwd: result.cwd, timedOut: result.timedOut, outputTruncated: result.outputTruncated, message: result.message }
+            metadata: { cwd: result.cwd, timedOut: result.timedOut, outputTruncated: result.outputTruncated, message: result.message, failureSummary: result.failureSummary }
           });
 
         } else if (step.type === "FILE_CHANGE") {
@@ -458,7 +458,8 @@ async function executeValidationJob(job: AutomationJob) {
           cwd: result.cwd,
           timedOut: result.timedOut,
           outputTruncated: result.outputTruncated,
-          message: result.message
+          message: result.message,
+          failureSummary: result.failureSummary
         };
       },
       prepareWorkspace: async () => {

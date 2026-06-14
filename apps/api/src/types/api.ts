@@ -195,6 +195,7 @@ export type PatchValidationResult = {
   timedOut?: boolean;
   outputTruncated?: boolean;
   message?: string;
+  failureSummary?: string;
 };
 
 export type PatchArtifactValidationStatus = "PENDING" | "APPROVED" | "REJECTED" | "REVISION_REQUESTED";

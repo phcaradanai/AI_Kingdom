@@ -227,7 +227,8 @@ const validationResultSchema = z.object({
   success: z.boolean(),
   timedOut: z.boolean().optional(),
   outputTruncated: z.boolean().optional(),
-  message: z.string().max(500).optional()
+  message: z.string().max(500).optional(),
+  failureSummary: z.string().max(6000).optional()
 });
 
 const patchArtifactSchema = z.object({

@@ -109,6 +109,7 @@ export interface ValidationCommandResult {
   timedOut: boolean;
   outputTruncated: boolean;
   message?: string;
+  failureSummary?: string;
 }
 
 export interface ValidationDependencyInstallResult {
@@ -359,15 +360,16 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
     const stdoutTail = tailLines(result.stdout, VALIDATION_STEP_OUTPUT_TAIL_LINES);
     const stderrTail = tailLines(result.stderr, VALIDATION_STEP_OUTPUT_TAIL_LINES);
     const outputTruncated = result.outputTruncated || stdoutTail !== result.stdout || stderrTail !== result.stderr;
-    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`);
+    const failureSummaryLine = result.failureSummary ? `FAILURE SUMMARY:\n${result.failureSummary}\n` : "";
+    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\n${failureSummaryLine}STDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`);
 
     await deps.api.recordStep(job.id, {
       sequence, stepType: "COMMAND", title: label,
       status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
       command: spec.command, args: spec.args,
-      output: sanitize(`CWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`).slice(0, VALIDATION_STEP_OUTPUT_MAX),
+      output: sanitize(`CWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\n${failureSummaryLine}STDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`).slice(0, VALIDATION_STEP_OUTPUT_MAX),
       exitCode: result.exitCode, durationMs: result.durationMs,
-      metadata: { cwd: result.cwd, timedOut: result.timedOut, outputTruncated, message: result.message }
+      metadata: { cwd: result.cwd, timedOut: result.timedOut, outputTruncated, message: result.message, failureSummary: result.failureSummary }
     });
   }
 

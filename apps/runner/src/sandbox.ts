@@ -12,7 +12,7 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { validateCommand } from "./commandValidator.js";
-import { captureOutput, sanitizeLogOutput } from "./secretRedactor.js";
+import { captureOutput, extractFailureSummary, redactSecrets, sanitizeLogOutput } from "./secretRedactor.js";
 import { buildValidationChildEnv } from "./validationEnv.js";
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 
@@ -34,6 +34,8 @@ export interface ExecutionResult {
   outputTruncated: boolean;
   blockReason?: string;
   message?: string;
+  /** Extracted "not ok" / AssertionError / ERR_* blocks, present only when exitCode !== 0. */
+  failureSummary?: string;
 }
 
 export interface RunCommandOptions {
@@ -111,8 +113,12 @@ export async function runCommand(
       const stdoutCapture = captureOutput(stdout, CAPTURED_OUTPUT_MAX_LINES, CAPTURED_OUTPUT_MAX_CHARS);
       const stderrCapture = captureOutput(stderr, CAPTURED_OUTPUT_MAX_LINES, CAPTURED_OUTPUT_MAX_CHARS);
       const outputCapture = captureOutput(rawOutput, CAPTURED_OUTPUT_MAX_LINES, CAPTURED_OUTPUT_MAX_CHARS);
+      const exitCode = timedOut ? null : (code ?? -1);
+      const failureSummary = (!timedOut && exitCode !== 0)
+        ? extractFailureSummary(redactSecrets(`${stdout}\n${stderr}`)) ?? undefined
+        : undefined;
       resolve({
-        exitCode: timedOut ? null : (code ?? -1),
+        exitCode,
         stdout: stdoutCapture.text,
         stderr: stderrCapture.text,
         output: outputCapture.text,
@@ -121,7 +127,8 @@ export async function runCommand(
         allowed: true,
         timedOut,
         outputTruncated: stdoutCapture.truncated || stderrCapture.truncated || outputCapture.truncated,
-        message: timedOut ? formatTimeoutMessage(timeout) : undefined
+        message: timedOut ? formatTimeoutMessage(timeout) : undefined,
+        failureSummary
       });
     });
 
