@@ -327,9 +327,10 @@ async function executeJob(job: AutomationJob) {
             status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
             command: cmd,
             args,
-            output: result.output,
+            output: sanitizeLogOutput(result.output, 30000),
             exitCode: result.exitCode,
-            durationMs: result.durationMs
+            durationMs: result.durationMs,
+            metadata: { cwd: result.cwd, timedOut: result.timedOut, outputTruncated: result.outputTruncated, message: result.message }
           });
 
         } else if (step.type === "FILE_CHANGE") {
@@ -367,7 +368,7 @@ async function executeJob(job: AutomationJob) {
       else if (!vr.success) testResult = testResult === "PASSED" ? "PARTIAL" : "FAILED";
       if (!vr.success) {
         if (vr.timedOut) {
-          errors.push(`Timed out: ${vr.command}\n${formatTimeoutMessage(getCommandTimeoutMs())}`);
+          errors.push(`Timed out: ${vr.command}\n${vr.message ?? formatTimeoutMessage(getCommandTimeoutMs())}`);
         } else {
           errors.push(vr.stderr.trim()
             ? `Exit ${vr.exitCode}: ${vr.command}\nSTDERR:\n${vr.stderr.trim()}`
@@ -455,7 +456,9 @@ async function executeValidationJob(job: AutomationJob) {
           output: result.output,
           durationMs: result.durationMs,
           cwd: result.cwd,
-          timedOut: result.timedOut
+          timedOut: result.timedOut,
+          outputTruncated: result.outputTruncated,
+          message: result.message
         };
       },
       prepareWorkspace: async () => {

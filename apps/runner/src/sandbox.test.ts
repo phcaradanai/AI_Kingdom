@@ -158,6 +158,97 @@ test("a command that does not time out reports timedOut false", async () => {
   }
 });
 
+test("a command with over 1MB of stdout and exit 0 is marked passed, not killed", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-sandbox-bin-");
+  const npmPath = path.join(binDir, "npm");
+  const script = [
+    "#!/bin/sh",
+    "i=0",
+    "while [ $i -lt 12000 ]; do",
+    '  echo "line $i 0123456789012345678901234567890123456789012345678901234567890123456789"',
+    "  i=$((i+1))",
+    "done",
+    'echo "not ok 1 - final summary line"',
+    "exit 0"
+  ].join("\n");
+  fs.writeFileSync(npmPath, script, { mode: 0o755 });
+  try {
+    const result = await runCommand("npm", ["run", "build"], {
+      workspaceRoot: workspace,
+      env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` }
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.timedOut, false);
+    assert.equal(result.outputTruncated, true);
+    assert.match(result.stdout, /not ok 1 - final summary line/);
+    assert.ok(result.stdout.length < 1_000_000, `expected bounded stdout, got ${result.stdout.length} chars`);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("a command with stderr output and exit 0 is not marked as a failure", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-sandbox-bin-");
+  const npmPath = path.join(binDir, "npm");
+  fs.writeFileSync(npmPath, "#!/bin/sh\necho 'warning: deprecated' >&2\nexit 0\n", { mode: 0o755 });
+  try {
+    const result = await runCommand("npm", ["run", "build"], {
+      workspaceRoot: workspace,
+      env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` }
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.match(result.stderr, /warning: deprecated/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("a command that exits 1 is marked failed via exitCode", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-sandbox-bin-");
+  const npmPath = path.join(binDir, "npm");
+  fs.writeFileSync(npmPath, "#!/bin/sh\necho 'not ok 1 - boom'\nexit 1\n", { mode: 0o755 });
+  try {
+    const result = await runCommand("npm", ["run", "build"], {
+      workspaceRoot: workspace,
+      env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.timedOut, false);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("a timed out command reports a message distinct from a generic failure", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-sandbox-bin-");
+  const npmPath = path.join(binDir, "npm");
+  fs.writeFileSync(npmPath, "#!/bin/sh\nsleep 5\n", { mode: 0o755 });
+  try {
+    const result = await runCommand("npm", ["run", "build"], {
+      workspaceRoot: workspace,
+      timeoutMs: 50,
+      env: { PATH: `${binDir}${path.delimiter}${process.env.PATH ?? ""}` }
+    });
+
+    assert.equal(result.exitCode, null);
+    assert.equal(result.timedOut, true);
+    assert.match(result.message ?? "", /RUNNER_COMMAND_TIMEOUT_MS/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
 test("validation env values are redacted from command output", async () => {
   const workspace = makeWorkspace();
   const markerFile = path.join(makeTempDir("runner-sandbox-marker-"), "env.txt");

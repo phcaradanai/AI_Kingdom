@@ -12,9 +12,15 @@
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { validateCommand } from "./commandValidator.js";
-import { sanitizeLogOutput } from "./secretRedactor.js";
+import { captureOutput, sanitizeLogOutput } from "./secretRedactor.js";
 import { buildValidationChildEnv } from "./validationEnv.js";
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
+
+// Captured stdout/stderr/output is bounded tail-biased so a command can never
+// be killed for producing too much output, while keeping the failure/summary
+// lines (which appear near the end of TAP-style test output) intact.
+const CAPTURED_OUTPUT_MAX_LINES = 2000;
+const CAPTURED_OUTPUT_MAX_CHARS = 200_000;
 
 export interface ExecutionResult {
   exitCode: number | null;
@@ -25,7 +31,9 @@ export interface ExecutionResult {
   cwd: string;
   allowed: boolean;
   timedOut: boolean;
+  outputTruncated: boolean;
   blockReason?: string;
+  message?: string;
 }
 
 export interface RunCommandOptions {
@@ -62,6 +70,7 @@ export async function runCommand(
       cwd: path.resolve(opts.cwd ?? opts.workspaceRoot),
       allowed: false,
       timedOut: false,
+      outputTruncated: false,
       blockReason: validation.reason
     };
   }
@@ -99,15 +108,20 @@ export async function runCommand(
       const rawOutput = timedOut
         ? `[${formatTimeoutMessage(timeout)}]\n${stdout}\n${stderr}`
         : `${stdout}\n${stderr}`;
+      const stdoutCapture = captureOutput(stdout, CAPTURED_OUTPUT_MAX_LINES, CAPTURED_OUTPUT_MAX_CHARS);
+      const stderrCapture = captureOutput(stderr, CAPTURED_OUTPUT_MAX_LINES, CAPTURED_OUTPUT_MAX_CHARS);
+      const outputCapture = captureOutput(rawOutput, CAPTURED_OUTPUT_MAX_LINES, CAPTURED_OUTPUT_MAX_CHARS);
       resolve({
         exitCode: timedOut ? null : (code ?? -1),
-        stdout: sanitizeLogOutput(stdout),
-        stderr: sanitizeLogOutput(stderr),
-        output: sanitizeLogOutput(rawOutput),
+        stdout: stdoutCapture.text,
+        stderr: stderrCapture.text,
+        output: outputCapture.text,
         durationMs,
         cwd: path.resolve(effectiveCwd),
         allowed: true,
-        timedOut
+        timedOut,
+        outputTruncated: stdoutCapture.truncated || stderrCapture.truncated || outputCapture.truncated,
+        message: timedOut ? formatTimeoutMessage(timeout) : undefined
       });
     });
 
@@ -122,7 +136,9 @@ export async function runCommand(
         durationMs,
         cwd: path.resolve(effectiveCwd),
         allowed: true,
-        timedOut: false
+        timedOut: false,
+        outputTruncated: false,
+        message: err.message
       });
     });
   });

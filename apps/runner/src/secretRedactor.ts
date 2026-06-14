@@ -70,3 +70,35 @@ export function tailLines(text: string, maxLines: number): string {
   const omitted = lines.length - maxLines;
   return `...[truncated ${omitted} earlier line${omitted === 1 ? "" : "s"}]...\n${lines.slice(-maxLines).join("\n")}`;
 }
+
+export interface CapturedOutput {
+  text: string;
+  truncated: boolean;
+}
+
+/**
+ * Redacts secrets, then bounds `raw` to the last `maxLines` lines and
+ * `maxChars` characters (tail-biased, like `tailLines`). Used to keep
+ * captured command output bounded in memory/storage without ever killing
+ * the underlying process. `truncated` reports whether anything was cut.
+ */
+export function captureOutput(raw: string, maxLines: number, maxChars: number): CapturedOutput {
+  if (!raw) return { text: raw, truncated: false };
+  const redacted = redactSecrets(raw);
+  let text = redacted;
+  let truncated = false;
+
+  const lineTailed = tailLines(text, maxLines);
+  if (lineTailed !== text) {
+    text = lineTailed;
+    truncated = true;
+  }
+
+  if (text.length > maxChars) {
+    const omitted = text.length - maxChars;
+    text = `...[truncated ${omitted} earlier char${omitted === 1 ? "" : "s"}]...\n${text.slice(-maxChars)}`;
+    truncated = true;
+  }
+
+  return { text, truncated };
+}

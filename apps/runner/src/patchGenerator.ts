@@ -26,6 +26,8 @@ export interface ValidationResult {
   output: string;
   success: boolean;
   timedOut: boolean;
+  outputTruncated: boolean;
+  message?: string;
 }
 
 export interface PatchPayload {
@@ -117,7 +119,9 @@ export async function runValidation(workspaceRoot: string): Promise<ValidationRe
       stderr: sanitizeLogOutput(stderrTail, VALIDATION_STDERR_MAX),
       output: sanitizeLogOutput(`CWD: ${result.cwd}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`, VALIDATION_COMBINED_OUTPUT_MAX),
       success: result.exitCode === 0,
-      timedOut: result.timedOut
+      timedOut: result.timedOut,
+      outputTruncated: result.outputTruncated || stdoutTail !== result.stdout || stderrTail !== result.stderr,
+      message: result.message
     });
   }
   return results;

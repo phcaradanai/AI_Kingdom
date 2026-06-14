@@ -1056,10 +1056,13 @@ function PatchArtifactCard({
                 <span className="text-muted-foreground">
                   {vr.timedOut ? "timed out" : `exit ${vr.exitCode ?? "?"}`} · {vr.durationMs}ms
                 </span>
+                {vr.outputTruncated && <span className="text-yellow-700">output truncated</span>}
               </div>
+              {vr.cwd && <div className="text-[11px] text-muted-foreground">cwd: {vr.cwd}</div>}
+              {vr.timedOut && vr.message && <div className="text-[11px] text-red-600">{vr.message}</div>}
               {!vr.success && (
                 <ValidationOutput
-                  text={`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? "TIMED OUT\n" : ""}STDOUT:\n${vr.stdout?.trim() || "(no stdout)"}\nSTDERR:\n${vr.stderr?.trim() || "(no stderr)"}`}
+                  text={`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? `TIMED OUT: ${vr.message ?? ""}\n` : ""}STDOUT:\n${vr.stdout?.trim() || "(no stdout)"}\nSTDERR:\n${vr.stderr?.trim() || "(no stderr)"}`}
                 />
               )}
             </div>

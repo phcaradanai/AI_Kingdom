@@ -104,6 +104,74 @@ test("patch validation surfaces a failing test line near the end of a large stdo
   }
 });
 
+test("patch validation marks outputTruncated when a command's output exceeds the tail line cap", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-patch-validation-bin-");
+  const script = [
+    "#!/bin/sh",
+    `if [ "$4" = "@ai-kingdom/api" ]; then`,
+    "  i=0",
+    "  while [ $i -lt 1000 ]; do",
+    '    echo "# pass $i"',
+    "    i=$((i+1))",
+    "  done",
+    "fi",
+    "echo ok",
+    "exit 0"
+  ].join("\n");
+  fs.writeFileSync(path.join(binDir, "npm"), script, { mode: 0o755 });
+  const previousPath = process.env.PATH;
+  try {
+    process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
+
+    const results = await runValidation(workspace);
+    const apiResult = results.find((r) => r.command === "npm run test --workspace @ai-kingdom/api");
+    const buildResult = results.find((r) => r.command === "npm run build");
+
+    assert.ok(apiResult);
+    assert.equal(apiResult.outputTruncated, true);
+    assert.ok(buildResult);
+    assert.equal(buildResult.outputTruncated, false);
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("patch validation reports a timeout message distinct from a generic failure", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-patch-validation-bin-");
+  const script = [
+    "#!/bin/sh",
+    `if [ "$4" = "@ai-kingdom/api" ]; then`,
+    "  sleep 5",
+    "fi",
+    "echo ok",
+    "exit 0"
+  ].join("\n");
+  fs.writeFileSync(path.join(binDir, "npm"), script, { mode: 0o755 });
+  const previousPath = process.env.PATH;
+  try {
+    process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
+    process.env.RUNNER_COMMAND_TIMEOUT_MS = "50";
+
+    const results = await runValidation(workspace);
+    const apiResult = results.find((r) => r.command === "npm run test --workspace @ai-kingdom/api");
+
+    assert.ok(apiResult);
+    assert.equal(apiResult.exitCode, null);
+    assert.equal(apiResult.timedOut, true);
+    assert.equal(apiResult.success, false);
+    assert.match(apiResult.message ?? "", /RUNNER_COMMAND_TIMEOUT_MS/);
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    delete process.env.RUNNER_COMMAND_TIMEOUT_MS;
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
 test("patch validation exposes the failing workspace stderr", async () => {
   const workspace = makeWorkspace();
   const markerFile = path.join(makeTempDir("runner-patch-validation-marker-"), "commands.txt");

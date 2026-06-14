@@ -107,6 +107,8 @@ export interface ValidationCommandResult {
   durationMs: number;
   cwd: string;
   timedOut: boolean;
+  outputTruncated: boolean;
+  message?: string;
 }
 
 export interface ValidationDependencyInstallResult {
@@ -348,7 +350,7 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
     }
     if (result.exitCode !== 0) {
       if (result.timedOut) {
-        errors.push(`Timed out: ${label}\n${formatTimeoutMessage(getCommandTimeoutMs())}`);
+        errors.push(`Timed out: ${label}\n${result.message ?? formatTimeoutMessage(getCommandTimeoutMs())}`);
       } else {
         const stderr = result.stderr.trim();
         errors.push(stderr ? `Exit ${result.exitCode}: ${label}\nSTDERR:\n${stderr}` : `Exit ${result.exitCode}: ${label}`);
@@ -356,6 +358,7 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
     }
     const stdoutTail = tailLines(result.stdout, VALIDATION_STEP_OUTPUT_TAIL_LINES);
     const stderrTail = tailLines(result.stderr, VALIDATION_STEP_OUTPUT_TAIL_LINES);
+    const outputTruncated = result.outputTruncated || stdoutTail !== result.stdout || stderrTail !== result.stderr;
     logLines.push(`$ ${label}\nCWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`);
 
     await deps.api.recordStep(job.id, {
@@ -364,7 +367,7 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
       command: spec.command, args: spec.args,
       output: sanitize(`CWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`).slice(0, VALIDATION_STEP_OUTPUT_MAX),
       exitCode: result.exitCode, durationMs: result.durationMs,
-      metadata: { cwd: result.cwd, timedOut: result.timedOut }
+      metadata: { cwd: result.cwd, timedOut: result.timedOut, outputTruncated, message: result.message }
     });
   }
 

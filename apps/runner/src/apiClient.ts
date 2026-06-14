@@ -86,6 +86,7 @@ export class ApiClient {
     output?: string | null;
     exitCode?: number | null;
     durationMs?: number | null;
+    metadata?: Record<string, unknown> | null;
   }): Promise<void> {
     await this.request("POST", `/api/runner/jobs/${jobId}/step`, step);
   }

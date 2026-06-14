@@ -61,7 +61,9 @@ function makeDeps(opts?: {
         output: `output of ${command}`,
         durationMs: 5,
         cwd: "/tmp/runner/jobs/job-validation-1",
-        timedOut
+        timedOut,
+        outputTruncated: false,
+        message: timedOut ? "Command timed out after RUNNER_COMMAND_TIMEOUT_MS (50ms)" : undefined
       };
     },
     prepareWorkspace: async () => {
