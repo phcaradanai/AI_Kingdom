@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { checkBudgetStatus, filterProvidersForBudget, logBudgetEvents } from "./budgetGuardService.js";
 import { getTreasuryByMonth, getTreasuryFallbackAnalytics } from "./treasuryService.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import type { AIProviderConfig } from "./aiProviderRegistry.js";
-import { LOCAL_SANDBOX_PROVIDER_ID } from "./aiProviderRegistry.js";
+import { LOCAL_SANDBOX_MODEL, LOCAL_SANDBOX_PROVIDER_ID, LOCAL_SANDBOX_PROVIDER_NAME } from "./aiProviderRegistry.js";
 
 
 const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -383,7 +384,40 @@ test("AIUsageTraceStep allows null durationMs for legacy steps", async () => {
 
 test("selectAIProviderRoute with daily budget exceeded blocks expensive provider and returns sandbox route", async () => {
   const routeSuffix = `${suffix}-route`;
+  const testRunId = `m16e-budget-fallback-${routeSuffix}`;
   const paidProviderId = `m16e-paid-provider-${routeSuffix}`;
+  const paidModel = `${paidProviderId}-model`;
+  const routeChainName = `M16E budget fallback chain ${testRunId}`;
+  const previousDailyBudget = await prisma.setting.findUnique({ where: { key: "DAILY_BUDGET_LIMIT_USD" } });
+  const previousMonthlyBudget = await prisma.setting.findUnique({ where: { key: "MONTHLY_BUDGET_LIMIT_USD" } });
+  const previousSandboxProvider = await prisma.aIProvider.findUnique({ where: { id: LOCAL_SANDBOX_PROVIDER_ID } });
+  let agent: Awaited<ReturnType<typeof prisma.agent.create>> | null = null;
+  let usageRecord: Awaited<ReturnType<typeof prisma.usageRecord.create>> | null = null;
+
+  const cleanup = async () => {
+    await prisma.auditLog.deleteMany({
+      where: {
+        OR: [
+          { resourceId: paidProviderId },
+          { metadata: { path: ["testRunId"], equals: testRunId } }
+        ]
+      }
+    });
+    await prisma.usageRecord.deleteMany({
+      where: {
+        OR: [
+          { id: usageRecord?.id },
+          { providerId: paidProviderId },
+          { metadata: { path: ["testRunId"], equals: testRunId } }
+        ]
+      }
+    });
+    await prisma.aIRouteChain.deleteMany({ where: { name: routeChainName } });
+    await prisma.agent.deleteMany({ where: { testRunId } });
+    await prisma.aIProvider.deleteMany({ where: { id: paidProviderId } });
+  };
+
+  await cleanup();
 
   // Create a dedicated paid provider, isolated from env-driven providers
   // (e.g. "deepseek") whose isActive state depends on credentials that may
@@ -393,19 +427,50 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
       id: paidProviderId,
       name: "M16E Paid Test Provider",
       type: "test-paid",
-      defaultModel: `${paidProviderId}-model`,
+      defaultModel: paidModel,
       isActive: true,
-      priority: 999,
+      priority: 1,
       costTier: "MEDIUM",
-      capabilities: { supportsChat: true },
+      capabilities: { supportsChat: true, supportsJsonMode: true },
       environmentMode: "PRODUCTION",
       allowSensitiveContext: true,
-      isFreeTier: false
+      isFreeTier: false,
+      notes: testRunId
+    }
+  });
+
+  await prisma.aIProvider.upsert({
+    where: { id: LOCAL_SANDBOX_PROVIDER_ID },
+    update: {
+      name: LOCAL_SANDBOX_PROVIDER_NAME,
+      type: "sandbox",
+      defaultModel: LOCAL_SANDBOX_MODEL,
+      isActive: true,
+      priority: 1000,
+      costTier: "FREE",
+      capabilities: { supportsChat: true, supportsJsonMode: true },
+      environmentMode: "SANDBOX",
+      allowSensitiveContext: false,
+      isFreeTier: true
+    },
+    create: {
+      id: LOCAL_SANDBOX_PROVIDER_ID,
+      name: LOCAL_SANDBOX_PROVIDER_NAME,
+      type: "sandbox",
+      defaultModel: LOCAL_SANDBOX_MODEL,
+      isActive: true,
+      priority: 1000,
+      costTier: "FREE",
+      capabilities: { supportsChat: true, supportsJsonMode: true },
+      environmentMode: "SANDBOX",
+      allowSensitiveContext: false,
+      isFreeTier: true,
+      notes: testRunId
     }
   });
 
   // Create an agent that prefers the non-free provider
-  const agent = await prisma.agent.create({
+  agent = await prisma.agent.create({
     data: {
       slug: `m16e-budget-agent-${routeSuffix}`,
       name: "Budget Test Agent",
@@ -417,33 +482,72 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
       skills: [],
       responseStyle: "concise",
       preferredProviderId: paidProviderId,
-      defaultModel: `${paidProviderId}-model`,
+      defaultModel: paidModel,
       fallbackModels: [],
       fallbackProviderIds: [],
-      isTestData: true
+      isTestData: true,
+      testRunId
     }
   });
 
-  // Set a very low daily budget limit
+  await prisma.aIRouteChain.create({
+    data: {
+      name: routeChainName,
+      agentId: agent.id,
+      scope: "AGENT",
+      isActive: true,
+      description: testRunId,
+      entries: {
+        create: [
+          {
+            sequence: 1,
+            providerId: paidProviderId,
+            model: paidModel,
+            isEnabled: true,
+            notes: testRunId
+          },
+          {
+            sequence: 2,
+            providerId: LOCAL_SANDBOX_PROVIDER_ID,
+            model: LOCAL_SANDBOX_MODEL,
+            isEnabled: true,
+            notes: testRunId
+          }
+        ]
+      }
+    }
+  });
+
+  // Set an isolated daily budget limit and disable monthly budget influence.
   await prisma.setting.upsert({
     where: { key: "DAILY_BUDGET_LIMIT_USD" },
     update: { value: "0.0001" },
     create: { key: "DAILY_BUDGET_LIMIT_USD", value: "0.0001", category: "SYSTEM", description: "test" }
   });
+  await prisma.setting.upsert({
+    where: { key: "MONTHLY_BUDGET_LIMIT_USD" },
+    update: { value: "" },
+    create: { key: "MONTHLY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "test" }
+  });
 
   // Insert a usage record today that exceeds the limit
-  const usageRecord = await prisma.usageRecord.create({
+  usageRecord = await prisma.usageRecord.create({
     data: {
       agentId: agent.id,
       provider: paidProviderId,
       providerId: paidProviderId,
-      model: `${paidProviderId}-model`,
+      model: paidModel,
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 150,
       estimatedCostUSD: 1.0,
       estimatedCostLocal: 1.0,
-      currency: "USD"
+      currency: "USD",
+      sourceType: "TEST",
+      sourceId: testRunId,
+      operation: "m16e_budget_fallback_test",
+      purpose: "Verify daily budget fallback to local sandbox",
+      metadata: { testRunId }
     }
   });
 
@@ -455,15 +559,8 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
     });
 
     // Budget is exceeded — sandbox or free-tier must be primary
-    const isAllowedProvider =
-      selection.provider.id === LOCAL_SANDBOX_PROVIDER_ID ||
-      selection.provider.isFreeTier ||
-      selection.provider.costTier === "FREE";
-
-    assert.ok(
-      isAllowedProvider,
-      `Expected sandbox/free provider when budget exceeded, got: ${selection.provider.id} (costTier: ${selection.provider.costTier})`
-    );
+    assert.equal(selection.provider.id, LOCAL_SANDBOX_PROVIDER_ID);
+    assert.equal(selection.model, LOCAL_SANDBOX_MODEL);
     assert.equal(selection.budgetBlocked, true, "budgetBlocked flag must be true when budget exceeded");
     assert.ok(
       selection.blockedProviderIds && selection.blockedProviderIds.length > 0,
@@ -475,15 +572,73 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
     );
 
   } finally {
-    // Always restore settings and clean up
-    await prisma.setting.upsert({
-      where: { key: "DAILY_BUDGET_LIMIT_USD" },
-      update: { value: "" },
-      create: { key: "DAILY_BUDGET_LIMIT_USD", value: "", category: "SYSTEM", description: "test" }
-    });
-    await prisma.usageRecord.delete({ where: { id: usageRecord.id } }).catch(() => undefined);
-    await prisma.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
-    await prisma.aIProvider.delete({ where: { id: paidProviderId } }).catch(() => undefined);
+    await cleanup();
+    if (previousDailyBudget) {
+      await prisma.setting.update({ where: { key: "DAILY_BUDGET_LIMIT_USD" }, data: { value: previousDailyBudget.value } });
+    } else {
+      await prisma.setting.delete({ where: { key: "DAILY_BUDGET_LIMIT_USD" } }).catch(() => undefined);
+    }
+    if (previousMonthlyBudget) {
+      await prisma.setting.update({ where: { key: "MONTHLY_BUDGET_LIMIT_USD" }, data: { value: previousMonthlyBudget.value } });
+    } else {
+      await prisma.setting.delete({ where: { key: "MONTHLY_BUDGET_LIMIT_USD" } }).catch(() => undefined);
+    }
+    if (previousSandboxProvider) {
+      const restoredCapabilities = previousSandboxProvider.capabilities === null
+        ? Prisma.JsonNull
+        : previousSandboxProvider.capabilities as Prisma.InputJsonValue;
+      const restoredConfig = previousSandboxProvider.config === null
+        ? Prisma.DbNull
+        : previousSandboxProvider.config as Prisma.InputJsonValue;
+      await prisma.aIProvider.upsert({
+        where: { id: LOCAL_SANDBOX_PROVIDER_ID },
+        update: {
+          name: previousSandboxProvider.name,
+          type: previousSandboxProvider.type,
+          baseUrl: previousSandboxProvider.baseUrl,
+          defaultModel: previousSandboxProvider.defaultModel,
+          isActive: previousSandboxProvider.isActive,
+          priority: previousSandboxProvider.priority,
+          costTier: previousSandboxProvider.costTier,
+          capabilities: restoredCapabilities,
+          config: restoredConfig,
+          environmentMode: previousSandboxProvider.environmentMode,
+          maxTokensPerRequest: previousSandboxProvider.maxTokensPerRequest,
+          maxRequestsPerDay: previousSandboxProvider.maxRequestsPerDay,
+          maxTokensPerDay: previousSandboxProvider.maxTokensPerDay,
+          maxEstimatedCostPerDay: previousSandboxProvider.maxEstimatedCostPerDay,
+          allowSensitiveContext: previousSandboxProvider.allowSensitiveContext,
+          isFreeTier: previousSandboxProvider.isFreeTier,
+          notes: previousSandboxProvider.notes,
+          modelValidationStatus: previousSandboxProvider.modelValidationStatus,
+          lastValidationTime: previousSandboxProvider.lastValidationTime
+        },
+        create: {
+          id: previousSandboxProvider.id,
+          name: previousSandboxProvider.name,
+          type: previousSandboxProvider.type,
+          baseUrl: previousSandboxProvider.baseUrl,
+          defaultModel: previousSandboxProvider.defaultModel,
+          isActive: previousSandboxProvider.isActive,
+          priority: previousSandboxProvider.priority,
+          costTier: previousSandboxProvider.costTier,
+          capabilities: restoredCapabilities,
+          config: restoredConfig,
+          environmentMode: previousSandboxProvider.environmentMode,
+          maxTokensPerRequest: previousSandboxProvider.maxTokensPerRequest,
+          maxRequestsPerDay: previousSandboxProvider.maxRequestsPerDay,
+          maxTokensPerDay: previousSandboxProvider.maxTokensPerDay,
+          maxEstimatedCostPerDay: previousSandboxProvider.maxEstimatedCostPerDay,
+          allowSensitiveContext: previousSandboxProvider.allowSensitiveContext,
+          isFreeTier: previousSandboxProvider.isFreeTier,
+          notes: previousSandboxProvider.notes,
+          modelValidationStatus: previousSandboxProvider.modelValidationStatus,
+          lastValidationTime: previousSandboxProvider.lastValidationTime
+        }
+      });
+    } else {
+      await prisma.aIProvider.delete({ where: { id: LOCAL_SANDBOX_PROVIDER_ID } }).catch(() => undefined);
+    }
   }
 });
 
