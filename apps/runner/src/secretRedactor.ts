@@ -53,6 +53,20 @@ export function truncateOutput(text: string, maxLength = MAX_OUTPUT_LENGTH): str
   return `${text.slice(0, half)}\n...[truncated ${text.length - maxLength} chars]...\n${text.slice(-half)}`;
 }
 
-export function sanitizeLogOutput(raw: string): string {
-  return truncateOutput(redactSecrets(raw));
+export function sanitizeLogOutput(raw: string, maxLength = MAX_OUTPUT_LENGTH): string {
+  return truncateOutput(redactSecrets(raw), maxLength);
+}
+
+/**
+ * Keeps only the last `maxLines` lines of `text`. Failure details (e.g. "not ok"
+ * lines and the final summary from a test runner) are almost always near the end
+ * of stdout/stderr, so a tail-based cap preserves them even when the full output
+ * is large.
+ */
+export function tailLines(text: string, maxLines: number): string {
+  if (!text) return text;
+  const lines = text.split("\n");
+  if (lines.length <= maxLines) return text;
+  const omitted = lines.length - maxLines;
+  return `...[truncated ${omitted} earlier line${omitted === 1 ? "" : "s"}]...\n${lines.slice(-maxLines).join("\n")}`;
 }

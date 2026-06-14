@@ -13,7 +13,7 @@
  */
 
 import { runCommand } from "./sandbox.js";
-import { sanitizeLogOutput } from "./secretRedactor.js";
+import { sanitizeLogOutput, tailLines } from "./secretRedactor.js";
 import type { ApiClient } from "./apiClient.js";
 
 export interface ValidationResult {
@@ -49,6 +49,14 @@ export interface PatchGeneratorOptions {
 const DIFF_STAT_MAX = 5000;
 const DIFF_PREVIEW_MAX = 10_000;
 const FULL_PATCH_MAX = 200_000;
+
+// Validation output capture: keep enough of stdout/stderr (tail-biased, since
+// failure lines and the final test summary appear near the end) to render the
+// last ~300 lines in the UI without losing the actual failing test/assertion.
+const VALIDATION_OUTPUT_TAIL_LINES = 300;
+const VALIDATION_STDOUT_MAX = 30_000;
+const VALIDATION_STDERR_MAX = 15_000;
+const VALIDATION_COMBINED_OUTPUT_MAX = 40_000;
 
 export async function generatePatch(opts: PatchGeneratorOptions): Promise<PatchPayload> {
   const { workspaceRoot, jobId, workOrderTitle, allowBranchPush } = opts;
@@ -98,14 +106,16 @@ export async function runValidation(workspaceRoot: string): Promise<ValidationRe
   const results: ValidationResult[] = [];
   for (const { cmd, args } of commands) {
     const result = await runCommand(cmd, args, { workspaceRoot });
+    const stdoutTail = tailLines(result.stdout, VALIDATION_OUTPUT_TAIL_LINES);
+    const stderrTail = tailLines(result.stderr, VALIDATION_OUTPUT_TAIL_LINES);
     results.push({
       command: `${cmd} ${args.join(" ")}`,
       exitCode: result.exitCode,
       durationMs: result.durationMs,
       cwd: result.cwd,
-      stdout: sanitizeLogOutput(result.stdout).slice(0, 3000),
-      stderr: sanitizeLogOutput(result.stderr).slice(0, 3000),
-      output: sanitizeLogOutput(`CWD: ${result.cwd}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 5000),
+      stdout: sanitizeLogOutput(stdoutTail, VALIDATION_STDOUT_MAX),
+      stderr: sanitizeLogOutput(stderrTail, VALIDATION_STDERR_MAX),
+      output: sanitizeLogOutput(`CWD: ${result.cwd}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`, VALIDATION_COMBINED_OUTPUT_MAX),
       success: result.exitCode === 0,
       timedOut: result.timedOut
     });

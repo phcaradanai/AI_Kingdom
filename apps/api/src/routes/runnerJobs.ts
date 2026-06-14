@@ -179,7 +179,7 @@ router.post("/jobs/:id/step", async (req, res, next) => {
       status: z.string().default("PENDING"),
       command: z.string().max(200).optional().nullable(),
       args: z.array(z.string()).max(50).default([]),
-      output: z.string().max(5000).optional().nullable(),
+      output: z.string().max(30000).optional().nullable(),
       exitCode: z.number().int().optional().nullable(),
       durationMs: z.number().int().optional().nullable(),
       metadata: z.record(z.unknown()).optional().nullable()
@@ -221,9 +221,9 @@ const validationResultSchema = z.object({
   exitCode: z.number().int().nullable(),
   durationMs: z.number().int().min(0),
   cwd: z.string().max(1000).optional(),
-  stdout: z.string().max(5000).optional(),
-  stderr: z.string().max(5000).optional(),
-  output: z.string().max(5000),
+  stdout: z.string().max(30000).optional(),
+  stderr: z.string().max(15000).optional(),
+  output: z.string().max(40000),
   success: z.boolean(),
   timedOut: z.boolean().optional()
 });

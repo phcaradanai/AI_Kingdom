@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { FormField } from "@/components/ui/FormField";
@@ -1057,9 +1058,9 @@ function PatchArtifactCard({
                 </span>
               </div>
               {!vr.success && (
-                <pre className="bg-muted/50 rounded p-2 overflow-auto max-h-36 font-mono whitespace-pre-wrap text-[11px]">
-                  {`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? "TIMED OUT\n" : ""}STDERR:\n${vr.stderr?.trim() || vr.output || "(no stderr)"}`}
-                </pre>
+                <ValidationOutput
+                  text={`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? "TIMED OUT\n" : ""}STDOUT:\n${vr.stdout?.trim() || "(no stdout)"}\nSTDERR:\n${vr.stderr?.trim() || "(no stderr)"}`}
+                />
               )}
             </div>
           ))}

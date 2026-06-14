@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Activity, AlertTriangle, Bot, CheckCircle, Clock, GitBranch, Play, RefreshCw, Shield, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
@@ -502,23 +503,28 @@ export function AutomationJobsPage() {
                   <h4 className="text-xs font-semibold text-muted-foreground mb-2">Step Timeline</h4>
                   <div className="space-y-1.5">
                     {selectedJob.steps.map((step) => (
-                      <div key={step.id} className="flex items-start gap-2 text-xs">
-                        <span className="text-muted-foreground shrink-0">#{step.sequence}</span>
-                        <span className={cn("shrink-0 px-1.5 py-0.5 rounded text-xs font-medium",
-                          step.status === "COMPLETED" ? "bg-green-50 text-green-700" :
-                          step.status === "FAILED" ? "bg-red-50 text-red-700" :
-                          step.status === "BLOCKED" ? "bg-yellow-50 text-yellow-700" :
-                          "bg-gray-50 text-gray-600"
-                        )}>{step.stepType}</span>
-                        <span className="flex-1">{step.title}</span>
-                        {Boolean((step.metadata as { timedOut?: boolean } | null)?.timedOut) ? (
-                          <span className="shrink-0 text-red-600">timed out</span>
-                        ) : step.exitCode !== null && (
-                          <span className={cn("shrink-0", step.exitCode === 0 ? "text-green-600" : "text-red-600")}>
-                            exit {step.exitCode}
-                          </span>
+                      <div key={step.id} className="space-y-1">
+                        <div className="flex items-start gap-2 text-xs">
+                          <span className="text-muted-foreground shrink-0">#{step.sequence}</span>
+                          <span className={cn("shrink-0 px-1.5 py-0.5 rounded text-xs font-medium",
+                            step.status === "COMPLETED" ? "bg-green-50 text-green-700" :
+                            step.status === "FAILED" ? "bg-red-50 text-red-700" :
+                            step.status === "BLOCKED" ? "bg-yellow-50 text-yellow-700" :
+                            "bg-gray-50 text-gray-600"
+                          )}>{step.stepType}</span>
+                          <span className="flex-1">{step.title}</span>
+                          {Boolean((step.metadata as { timedOut?: boolean } | null)?.timedOut) ? (
+                            <span className="shrink-0 text-red-600">timed out</span>
+                          ) : step.exitCode !== null && (
+                            <span className={cn("shrink-0", step.exitCode === 0 ? "text-green-600" : "text-red-600")}>
+                              exit {step.exitCode}
+                            </span>
+                          )}
+                          {step.durationMs !== null && <span className="shrink-0 text-muted-foreground">{step.durationMs}ms</span>}
+                        </div>
+                        {step.status === "FAILED" && step.output && (
+                          <ValidationOutput text={step.output} className="ml-6" />
                         )}
-                        {step.durationMs !== null && <span className="shrink-0 text-muted-foreground">{step.durationMs}ms</span>}
                       </div>
                     ))}
                   </div>
@@ -736,9 +742,9 @@ function PatchReviewCard({
                 </span>
               </div>
               {!vr.success && (
-                <pre className="bg-muted rounded p-2 overflow-auto max-h-36 font-mono whitespace-pre-wrap text-[11px]">
-                  {`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? "TIMED OUT\n" : ""}STDERR:\n${vr.stderr?.trim() || vr.output || "(no stderr)"}`}
-                </pre>
+                <ValidationOutput
+                  text={`CWD: ${vr.cwd ?? "unknown"}\n${vr.timedOut ? "TIMED OUT\n" : ""}STDOUT:\n${vr.stdout?.trim() || "(no stdout)"}\nSTDERR:\n${vr.stderr?.trim() || "(no stderr)"}`}
+                />
               )}
             </div>
           ))}

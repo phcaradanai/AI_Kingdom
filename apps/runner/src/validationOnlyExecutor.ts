@@ -10,6 +10,13 @@
  */
 
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
+import { tailLines } from "./secretRedactor.js";
+
+// Validation step output capture: tail-biased so the actual failure (e.g. a
+// "not ok" line and the final test summary) survives truncation even when a
+// command produces a large amount of output.
+const VALIDATION_STEP_OUTPUT_TAIL_LINES = 300;
+const VALIDATION_STEP_OUTPUT_MAX = 30_000;
 
 export interface ValidationCommandSpec {
   command: string;
@@ -347,13 +354,15 @@ export async function executeValidationOnlyJob(job: ValidationOnlyJob, deps: Exe
         errors.push(stderr ? `Exit ${result.exitCode}: ${label}\nSTDERR:\n${stderr}` : `Exit ${result.exitCode}: ${label}`);
       }
     }
-    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
+    const stdoutTail = tailLines(result.stdout, VALIDATION_STEP_OUTPUT_TAIL_LINES);
+    const stderrTail = tailLines(result.stderr, VALIDATION_STEP_OUTPUT_TAIL_LINES);
+    logLines.push(`$ ${label}\nCWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`);
 
     await deps.api.recordStep(job.id, {
       sequence, stepType: "COMMAND", title: label,
       status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
       command: spec.command, args: spec.args,
-      output: sanitize(`CWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`).slice(0, 4000),
+      output: sanitize(`CWD: ${result.cwd}\nTIMED_OUT: ${result.timedOut}\nSTDOUT:\n${stdoutTail}\nSTDERR:\n${stderrTail}`).slice(0, VALIDATION_STEP_OUTPUT_MAX),
       exitCode: result.exitCode, durationMs: result.durationMs,
       metadata: { cwd: result.cwd, timedOut: result.timedOut }
     });

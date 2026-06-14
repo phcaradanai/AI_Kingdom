@@ -69,6 +69,41 @@ test("patch validation runs explicit workspace test commands from workspace root
   }
 });
 
+test("patch validation surfaces a failing test line near the end of a large stdout", async () => {
+  const workspace = makeWorkspace();
+  const binDir = makeTempDir("runner-patch-validation-bin-");
+  const lines = Array.from({ length: 1000 }, (_, i) => `# pass ${i}`);
+  lines.push("not ok 1 - some assertion failed");
+  lines.push("# fail 1");
+  const script = [
+    "#!/bin/sh",
+    `if [ "$4" = "@ai-kingdom/api" ]; then`,
+    ...lines.map((l) => `  echo ${JSON.stringify(l)}`),
+    `  exit 1`,
+    `fi`,
+    "echo ok",
+    "exit 0"
+  ].join("\n");
+  fs.writeFileSync(path.join(binDir, "npm"), script, { mode: 0o755 });
+  const previousPath = process.env.PATH;
+  try {
+    process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
+
+    const results = await runValidation(workspace);
+    const failed = results.find((r) => r.command === "npm run test --workspace @ai-kingdom/api");
+
+    assert.ok(failed);
+    assert.equal(failed.exitCode, 1);
+    assert.match(failed.stdout, /not ok 1 - some assertion failed/);
+    assert.match(failed.stdout, /# fail 1/);
+    assert.match(failed.output, /not ok 1 - some assertion failed/);
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
 test("patch validation exposes the failing workspace stderr", async () => {
   const workspace = makeWorkspace();
   const markerFile = path.join(makeTempDir("runner-patch-validation-marker-"), "commands.txt");
