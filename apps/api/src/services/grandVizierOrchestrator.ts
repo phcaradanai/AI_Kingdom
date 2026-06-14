@@ -1,4 +1,4 @@
-import type { Agent, Task, TaskMode } from "@prisma/client";
+import type { Agent, AgentResponse, CouncilSession, Task, TaskMode } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
@@ -11,9 +11,9 @@ import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./m
 import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
-import { buildUsageAttribution } from "./usageAttributionService.js";
+import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
-import { runPlannerAgent } from "./plannerAgentService.js";
+import { proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
 import {
   addTraceStep,
   attachUsageRecordStep,
@@ -28,11 +28,48 @@ import {
 } from "./aiUsageTraceService.js";
 
 const AGENTS_BY_MODE: Record<TaskMode, string[]> = {
-  ASK: ["grand-vizier", "royal-architect"],
-  PLAN: ["grand-vizier", "royal-general", "royal-architect"],
-  RESEARCH: ["grand-vizier", "royal-researcher", "royal-general"],
-  BUILD: ["grand-vizier", "royal-architect", "royal-general"]
+  ASK: ["royal-archivist", "royal-researcher", "royal-architect", "royal-general", "grand-vizier"],
+  PLAN: ["royal-archivist", "royal-researcher", "royal-architect", "royal-general", "grand-vizier"],
+  RESEARCH: ["royal-archivist", "royal-researcher", "royal-architect", "royal-general", "grand-vizier"],
+  BUILD: ["royal-archivist", "royal-researcher", "royal-architect", "royal-general", "grand-vizier"]
 };
+
+const ROLE_RESPONSE_CONTRACTS: Record<string, string> = {
+  "royal-archivist": [
+    "Return a section titled 'Archivist Evidence Report'.",
+    "Include: evidence summary; cited logs/artifacts/context; exact failing item or observed event; candidate lesson/memory.",
+    "Use only provided Project Context, Kingdom Memory Context, and prior council context. Do not expose secrets or raw local root paths."
+  ].join("\n"),
+  "royal-researcher": [
+    "Return a section titled 'Researcher Hypotheses'.",
+    "Include: hypotheses ranked by likelihood; likely root cause categories; evidence supporting or refuting each hypothesis.",
+    "Clearly separate evidence from assumptions."
+  ].join("\n"),
+  "royal-architect": [
+    "Return a section titled 'Architect Patch Plan'.",
+    "Include: safe patch plan; files to inspect/change; risk assessment; validation commands; rollback strategy.",
+    "Do not create a patch. Do not suggest merge, deploy, push, or PR automation."
+  ].join("\n"),
+  "royal-general": [
+    "Return a section titled 'General Execution Checklist'.",
+    "Include: execution checklist; external-agent handoff checklist; acceptance criteria; do-not-cross constraints.",
+    "Keep handoff manual-review only. Do not create runner jobs or automation."
+  ].join("\n"),
+  "grand-vizier": [
+    "Return a section titled 'Grand Vizier Final Decision'.",
+    "Include: final synthesis; decision framing; recommended next action; tradeoffs.",
+    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
+  ].join("\n")
+};
+
+const MANUAL_ONLY_GUARDRAILS = [
+  "M17F-1 guardrail: do not auto-patch.",
+  "M17F-1 guardrail: do not auto-merge.",
+  "M17F-1 guardrail: do not auto-deploy.",
+  "M17F-1 guardrail: do not auto-create PRs.",
+  "M17F-1 guardrail: do not weaken runner auth or context binding.",
+  "M17F-1 guardrail: do not expose secrets."
+].join("\n");
 
 export async function processTaskWithGrandVizier(taskId: string, userId: string) {
   const task = await prisma.task.findFirst({
@@ -88,9 +125,11 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
     const kingdomContext = await getKingdomContext();
-    const projectContext = task.projectId
+    const baseProjectContext = task.projectId
       ? await buildProjectContext(task.projectId)
       : "[PROJECT CONTEXT]\nNo project assigned. Avoid project-specific assumptions.";
+    const contextWarning = await buildContextWarning(task.projectId);
+    const projectContext = [contextWarning, baseProjectContext].filter(Boolean).join("\n\n");
     const relevantMemories = await findRelevantMemories(userId, task.command, 5);
     const kingdomMemoryContext = formatMemoryContext(relevantMemories);
     const fallbackNotices: string[] = [];
@@ -228,7 +267,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           agentName: agent.name,
           agentRole: agent.title,
           agentSkills: agent.skills,
-          systemPrompt: agent.systemPrompt || agent.prompt,
+          systemPrompt: buildRoleSystemPrompt(agent),
           responseStyle: agent.responseStyle,
           temperature: agent.temperature ?? undefined,
           maxTokens: agent.maxTokens ?? defaultMaxTokens,
@@ -603,7 +642,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       fallbackNotice: generatedSummary.fallbackNotice ?? null
     });
 
-    const finalSummary = generatedSummary.response;
+    const finalSummary = [contextWarning, generatedSummary.response].filter(Boolean).join("\n\n");
 
     const completedSession = await prisma.councilSession.update({
       where: { id: session.id },
@@ -670,6 +709,15 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       });
     }
 
+    const learningCandidate = await createCouncilLearningCandidate({
+      task,
+      session: completedSession,
+      grandVizier,
+      responses: completedSession.responses,
+      finalSummary,
+      traceId: summaryTrace.traceId
+    });
+
     const sessionWithMemories = await prisma.councilSession.update({
       where: { id: completedSession.id },
       data: {
@@ -706,6 +754,21 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       });
     }
 
+    if (learningCandidate) {
+      await addTraceStep({
+        traceId: summaryTrace.traceId,
+        stepType: "MEMORY_EXTRACTION",
+        operation: "knowledge_candidate",
+        title: "Learning memory candidate created",
+        detail: learningCandidate.title,
+        taskId: task.id,
+        projectId: task.projectId,
+        councilSessionId: session.id,
+        agentId: grandVizier.id,
+        metadata: { candidateId: learningCandidate.id, status: learningCandidate.status }
+      });
+    }
+
     // ── Timeline: TRACE_COMPLETED step for final counsel ──
     await addTraceStep({
       traceId: summaryTrace.traceId,
@@ -720,11 +783,6 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       estimatedCostUSD: summaryCost.costUSD
     });
 
-    // ── Planner Agent: best-effort draft work order generation ──
-    await runPlannerAgent(sessionWithMemories, task, userId).catch((err) =>
-      console.warn("[PlannerAgent] Skipped:", err instanceof Error ? err.message : String(err))
-    );
-
     return sessionWithMemories;
   } catch (error) {
     await prisma.councilSession.update({
@@ -737,6 +795,99 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     });
     throw error;
   }
+}
+
+async function buildContextWarning(projectId: string | null): Promise<string> {
+  if (!projectId) {
+    return [
+      "[CONTEXT WARNING]",
+      "No project is assigned to this Royal Command. Do not create SANDBOX_PATCH jobs from this council output without first linking a project and binding fresh local document context."
+    ].join("\n");
+  }
+
+  const blockedWorkOrders = await prisma.workOrder.findMany({
+    where: {
+      projectId,
+      status: { in: ["READY", "IN_PROGRESS", "NEEDS_REVIEW"] },
+      contextBindingStatus: { not: "FRESH" }
+    },
+    select: { id: true, title: true, contextBindingStatus: true },
+    orderBy: { updatedAt: "desc" },
+    take: 5
+  });
+
+  if (blockedWorkOrders.length === 0) {
+    return "";
+  }
+
+  return [
+    "[CONTEXT WARNING]",
+    "One or more active WorkOrders have stale, missing, or partial project context. SANDBOX_PATCH creation is blocked until contextBindingStatus is FRESH.",
+    ...blockedWorkOrders.map((workOrder) => `- ${workOrder.title} (${workOrder.contextBindingStatus}; id ${workOrder.id})`)
+  ].join("\n");
+}
+
+function buildRoleSystemPrompt(agent: Agent): string {
+  return [
+    agent.systemPrompt || agent.prompt,
+    ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel.",
+    MANUAL_ONLY_GUARDRAILS
+  ].join("\n\n");
+}
+
+async function createCouncilLearningCandidate(input: {
+  task: Task;
+  session: CouncilSession;
+  grandVizier: Agent;
+  responses: AgentResponse[];
+  finalSummary: string;
+  traceId: string;
+}) {
+  const roleMap = new Map(input.responses.map((response) => [response.role, response.response]));
+  const archivist = roleMap.get("Royal Archivist") ?? "";
+  const researcher = roleMap.get("Royal Researcher") ?? "";
+  const architect = roleMap.get("Royal Architect") ?? "";
+  const general = roleMap.get("Royal General") ?? "";
+  const content = redactPublicOutput([
+    `Failure pattern: ${input.task.command}`,
+    `Evidence: ${summarizeForCandidate(archivist || input.finalSummary)}`,
+    `Lesson: ${summarizeForCandidate(researcher || input.finalSummary)}`,
+    `Recommended future behavior: ${summarizeForCandidate([architect, general, input.finalSummary].filter(Boolean).join(" "))}`
+  ].join("\n\n"));
+
+  return proposeKnowledgeCandidate({
+    agentId: input.grandVizier.id,
+    projectId: input.task.projectId,
+    taskId: input.task.id,
+    councilSessionId: input.session.id,
+    traceId: input.traceId,
+    sourceType: "COUNCIL_SESSION",
+    sourceId: input.session.id,
+    title: `Learning candidate from ${input.task.title}`,
+    content,
+    summary: summarizeForCandidate(input.finalSummary, 280),
+    category: /fail|error|diagnos|bug|test/i.test(input.task.command) ? "BUG_LEARNING" : "WORKFLOW_RULE",
+    confidence: 0.72,
+    proposedByAgentId: input.grandVizier.id,
+    tags: ["m17f-1", "council-learning", input.task.mode.toLowerCase()],
+    metadata: {
+      failurePattern: input.task.command,
+      evidenceSourceRoles: input.responses.map((response) => response.role),
+      recommendedFutureBehaviorSource: "Royal Architect, Royal General, and Grand Vizier outputs",
+      requiresReview: true
+    }
+  });
+}
+
+function redactPublicOutput(value: string): string {
+  return redactSecrets(value)
+    .replace(/\/Users\/[^\s"'`),;]+/g, "[LOCAL_PATH_REDACTED]")
+    .replace(/\/private\/(?:tmp|var)\/[^\s"'`),;]+/g, "[LOCAL_PATH_REDACTED]");
+}
+
+function summarizeForCandidate(value: string, maxLength = 450): string {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized;
 }
 
 function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fallbackProviders: AIProviderConfig[]) {
@@ -757,8 +908,5 @@ function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fal
 
 function orderSelectedAgents(mode: TaskMode, agents: Agent[]): Agent[] {
   const bySlug = new Map(agents.map((agent) => [agent.slug, agent]));
-  const selected = AGENTS_BY_MODE[mode].map((slug) => bySlug.get(slug)).filter((agent): agent is Agent => Boolean(agent));
-  const grandVizier = selected.find((agent) => agent.slug === "grand-vizier");
-  const specialists = selected.filter((agent) => agent.slug !== "grand-vizier").sort((a, b) => a.priority - b.priority);
-  return grandVizier ? [grandVizier, ...specialists] : specialists;
+  return AGENTS_BY_MODE[mode].map((slug) => bySlug.get(slug)).filter((agent): agent is Agent => Boolean(agent));
 }

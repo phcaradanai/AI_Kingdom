@@ -378,6 +378,8 @@ export const api = {
       method: "POST"
     }),
   taskCouncil: (id: string) => apiRequest<{ sessions: CouncilSessionDto[] }>(`/tasks/${id}/council`),
+  createCouncilHandoff: (taskId: string, sessionId: string) =>
+    apiRequest<{ workOrder: WorkOrderDto; handoffBrief: HandoffBriefDto }>(`/tasks/${taskId}/council/${sessionId}/handoff`, { method: "POST" }),
   councilSessions: () => apiRequest<{ sessions: CouncilSessionDto[] }>("/council"),
   councilSession: (id: string) => apiRequest<{ session: CouncilSessionDto }>(`/council/${id}`),
   reports: (params?: { category?: string; importance?: string }) => {

@@ -1,4 +1,5 @@
-import { Send, Sparkles, ScrollText, Cpu, Server, FileText } from "lucide-react";
+import { AlertTriangle, BookOpen, CheckCircle2, ClipboardCheck, Cpu, FileText, Handshake, ScrollText, Search, Send, Server, ShieldCheck, Sparkles, Clock3, XCircle } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -7,10 +8,11 @@ import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
+import { api } from "@/lib/api";
 import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { TaskMode } from "@/types/api";
+import type { CouncilResponseDto, CouncilSessionDto, TaskMode } from "@/types/api";
 
 const modes: Array<{ value: TaskMode; label: string; description: string }> = [
   { value: "ASK", label: "Ask", description: "Clarify a question or decision." },
@@ -19,10 +21,21 @@ const modes: Array<{ value: TaskMode; label: string; description: string }> = [
   { value: "BUILD", label: "Build", description: "Prepare implementation work." }
 ];
 
+const councilRoles = [
+  { role: "Royal Archivist", label: "Archivist Evidence Report", icon: BookOpen },
+  { role: "Royal Researcher", label: "Researcher Hypotheses", icon: Search },
+  { role: "Royal Architect", label: "Architect Patch Plan", icon: ShieldCheck },
+  { role: "Royal General", label: "General Execution Checklist", icon: ClipboardCheck },
+  { role: "Grand Vizier", label: "Grand Vizier Final Decision", icon: FileText }
+] as const;
+
 export function ThroneRoomPage() {
   const [command, setCommand] = useState("");
   const [mode, setMode] = useState<TaskMode>("ASK");
   const [error, setError] = useState<string | null>(null);
+  const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
+  const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [isCreatingHandoff, setIsCreatingHandoff] = useState(false);
   const submitCommand = useKingdomStore((state) => state.submitCommand);
   const isLoading = useKingdomStore((state) => state.isLoading);
   const isProcessing = useKingdomStore((state) => state.isProcessing);
@@ -43,6 +56,21 @@ export function ThroneRoomPage() {
       setCommand("");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "The throne room could not record the decree");
+    }
+  }
+
+  async function createHandoff() {
+    if (!latestTask || !latestSession) return;
+    setHandoffMessage(null);
+    setHandoffError(null);
+    setIsCreatingHandoff(true);
+    try {
+      const response = await api.createCouncilHandoff(latestTask.id, latestSession.id);
+      setHandoffMessage(`External handoff created: ${response.handoffBrief.title}`);
+    } catch (handoffError) {
+      setHandoffError(handoffError instanceof Error ? handoffError.message : "Unable to create external-agent handoff");
+    } finally {
+      setIsCreatingHandoff(false);
     }
   }
 
@@ -138,12 +166,58 @@ export function ThroneRoomPage() {
             </div>
           </div>
           
+          {latestSession && (
+            <div className="mt-8 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="font-display text-lg text-primary">Role-Based Council</h3>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={latestSession.status !== "COMPLETED" || isCreatingHandoff}
+                  onClick={createHandoff}
+                >
+                  <Handshake className="mr-2 h-4 w-4" />
+                  {isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}
+                </Button>
+              </div>
+
+              {extractContextWarning(latestSession.finalSummary) && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-300">
+                  <div className="mb-1 flex items-center gap-2 font-semibold">
+                    <AlertTriangle className="h-4 w-4" />
+                    Context Warning
+                  </div>
+                  <MarkdownDocument content={extractContextWarning(latestSession.finalSummary) ?? ""} className="max-w-none text-sm" />
+                </div>
+              )}
+
+              {handoffMessage && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{handoffMessage}</div>
+              )}
+              {handoffError && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{handoffError}</div>
+              )}
+
+              <div className="grid gap-4 xl:grid-cols-2">
+                {councilRoles.map((role) => (
+                  <CouncilRoleSection
+                    key={role.role}
+                    session={latestSession}
+                    role={role.role}
+                    label={role.label}
+                    icon={role.icon}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
           {latestSession?.finalSummary && (
             <div className="mt-8 rounded-xl border border-primary/20 bg-background/60 p-6 backdrop-blur-md">
               <div className="flex flex-wrap items-center justify-between gap-4 mb-4 border-b border-border/50 pb-4">
                 <h3 className="font-display text-lg text-primary flex items-center gap-2">
                   <FileText className="h-5 w-5" />
-                  Final Counsel
+                  Final Recommendation
                 </h3>
                 {latestSession.providerName && (
                   <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-md border border-border/50">
@@ -153,7 +227,7 @@ export function ThroneRoomPage() {
                   </div>
                 )}
               </div>
-              <MarkdownDocument content={latestSession.finalSummary} className="max-w-none" />
+              <MarkdownDocument content={stripContextWarning(latestSession.finalSummary)} className="max-w-none" />
               <div className="mt-6 flex flex-wrap gap-4 text-xs text-muted-foreground border-t border-border/50 pt-4">
                 <div className="flex items-center gap-1.5">
                   <div className="h-1.5 w-1.5 rounded-full bg-primary/50"></div>
@@ -224,4 +298,97 @@ export function ThroneRoomPage() {
       </section>
     </div>
   );
+}
+
+function CouncilRoleSection({
+  session,
+  role,
+  label,
+  icon: Icon
+}: {
+  session: CouncilSessionDto;
+  role: string;
+  label: string;
+  icon: LucideIcon;
+}) {
+  const response = findRoleResponse(session.responses, role);
+  const isGrandVizier = role === "Grand Vizier";
+  const content = isGrandVizier
+    ? stripContextWarning(session.finalSummary || response?.response || "")
+    : response?.response || "";
+  const status = response || (isGrandVizier && session.finalSummary)
+    ? "completed"
+    : session.status === "FAILED"
+    ? "failed"
+    : "pending";
+  const references = extractReferences(content || response?.response || "");
+  const StatusIcon = status === "completed" ? CheckCircle2 : status === "failed" ? XCircle : Clock3;
+
+  return (
+    <div className="rounded-lg border border-border bg-background/50 p-4">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="rounded-md border border-primary/20 bg-primary/10 p-1.5 text-primary">
+            <Icon className="h-4 w-4" />
+          </span>
+          <div>
+            <div className="font-semibold leading-tight">{label}</div>
+            <div className="text-xs text-muted-foreground">{role}</div>
+          </div>
+        </div>
+        <span className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
+          status === "completed" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+          status === "failed" && "border-destructive/30 bg-destructive/10 text-destructive",
+          status === "pending" && "border-amber-500/30 bg-amber-500/10 text-amber-300"
+        )}>
+          <StatusIcon className="h-3 w-3" />
+          {status}
+        </span>
+      </div>
+
+      {content ? (
+        <MarkdownDocument content={content} className="max-w-none text-sm" />
+      ) : (
+        <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
+          Awaiting role-specific counsel.
+        </div>
+      )}
+
+      {references.length > 0 && (
+        <div className="mt-4 rounded-md border border-border/60 bg-muted/20 p-3">
+          <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Evidence / Context References</div>
+          <ul className="space-y-1 text-xs text-foreground/75">
+            {references.map((reference, index) => (
+              <li key={`${role}-${index}`}>{reference}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function findRoleResponse(responses: CouncilResponseDto[], role: string): CouncilResponseDto | undefined {
+  return responses.find((response) => response.role === role || response.agent?.title === role);
+}
+
+function extractReferences(content: string): string[] {
+  return content
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-*#\s]+/, "").trim())
+    .filter((line) => /(evidence|context|artifact|log|trace|report|memory|id |observed|failing)/i.test(line))
+    .slice(0, 5);
+}
+
+function extractContextWarning(summary: string | null | undefined): string | null {
+  if (!summary?.includes("[CONTEXT WARNING]")) return null;
+  const [, rest = ""] = summary.split("[CONTEXT WARNING]");
+  const [warning = ""] = rest.split(/\n\n(?=\S)/);
+  return warning.trim() ? warning.trim() : null;
+}
+
+function stripContextWarning(summary: string): string {
+  if (!summary.includes("[CONTEXT WARNING]")) return summary;
+  return summary.replace(/\[CONTEXT WARNING\][\s\S]*?\n\n(?=\S)/, "").trim();
 }
