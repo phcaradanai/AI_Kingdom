@@ -383,8 +383,28 @@ test("AIUsageTraceStep allows null durationMs for legacy steps", async () => {
 
 test("selectAIProviderRoute with daily budget exceeded blocks expensive provider and returns sandbox route", async () => {
   const routeSuffix = `${suffix}-route`;
+  const paidProviderId = `m16e-paid-provider-${routeSuffix}`;
 
-  // Create an agent that prefers a non-free provider
+  // Create a dedicated paid provider, isolated from env-driven providers
+  // (e.g. "deepseek") whose isActive state depends on credentials that may
+  // not be present in every environment running this suite.
+  await prisma.aIProvider.create({
+    data: {
+      id: paidProviderId,
+      name: "M16E Paid Test Provider",
+      type: "test-paid",
+      defaultModel: `${paidProviderId}-model`,
+      isActive: true,
+      priority: 999,
+      costTier: "MEDIUM",
+      capabilities: { supportsChat: true },
+      environmentMode: "PRODUCTION",
+      allowSensitiveContext: true,
+      isFreeTier: false
+    }
+  });
+
+  // Create an agent that prefers the non-free provider
   const agent = await prisma.agent.create({
     data: {
       slug: `m16e-budget-agent-${routeSuffix}`,
@@ -396,8 +416,8 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
       systemPrompt: "test",
       skills: [],
       responseStyle: "concise",
-      preferredProviderId: "deepseek",
-      defaultModel: "deepseek-chat",
+      preferredProviderId: paidProviderId,
+      defaultModel: `${paidProviderId}-model`,
       fallbackModels: [],
       fallbackProviderIds: [],
       isTestData: true
@@ -415,9 +435,9 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
   const usageRecord = await prisma.usageRecord.create({
     data: {
       agentId: agent.id,
-      provider: "deepseek",
-      providerId: "deepseek",
-      model: "deepseek-chat",
+      provider: paidProviderId,
+      providerId: paidProviderId,
+      model: `${paidProviderId}-model`,
       promptTokens: 100,
       completionTokens: 50,
       totalTokens: 150,
@@ -449,6 +469,10 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
       selection.blockedProviderIds && selection.blockedProviderIds.length > 0,
       "blockedProviderIds should be non-empty when budget is exceeded"
     );
+    assert.ok(
+      selection.blockedProviderIds!.includes(paidProviderId),
+      `Expected blockedProviderIds to include the paid provider, got: ${selection.blockedProviderIds}`
+    );
 
   } finally {
     // Always restore settings and clean up
@@ -459,6 +483,7 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
     });
     await prisma.usageRecord.delete({ where: { id: usageRecord.id } }).catch(() => undefined);
     await prisma.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
+    await prisma.aIProvider.delete({ where: { id: paidProviderId } }).catch(() => undefined);
   }
 });
 
