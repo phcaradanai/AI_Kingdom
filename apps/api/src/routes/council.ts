@@ -81,8 +81,8 @@ router.post("/:sessionId/plan-work-orders", requireRole("KING", "CROWN_PRINCE"),
       return;
     }
     const { sessionId } = req.params as { sessionId: string };
-    const result = await planFromSession(sessionId, userId);
-    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds });
+    const result = await planFromSession(sessionId, userId, "POST /api/council/:sessionId/plan-work-orders");
+    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds, skipReason: result.skipReason });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });
@@ -100,8 +100,8 @@ router.post("/:sessionId/work-order", requireRole("KING", "CROWN_PRINCE"), async
       return;
     }
     const { sessionId } = req.params as { sessionId: string };
-    const result = await planFromSession(sessionId, userId);
-    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds });
+    const result = await planFromSession(sessionId, userId, "POST /api/council/:sessionId/work-order");
+    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds, skipReason: result.skipReason });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });

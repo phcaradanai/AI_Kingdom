@@ -114,6 +114,23 @@ test("runPlannerAgent returns { drafted: 0, skipped: 0 } when COUNCIL_AUTO_WORK_
   assert.deepEqual(result.draftedWorkOrderIds, []);
 });
 
+test("runPlannerAgent returns skipReason when COUNCIL_AUTO_WORK_ORDER_MODE is OFF", async () => {
+  await prisma.setting.upsert({
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "OFF" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF", category: "SYSTEM", description: "test" }
+  });
+
+  const result = await runPlannerAgent(
+    { id: "fake-session-skip", finalSummary: "Council decided X.", projectId: null, taskId: "fake-task-skip" },
+    { id: "fake-task-skip", title: "Skip reason test", command: "Test", mode: "ASK", projectId: null, createdBy: "fake-user" },
+    "fake-user"
+  );
+
+  assert.ok(result.skipReason, "skipReason should be present when mode is OFF");
+  assert.match(result.skipReason!, /OFF/, "skipReason should mention OFF");
+});
+
 test("runPlannerAgent returns { drafted: 0, skipped: 0 } when planner agent is missing from DB", async () => {
   await prisma.setting.upsert({
     where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
@@ -355,6 +372,90 @@ test("planFromSession loads project context, snapshot, open work orders, reports
 
 // ── createDraftWorkOrders direct-path tests ───────────────────────────────────
 
+test("createDraftWorkOrders uses createWorkOrder path — DRAFT with explicitUserAction creates work orders via data value gate", async () => {
+  const user = await createUser("KING");
+  const s = suffix();
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: `Gate path test ${s}`, command: "Build feature", mode: "BUILD", status: "COMPLETED" }
+  });
+  const session = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", selectedAgentIds: [], finalSummary: "Build the feature." }
+  });
+
+  const drafts: PlannerDraft[] = [
+    { title: `M17I Gate Path Draft ${s}`, objective: "Implement the gate path feature", rationale: "Test gate routing" }
+  ];
+
+  try {
+    // explicitUserAction=true routes through createWorkOrder with gate override for PREVIEW_ONLY
+    const result = await createDraftWorkOrders(
+      drafts,
+      { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
+      { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
+      user.id,
+      "DRAFT",
+      true
+    );
+
+    assert.equal(result.drafted, 1, "Work order created through createWorkOrder path");
+    assert.equal(result.skipped, 0);
+    assert.equal(result.draftedWorkOrderIds.length, 1);
+
+    const wo = await prisma.workOrder.findUnique({ where: { id: result.draftedWorkOrderIds[0]! } });
+    assert.ok(wo, "Work order exists in DB");
+    assert.equal(wo!.sourceType, "COUNCIL_SESSION");
+    assert.equal(wo!.sourceId, session.id);
+    assert.equal(wo!.createdBySystem, true);
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
+    await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("createDraftWorkOrders (auto mode) does not create DRAFT work orders when gate returns PREVIEW_ONLY without explicit action", async () => {
+  const user = await createUser("KING");
+  const s = suffix();
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: `Gate planner-t ${s}`, command: "Auto planner-t run", mode: "BUILD", status: "COMPLETED" }
+  });
+  const session = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", selectedAgentIds: [], finalSummary: "Auto planner-t session." }
+  });
+
+  // Title contains "-t" to opt out of the gate's legacy-bypass (isLegacyTest) so actual gate rules apply.
+  // No test/debug/mock/dummy/temp/tmp keywords so isTestOrDebugText returns false → gate reaches rule 9:
+  //   SYSTEM_GENERATED + DRAFT → PREVIEW_ONLY → no creation without explicitUserAction.
+  const drafts: PlannerDraft[] = [
+    { title: `M17I Gate Planner-t ${s}`, objective: "Implement the planner gate path verification", rationale: "Auto mode gate rule" }
+  ];
+
+  try {
+    // explicitUserAction=false: SYSTEM_GENERATED+DRAFT → gate PREVIEW_ONLY → no creation
+    const result = await createDraftWorkOrders(
+      drafts,
+      { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
+      { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
+      user.id,
+      "DRAFT",
+      false
+    );
+
+    assert.equal(result.drafted, 0, "Gate blocks DRAFT creation without explicitUserAction");
+    assert.equal(result.skipped, 1);
+    assert.equal(result.draftedWorkOrderIds.length, 0);
+
+    const wos = await prisma.workOrder.findMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } });
+    assert.equal(wos.length, 0, "No work orders created in auto mode for DRAFT");
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
+    await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
 test("createDraftWorkOrders creates DRAFT work orders linked to council session with rationale in context", async () => {
   const user = await createUser("KING");
   const task = await prisma.task.create({
@@ -374,7 +475,9 @@ test("createDraftWorkOrders creates DRAFT work orders linked to council session 
       drafts,
       { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
       { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
-      user.id
+      user.id,
+      "DRAFT",
+      true  // explicit user action — allows creation through PREVIEW_ONLY gate
     );
 
     assert.equal(result.drafted, 2);
@@ -413,6 +516,7 @@ test("createDraftWorkOrders creates DRAFT work orders linked to council session 
 
 test("createDraftWorkOrders creates READY work orders when targetStatus is READY", async () => {
   const user = await createUser("KING");
+  const s = suffix();
   const task = await prisma.task.create({
     data: { createdBy: user.id, title: "READY status test", command: "Build READY feature", mode: "BUILD", status: "COMPLETED" }
   });
@@ -421,7 +525,7 @@ test("createDraftWorkOrders creates READY work orders when targetStatus is READY
   });
 
   const drafts: PlannerDraft[] = [
-    { title: "M17I READY Work Order Alpha", objective: "Implement the Alpha module for READY mode", rationale: "King approved" }
+    { title: `M17I READY Work Order Alpha ${s}`, objective: "Implement the Alpha module for READY mode", rationale: "King approved" }
   ];
 
   try {
@@ -430,7 +534,8 @@ test("createDraftWorkOrders creates READY work orders when targetStatus is READY
       { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
       { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
       user.id,
-      "READY"
+      "READY",
+      true
     );
 
     assert.equal(result.drafted, 1);
@@ -452,6 +557,7 @@ test("createDraftWorkOrders creates READY work orders when targetStatus is READY
 
 test("createDraftWorkOrders returns draftedWorkOrderIds populated with created IDs", async () => {
   const user = await createUser("KING");
+  const s = suffix();
   const task = await prisma.task.create({
     data: { createdBy: user.id, title: "IDs test", command: "Track IDs", mode: "BUILD", status: "COMPLETED" }
   });
@@ -460,8 +566,8 @@ test("createDraftWorkOrders returns draftedWorkOrderIds populated with created I
   });
 
   const drafts: PlannerDraft[] = [
-    { title: "M17I Track ID Gamma", objective: "Objective gamma", rationale: "r" },
-    { title: "M17I Track ID Delta", objective: "Objective delta", rationale: "r" }
+    { title: `M17I Track ID Gamma ${s}`, objective: "Objective gamma", rationale: "r" },
+    { title: `M17I Track ID Delta ${s}`, objective: "Objective delta", rationale: "r" }
   ];
 
   try {
@@ -469,7 +575,9 @@ test("createDraftWorkOrders returns draftedWorkOrderIds populated with created I
       drafts,
       { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
       { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
-      user.id
+      user.id,
+      "DRAFT",
+      true
     );
 
     assert.equal(result.drafted, 2);
@@ -510,7 +618,9 @@ test("createDraftWorkOrders skips drafts whose normalized title matches an open 
       drafts,
       { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
       { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
-      user.id
+      user.id,
+      "DRAFT",
+      true
     );
 
     assert.equal(result.drafted, 1, "Only one draft created — duplicate was skipped");
@@ -524,6 +634,44 @@ test("createDraftWorkOrders skips drafts whose normalized title matches an open 
   } finally {
     await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
     await prisma.workOrder.delete({ where: { id: existing.id } }).catch(() => undefined);
+    await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("createDraftWorkOrders — repeated manual calls do not create duplicate work orders", async () => {
+  const user = await createUser("KING");
+  const s = suffix();
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: `Repeated call test ${s}`, command: "Build repeated", mode: "BUILD", status: "COMPLETED" }
+  });
+  const session = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", selectedAgentIds: [], finalSummary: "Repeated call test." }
+  });
+
+  const drafts: PlannerDraft[] = [
+    { title: `M17I Repeated Manual Draft ${s}`, objective: "Objective for repeated manual call test", rationale: "King clicked twice" }
+  ];
+
+  const sessionInput = { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id };
+  const taskInput = { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id };
+
+  try {
+    // First call creates 1 work order
+    const first = await createDraftWorkOrders(drafts, sessionInput, taskInput, user.id, "DRAFT", true);
+    assert.equal(first.drafted, 1, "First call creates 1 work order");
+
+    // Second call with same draft — dedup prevents another creation
+    const second = await createDraftWorkOrders(drafts, sessionInput, taskInput, user.id, "DRAFT", true);
+    assert.equal(second.drafted, 0, "Second call creates 0 (duplicate detected)");
+    assert.equal(second.skipped, 1, "Second call reports 1 skipped");
+
+    // Only one work order exists
+    const wos = await prisma.workOrder.findMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } });
+    assert.equal(wos.length, 1, "Only one work order in DB after repeated calls");
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
     await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);
     await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);

@@ -17,6 +17,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { getNumberSetting, getSettingValue } from "./settingsService.js";
 import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
+import { createWorkOrder } from "./externalAgentWorkOrderService.js";
 
 export interface PlannerDraft {
   title: string;
@@ -29,6 +30,7 @@ export interface PlannerResult {
   skipped: number;
   sessionId: string;
   draftedWorkOrderIds: string[];
+  skipReason?: string;
 }
 
 type SessionInput = {
@@ -54,18 +56,24 @@ export async function runPlannerAgent(
   userId: string
 ): Promise<PlannerResult> {
   const mode = await getSettingValue("COUNCIL_AUTO_WORK_ORDER_MODE", "OFF");
-  if (mode === "OFF") return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
+  if (mode === "OFF") {
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [], skipReason: "COUNCIL_AUTO_WORK_ORDER_MODE is OFF" };
+  }
   const targetStatus: "DRAFT" | "READY" = mode === "READY" ? "READY" : "DRAFT";
 
   try {
-    return await executePlanner(session, task, userId, targetStatus);
+    return await executePlanner(session, task, userId, targetStatus, true, "SYSTEM_ACTION: grandVizierOrchestrator (auto-planner)");
   } catch (error) {
     console.warn("[PlannerAgent] Failed to run planner agent:", error instanceof Error ? error.message : String(error));
     return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
   }
 }
 
-export async function planFromSession(sessionId: string, userId: string): Promise<PlannerResult> {
+export async function planFromSession(
+  sessionId: string,
+  userId: string,
+  triggerRoute = "POST /api/council/:sessionId/plan-work-orders"
+): Promise<PlannerResult> {
   const session = await prisma.councilSession.findUnique({
     where: { id: sessionId },
     include: { task: { include: { user: { select: { role: true } } } } }
@@ -79,10 +87,17 @@ export async function planFromSession(sessionId: string, userId: string): Promis
     throw new Error("Council session must be COMPLETED before planning");
   }
 
-  return executePlanner(session, session.task, userId, "DRAFT");
+  return executePlanner(session, session.task, userId, "DRAFT", true, triggerRoute);
 }
 
-async function executePlanner(session: SessionInput, task: TaskInput, userId: string, targetStatus: "DRAFT" | "READY" = "DRAFT"): Promise<PlannerResult> {
+async function executePlanner(
+  session: SessionInput,
+  task: TaskInput,
+  userId: string,
+  targetStatus: "DRAFT" | "READY" = "DRAFT",
+  explicitUserAction = true,
+  triggerRoute = "POST /api/council/:sessionId/plan-work-orders"
+): Promise<PlannerResult> {
   const plannerAgent = await prisma.agent.findUnique({ where: { slug: "planner" } });
   if (!plannerAgent) {
     console.warn("[PlannerAgent] No 'planner' agent found in database. Run npm run db:seed to create it.");
@@ -142,7 +157,8 @@ async function executePlanner(session: SessionInput, task: TaskInput, userId: st
     session,
     task,
     userId,
-    defaultMaxTokens
+    defaultMaxTokens,
+    triggerRoute
   });
 
   const drafts = parsePlannerResponse(rawResponse);
@@ -150,7 +166,7 @@ async function executePlanner(session: SessionInput, task: TaskInput, userId: st
     return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
   }
 
-  return createDraftWorkOrders(drafts, session, task, userId, targetStatus);
+  return createDraftWorkOrders(drafts, session, task, userId, targetStatus, explicitUserAction);
 }
 
 function buildPlanningContext(opts: {
@@ -202,8 +218,9 @@ async function callPlannerLLM(opts: {
   task: TaskInput;
   userId: string;
   defaultMaxTokens: number;
+  triggerRoute: string;
 }): Promise<string> {
-  const { plannerAgent, planningContext, session, task, userId, defaultMaxTokens } = opts;
+  const { plannerAgent, planningContext, session, task, userId, defaultMaxTokens, triggerRoute } = opts;
 
   const route = await selectAIProviderRoute({
     agent: plannerAgent as Parameters<typeof selectAIProviderRoute>[0]["agent"],
@@ -222,7 +239,7 @@ async function callPlannerLLM(opts: {
     actorUserId: userId,
     actorRole,
     triggerType: "SYSTEM_ACTION",
-    triggerRoute: "POST /api/council/:sessionId/plan-work-orders",
+    triggerRoute,
     triggerLabel: task.title,
     projectId: task.projectId,
     taskId: task.id,
@@ -368,7 +385,8 @@ export async function createDraftWorkOrders(
   session: SessionInput,
   task: TaskInput,
   userId: string,
-  targetStatus: "DRAFT" | "READY" = "DRAFT"
+  targetStatus: "DRAFT" | "READY" = "DRAFT",
+  explicitUserAction = true
 ): Promise<PlannerResult> {
   let drafted = 0;
   let skipped = 0;
@@ -388,49 +406,49 @@ export async function createDraftWorkOrders(
       `[TASK]\n${task.title}: ${task.command.slice(0, 300)}`
     ].join("\n\n");
 
-    const created = await prisma.workOrder.create({
-      data: {
-        title: draft.title,
-        objective: draft.objective,
-        context,
-        instructions: "Implement the work described in the objective. Keep changes scoped, validate them, and report results in the required format.",
-        constraints: [
-          "AI Kingdom remains the source of truth.",
-          "External agents are executors, not decision owners.",
-          "Keep changes scoped to the work order.",
-          "Do not expose secrets or store raw secret material.",
-          "Do not run backend-initiated shell commands or call external agent APIs."
-        ].join("\n"),
-        acceptanceCriteria: [
-          "Requested behavior is implemented.",
-          "Existing Kingdom architecture and conventions are preserved.",
-          "No API keys, tokens, passwords, or secrets are exposed.",
-          "Validation commands are run or clearly reported as not run."
-        ],
-        validationCommands: [
-          "npm run typecheck",
-          "npm run test --workspace @ai-kingdom/api",
-          "npm run test --workspace @ai-kingdom/runner",
-          "npm run test --workspace @ai-kingdom/web",
-          "npm run build"
-        ],
-        projectId: task.projectId,
-        sourceType: "COUNCIL_SESSION",
-        sourceId: session.id,
-        status: targetStatus,
-        priority: "MEDIUM",
-        createdByUserId: userId,
-        createdBySystem: true,
-        dataQuality: "REVIEW_REQUIRED",
-        workQuality: "ACTIONABLE"
-      }
-    });
-    draftedWorkOrderIds.push(created.id);
-    // Auto-assign an internal agent; failure never blocks draft creation
-    await assignWorkOrderAgent(created.id).catch((err) => {
-      console.warn(`[PlannerAgent] Auto-assignment failed for work order ${created.id}:`, err instanceof Error ? err.message : String(err));
-    });
-    drafted++;
+    const result = await createWorkOrder({
+      title: draft.title,
+      objective: draft.objective,
+      context,
+      instructions: "Implement the work described in the objective. Keep changes scoped, validate them, and report results in the required format.",
+      constraints: [
+        "AI Kingdom remains the source of truth.",
+        "External agents are executors, not decision owners.",
+        "Keep changes scoped to the work order.",
+        "Do not expose secrets or store raw secret material.",
+        "Do not run backend-initiated shell commands or call external agent APIs."
+      ].join("\n"),
+      acceptanceCriteria: [
+        "Requested behavior is implemented.",
+        "Existing Kingdom architecture and conventions are preserved.",
+        "No API keys, tokens, passwords, or secrets are exposed.",
+        "Validation commands are run or clearly reported as not run."
+      ],
+      validationCommands: [
+        "npm run typecheck",
+        "npm run test --workspace @ai-kingdom/api",
+        "npm run test --workspace @ai-kingdom/runner",
+        "npm run test --workspace @ai-kingdom/web",
+        "npm run build"
+      ],
+      projectId: task.projectId,
+      sourceType: "COUNCIL_SESSION",
+      sourceId: session.id,
+      status: targetStatus,
+      priority: "MEDIUM",
+      createdByUserId: userId
+    }, explicitUserAction);
+
+    if (result.status === "CREATED" && result.workOrder) {
+      draftedWorkOrderIds.push(result.workOrder.id);
+      // Auto-assign an internal agent; failure never blocks draft creation
+      await assignWorkOrderAgent(result.workOrder.id).catch((err) => {
+        console.warn(`[PlannerAgent] Auto-assignment failed for work order ${result.workOrder!.id}:`, err instanceof Error ? err.message : String(err));
+      });
+      drafted++;
+    } else {
+      skipped++;
+    }
   }
 
   return { drafted, skipped, sessionId: session.id, draftedWorkOrderIds };
