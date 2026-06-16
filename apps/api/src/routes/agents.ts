@@ -79,7 +79,34 @@ const agentSchema = z.object({
     max_tokens: z.number().int().min(64).max(32000).optional().nullable(),
     top_p: z.number().min(0).max(1).optional().nullable(),
     seed: z.number().int().optional().nullable(),
-    response_format: z.enum(["none", "json_object", "json_schema"]).optional().nullable(),
+    // response_format: z.enum(["none", "json_object", "json_schema"]).optional().nullable(),
+    response_format: z.union([
+
+      z.enum([
+
+        "none",
+
+        "json_object",
+
+        "json_schema"
+
+      ]),
+
+      z.object({
+
+        type: z.enum([
+
+          "none",
+
+          "json_object",
+
+          "json_schema"
+
+        ])
+
+      })
+
+    ]).optional().nullable(),
     stop: z.array(z.string().min(1).max(120)).max(8).optional().nullable(),
     frequency_penalty: z.number().min(-2).max(2).optional().nullable(),
     presence_penalty: z.number().min(-2).max(2).optional().nullable(),

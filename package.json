@@ -6,7 +6,7 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "concurrently \"npm run dev --workspace @ai-kingdom/api\" \"npm run dev --workspace @ai-kingdom/web\"",
+    "dev": "concurrently \"npm run dev --workspace @ai-kingdom/api\" \"npm run dev --workspace @ai-kingdom/web\" \"npm run dev --workspace @ai-kingdom/runner\"",
     "build": "npm run build --workspaces",
     "typecheck": "npm run typecheck --workspaces",
     "lint": "npm run lint --workspaces",
