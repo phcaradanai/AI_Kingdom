@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { execSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { isEmptyPatch, runValidation, type PatchPayload } from "./patchGenerator.js";
+import { applyImportedPatch, isEmptyPatch, runValidation, type PatchPayload } from "./patchGenerator.js";
 
 function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -226,4 +227,100 @@ test("isEmptyPatch returns false when fullPatch is present even if filesChanged 
 
 test("isEmptyPatch returns false when only filesChanged is non-empty (no fullPatch)", () => {
   assert.equal(isEmptyPatch(makePayload({ filesChanged: ["src/bar.ts"] })), false);
+});
+
+// ── applyImportedPatch ────────────────────────────────────────────────────────
+
+function makeGitWorkspace(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "runner-apply-patch-"));
+  execSync("git init -b main", { cwd: dir, stdio: "pipe" });
+  execSync("git config user.email test@example.com", { cwd: dir, stdio: "pipe" });
+  execSync("git config user.name Test", { cwd: dir, stdio: "pipe" });
+  fs.writeFileSync(path.join(dir, "hello.txt"), "line 1\nline 2\n");
+  execSync("git add .", { cwd: dir, stdio: "pipe" });
+  execSync("git commit -m init", { cwd: dir, stdio: "pipe" });
+  return dir;
+}
+
+test("applyImportedPatch: applies a valid unified diff and reports success", async () => {
+  const workspace = makeGitWorkspace();
+  try {
+    const patch = `diff --git a/hello.txt b/hello.txt
+--- a/hello.txt
++++ b/hello.txt
+@@ -1,2 +1,3 @@
+ line 1
+ line 2
++line 3
+`;
+    const result = await applyImportedPatch(workspace, patch);
+    assert.equal(result.success, true, `Expected success but got: ${result.error}`);
+    const contents = fs.readFileSync(path.join(workspace, "hello.txt"), "utf8");
+    assert.match(contents, /line 3/);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("applyImportedPatch: returns success=false when patch does not apply cleanly", async () => {
+  const workspace = makeGitWorkspace();
+  try {
+    // Patch targets a line that doesn't exist in the file
+    const patch = `diff --git a/hello.txt b/hello.txt
+--- a/hello.txt
++++ b/hello.txt
+@@ -5,2 +5,3 @@
+ does not exist
+ also missing
++new line
+`;
+    const result = await applyImportedPatch(workspace, patch);
+    assert.equal(result.success, false);
+    assert.ok(result.error?.includes("apply"), `Expected apply error, got: ${result.error}`);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("applyImportedPatch: failed apply leaves workspace unchanged", async () => {
+  const workspace = makeGitWorkspace();
+  try {
+    const originalContent = fs.readFileSync(path.join(workspace, "hello.txt"), "utf8");
+    const patch = `diff --git a/hello.txt b/hello.txt
+--- a/hello.txt
++++ b/hello.txt
+@@ -99,2 +99,3 @@
+ nonexistent context
+ also nonexistent
++injected line
+`;
+    const result = await applyImportedPatch(workspace, patch);
+    assert.equal(result.success, false);
+    // File must be unchanged
+    const currentContent = fs.readFileSync(path.join(workspace, "hello.txt"), "utf8");
+    assert.equal(currentContent, originalContent);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
+});
+
+test("applyImportedPatch: temp file is not left behind after apply", async () => {
+  const workspace = makeGitWorkspace();
+  const tmpBefore = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith("kingdom-patch-"));
+  try {
+    const patch = `diff --git a/hello.txt b/hello.txt
+--- a/hello.txt
++++ b/hello.txt
+@@ -1,2 +1,3 @@
+ line 1
+ line 2
++line 3
+`;
+    await applyImportedPatch(workspace, patch);
+    const tmpAfter = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith("kingdom-patch-"));
+    // No new temp files should remain (cleanup in finally block)
+    assert.equal(tmpAfter.length, tmpBefore.length);
+  } finally {
+    fs.rmSync(workspace, { recursive: true, force: true });
+  }
 });

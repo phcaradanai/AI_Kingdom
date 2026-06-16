@@ -81,7 +81,8 @@ const apiMocks = vi.hoisted(() => ({
   approvePatchArtifact: vi.fn(),
   rejectPatchArtifact: vi.fn(),
   requestPatchRevision: vi.fn(),
-  createPatchPr: vi.fn()
+  createPatchPr: vi.fn(),
+  importPatch: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -184,5 +185,114 @@ describe("AutomationJobsPage — NO_CHANGES SANDBOX_PATCH report", () => {
 
     expect(await screen.findByText(/NO_CHANGES:/)).toBeInTheDocument();
     expect(screen.queryByText(/Patch Review/)).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationJobsPage — M17G imported patch status display", () => {
+  const makeJobWithPatchStatus = (importedPatchStatus: string, reportSummary?: string): AutomationJobDto => ({
+    ...baseJob,
+    id: "job-patch-1",
+    mode: "SANDBOX_PATCH",
+    commandPolicy: "SANDBOX_PATCH_NO_PUSH",
+    status: "NEEDS_REVIEW",
+    importedPatchStatus,
+    contextValidationStatus: "NOT_REQUIRED",
+    localDocumentSnapshotId: null,
+    workOrder: { id: "wo-patch-1", title: "Apply imported patch", status: "NEEDS_REVIEW", projectId: "proj-1" },
+    implementationReports: reportSummary ? [{
+      id: "report-patch-1",
+      workOrderId: "wo-patch-1",
+      projectId: "proj-1",
+      workSessionId: null,
+      externalAgentId: null,
+      summary: reportSummary,
+      filesChanged: [],
+      commandsRun: [],
+      testsRun: [],
+      testResult: "NOT_RUN" as const,
+      errors: ["git apply --check failed"],
+      decisionsMade: [],
+      remainingWork: [],
+      nextRecommendedAction: null,
+      rawOutput: null,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    }] : []
+  });
+
+  it("shows CHECK_FAILED imported patch status badge in detail view", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const job = makeJobWithPatchStatus("CHECK_FAILED", `PATCH_APPLY_FAILED: Imported patch for "Apply imported patch" did not apply cleanly.`);
+
+    apiMocks.automationJobs.mockResolvedValue([job]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(job);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Apply imported patch"));
+
+    expect(await screen.findByText(/Check Failed/)).toBeInTheDocument();
+    expect(screen.getByText(/PATCH_APPLY_FAILED:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Patch Review/)).not.toBeInTheDocument();
+  });
+
+  it("shows APPLIED_IN_SANDBOX imported patch status badge when patch was applied", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const job = makeJobWithPatchStatus("APPLIED_IN_SANDBOX");
+
+    apiMocks.automationJobs.mockResolvedValue([job]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(job);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Apply imported patch"));
+
+    expect(await screen.findByText(/Applied in Sandbox/)).toBeInTheDocument();
+  });
+
+  it("shows Import Patch button for QUEUED jobs", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const queuedJob: AutomationJobDto = {
+      ...baseJob,
+      id: "job-q-1",
+      status: "QUEUED",
+      mode: "SANDBOX_PATCH",
+      workOrder: { id: "wo-q-1", title: "Queued patch job", status: "QUEUED", projectId: "proj-1" }
+    };
+
+    apiMocks.automationJobs.mockResolvedValue([queuedJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(queuedJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Queued patch job"));
+
+    expect(await screen.findByRole("button", { name: /Import Patch/i })).toBeInTheDocument();
+  });
+
+  it("shows Import Patch dialog when button is clicked", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const queuedJob: AutomationJobDto = {
+      ...baseJob,
+      id: "job-q-2",
+      status: "QUEUED",
+      mode: "SANDBOX_PATCH",
+      workOrder: { id: "wo-q-2", title: "Patch job for dialog test", status: "QUEUED", projectId: "proj-1" }
+    };
+
+    apiMocks.automationJobs.mockResolvedValue([queuedJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(queuedJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Patch job for dialog test"));
+    await userEvent.click(await screen.findByRole("button", { name: /Import Patch/i }));
+
+    expect(await screen.findByRole("dialog", { name: /Import Patch/i })).toBeInTheDocument();
+    expect(screen.getByLabelText("Patch text")).toBeInTheDocument();
   });
 });

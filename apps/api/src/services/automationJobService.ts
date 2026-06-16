@@ -255,7 +255,7 @@ export async function updateJobStatus(
   jobId: string,
   runnerId: string,
   status: AutomationJobStatus,
-  data?: { patchSummary?: string; logsPreview?: string }
+  data?: { patchSummary?: string; logsPreview?: string; importedPatchStatus?: string }
 ) {
   const job = await prisma.automationJob.findFirst({
     where: { id: jobId, runnerId }
@@ -272,6 +272,7 @@ export async function updateJobStatus(
       status,
       ...(data?.patchSummary !== undefined ? { patchSummary: data.patchSummary } : {}),
       ...(data?.logsPreview !== undefined ? { logsPreview: data.logsPreview } : {}),
+      ...(data?.importedPatchStatus !== undefined ? { importedPatchStatus: data.importedPatchStatus } : {}),
       ...(status === "COMPLETED" || status === "FAILED" ? { completedAt: new Date() } : {})
     },
     include: jobInclude

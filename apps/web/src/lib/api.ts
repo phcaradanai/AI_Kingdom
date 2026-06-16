@@ -613,6 +613,12 @@ export const api = {
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/approve`, { method: "POST" }),
   cancelAutomationJob: (id: string) =>
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/cancel`, { method: "POST" }),
+  importPatch: (id: string, patchText: string) =>
+    apiRequest<AutomationJobDto>(`/automation-jobs/${id}/import-patch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ patchText })
+    }),
 
   // Patch artifacts
   patchArtifacts: (params?: { automationJobId?: string; workOrderId?: string; projectId?: string; validationStatus?: string }) => {

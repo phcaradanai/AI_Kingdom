@@ -12,6 +12,10 @@
  * - Respects ALLOW_RUNNER_BRANCH_PUSH setting from server
  */
 
+import { spawn } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { runCommand } from "./sandbox.js";
 import { sanitizeLogOutput, tailLines } from "./secretRedactor.js";
 import type { ApiClient } from "./apiClient.js";
@@ -212,6 +216,74 @@ function buildSummary(filesChanged: string[], diffStat: string | null): string {
  */
 export function isEmptyPatch(payload: PatchPayload): boolean {
   return payload.filesChanged.length === 0 && !payload.fullPatch;
+}
+
+export interface ApplyPatchResult {
+  success: boolean;
+  error?: string;
+  stderr?: string;
+}
+
+/**
+ * Applies an imported unified diff to the workspace.
+ *
+ * Uses a temp file outside the workspace so the patch file itself never
+ * shows up in the subsequent git diff. Runs git apply --check first (dry-run);
+ * only if that passes does it run git apply.
+ *
+ * Does NOT go through runCommand/validateCommand — this is an internal
+ * operation with fully-controlled args, not a user-specified plan step.
+ */
+export async function applyImportedPatch(
+  workspaceRoot: string,
+  patchText: string
+): Promise<ApplyPatchResult> {
+  const tmpFile = path.join(os.tmpdir(), `kingdom-patch-${Date.now()}-${Math.random().toString(36).slice(2)}.patch`);
+
+  try {
+    await fs.writeFile(tmpFile, patchText, "utf8");
+
+    // Dry-run first
+    const checkResult = await spawnGitApply(workspaceRoot, ["--check", tmpFile]);
+    if (!checkResult.success) {
+      return {
+        success: false,
+        error: "git apply --check failed: patch does not apply cleanly",
+        stderr: sanitizeLogOutput(checkResult.stderr)
+      };
+    }
+
+    // Apply for real
+    const applyResult = await spawnGitApply(workspaceRoot, [tmpFile]);
+    if (!applyResult.success) {
+      return {
+        success: false,
+        error: "git apply failed after passing --check",
+        stderr: sanitizeLogOutput(applyResult.stderr)
+      };
+    }
+
+    return { success: true };
+  } finally {
+    await fs.unlink(tmpFile).catch(() => undefined);
+  }
+}
+
+function spawnGitApply(
+  cwd: string,
+  args: string[]
+): Promise<{ success: boolean; stderr: string }> {
+  return new Promise((resolve) => {
+    let stderr = "";
+    const child = spawn("git", ["apply", ...args], {
+      cwd: path.resolve(cwd),
+      shell: false,
+      timeout: 30_000
+    });
+    child.stderr?.on("data", (chunk: Buffer) => { stderr += chunk.toString(); });
+    child.on("close", (code) => resolve({ success: code === 0, stderr }));
+    child.on("error", (err) => resolve({ success: false, stderr: err.message }));
+  });
 }
 
 export async function submitPatchArtifact(

@@ -1368,6 +1368,8 @@ model AutomationJob {
   contextRequired         Boolean                 @default(false)
   contextValidationStatus ContextValidationStatus @default(NOT_REQUIRED)
   contextValidationSummary Json?
+  importedPatch    String?
+  importedPatchStatus String?
   createdByUserId  String?
   approvedByUserId String?
   startedAt        DateTime?

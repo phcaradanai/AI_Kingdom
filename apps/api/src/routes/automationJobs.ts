@@ -8,6 +8,7 @@ import {
   getJob,
   listJobs
 } from "../services/automationJobService.js";
+import { importPatch } from "../services/importedPatchService.js";
 import type { AutomationJobStatus } from "@prisma/client";
 
 const router = Router();
@@ -119,6 +120,31 @@ router.post("/:id/cancel", requireRole("KING"), async (req, res, next) => {
     res.json(job);
   } catch (err) {
     jobErrorHandler(err, res, next);
+  }
+});
+
+const importPatchSchema = z.object({
+  patchText: z.string().trim().min(1, "Patch text is required")
+});
+
+/** POST /api/automation-jobs/:id/import-patch — store a unified diff for sandbox apply */
+router.post("/:id/import-patch", requireRole("KING"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const body = importPatchSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+    const result = await importPatch(id, body.data.patchText, req.user!.id);
+    if (!result.success) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    const job = await getJob(id);
+    res.json(job);
+  } catch (err) {
+    next(err);
   }
 });
 

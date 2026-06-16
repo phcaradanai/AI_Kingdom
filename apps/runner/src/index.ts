@@ -18,7 +18,7 @@ import { ApiClient, type AutomationJob } from "./apiClient.js";
 import { runCommand } from "./sandbox.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
-import { generatePatch, isEmptyPatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
+import { applyImportedPatch, generatePatch, isEmptyPatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
 import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
@@ -274,6 +274,55 @@ async function executeJob(job: AutomationJob) {
       log(`[Job ${job.id}] Context binding: ${job.contextValidationStatus}`);
     }
 
+    // Apply imported patch (if one was stored via the import-patch API endpoint)
+    if (job.importedPatch) {
+      sequence++;
+      log(`[Job ${job.id}] Imported patch detected — running git apply --check then git apply...`);
+      const applyResult = await applyImportedPatch(workspaceDir, job.importedPatch);
+
+      await api.recordStep(job.id, {
+        sequence,
+        stepType: "COMMAND",
+        title: applyResult.success ? "git apply (imported patch)" : "git apply --check (imported patch)",
+        detail: applyResult.success ? "Imported unified diff applied to workspace" : applyResult.error,
+        status: applyResult.success ? "COMPLETED" : "FAILED",
+        command: "git",
+        args: applyResult.success ? ["apply"] : ["apply", "--check"],
+        output: applyResult.stderr ? `STDERR:\n${applyResult.stderr}` : undefined,
+        exitCode: applyResult.success ? 0 : 1
+      });
+
+      if (!applyResult.success) {
+        const applyError = applyResult.error ?? "Patch did not apply cleanly";
+        errors.push(applyError);
+        const logsPreview = sanitizeLogOutput([...logLines, `PATCH_APPLY_FAILED: ${applyError}`, applyResult.stderr ?? ""].slice(-80).join("\n"));
+
+        // Record CHECK_FAILED status while job is still RUNNING (submitReport will move it to NEEDS_REVIEW)
+        await api.updateStatus(job.id, "RUNNING", { importedPatchStatus: "CHECK_FAILED" });
+
+        await api.submitReport(job.id, {
+          summary: `PATCH_APPLY_FAILED: Imported patch for "${job.workOrder.title}" did not apply cleanly. ${applyError}${applyResult.stderr ? `\nDetails: ${applyResult.stderr}` : ""}`,
+          filesChanged: [],
+          commandsRun,
+          testsRun,
+          testResult: "NOT_RUN",
+          errors: [applyError],
+          decisionsMade: [],
+          remainingWork: ["Review the patch diff for conflicts with the current workspace state and re-import a corrected patch."],
+          nextRecommendedAction: "Fix patch conflicts and re-import via Import Patch",
+          logsPreview,
+          rawOutput: logsPreview,
+          patchSummary: "Patch did not apply cleanly.",
+          contextUsed: buildContextUsed(job)
+        });
+        return;
+      }
+
+      log(`[Job ${job.id}] Imported patch applied successfully.`);
+      // Mark as applied — will be updated to VALIDATED after validation completes
+      await api.updateStatus(job.id, "RUNNING", { importedPatchStatus: "APPLIED_IN_SANDBOX" });
+    }
+
     // Execute plan steps
     const plan = job.planJson as ExecutionPlan | null;
     if (!plan || !Array.isArray(plan.steps)) {
@@ -334,13 +383,13 @@ async function executeJob(job: AutomationJob) {
           });
 
         } else if (step.type === "FILE_CHANGE") {
-          log(`[Job ${job.id}] Step ${sequence}: FILE_CHANGE — ${step.filePath} (${step.action})`);
+          log(`[Job ${job.id}] Step ${sequence}: FILE_CHANGE (PLANNED) — ${step.filePath} (${step.action})`);
           await api.recordStep(job.id, {
             sequence,
             stepType: "FILE_CHANGE",
             title: `${step.action}: ${step.filePath}`,
             detail: step.description,
-            status: "COMPLETED"
+            status: "PLANNED"
           });
         }
       }
@@ -396,6 +445,11 @@ async function executeJob(job: AutomationJob) {
     // Submit implementation report
     const logsPreview = sanitizeLogOutput(logLines.slice(-100).join("\n"));
     log(`[Job ${job.id}] Submitting report...`);
+
+    // If an imported patch was applied and validation completed, advance its status to VALIDATED
+    if (job.importedPatch && !emptyPatch) {
+      await api.updateStatus(job.id, "RUNNING", { importedPatchStatus: "VALIDATED" });
+    }
 
     await api.submitReport(job.id, {
       summary: emptyPatch

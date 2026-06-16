@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, Bot, CheckCircle, Clock, GitBranch, Play, RefreshCw, Shield, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Bot, CheckCircle, Clock, FileCode, GitBranch, Play, RefreshCw, Shield, Upload, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
@@ -132,6 +132,10 @@ export function AutomationJobsPage() {
   const [statusFilter, setStatusFilter] = useState<string>("");
   const [patchArtifacts, setPatchArtifacts] = useState<PatchArtifactDto[]>([]);
   const [patchActionId, setPatchActionId] = useState<string | null>(null);
+  const [importPatchJobId, setImportPatchJobId] = useState<string | null>(null);
+  const [importPatchText, setImportPatchText] = useState("");
+  const [importPatchError, setImportPatchError] = useState<string | null>(null);
+  const [importPatchLoading, setImportPatchLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -241,6 +245,23 @@ export function AutomationJobsPage() {
       setActionError(err instanceof Error ? err.message : "Failed to create PR");
     } finally {
       setPatchActionId(null);
+    }
+  }
+
+  async function handleImportPatch() {
+    if (!importPatchJobId || !importPatchText.trim()) return;
+    setImportPatchLoading(true);
+    setImportPatchError(null);
+    try {
+      await api.importPatch(importPatchJobId, importPatchText.trim());
+      setImportPatchJobId(null);
+      setImportPatchText("");
+      await load();
+      if (selectedJob?.id === importPatchJobId) await loadDetail(importPatchJobId);
+    } catch (err) {
+      setImportPatchError(err instanceof Error ? err.message : "Import failed");
+    } finally {
+      setImportPatchLoading(false);
     }
   }
 
@@ -566,6 +587,16 @@ export function AutomationJobsPage() {
                 </div>
               )}
 
+              {/* Imported patch status */}
+              {selectedJob.importedPatchStatus && (
+                <div className="rounded border border-border bg-muted/20 p-3 space-y-1">
+                  <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                    <FileCode className="h-3.5 w-3.5" /> Imported Patch
+                  </h4>
+                  <ImportedPatchStatusBadge status={selectedJob.importedPatchStatus} />
+                </div>
+              )}
+
               {/* Patch summary */}
               {selectedJob.patchSummary && (
                 <div>
@@ -613,11 +644,21 @@ export function AutomationJobsPage() {
               )}
 
               {/* Actions in detail view */}
-              <div className="flex gap-2 pt-2 border-t">
+              <div className="flex flex-wrap gap-2 pt-2 border-t">
                 {selectedJob.status === "QUEUED" && (
                   <Button className="h-8 text-xs px-3" onClick={() => handleApprove(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
                     <Play className="h-3.5 w-3.5 mr-1.5" />
                     Approve for Execution
+                  </Button>
+                )}
+                {(selectedJob.status === "QUEUED" || selectedJob.status === "APPROVED") && (
+                  <Button
+                    variant="outline"
+                    className="h-8 text-xs px-3"
+                    onClick={() => { setImportPatchJobId(selectedJob.id); setImportPatchText(""); setImportPatchError(null); }}
+                  >
+                    <Upload className="h-3.5 w-3.5 mr-1.5" />
+                    Import Patch
                   </Button>
                 )}
                 {!["COMPLETED", "CANCELLED", "FAILED"].includes(selectedJob.status) && (
@@ -631,7 +672,69 @@ export function AutomationJobsPage() {
           )}
         </Card>
       )}
+
+      {/* Import Patch dialog */}
+      {importPatchJobId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true" aria-label="Import Patch">
+          <div className="bg-background rounded-lg border border-border shadow-xl w-full max-w-2xl space-y-4 p-6">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold flex items-center gap-2">
+                <FileCode className="h-4 w-4" /> Import Unified Diff
+              </h3>
+              <Button variant="ghost" className="h-7 w-7 p-0" onClick={() => setImportPatchJobId(null)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Paste a unified diff (output of <code className="font-mono bg-muted px-1 rounded">git diff</code> or similar). The patch will be validated server-side — blocked paths and secrets are rejected. The runner will apply it in the sandbox workspace and create a PatchArtifact for King review.
+            </p>
+            <textarea
+              className="w-full font-mono text-xs rounded border border-border bg-muted/40 p-3 min-h-[240px] resize-y focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder={"diff --git a/src/foo.ts b/src/foo.ts\n--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1,3 +1,4 @@\n ..."}
+              value={importPatchText}
+              onChange={(e) => setImportPatchText(e.target.value)}
+              aria-label="Patch text"
+            />
+            {importPatchError && (
+              <div className="flex items-start gap-2 rounded border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                {importPatchError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" className="h-8 text-xs" onClick={() => setImportPatchJobId(null)}>
+                Cancel
+              </Button>
+              <Button
+                className="h-8 text-xs px-4"
+                disabled={!importPatchText.trim() || importPatchLoading}
+                onClick={() => void handleImportPatch()}
+              >
+                <Upload className="h-3.5 w-3.5 mr-1.5" />
+                {importPatchLoading ? "Importing…" : "Import Patch"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  );
+}
+
+function ImportedPatchStatusBadge({ status }: { status: string }) {
+  const config: Record<string, { label: string; cls: string }> = {
+    PENDING: { label: "Pending — not yet applied", cls: "text-yellow-700 bg-yellow-50 border-yellow-200" },
+    CHECK_FAILED: { label: "Check Failed — patch did not apply cleanly", cls: "text-red-700 bg-red-50 border-red-200" },
+    APPLIED_IN_SANDBOX: { label: "Applied in Sandbox — awaiting validation", cls: "text-blue-700 bg-blue-50 border-blue-200" },
+    VALIDATED: { label: "Validated — patch applied and tests passed", cls: "text-green-700 bg-green-50 border-green-200" },
+    NEEDS_REVIEW: { label: "Needs Review — patch applied, validation pending King review", cls: "text-purple-700 bg-purple-50 border-purple-200" }
+  };
+  const c = config[status] ?? { label: status, cls: "text-muted-foreground bg-muted border-border" };
+  return (
+    <span className={cn("inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border", c.cls)}>
+      {status === "CHECK_FAILED" ? <AlertTriangle className="h-3 w-3" /> : status === "VALIDATED" ? <CheckCircle className="h-3 w-3" /> : <FileCode className="h-3 w-3" />}
+      {c.label}
+    </span>
   );
 }
 

@@ -40,6 +40,20 @@ const SENSITIVE_ENV_NAMES = new Set([
   "OPENAI_COMPATIBLE_API_KEY"
 ]);
 
+/** Returns true if text contains any secret-like patterns. Used to reject imported patches. */
+export function containsSecrets(text: string): boolean {
+  if (!text) return false;
+  for (const name of SENSITIVE_ENV_NAMES) {
+    const envPattern = new RegExp(`(?:^|\\s|;)${name}\\s*=\\s*\\S+`, "gm");
+    if (envPattern.test(text)) return true;
+  }
+  for (const pattern of SECRET_PATTERNS) {
+    pattern.lastIndex = 0;
+    if (pattern.test(text)) { pattern.lastIndex = 0; return true; }
+  }
+  return false;
+}
+
 export function redactSecrets(text: string): string {
   if (!text) return text;
 

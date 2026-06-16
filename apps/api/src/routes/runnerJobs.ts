@@ -46,7 +46,8 @@ router.post("/jobs/claim", async (req, res, next) => {
 const statusSchema = z.object({
   status: z.enum(["RUNNING", "NEEDS_REVIEW", "COMPLETED", "FAILED"]),
   patchSummary: z.string().trim().max(5000).optional().nullable(),
-  logsPreview: z.string().max(10000).optional().nullable()
+  logsPreview: z.string().max(10000).optional().nullable(),
+  importedPatchStatus: z.string().trim().max(100).optional().nullable()
 });
 
 /** PATCH /api/runner/jobs/:id/status — runner updates job status */
@@ -58,11 +59,12 @@ router.patch("/jobs/:id/status", async (req, res, next) => {
       res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
       return;
     }
-    const { status, patchSummary, logsPreview } = body.data;
+    const { status, patchSummary, logsPreview, importedPatchStatus } = body.data;
     const sanitizedLogs = logsPreview ? sanitizeLogOutput(logsPreview) : undefined;
     const job = await updateJobStatus(req.params.id, runner.id, status as AutomationJobStatus, {
       patchSummary: patchSummary ?? undefined,
-      logsPreview: sanitizedLogs
+      logsPreview: sanitizedLogs,
+      importedPatchStatus: importedPatchStatus ?? undefined
     });
     res.json(job);
   } catch (err) {

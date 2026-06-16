@@ -27,6 +27,8 @@ export interface AutomationJob {
   contextRequired?: boolean;
   contextValidationStatus?: string | null;
   contextValidationSummary?: Record<string, unknown> | null;
+  importedPatch?: string | null;
+  importedPatchStatus?: string | null;
   workOrder: {
     id: string;
     title: string;
@@ -71,7 +73,7 @@ export class ApiClient {
     return this.request("POST", "/api/runner/jobs/claim", {});
   }
 
-  async updateStatus(jobId: string, status: string, data?: { patchSummary?: string; logsPreview?: string }): Promise<void> {
+  async updateStatus(jobId: string, status: string, data?: { patchSummary?: string; logsPreview?: string; importedPatchStatus?: string | null }): Promise<void> {
     await this.request("PATCH", `/api/runner/jobs/${jobId}/status`, { status, ...data });
   }
 

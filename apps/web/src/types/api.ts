@@ -1522,6 +1522,8 @@ export type AutomationJobDto = {
   contextRequired?: boolean;
   contextValidationStatus?: "FRESH" | "STALE" | "MISSING" | "PARTIAL" | "NOT_REQUIRED";
   contextValidationSummary?: Record<string, unknown> | null;
+  importedPatch?: string | null;
+  importedPatchStatus?: string | null;
   createdByUserId: string | null;
   approvedByUserId: string | null;
   startedAt: string | null;
