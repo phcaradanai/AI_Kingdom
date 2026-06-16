@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { extractPathsFromPatch, validateImportedPatch } from "./importedPatchService.js";
+import { extractPathsFromPatch, validateImportedPatch, IMPORTED_PATCH_STATUSES } from "./importedPatchService.js";
 
 describe("extractPathsFromPatch", () => {
   it("extracts paths from diff --git headers", () => {
@@ -130,5 +130,33 @@ new mode 120000
     const result = validateImportedPatch(patch);
     assert.equal(result.valid, false);
     assert.ok(result.error?.includes("secrets"));
+  });
+
+  it("sets reason=INVALID_PATCH for format errors", () => {
+    assert.equal(validateImportedPatch("").reason, "INVALID_PATCH");
+    assert.equal(validateImportedPatch("+" + "x".repeat(260_000)).reason, "INVALID_PATCH");
+  });
+
+  it("sets reason=UNSAFE_PATCH for security violations", () => {
+    const symlink = `diff --git a/link b/link\nnew mode 120000`;
+    assert.equal(validateImportedPatch(symlink).reason, "UNSAFE_PATCH");
+
+    const traversal = `diff --git a/../etc/passwd b/../etc/passwd\n--- a/../etc/passwd\n+++ b/../etc/passwd\n@@ -1 +1 @@\n-x\n+y`;
+    assert.equal(validateImportedPatch(traversal).reason, "UNSAFE_PATCH");
+
+    const env = `diff --git a/.env b/.env\n--- a/.env\n+++ b/.env\n@@ -1 +1,2 @@\n DB=x\n+EVIL=1\n`;
+    assert.equal(validateImportedPatch(env).reason, "UNSAFE_PATCH");
+
+    const secret = `diff --git a/c.ts b/c.ts\n--- a/c.ts\n+++ b/c.ts\n@@ -1 +1,2 @@\n x\n+const k = "sk-proj-abc1234567890ABCDEF";\n`;
+    assert.equal(validateImportedPatch(secret).reason, "UNSAFE_PATCH");
+  });
+});
+
+describe("IMPORTED_PATCH_STATUSES", () => {
+  it("exports all required status values", () => {
+    const required = ["PENDING", "CHECK_FAILED", "APPLIED_IN_SANDBOX", "VALIDATED", "VALIDATION_FAILED", "NO_CHANGES"];
+    for (const s of required) {
+      assert.ok(IMPORTED_PATCH_STATUSES.includes(s as typeof IMPORTED_PATCH_STATUSES[number]), `Missing status: ${s}`);
+    }
   });
 });

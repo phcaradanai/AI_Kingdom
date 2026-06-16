@@ -138,7 +138,11 @@ router.post("/:id/import-patch", requireRole("KING"), async (req, res, next) => 
     }
     const result = await importPatch(id, body.data.patchText, req.user!.id);
     if (!result.success) {
-      res.status(400).json({ error: result.error });
+      const status = result.code === "NOT_FOUND" ? 404
+        : result.code === "INVALID_STATUS" ? 409
+        : result.code === "UNSAFE_PATCH" ? 422
+        : 400;
+      res.status(status).json({ error: result.error });
       return;
     }
     const job = await getJob(id);

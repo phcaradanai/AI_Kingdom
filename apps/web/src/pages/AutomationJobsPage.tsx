@@ -651,7 +651,7 @@ export function AutomationJobsPage() {
                     Approve for Execution
                   </Button>
                 )}
-                {(selectedJob.status === "QUEUED" || selectedJob.status === "APPROVED") && (
+                {selectedJob.status === "QUEUED" && (
                   <Button
                     variant="outline"
                     className="h-8 text-xs px-3"
@@ -688,6 +688,9 @@ export function AutomationJobsPage() {
             <p className="text-xs text-muted-foreground">
               Paste a unified diff (output of <code className="font-mono bg-muted px-1 rounded">git diff</code> or similar). The patch will be validated server-side — blocked paths and secrets are rejected. The runner will apply it in the sandbox workspace and create a PatchArtifact for King review.
             </p>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+              Import patch before approving the job so the runner receives the correct patch payload.
+            </p>
             <textarea
               className="w-full font-mono text-xs rounded border border-border bg-muted/40 p-3 min-h-[240px] resize-y focus:outline-none focus:ring-2 focus:ring-primary"
               placeholder={"diff --git a/src/foo.ts b/src/foo.ts\n--- a/src/foo.ts\n+++ b/src/foo.ts\n@@ -1,3 +1,4 @@\n ..."}
@@ -721,18 +724,22 @@ export function AutomationJobsPage() {
   );
 }
 
+const PATCH_STATUS_CONFIG: Record<string, { label: string; cls: string }> = {
+  PENDING: { label: "Pending — not yet applied", cls: "text-yellow-700 bg-yellow-50 border-yellow-200" },
+  CHECK_FAILED: { label: "Check Failed — patch did not apply cleanly", cls: "text-red-700 bg-red-50 border-red-200" },
+  APPLIED_IN_SANDBOX: { label: "Applied in Sandbox — awaiting validation", cls: "text-blue-700 bg-blue-50 border-blue-200" },
+  VALIDATED: { label: "Validated — patch applied and all validation passed", cls: "text-green-700 bg-green-50 border-green-200" },
+  VALIDATION_FAILED: { label: "Validation Failed — patch applied but validation commands failed", cls: "text-orange-700 bg-orange-50 border-orange-200" },
+  NO_CHANGES: { label: "No Changes — patch applied but produced no file diff", cls: "text-gray-600 bg-gray-50 border-gray-200" }
+};
+
 function ImportedPatchStatusBadge({ status }: { status: string }) {
-  const config: Record<string, { label: string; cls: string }> = {
-    PENDING: { label: "Pending — not yet applied", cls: "text-yellow-700 bg-yellow-50 border-yellow-200" },
-    CHECK_FAILED: { label: "Check Failed — patch did not apply cleanly", cls: "text-red-700 bg-red-50 border-red-200" },
-    APPLIED_IN_SANDBOX: { label: "Applied in Sandbox — awaiting validation", cls: "text-blue-700 bg-blue-50 border-blue-200" },
-    VALIDATED: { label: "Validated — patch applied and tests passed", cls: "text-green-700 bg-green-50 border-green-200" },
-    NEEDS_REVIEW: { label: "Needs Review — patch applied, validation pending King review", cls: "text-purple-700 bg-purple-50 border-purple-200" }
-  };
-  const c = config[status] ?? { label: status, cls: "text-muted-foreground bg-muted border-border" };
+  const c = PATCH_STATUS_CONFIG[status] ?? { label: status, cls: "text-muted-foreground bg-muted border-border" };
+  const isError = status === "CHECK_FAILED" || status === "VALIDATION_FAILED";
+  const isSuccess = status === "VALIDATED";
   return (
     <span className={cn("inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full border", c.cls)}>
-      {status === "CHECK_FAILED" ? <AlertTriangle className="h-3 w-3" /> : status === "VALIDATED" ? <CheckCircle className="h-3 w-3" /> : <FileCode className="h-3 w-3" />}
+      {isError ? <AlertTriangle className="h-3 w-3" /> : isSuccess ? <CheckCircle className="h-3 w-3" /> : <FileCode className="h-3 w-3" />}
       {c.label}
     </span>
   );

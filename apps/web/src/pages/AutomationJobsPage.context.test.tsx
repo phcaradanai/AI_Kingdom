@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AutomationJobDto, ImplementationReportDto, PatchArtifactDto } from "@/types/api";
+import type { AutomationJobDto, ImportedPatchStatus, ImplementationReportDto, PatchArtifactDto } from "@/types/api";
 import { AutomationJobsPage } from "./AutomationJobsPage";
 
 const nowIso = new Date().toISOString();
@@ -189,7 +189,7 @@ describe("AutomationJobsPage — NO_CHANGES SANDBOX_PATCH report", () => {
 });
 
 describe("AutomationJobsPage — M17G imported patch status display", () => {
-  const makeJobWithPatchStatus = (importedPatchStatus: string, reportSummary?: string): AutomationJobDto => ({
+  const makeJobWithPatchStatus = (importedPatchStatus: ImportedPatchStatus, reportSummary?: string): AutomationJobDto => ({
     ...baseJob,
     id: "job-patch-1",
     mode: "SANDBOX_PATCH",
@@ -294,5 +294,72 @@ describe("AutomationJobsPage — M17G imported patch status display", () => {
 
     expect(await screen.findByRole("dialog", { name: /Import Patch/i })).toBeInTheDocument();
     expect(screen.getByLabelText("Patch text")).toBeInTheDocument();
+  });
+
+  it("does not show Import Patch button for APPROVED jobs", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const approvedJob: AutomationJobDto = {
+      ...baseJob,
+      id: "job-approved-1",
+      status: "APPROVED",
+      mode: "SANDBOX_PATCH",
+      workOrder: { id: "wo-approved-1", title: "Approved patch job", status: "APPROVED", projectId: "proj-1" }
+    };
+
+    apiMocks.automationJobs.mockResolvedValue([approvedJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(approvedJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Approved patch job"));
+    await screen.findByText("Approved patch job");
+
+    expect(screen.queryByRole("button", { name: /Import Patch/i })).not.toBeInTheDocument();
+  });
+
+  it("shows VALIDATED imported patch status badge", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const job = makeJobWithPatchStatus("VALIDATED");
+
+    apiMocks.automationJobs.mockResolvedValue([job]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(job);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Apply imported patch"));
+
+    expect(await screen.findByText(/Validated/)).toBeInTheDocument();
+  });
+
+  it("shows VALIDATION_FAILED imported patch status badge", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const job = makeJobWithPatchStatus("VALIDATION_FAILED");
+
+    apiMocks.automationJobs.mockResolvedValue([job]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(job);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Apply imported patch"));
+
+    expect(await screen.findByText(/Validation Failed/)).toBeInTheDocument();
+  });
+
+  it("shows NO_CHANGES imported patch status badge", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const job = makeJobWithPatchStatus("NO_CHANGES");
+
+    apiMocks.automationJobs.mockResolvedValue([job]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(job);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Apply imported patch"));
+
+    expect(await screen.findByText(/No Changes/)).toBeInTheDocument();
   });
 });

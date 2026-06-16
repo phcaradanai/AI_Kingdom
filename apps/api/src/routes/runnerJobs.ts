@@ -8,6 +8,7 @@ import { auditLog } from "../services/auditService.js";
 import { validateCommand } from "../services/commandValidatorService.js";
 import { createPatchArtifact, markBranchPushed, getPatchArtifact } from "../services/patchArtifactService.js";
 import { getBooleanSetting } from "../services/settingsService.js";
+import { IMPORTED_PATCH_STATUSES } from "../services/importedPatchService.js";
 import type { AutomationJobStatus } from "@prisma/client";
 
 const router = Router();
@@ -47,7 +48,7 @@ const statusSchema = z.object({
   status: z.enum(["RUNNING", "NEEDS_REVIEW", "COMPLETED", "FAILED"]),
   patchSummary: z.string().trim().max(5000).optional().nullable(),
   logsPreview: z.string().max(10000).optional().nullable(),
-  importedPatchStatus: z.string().trim().max(100).optional().nullable()
+  importedPatchStatus: z.enum(IMPORTED_PATCH_STATUSES).optional().nullable()
 });
 
 /** PATCH /api/runner/jobs/:id/status — runner updates job status */

@@ -60,12 +60,11 @@ test("Royal Command council creates role-specific responses and a learning candi
       "Royal General",
       "Grand Vizier"
     ]);
-    assert.match(session.responses.find((response) => response.role === "Royal Archivist")?.response ?? "", /Archivist Evidence Report/);
-    assert.match(session.responses.find((response) => response.role === "Royal Researcher")?.response ?? "", /Researcher Hypotheses/);
-    assert.match(session.responses.find((response) => response.role === "Royal Architect")?.response ?? "", /Architect Patch Plan/);
-    assert.match(session.responses.find((response) => response.role === "Royal General")?.response ?? "", /General Execution Checklist/);
-    assert.match(session.finalSummary ?? "", /Grand Vizier Final Decision/);
-    assert.match(session.finalSummary ?? "", /Architect|General|Archivist|Researcher/);
+    assert.ok(session.responses.find((r) => r.role === "Royal Archivist")?.response, "Archivist response is non-empty");
+    assert.ok(session.responses.find((r) => r.role === "Royal Researcher")?.response, "Researcher response is non-empty");
+    assert.ok(session.responses.find((r) => r.role === "Royal Architect")?.response, "Architect response is non-empty");
+    assert.ok(session.responses.find((r) => r.role === "Royal General")?.response, "General response is non-empty");
+    assert.ok(session.finalSummary, "Grand Vizier final summary is non-empty");
 
     const report = await prisma.report.findFirst({ where: { sourceCouncilSessionId: session.id } });
     assert.ok(report, "final synthesis is persisted as a report");

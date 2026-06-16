@@ -1472,6 +1472,16 @@ export type AutomationJobStatus = "QUEUED" | "APPROVED" | "CLAIMED" | "RUNNING" 
 export type AutomationJobMode = "OBSERVE" | "PLAN_ONLY" | "SANDBOX_PATCH" | "VALIDATION_ONLY";
 export type AgentRunnerStatus = "ONLINE" | "OFFLINE" | "ERROR";
 
+export const IMPORTED_PATCH_STATUSES = [
+  "PENDING",
+  "CHECK_FAILED",
+  "APPLIED_IN_SANDBOX",
+  "VALIDATED",
+  "VALIDATION_FAILED",
+  "NO_CHANGES"
+] as const;
+export type ImportedPatchStatus = typeof IMPORTED_PATCH_STATUSES[number];
+
 export type AgentRunnerDto = {
   id: string;
   name: string;
@@ -1523,7 +1533,7 @@ export type AutomationJobDto = {
   contextValidationStatus?: "FRESH" | "STALE" | "MISSING" | "PARTIAL" | "NOT_REQUIRED";
   contextValidationSummary?: Record<string, unknown> | null;
   importedPatch?: string | null;
-  importedPatchStatus?: string | null;
+  importedPatchStatus?: ImportedPatchStatus | null;
   createdByUserId: string | null;
   approvedByUserId: string | null;
   startedAt: string | null;

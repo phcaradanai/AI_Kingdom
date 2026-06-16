@@ -3,6 +3,9 @@
  * Uses RUNNER_TOKEN for all requests.
  */
 
+import type { ImportedPatchStatus } from "./importedPatchStatus.js";
+export type { ImportedPatchStatus } from "./importedPatchStatus.js";
+
 export interface ApiClientConfig {
   baseUrl: string;
   runnerToken: string;
@@ -28,7 +31,7 @@ export interface AutomationJob {
   contextValidationStatus?: string | null;
   contextValidationSummary?: Record<string, unknown> | null;
   importedPatch?: string | null;
-  importedPatchStatus?: string | null;
+  importedPatchStatus?: ImportedPatchStatus | null;
   workOrder: {
     id: string;
     title: string;
@@ -73,7 +76,7 @@ export class ApiClient {
     return this.request("POST", "/api/runner/jobs/claim", {});
   }
 
-  async updateStatus(jobId: string, status: string, data?: { patchSummary?: string; logsPreview?: string; importedPatchStatus?: string | null }): Promise<void> {
+  async updateStatus(jobId: string, status: string, data?: { patchSummary?: string; logsPreview?: string; importedPatchStatus?: ImportedPatchStatus | null }): Promise<void> {
     await this.request("PATCH", `/api/runner/jobs/${jobId}/status`, { status, ...data });
   }
 

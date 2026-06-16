@@ -21,6 +21,7 @@ import { validateCommand } from "./commandValidator.js";
 import { applyImportedPatch, generatePatch, isEmptyPatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
 import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
+import { decideImportedPatchStatus } from "./importedPatchStatus.js";
 import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
 import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDependencies } from "./dependencyInstaller.js";
 import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationCommands } from "./preValidationRunner.js";
@@ -446,9 +447,11 @@ async function executeJob(job: AutomationJob) {
     const logsPreview = sanitizeLogOutput(logLines.slice(-100).join("\n"));
     log(`[Job ${job.id}] Submitting report...`);
 
-    // If an imported patch was applied and validation completed, advance its status to VALIDATED
-    if (job.importedPatch && !emptyPatch) {
-      await api.updateStatus(job.id, "RUNNING", { importedPatchStatus: "VALIDATED" });
+    // Update imported patch terminal status based on apply result and validation outcome
+    if (job.importedPatch) {
+      const allValidationPassed = validationResults.every(vr => vr.success);
+      const finalStatus = decideImportedPatchStatus({ applied: true, emptyPatch, allValidationPassed });
+      await api.updateStatus(job.id, "RUNNING", { importedPatchStatus: finalStatus });
     }
 
     await api.submitReport(job.id, {

@@ -21,11 +21,31 @@ import { containsSecrets } from "./secretRedactorService.js";
 const MAX_PATCH_BYTES = 256_000; // 250 KB
 const MAX_FILES_CHANGED = 50;
 
+export const IMPORTED_PATCH_STATUSES = [
+  "PENDING",
+  "CHECK_FAILED",
+  "APPLIED_IN_SANDBOX",
+  "VALIDATED",
+  "VALIDATION_FAILED",
+  "NO_CHANGES"
+] as const;
+
+export type ImportedPatchStatus = typeof IMPORTED_PATCH_STATUSES[number];
+
+export type PatchValidationErrorCode = "INVALID_PATCH" | "UNSAFE_PATCH";
+
 export interface PatchValidationResult {
   valid: boolean;
+  reason?: PatchValidationErrorCode;
   error?: string;
   paths?: string[];
 }
+
+export type ImportPatchErrorCode = "NOT_FOUND" | "INVALID_STATUS" | "INVALID_PATCH" | "UNSAFE_PATCH";
+
+export type ImportPatchResult =
+  | { success: true }
+  | { success: false; code: ImportPatchErrorCode; error: string };
 
 /**
  * Extracts every affected file path from a unified diff.
@@ -84,16 +104,16 @@ export function extractPathsFromPatch(patchText: string): string[] {
 
 export function validateImportedPatch(patchText: string): PatchValidationResult {
   if (!patchText || !patchText.trim()) {
-    return { valid: false, error: "Patch text is empty" };
+    return { valid: false, reason: "INVALID_PATCH", error: "Patch text is empty" };
   }
 
   if (Buffer.byteLength(patchText, "utf8") > MAX_PATCH_BYTES) {
-    return { valid: false, error: `Patch exceeds maximum size (${MAX_PATCH_BYTES} bytes)` };
+    return { valid: false, reason: "INVALID_PATCH", error: `Patch exceeds maximum size (${MAX_PATCH_BYTES} bytes)` };
   }
 
   // Reject symlink-creating hunks
   if (/^new mode 120000$/m.test(patchText)) {
-    return { valid: false, error: "Patch contains a symlink-creating hunk (new mode 120000) — rejected" };
+    return { valid: false, reason: "UNSAFE_PATCH", error: "Patch contains a symlink-creating hunk (new mode 120000) — rejected" };
   }
 
   const paths = extractPathsFromPatch(patchText);
@@ -101,22 +121,22 @@ export function validateImportedPatch(patchText: string): PatchValidationResult 
   // Reject path traversal or absolute paths
   for (const p of paths) {
     if (p.includes("..") || p.startsWith("/")) {
-      return { valid: false, error: `Patch contains an unsafe path: ${p}` };
+      return { valid: false, reason: "UNSAFE_PATCH", error: `Patch contains an unsafe path: ${p}` };
     }
   }
 
   if (paths.length > MAX_FILES_CHANGED) {
-    return { valid: false, error: `Patch touches too many files (${paths.length} > ${MAX_FILES_CHANGED})` };
+    return { valid: false, reason: "INVALID_PATCH", error: `Patch touches too many files (${paths.length} > ${MAX_FILES_CHANGED})` };
   }
 
   const blocked = detectBlockedPaths(paths);
   if (blocked.length > 0) {
-    return { valid: false, error: `Patch touches blocked paths: ${blocked.join(", ")}` };
+    return { valid: false, reason: "UNSAFE_PATCH", error: `Patch touches blocked paths: ${blocked.join(", ")}` };
   }
 
   // Reject patches that appear to contain secrets (applying a redacted patch would corrupt code)
   if (containsSecrets(patchText)) {
-    return { valid: false, error: "Patch appears to contain secrets or credentials — remove them and re-import" };
+    return { valid: false, reason: "UNSAFE_PATCH", error: "Patch appears to contain secrets or credentials — remove them and re-import" };
   }
 
   return { valid: true, paths };
@@ -126,19 +146,23 @@ export async function importPatch(
   jobId: string,
   patchText: string,
   userId: string
-): Promise<{ success: boolean; error?: string }> {
-  // Gate on job status — only QUEUED or APPROVED jobs can accept a patch
+): Promise<ImportPatchResult> {
+  // Gate on job status — only QUEUED jobs can accept a patch
   const job = await prisma.automationJob.findUnique({ where: { id: jobId } });
   if (!job) {
-    return { success: false, error: "Automation job not found" };
+    return { success: false, code: "NOT_FOUND", error: "Automation job not found" };
   }
-  if (job.status !== "QUEUED" && job.status !== "APPROVED") {
-    return { success: false, error: `Cannot import patch on a ${job.status} job` };
+  if (job.status !== "QUEUED") {
+    return {
+      success: false,
+      code: "INVALID_STATUS",
+      error: "Patch can only be imported before approval. Cancel/recreate the job or import the patch before approving."
+    };
   }
 
   const validation = validateImportedPatch(patchText);
   if (!validation.valid) {
-    return { success: false, error: validation.error };
+    return { success: false, code: validation.reason ?? "INVALID_PATCH", error: validation.error ?? "Invalid patch" };
   }
 
   await prisma.automationJob.update({
