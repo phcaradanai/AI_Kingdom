@@ -512,6 +512,13 @@ export type ReportPayload = {
   tags: string[];
 };
 
+export type PlannerResultDto = {
+  drafted: number;
+  skipped: number;
+  sessionId: string;
+  draftedWorkOrderIds: string[];
+};
+
 export type CouncilSessionDto = {
   id: string;
   taskId: string;

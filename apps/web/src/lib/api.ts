@@ -90,7 +90,8 @@ import type {
   LocalDocumentInsightDto,
   ProjectContextBindingDto,
   ProjectContextHealthDto,
-  WorkOrderContextDto
+  WorkOrderContextDto,
+  PlannerResultDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -383,6 +384,8 @@ export const api = {
     apiRequest<{ workOrder: WorkOrderDto; handoffBrief: HandoffBriefDto }>(`/tasks/${taskId}/council/${sessionId}/handoff`, { method: "POST" }),
   councilSessions: () => apiRequest<{ sessions: CouncilSessionDto[] }>("/council"),
   councilSession: (id: string) => apiRequest<{ session: CouncilSessionDto }>(`/council/${id}`),
+  planCouncilWorkOrder: (sessionId: string) =>
+    apiRequest<PlannerResultDto>(`/council/${sessionId}/work-order`, { method: "POST" }),
   reports: (params?: { category?: string; importance?: string }) => {
     const search = new URLSearchParams();
     if (params?.category) search.set("category", params.category);

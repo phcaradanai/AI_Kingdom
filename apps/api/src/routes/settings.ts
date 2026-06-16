@@ -67,10 +67,11 @@ router.patch("/:key", async (req, res, next) => {
   }
 });
 
-const BOOLEAN_SETTING_KEYS = ["AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS", "AUTO_PLAN_WORK_ORDERS", "ROUTING_DEBUG_MODE", "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", "LIVING_LOOP_ENABLED", "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", "LIVING_LOOP_AUTO_SANDBOX_PATCH", "LIVING_LOOP_ALLOW_BRANCH_PUSH", "LIVING_LOOP_ALLOW_PR_CREATE", "LIVING_LOOP_ALLOW_PAID_PROVIDERS"];
+const BOOLEAN_SETTING_KEYS = ["AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS", "ROUTING_DEBUG_MODE", "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", "LIVING_LOOP_ENABLED", "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", "LIVING_LOOP_AUTO_SANDBOX_PATCH", "LIVING_LOOP_ALLOW_BRANCH_PUSH", "LIVING_LOOP_ALLOW_PR_CREATE", "LIVING_LOOP_ALLOW_PAID_PROVIDERS"];
 
 function validateSettingValue(key: string, value: string): string | null {
   if (key === "AI_COST_MODE" && !["low", "balanced", "quality"].includes(value)) return "AI_COST_MODE must be low, balanced, or quality";
+  if (key === "COUNCIL_AUTO_WORK_ORDER_MODE" && !["OFF", "DRAFT", "READY"].includes(value)) return "COUNCIL_AUTO_WORK_ORDER_MODE must be OFF, DRAFT, or READY";
   if (BOOLEAN_SETTING_KEYS.includes(key) && !["true", "false"].includes(value)) return `${key} must be true or false`;
   if (key === "AI_TIMEOUT_MS" && (!Number.isFinite(Number(value)) || Number(value) < 1000 || Number(value) > 120000)) return "AI_TIMEOUT_MS must be between 1000 and 120000";
   if (key === "AI_MAX_TOKENS" && (!Number.isFinite(Number(value)) || Number(value) < 64 || Number(value) > 8000)) return "AI_MAX_TOKENS must be between 64 and 8000";

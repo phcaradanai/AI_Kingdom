@@ -8,7 +8,7 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "AI_MAX_TOKENS", value: String(env.AI_MAX_TOKENS), category: "AI", description: "Default maximum output tokens for AI calls." },
   { key: "AUTO_SAVE_MEMORY", value: "true", category: "SYSTEM", description: "Automatically save concise memories after council completion." },
   { key: "AUTO_GENERATE_REPORTS", value: "true", category: "SYSTEM", description: "Automatically generate Royal Reports after council completion." },
-  { key: "AUTO_PLAN_WORK_ORDERS", value: "false", category: "SYSTEM", description: "Automatically run the Planner Agent after each completed council session to generate draft work orders for King review." },
+  { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF", category: "SYSTEM", description: "Controls whether the Planner Agent auto-creates work orders after council completion. OFF = disabled; DRAFT = create draft work orders for King review; READY = create work orders ready for agent assignment." },
   { key: "AUTO_ASSIGN_WORK_ORDERS", value: "true", category: "SYSTEM", description: "Automatically assign a suitable internal agent to planner-created draft work orders based on skill and specialty matching." },
   { key: "ROUTING_DEBUG_MODE", value: "false", category: "SYSTEM", description: "When enabled, low-confidence and debug-only routing decisions are stored as inbox items (hidden by default) for admin review." },
   { key: "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", value: "false", category: "SYSTEM", description: "Allow production provider calls when running outside production mode. Keep disabled unless actively testing production routes." },
@@ -34,7 +34,7 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
 ];
 
 // Keys that were removed from active settings and should be cleaned up from existing databases.
-const DEPRECATED_SETTING_KEYS = ["AI_PROVIDER", "OPENAI_MODEL", "DEFAULT_TASK_MODE", "AUTO_PROCESS_TASKS"];
+const DEPRECATED_SETTING_KEYS = ["AI_PROVIDER", "OPENAI_MODEL", "DEFAULT_TASK_MODE", "AUTO_PROCESS_TASKS", "AUTO_PLAN_WORK_ORDERS"];
 
 export async function ensureDefaultSettings() {
   for (const setting of DEFAULT_SETTINGS) {

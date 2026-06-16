@@ -82,7 +82,26 @@ router.post("/:sessionId/plan-work-orders", requireRole("KING", "CROWN_PRINCE"),
     }
     const { sessionId } = req.params as { sessionId: string };
     const result = await planFromSession(sessionId, userId);
-    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId });
+    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+router.post("/:sessionId/work-order", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      res.status(401).json({ error: "Unauthorized" });
+      return;
+    }
+    const { sessionId } = req.params as { sessionId: string };
+    const result = await planFromSession(sessionId, userId);
+    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });

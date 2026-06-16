@@ -11,6 +11,7 @@ import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./m
 import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { runPlannerAgent } from "./plannerAgentService.js";
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
 import { proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
@@ -781,6 +782,15 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       agentId: grandVizier.id,
       tokensUsed: generatedSummary.usage.totalTokens,
       estimatedCostUSD: summaryCost.costUSD
+    });
+
+    // Fire-and-forget: planner runs after council completes, gated by COUNCIL_AUTO_WORK_ORDER_MODE setting
+    runPlannerAgent(
+      { id: sessionWithMemories.id, finalSummary: sessionWithMemories.finalSummary, projectId: sessionWithMemories.projectId, taskId: task.id },
+      { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: task.projectId, createdBy: task.createdBy, user: task.user ?? undefined },
+      userId
+    ).catch((err) => {
+      console.warn("[GrandVizier] Planner agent failed:", err instanceof Error ? err.message : String(err));
     });
 
     return sessionWithMemories;

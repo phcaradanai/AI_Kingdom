@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { UsersRound, ScrollText, ChevronRight, FileText, Cpu, AlertTriangle, Sparkles } from "lucide-react";
+import { UsersRound, ScrollText, ChevronRight, FileText, Cpu, AlertTriangle, Sparkles, ClipboardList } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -11,7 +11,8 @@ import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
 import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { CouncilSessionDto } from "@/types/api";
+import { api } from "@/lib/api";
+import type { CouncilSessionDto, PlannerResultDto } from "@/types/api";
 
 export function CouncilPage() {
   const sessions = useKingdomStore((state) => state.councilSessions);
@@ -118,6 +119,23 @@ export function CouncilPage() {
 }
 
 function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; linkedReport: ReportLike | null }) {
+  const [plannerResult, setPlannerResult] = useState<PlannerResultDto | null>(null);
+  const [plannerError, setPlannerError] = useState<string | null>(null);
+  const [isPlanning, setIsPlanning] = useState(false);
+
+  async function handleCreateWorkOrder() {
+    setIsPlanning(true);
+    setPlannerError(null);
+    try {
+      const result = await api.planCouncilWorkOrder(session.id);
+      setPlannerResult(result);
+    } catch (err) {
+      setPlannerError(err instanceof Error ? err.message : "Failed to create work order");
+    } finally {
+      setIsPlanning(false);
+    }
+  }
+
   return (
     <SectionCard className="h-full border-primary/20 bg-background/50 shadow-sm relative overflow-hidden" contentClassName="p-0">
       <div className="absolute right-0 top-0 opacity-5 pointer-events-none">
@@ -236,6 +254,56 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
                 <ChevronRight className="ml-1.5 h-4 w-4" />
               </Button>
             </Link>
+          </div>
+        )}
+
+        {session.status === "COMPLETED" && (
+          <div className="rounded-xl border border-border/50 bg-muted/10 p-5 mt-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-start gap-4">
+                <div className="p-2 rounded-lg bg-muted/30">
+                  <ClipboardList className="h-5 w-5 text-muted-foreground" />
+                </div>
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Work Order</div>
+                  {plannerResult ? (
+                    plannerResult.drafted > 0 ? (
+                      <p className="text-sm font-semibold text-foreground">
+                        {plannerResult.drafted} work order{plannerResult.drafted !== 1 ? "s" : ""} created
+                      </p>
+                    ) : plannerResult.skipped > 0 ? (
+                      <p className="text-sm text-muted-foreground">Skipped — a work order with this title already exists</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No actionable items identified from this session</p>
+                    )
+                  ) : plannerError ? (
+                    <p className="text-sm text-destructive">{plannerError}</p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Generate a draft work order from this council session</p>
+                  )}
+                </div>
+              </div>
+              <div className="flex gap-2 shrink-0">
+                {plannerResult && plannerResult.drafted > 0 && (
+                  <Link to="/work-orders">
+                    <Button variant="secondary" className="h-9">
+                      View Work Orders
+                      <ChevronRight className="ml-1.5 h-4 w-4" />
+                    </Button>
+                  </Link>
+                )}
+                {!plannerResult && (
+                  <Button
+                    variant="outline"
+                    className="h-9"
+                    onClick={handleCreateWorkOrder}
+                    disabled={isPlanning}
+                  >
+                    {isPlanning ? "Creating..." : "Create Work Order"}
+                  </Button>
+                )}
+              </div>
+            </div>
           </div>
         )}
       </div>

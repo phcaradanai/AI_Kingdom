@@ -15,20 +15,32 @@ npm run db:seed
 npm run runner:bootstrap
 
 # Development
-npm run dev          # starts both API (port 4000) and Vite (port 5173)
+npm run dev          # starts API (port 4000), Vite (port 5173), and runner — all three concurrently
 npm run runner:bootstrap # create/update Local Runner from RUNNER_TOKEN
 npm run typecheck    # TypeScript checks across all workspaces
-npm run test         # API test suite (Node built-in runner + tsx)
-npm run lint         # alias for typecheck in both workspaces
+npm run test         # full test suite: API + runner + web
+npm run test:api     # API tests only (faster for backend-only changes)
+npm run lint         # alias for typecheck in all workspaces
 
 # Database
 npm run db:migrate   # apply migrations + generate Prisma client (dev only)
-npm run db:seed      # reset seeded King user and royal agents
+npm run db:seed      # reset seeded King user, royal agents, providers, projects, settings
 npm run runner:bootstrap # create/update local AgentRunner runtime data
 
 # Single workspace targets
 npm run dev --workspace @ai-kingdom/api
 npm run test --workspace @ai-kingdom/api
+npm run test --workspace @ai-kingdom/runner
+
+# Run a single test file (from repo root)
+node scripts/with-test-env.mjs node --import tsx --test apps/api/src/services/memoryService.test.ts
+
+# Data quality scripts
+npm run data:inspect-pollution          # inspect low-quality / polluted kingdom data
+npm run data:cleanup-test-data          # remove test-generated noise records
+npm run data:archive-low-value          # archive low-value memories/matters
+npm run data:archive-low-value-work-orders  # archive low-value work orders
+npm run data:inspect-low-value          # preview low-value records before archiving
 ```
 
 Seeded login: `king@aikingdom.local` / `password123`
@@ -46,7 +58,7 @@ Use the same `RUNNER_TOKEN` for bootstrap and the runner process. The bootstrap 
 
 ## Architecture
 
-npm workspaces monorepo: `apps/api` (Express + Prisma) and `apps/web` (React + Vite). No shared packages — types are duplicated between `apps/api/src/types/api.ts` and `apps/web/src/types/api.ts`.
+npm workspaces monorepo: `apps/api` (Express + Prisma), `apps/web` (React + Vite), and `apps/runner` (sandbox execution agent). No shared packages — types are duplicated between `apps/api/src/types/api.ts` and `apps/web/src/types/api.ts`.
 
 ### Backend (`apps/api`)
 
@@ -55,9 +67,11 @@ Entry: `src/server.ts` → `src/app.ts` (Express setup with cors, helmet, morgan
 **Core flow — decree processing:**
 1. `POST /api/tasks` creates a Task (status `PENDING`).
 2. `POST /api/tasks/:id/process` triggers `grandVizierOrchestrator.ts`, which:
+   - Loads Kingdom Charter + Vision context via `kingdomComplianceService.ts`.
    - Loads relevant Kingdom Memories via `memoryService.ts` (keyword/tag match, up to 5).
+   - Injects compact project context when task has a `projectId` (via `projectContextService.ts`).
    - Selects agents by `AGENTS_BY_MODE` map (keyed on `TaskMode`: ASK/PLAN/RESEARCH/BUILD).
-   - Calls each agent in order via `generateWithFallback.ts` — tries the configured `AIProvider`, falls back to mock if it fails or times out.
+   - Calls each agent in order via `generateWithFallback.ts` — tries the resolved `AIProvider` chain, falls back to mock on failure/timeout.
    - Creates one `UsageRecord` per AI call (agents + Grand Vizier synthesis) with token counts and estimated USD cost from `src/pricing/providerPricing.ts`.
    - Creates a `CouncilSession` with agent responses.
    - Creates one `TreasuryLedger` COST entry for the session total.
@@ -66,28 +80,52 @@ Entry: `src/server.ts` → `src/app.ts` (Express setup with cors, helmet, morgan
 
 **AI provider abstraction** (`src/ai/`):
 - `AIProvider` interface in `aiProvider.ts` — `generateAgentResponse` returns `AgentResponseResult` (response text + `TokenUsage`).
-- `mockAIProvider.ts` — deterministic responses, token counts estimated from string length, cost = $0.
-- `openAIProvider.ts` — OpenAI-compatible; reads real token counts from API response body.
-- `providerFactory.ts` — instantiates provider from env/settings.
-- `generateWithFallback.ts` — wraps provider call with timeout + fallback to mock; propagates usage from whichever provider ran.
+- `mockAIProvider.ts` — deterministic responses, tokens estimated from string length, cost = $0.
+- `openAICompatibleProvider.ts` — reusable Chat Completions implementation for OpenAI, OpenRouter, DeepSeek, and any OpenAI-compatible API.
+- `providerFactory.ts` / `aiProviderRegistry.ts` — env-first public registry, DB-backed provider overrides, capability/cost metadata. Credentials are referenced by env var name, never stored as literal secrets.
+- `aiProviderRouter.ts` — resolves provider/model/fallback chain from agent override, task mode, `AI_COST_MODE` (low|balanced|quality), required capabilities. Default fallback chain: `deepseek → openrouter → openai → mock`.
+- `generateWithFallback.ts` — wraps provider call with timeout + fallback; propagates usage from whichever provider ran. Fallback notices stored on `CouncilSession.fallbackNotice`.
 
 **Cost calculation** (`src/pricing/providerPricing.ts`): static table keyed `"provider:model"`, USD per 1M tokens. Unknown models default to $0 + console.warn. `calculateCostUSD(provider, model, promptTokens, completionTokens)` is the main entry point.
 
-**RBAC** (`src/middleware/rbac.ts`): roles `KING > CROWN_PRINCE > MINISTER > SCRIBE`. Route handlers call `requireRole(role)` middleware. The Grand Vizier agent cannot be deleted or deactivated via the API.
+**RBAC** (`src/middleware/rbac.ts`): roles `KING > CROWN_PRINCE > MINISTER > SCRIBE`. Route handlers call `requireRole(role)` or `methodPermission` middleware. The Grand Vizier agent cannot be deleted or deactivated via the API. `/api/agents`, `/api/settings`, `/api/providers`, `/api/users`, `/api/treasury`, and `/api/audit` require KING.
 
-**Settings** (`src/services/settingsService.ts`): runtime settings stored in DB, read via `getSettingValue`/`getBooleanSetting`/`getNumberSetting`. Keys: `AI_PROVIDER`, `OPENAI_MODEL`, `AI_TIMEOUT_MS`, `AI_MAX_TOKENS`, `DEFAULT_TASK_MODE`, `AUTO_PROCESS_TASKS`, `AUTO_SAVE_MEMORY`, `AUTO_GENERATE_REPORTS`, `DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`. `OPENAI_API_KEY` is server-only and never returned by the settings API.
+**Settings** (`src/services/settingsService.ts`): runtime settings stored in DB. Keys: `AI_PROVIDER`, `OPENAI_MODEL`, `AI_TIMEOUT_MS`, `AI_MAX_TOKENS`, `AI_COST_MODE`, `DEFAULT_TASK_MODE`, `AUTO_PROCESS_TASKS`, `AUTO_SAVE_MEMORY`, `AUTO_GENERATE_REPORTS`, `DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`, `LIVING_LOOP_ENABLED`, `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`, `LIVING_LOOP_AUTO_SANDBOX_PATCH`. API keys are server-side only and never returned by the settings API.
 
-**Auth**: bcrypt passwords, short-lived JWT access tokens, server-stored refresh token sessions. `src/middleware/auth.ts` validates tokens; logout revokes the refresh session. Audit logs written for sensitive operations via `auditService.ts`.
+**Auth**: bcrypt passwords, 15-minute JWT access tokens, server-stored refresh token sessions. `src/middleware/auth.ts` validates tokens; logout revokes the refresh session. Audit logs written for sensitive operations via `auditService.ts`.
+
+**Royal Secretary** (`royalSecretaryService.ts`): manages `Notice` and `Matter` records, `inspectKingdomStatus`, and `generateDailyBrief` (status, urgent notices, open/awaiting-decision matters, `recommendedActions`, `contextHealthSummary`).
+
+**Living Loop** (`livingLoopService.ts`): observe → propose → act automation cycle, gated by `LIVING_LOOP_ENABLED`. Observes work orders, failed automation jobs, stale runners, provider failures, project inbox items, and matters awaiting decision. Proposes `AutomationCandidate` rows (kinds: `VALIDATION_JOB`, `SANDBOX_PATCH`, `WORK_ORDER_REVIEW`, etc.), each filtered by `dataValueGate()`. Two opt-in auto-act stages:
+- `autoCreateValidationJobs()` (`LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`): creates `VALIDATION_ONLY` automation jobs — read-only, never patches.
+- `autoCreateSandboxPatchJobs()` (`LIVING_LOOP_AUTO_SANDBOX_PATCH`): creates `SANDBOX_PATCH` jobs with `commandPolicy: "SANDBOX_PATCH_NO_PUSH"`. Eight-condition risk policy (`livingLoopRiskPolicyService.ts`) gates every auto-patch: confidence ≥85, riskLevel LOW, online runner present, project linked, no active job, cooldown not violated, no blocked-path file hints. Auto-created jobs end in `NEEDS_REVIEW` — no branch push, PR creation, merge, or deploy ever runs automatically.
+
+### Runner (`apps/runner`)
+
+Standalone worker process that polls the API for queued `AutomationJob` rows and executes them in the local workspace. Entry: `src/index.ts` → `src/sandbox.ts`.
+
+Key modules:
+- `sandboxPatchPolicy.ts`: `evaluateBranchPushEligibility()` refuses push when `commandPolicy === "SANDBOX_PATCH_NO_PUSH"` regardless of server settings. `evaluateJobContextBinding()` refuses SANDBOX_PATCH execution when context is STALE/MISSING/PARTIAL.
+- `patchGenerator.ts`: generates unified diff patch artifacts from workspace changes.
+- `validationOnlyExecutor.ts`: runs allowlisted read/typecheck/test/build commands only — never edits files.
+- `commandValidator.ts`: validates commands against the allowlist before execution.
+- `workspacePreparation.ts`: prepares the workspace (git state, dependency install) before job execution.
+- `preValidationRunner.ts`: pre-patch validation runs before applying any changes.
+- `importedPatchStatus.ts`: tracks and reports imported patch application status.
+- `secretRedactor.ts`: redacts secrets from runner output before sending to API.
+
+The runner must be bootstrapped (`npm run runner:bootstrap`) and started with the same `RUNNER_TOKEN` as the API. Confirm `/automation-jobs` shows `Online Runners = 1` before manual SANDBOX_PATCH acceptance.
 
 ### Frontend (`apps/web`)
 
-React Router v6 SPA. All API calls go through `src/lib/api.ts` (centralized fetch wrapper). Zustand stores: `authStore.ts` (JWT + user), `kingdomStore.ts` (tasks, agents, memories, reports, council sessions).
+React Router v6 SPA. All API calls go through `src/lib/api.ts` (centralized fetch wrapper). Zustand stores: `authStore.ts` (JWT + user), `kingdomStore.ts` (tasks, agents, memories, reports, council sessions, providers, settings).
 
 **Route → role access** enforced by `ProtectedRoute.tsx`:
 - `/throne-room`, `/council`, `/reports`, `/memory` — all authenticated roles.
 - `/agents`, `/settings`, `/users` — KING only.
+- `/external-agents`, `/work-orders`, `/projects`, `/project-inbox`, `/artifacts`, `/living-loop` — KING/CROWN_PRINCE.
 
-UI components under `src/components/ui/` are local shadcn-style primitives (button, card, input, textarea). Layout is in `src/components/layout/AppLayout.tsx`.
+UI components under `src/components/ui/` are local shadcn-style primitives. Layout is in `src/components/layout/AppLayout.tsx`.
 
 ### Database
 
@@ -95,9 +133,15 @@ Prisma schema at `apps/api/prisma/schema.prisma`. `scripts/with-root-env.mjs` lo
 
 ## Testing
 
-Tests use Node's built-in test runner via `tsx`. Place test files next to the module as `*.test.ts`. Tests must not require a real OpenAI key — use `mockAIProvider` or stub providers. Run `npm run test` before shipping backend changes.
+Tests use Node's built-in test runner via `tsx`. Place test files next to the module as `*.test.ts`. Tests must not require a real OpenAI key — use `mockAIProvider` or stub providers. Run `npm run typecheck` and `npm run test` before shipping backend or contract changes.
 
 **Test DB migrations:** the test suite runs against the `ai_kingdom_test` database. Every new Prisma migration must be deployed there before root tests pass: run `npm run test:db:prepare` (or `prisma migrate deploy` with the test `DATABASE_URL`) after creating a migration, then `npm run test`.
+
+For auth/RBAC changes, cover login, denied access, and session invalidation. For route shape changes, update DTO types in both `apps/api/src/types/api.ts` and `apps/web/src/types/api.ts`.
+
+## Coding Style
+
+Keep route handlers thin — orchestration, memory, reports, settings, and audit logic belong in services. Frontend network calls stay in `apps/web/src/lib/api.ts`; shared state in Zustand stores. Use `PascalCase` for React components, `camelCase` for services/utilities. Generated data must pass a value/quality gate before becoming Kingdom state (`dataValueGateService.ts`). Low-confidence signals are preview-only or ephemeral — a smaller trusted Kingdom is better than a large polluted one.
 
 ## Agent Workflow (Claude/Codex-style agents)
 
@@ -123,6 +167,9 @@ OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4o-mini
 AI_TIMEOUT_MS=20000
 AI_MAX_TOKENS=700
+AI_COST_MODE=balanced   # low | balanced | quality
 ```
+
+Other supported provider env keys (all server-side only, never returned via API): `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`. Custom providers reference their key by env var name — never store literal secrets in the DB.
 
 The orchestrator always falls back to mock if the provider fails or times out.

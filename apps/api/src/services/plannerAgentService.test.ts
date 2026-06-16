@@ -95,12 +95,11 @@ test("parsePlannerResponse skips drafts with missing title or objective", () => 
 
 // ── runPlannerAgent tests ─────────────────────────────────────────────────────
 
-test("runPlannerAgent returns { drafted: 0, skipped: 0 } when AUTO_PLAN_WORK_ORDERS is false (default)", async () => {
-  // Ensure setting is false
+test("runPlannerAgent returns { drafted: 0, skipped: 0 } when COUNCIL_AUTO_WORK_ORDER_MODE is OFF (default)", async () => {
   await prisma.setting.upsert({
-    where: { key: "AUTO_PLAN_WORK_ORDERS" },
-    update: { value: "false" },
-    create: { key: "AUTO_PLAN_WORK_ORDERS", value: "false", category: "SYSTEM", description: "test" }
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "OFF" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF", category: "SYSTEM", description: "test" }
   });
 
   const result = await runPlannerAgent(
@@ -112,16 +111,14 @@ test("runPlannerAgent returns { drafted: 0, skipped: 0 } when AUTO_PLAN_WORK_ORD
   assert.equal(result.drafted, 0);
   assert.equal(result.skipped, 0);
   assert.equal(result.sessionId, "fake-session-id");
+  assert.deepEqual(result.draftedWorkOrderIds, []);
 });
 
 test("runPlannerAgent returns { drafted: 0, skipped: 0 } when planner agent is missing from DB", async () => {
-  // Delete planner agent if exists
-  await prisma.agent.deleteMany({ where: { slug: "planner-nonexistent-test" } });
-
   await prisma.setting.upsert({
-    where: { key: "AUTO_PLAN_WORK_ORDERS" },
-    update: { value: "true" },
-    create: { key: "AUTO_PLAN_WORK_ORDERS", value: "true", category: "SYSTEM", description: "test" }
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "DRAFT" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "DRAFT", category: "SYSTEM", description: "test" }
   });
 
   const result = await runPlannerAgent(
@@ -136,17 +133,16 @@ test("runPlannerAgent returns { drafted: 0, skipped: 0 } when planner agent is m
   assert.equal(result.sessionId, "fake-session-missing-agent");
 
   // Reset setting
-  await prisma.setting.update({ where: { key: "AUTO_PLAN_WORK_ORDERS" }, data: { value: "false" } });
+  await prisma.setting.update({ where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" }, data: { value: "OFF" } });
 });
 
-test("runPlannerAgent does not throw when setting is disabled", async () => {
+test("runPlannerAgent does not throw when mode is OFF", async () => {
   await prisma.setting.upsert({
-    where: { key: "AUTO_PLAN_WORK_ORDERS" },
-    update: { value: "false" },
-    create: { key: "AUTO_PLAN_WORK_ORDERS", value: "false", category: "SYSTEM", description: "test" }
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "OFF" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF", category: "SYSTEM", description: "test" }
   });
 
-  // Should complete without throwing
   await assert.doesNotReject(async () => {
     await runPlannerAgent(
       { id: "safe-session", finalSummary: null, projectId: null, taskId: "safe-task" },
@@ -407,6 +403,81 @@ test("createDraftWorkOrders creates DRAFT work orders linked to council session 
     assert.match(alpha.context, /PLANNER RATIONALE/);
     assert.match(alpha.context, /ORIGINATING COUNCIL SESSION/);
     assert.match(alpha.context, /Session ID:/i);
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
+    await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("createDraftWorkOrders creates READY work orders when targetStatus is READY", async () => {
+  const user = await createUser("KING");
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "READY status test", command: "Build READY feature", mode: "BUILD", status: "COMPLETED" }
+  });
+  const session = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", selectedAgentIds: [], finalSummary: "Ready to assign." }
+  });
+
+  const drafts: PlannerDraft[] = [
+    { title: "M17I READY Work Order Alpha", objective: "Implement the Alpha module for READY mode", rationale: "King approved" }
+  ];
+
+  try {
+    const result = await createDraftWorkOrders(
+      drafts,
+      { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
+      { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
+      user.id,
+      "READY"
+    );
+
+    assert.equal(result.drafted, 1);
+    assert.equal(result.skipped, 0);
+    assert.equal(result.draftedWorkOrderIds.length, 1);
+
+    const wo = await prisma.workOrder.findUnique({ where: { id: result.draftedWorkOrderIds[0]! } });
+    assert.ok(wo, "Work order exists");
+    assert.equal(wo!.status, "READY");
+    assert.equal(wo!.sourceType, "COUNCIL_SESSION");
+    assert.equal(wo!.createdBySystem, true);
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
+    await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("createDraftWorkOrders returns draftedWorkOrderIds populated with created IDs", async () => {
+  const user = await createUser("KING");
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "IDs test", command: "Track IDs", mode: "BUILD", status: "COMPLETED" }
+  });
+  const session = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", selectedAgentIds: [], finalSummary: "Track IDs test." }
+  });
+
+  const drafts: PlannerDraft[] = [
+    { title: "M17I Track ID Gamma", objective: "Objective gamma", rationale: "r" },
+    { title: "M17I Track ID Delta", objective: "Objective delta", rationale: "r" }
+  ];
+
+  try {
+    const result = await createDraftWorkOrders(
+      drafts,
+      { id: session.id, finalSummary: session.finalSummary, projectId: null, taskId: task.id },
+      { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: null, createdBy: user.id },
+      user.id
+    );
+
+    assert.equal(result.drafted, 2);
+    assert.equal(result.draftedWorkOrderIds.length, 2);
+    for (const id of result.draftedWorkOrderIds) {
+      const wo = await prisma.workOrder.findUnique({ where: { id } });
+      assert.ok(wo, `Work order ${id} exists`);
+    }
   } finally {
     await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }).catch(() => undefined);
     await prisma.councilSession.delete({ where: { id: session.id } }).catch(() => undefined);

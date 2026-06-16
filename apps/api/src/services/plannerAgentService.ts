@@ -15,7 +15,7 @@ import { buildUsageAttribution } from "./usageAttributionService.js";
 import { prisma } from "../db/prisma.js";
 import { buildProjectContext } from "./projectContextService.js";
 import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
-import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { getNumberSetting, getSettingValue } from "./settingsService.js";
 import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
 
 export interface PlannerDraft {
@@ -28,6 +28,7 @@ export interface PlannerResult {
   drafted: number;
   skipped: number;
   sessionId: string;
+  draftedWorkOrderIds: string[];
 }
 
 type SessionInput = {
@@ -52,14 +53,15 @@ export async function runPlannerAgent(
   task: TaskInput,
   userId: string
 ): Promise<PlannerResult> {
-  const enabled = await getBooleanSetting("AUTO_PLAN_WORK_ORDERS", false);
-  if (!enabled) return { drafted: 0, skipped: 0, sessionId: session.id };
+  const mode = await getSettingValue("COUNCIL_AUTO_WORK_ORDER_MODE", "OFF");
+  if (mode === "OFF") return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
+  const targetStatus: "DRAFT" | "READY" = mode === "READY" ? "READY" : "DRAFT";
 
   try {
-    return await executePlanner(session, task, userId);
+    return await executePlanner(session, task, userId, targetStatus);
   } catch (error) {
     console.warn("[PlannerAgent] Failed to run planner agent:", error instanceof Error ? error.message : String(error));
-    return { drafted: 0, skipped: 0, sessionId: session.id };
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
   }
 }
 
@@ -77,14 +79,14 @@ export async function planFromSession(sessionId: string, userId: string): Promis
     throw new Error("Council session must be COMPLETED before planning");
   }
 
-  return executePlanner(session, session.task, userId);
+  return executePlanner(session, session.task, userId, "DRAFT");
 }
 
-async function executePlanner(session: SessionInput, task: TaskInput, userId: string): Promise<PlannerResult> {
+async function executePlanner(session: SessionInput, task: TaskInput, userId: string, targetStatus: "DRAFT" | "READY" = "DRAFT"): Promise<PlannerResult> {
   const plannerAgent = await prisma.agent.findUnique({ where: { slug: "planner" } });
   if (!plannerAgent) {
     console.warn("[PlannerAgent] No 'planner' agent found in database. Run npm run db:seed to create it.");
-    return { drafted: 0, skipped: 0, sessionId: session.id };
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
   }
 
   const defaultMaxTokens = await getNumberSetting("AI_MAX_TOKENS", 700);
@@ -145,10 +147,10 @@ async function executePlanner(session: SessionInput, task: TaskInput, userId: st
 
   const drafts = parsePlannerResponse(rawResponse);
   if (drafts.length === 0) {
-    return { drafted: 0, skipped: 0, sessionId: session.id };
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
   }
 
-  return createDraftWorkOrders(drafts, session, task, userId);
+  return createDraftWorkOrders(drafts, session, task, userId, targetStatus);
 }
 
 function buildPlanningContext(opts: {
@@ -365,10 +367,12 @@ export async function createDraftWorkOrders(
   drafts: PlannerDraft[],
   session: SessionInput,
   task: TaskInput,
-  userId: string
+  userId: string,
+  targetStatus: "DRAFT" | "READY" = "DRAFT"
 ): Promise<PlannerResult> {
   let drafted = 0;
   let skipped = 0;
+  const draftedWorkOrderIds: string[] = [];
 
   for (const draft of drafts) {
     // Cross-session dedup: skip if open work order with same normalized title exists
@@ -413,7 +417,7 @@ export async function createDraftWorkOrders(
         projectId: task.projectId,
         sourceType: "COUNCIL_SESSION",
         sourceId: session.id,
-        status: "DRAFT",
+        status: targetStatus,
         priority: "MEDIUM",
         createdByUserId: userId,
         createdBySystem: true,
@@ -421,6 +425,7 @@ export async function createDraftWorkOrders(
         workQuality: "ACTIONABLE"
       }
     });
+    draftedWorkOrderIds.push(created.id);
     // Auto-assign an internal agent; failure never blocks draft creation
     await assignWorkOrderAgent(created.id).catch((err) => {
       console.warn(`[PlannerAgent] Auto-assignment failed for work order ${created.id}:`, err instanceof Error ? err.message : String(err));
@@ -428,7 +433,7 @@ export async function createDraftWorkOrders(
     drafted++;
   }
 
-  return { drafted, skipped, sessionId: session.id };
+  return { drafted, skipped, sessionId: session.id, draftedWorkOrderIds };
 }
 
 async function hasDuplicateWorkOrder(title: string, projectId: string | null): Promise<boolean> {
