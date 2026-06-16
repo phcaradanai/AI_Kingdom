@@ -205,6 +205,15 @@ function buildSummary(filesChanged: string[], diffStat: string | null): string {
   return `${count} file${count !== 1 ? "s" : ""} changed. ${diffStat?.split("\n").pop()?.trim() ?? ""}`.trim();
 }
 
+/**
+ * Returns true when the workspace diff is empty — no files changed and no
+ * unified diff output. SANDBOX_PATCH jobs must not submit a PatchArtifact
+ * in this case; the ImplementationReport should surface NO_CHANGES instead.
+ */
+export function isEmptyPatch(payload: PatchPayload): boolean {
+  return payload.filesChanged.length === 0 && !payload.fullPatch;
+}
+
 export async function submitPatchArtifact(
   client: ApiClient,
   jobId: string,

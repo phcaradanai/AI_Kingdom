@@ -18,7 +18,7 @@ import { ApiClient, type AutomationJob } from "./apiClient.js";
 import { runCommand } from "./sandbox.js";
 import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
-import { generatePatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
+import { generatePatch, isEmptyPatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
 import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
@@ -378,10 +378,19 @@ async function executeJob(job: AutomationJob) {
       logLines.push(`$ ${vr.command}\nCWD: ${vr.cwd}\nTIMED_OUT: ${vr.timedOut}\nSTDOUT:\n${vr.stdout}\nSTDERR:\n${vr.stderr}`);
     }
 
-    // Submit patch artifact
-    const artifact = await submitPatchArtifact(api, job.id, patchPayload);
-    if (artifact) {
-      log(`[Job ${job.id}] Patch artifact submitted: ${artifact.id} (risk: pending server score)`);
+    // Empty patch guard: if no files changed and no diff, do not submit a PatchArtifact.
+    // Record a NO_CHANGES report instead so the job is clearly review-only.
+    const emptyPatch = isEmptyPatch(patchPayload);
+
+    // Submit patch artifact (only when actual file changes are present)
+    let artifact: { id: string } | null = null;
+    if (!emptyPatch) {
+      artifact = await submitPatchArtifact(api, job.id, patchPayload);
+      if (artifact) {
+        log(`[Job ${job.id}] Patch artifact submitted: ${artifact.id} (risk: pending server score)`);
+      }
+    } else {
+      log(`[Job ${job.id}] No files changed — skipping patch artifact submission (NO_CHANGES).`);
     }
 
     // Submit implementation report
@@ -389,18 +398,24 @@ async function executeJob(job: AutomationJob) {
     log(`[Job ${job.id}] Submitting report...`);
 
     await api.submitReport(job.id, {
-      summary: plan?.summary ?? "Sandbox execution completed.",
+      summary: emptyPatch
+        ? `NO_CHANGES: Sandbox run for "${job.workOrder.title}" produced no file modifications. This job did not apply any edits. Review the work order and provide an actual patch or diff.`
+        : (plan?.summary ?? "Sandbox execution completed."),
       filesChanged: patchPayload.filesChanged,
       commandsRun,
       testsRun,
       testResult,
       errors,
       decisionsMade: [],
-      remainingWork: errors.length > 0 ? ["Review and fix failed commands"] : [],
-      nextRecommendedAction: errors.length > 0 ? "Review errors in implementation report" : "Review patch artifact",
+      remainingWork: emptyPatch
+        ? ["Review the work order and provide a model-generated patch or diff. No files were changed during this sandbox run."]
+        : (errors.length > 0 ? ["Review and fix failed commands"] : []),
+      nextRecommendedAction: emptyPatch
+        ? "Review the work order — no files were modified. Provide an actual patch/diff and retry SANDBOX_PATCH."
+        : (errors.length > 0 ? "Review errors in implementation report" : "Review patch artifact"),
       logsPreview,
       rawOutput: logsPreview,
-      patchSummary: patchPayload.summary,
+      patchSummary: emptyPatch ? "No files changed." : patchPayload.summary,
       contextUsed: buildContextUsed(job)
     });
 

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AutomationJobDto, PatchArtifactDto } from "@/types/api";
+import type { AutomationJobDto, ImplementationReportDto, PatchArtifactDto } from "@/types/api";
 import { AutomationJobsPage } from "./AutomationJobsPage";
 
 const nowIso = new Date().toISOString();
@@ -133,5 +133,56 @@ describe("AutomationJobsPage — context binding (M17E-2)", () => {
 
     expect(await screen.findByText("Validate context feature")).toBeInTheDocument();
     expect(screen.queryByText(/Context: /)).not.toBeInTheDocument();
+  });
+});
+
+describe("AutomationJobsPage — NO_CHANGES SANDBOX_PATCH report", () => {
+  it("renders the NO_CHANGES summary and no patch artifact section when the job produced no file modifications", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+
+    const noChangesReport: ImplementationReportDto = {
+      id: "report-nc-1",
+      workOrderId: "wo-nc-1",
+      projectId: "proj-1",
+      workSessionId: null,
+      externalAgentId: null,
+      summary: `NO_CHANGES: Sandbox run for "Fix typo" produced no file modifications. This job did not apply any edits. Review the work order and provide an actual patch or diff.`,
+      filesChanged: [],
+      commandsRun: ["npm run typecheck", "npm run test --workspace @ai-kingdom/api"],
+      testsRun: ["npm run typecheck"],
+      testResult: "PASSED",
+      errors: [],
+      decisionsMade: [],
+      remainingWork: ["Review the work order and provide a model-generated patch or diff. No files were changed during this sandbox run."],
+      nextRecommendedAction: "Review the work order — no files were modified. Provide an actual patch/diff and retry SANDBOX_PATCH.",
+      rawOutput: null,
+      createdAt: nowIso,
+      updatedAt: nowIso
+    };
+
+    const sandboxJob: AutomationJobDto = {
+      ...baseJob,
+      id: "job-nc-1",
+      mode: "SANDBOX_PATCH",
+      commandPolicy: "SANDBOX_PATCH_NO_PUSH",
+      status: "NEEDS_REVIEW",
+      patchSummary: "No files changed.",
+      contextValidationStatus: "NOT_REQUIRED",
+      localDocumentSnapshotId: null,
+      workOrder: { id: "wo-nc-1", title: "Fix typo", status: "NEEDS_REVIEW", projectId: "proj-1" },
+      implementationReports: [noChangesReport]
+    };
+
+    apiMocks.automationJobs.mockResolvedValue([sandboxJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(sandboxJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+
+    await userEvent.click(await screen.findByText("Fix typo"));
+
+    expect(await screen.findByText(/NO_CHANGES:/)).toBeInTheDocument();
+    expect(screen.queryByText(/Patch Review/)).not.toBeInTheDocument();
   });
 });

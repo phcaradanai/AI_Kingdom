@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { runValidation } from "./patchGenerator.js";
+import { isEmptyPatch, runValidation, type PatchPayload } from "./patchGenerator.js";
 
 function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -194,4 +194,36 @@ test("patch validation exposes the failing workspace stderr", async () => {
     fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
     fs.rmSync(binDir, { recursive: true, force: true });
   }
+});
+
+// ── isEmptyPatch guard ───────────────────────────────────────────────────────
+
+function makePayload(overrides: Partial<PatchPayload> = {}): PatchPayload {
+  return {
+    title: "Patch: test",
+    summary: "No files changed.",
+    diffStat: null,
+    diffPreview: null,
+    fullPatch: null,
+    filesChanged: [],
+    validationResults: [],
+    branchName: null,
+    ...overrides
+  };
+}
+
+test("isEmptyPatch returns true when no files changed and fullPatch is null", () => {
+  assert.equal(isEmptyPatch(makePayload()), true);
+});
+
+test("isEmptyPatch returns false when filesChanged is non-empty", () => {
+  assert.equal(isEmptyPatch(makePayload({ filesChanged: ["src/foo.ts"], fullPatch: "diff --git a/src/foo.ts..." })), false);
+});
+
+test("isEmptyPatch returns false when fullPatch is present even if filesChanged is empty", () => {
+  assert.equal(isEmptyPatch(makePayload({ fullPatch: "diff --git a/src/foo.ts b/src/foo.ts\n..." })), false);
+});
+
+test("isEmptyPatch returns false when only filesChanged is non-empty (no fullPatch)", () => {
+  assert.equal(isEmptyPatch(makePayload({ filesChanged: ["src/bar.ts"] })), false);
 });

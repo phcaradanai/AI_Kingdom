@@ -86,6 +86,9 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
 - The `Budget` model is schema-only; budget limits are stored as `Setting` keys (`DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`). No write API for `Budget` records exists yet.
 - Usage records only cover sessions processed after M10 was deployed; historical sessions have no cost data.
 - `LIVING_LOOP_AUTO_SANDBOX_PATCH` and `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS` default to disabled; auto-created `SANDBOX_PATCH` jobs always require an online runner and a project-linked work order, and never push branches, open PRs, merge, or deploy — every patch lands `NEEDS_REVIEW` for King review.
+- **Runner job modes (current capability boundary):**
+  - `VALIDATION_ONLY` — copies the workspace, runs allowlisted typecheck/test/build/lint commands, submits a validation report. Never edits files, never creates a patch artifact, never runs `git add`/`commit`/`push`.
+  - `SANDBOX_PATCH` — runs the plan's steps and validation commands, then diffs the workspace. If the workspace diff is empty (no files changed, no unified diff output) the runner submits a `NO_CHANGES` implementation report and **does not create a PatchArtifact**. If files were changed the runner submits a `PatchArtifact` (risk-scored, blocked-path-checked, secret-redacted) and lands the job `NEEDS_REVIEW`. The runner does not apply model-generated text edits to disk — `FILE_CHANGE` plan steps are recorded as steps only. Branch push and PR creation remain disabled until an explicit safe patch-apply flow exists.
 
 ## Known non-blocking:
 - Vitest 4.x with Vite 5.x emits deprecation warnings. Tests pass; consider pinning Vitest to a Vite 5-compatible version or upgrading Vite later.
