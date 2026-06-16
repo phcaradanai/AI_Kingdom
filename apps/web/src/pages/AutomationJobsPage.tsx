@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, Bot, CheckCircle, Clock, FileCode, GitBranch, Play, RefreshCw, Shield, Upload, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Bot, CheckCircle, Clipboard, Clock, FileCode, GitBranch, Play, RefreshCw, Shield, Upload, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AgentRunnerDto, AutomationJobDto, AutomationJobStatus, PatchArtifactDto } from "@/types/api";
+import type { AgentReviewSummaryDto, AgentRunnerDto, AutomationJobDto, AutomationJobStatus, PatchArtifactDto } from "@/types/api";
 
 function statusColor(status: AutomationJobStatus): string {
   switch (status) {
@@ -136,6 +136,8 @@ export function AutomationJobsPage() {
   const [importPatchText, setImportPatchText] = useState("");
   const [importPatchError, setImportPatchError] = useState<string | null>(null);
   const [importPatchLoading, setImportPatchLoading] = useState(false);
+  const [agentReview, setAgentReview] = useState<AgentReviewSummaryDto | null>(null);
+  const [agentReviewLoading, setAgentReviewLoading] = useState(false);
 
   async function load() {
     setLoading(true);
@@ -187,14 +189,30 @@ export function AutomationJobsPage() {
   async function loadDetail(jobId: string) {
     setDetailLoading(true);
     try {
-      const [job, patches] = await Promise.all([
+      const [job, patches, reviewResponse] = await Promise.all([
         api.automationJob(jobId),
-        api.patchArtifacts({ automationJobId: jobId })
+        api.patchArtifacts({ automationJobId: jobId }),
+        api.automationJobAgentReview(jobId)
       ]);
       setSelectedJob(job);
       setPatchArtifacts(patches);
+      setAgentReview(reviewResponse.agentReview);
     } finally {
       setDetailLoading(false);
+    }
+  }
+
+  async function regenerateAgentReview() {
+    if (!selectedJob) return;
+    setAgentReviewLoading(true);
+    setActionError(null);
+    try {
+      const response = await api.regenerateAutomationJobAgentReview(selectedJob.id);
+      setAgentReview(response.agentReview);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to generate agent review");
+    } finally {
+      setAgentReviewLoading(false);
     }
   }
 
@@ -620,6 +638,14 @@ export function AutomationJobsPage() {
                 </div>
               )}
 
+              <AgentReviewCard
+                review={agentReview}
+                isKing={user?.role === "KING"}
+                canRegenerate={selectedJob.status === "NEEDS_REVIEW"}
+                isLoading={agentReviewLoading}
+                onRegenerate={() => void regenerateAgentReview()}
+              />
+
               {/* Patch Review panel */}
               {patchArtifacts.length > 0 && (
                 <div>
@@ -762,6 +788,136 @@ function validationStatusBadge(status: string) {
     case "REVISION_REQUESTED": return "text-orange-700 bg-orange-50 border-orange-200";
     default: return "text-purple-700 bg-purple-50 border-purple-200";
   }
+}
+
+function reviewBadgeColor(value: string) {
+  switch (value) {
+    case "PASS":
+    case "APPROVE":
+    case "HIGH":
+      return "text-green-700 bg-green-50 border-green-200";
+    case "REQUEST_REVISION":
+    case "VALIDATION_FAILED":
+    case "NEEDS_FIX":
+    case "MEDIUM":
+      return "text-orange-700 bg-orange-50 border-orange-200";
+    case "PATCH_FAILED":
+    case "REJECT":
+    case "RETRY_WITH_FIXED_PATCH":
+      return "text-red-700 bg-red-50 border-red-200";
+    case "RISK_REVIEW":
+    case "REVIEW_MANUALLY":
+    case "LOW":
+      return "text-purple-700 bg-purple-50 border-purple-200";
+    default:
+      return "text-muted-foreground bg-muted border-border";
+  }
+}
+
+function AgentReviewCard({
+  review,
+  isKing,
+  canRegenerate,
+  isLoading,
+  onRegenerate
+}: {
+  review: AgentReviewSummaryDto | null;
+  isKing: boolean;
+  canRegenerate: boolean;
+  isLoading: boolean;
+  onRegenerate: () => void;
+}) {
+  return (
+    <div className="rounded border border-border bg-muted/20 p-3 space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5 mr-auto">
+          <Bot className="h-3.5 w-3.5" /> Agent Review
+        </h4>
+        {review && (
+          <>
+            <ReviewBadge label={review.verdict} />
+            <ReviewBadge label={review.confidence} />
+            <ReviewBadge label={review.kingRecommendation} />
+          </>
+        )}
+        {isKing && canRegenerate && (
+          <Button className="h-7 text-xs px-2.5" variant="outline" onClick={onRegenerate} disabled={isLoading}>
+            <RefreshCw className={cn("h-3 w-3 mr-1", isLoading && "animate-spin")} />
+            {review ? "Regenerate Agent Review" : "Generate Agent Review"}
+          </Button>
+        )}
+      </div>
+
+      {!review ? (
+        <p className="text-xs text-muted-foreground">No agent review yet</p>
+      ) : (
+        <>
+          <p className="text-sm text-foreground">{review.summary}</p>
+          <div className="grid gap-3 md:grid-cols-2">
+            <ReviewList title="What passed" items={review.whatPassed} empty="None recorded" />
+            <ReviewList title="What failed" items={review.whatFailed} empty="None recorded" tone="danger" />
+            <ReviewList title="Risk notes" items={review.riskNotes} empty="None recorded" />
+            <ReviewList title="Next actions" items={review.nextActions} empty="None recorded" />
+          </div>
+          {review.failedCommands.length > 0 && (
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-1">Failed commands</p>
+              <div className="space-y-1">
+                {review.failedCommands.map((cmd, index) => (
+                  <div key={`${cmd.command}-${index}`} className="rounded border border-border bg-background/60 p-2 text-xs">
+                    <div className="flex flex-wrap gap-2">
+                      <span className="font-mono">{cmd.command}</span>
+                      <span className="text-muted-foreground">exit {cmd.exitCode ?? "unknown"}</span>
+                      {cmd.durationMs !== null && <span className="text-muted-foreground">{cmd.durationMs}ms</span>}
+                    </div>
+                    {cmd.cwd && <p className="mt-1 text-[11px] text-muted-foreground">cwd: {cmd.cwd}</p>}
+                    {cmd.failureSummary && <p className="mt-1 text-[11px] text-red-700">{cmd.failureSummary}</p>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {review.externalAgentPrompt && (
+            <Button
+              className="h-8 text-xs px-3"
+              variant="outline"
+              onClick={() => void navigator.clipboard?.writeText(review.externalAgentPrompt ?? "")}
+            >
+              <Clipboard className="h-3.5 w-3.5 mr-1.5" />
+              Copy External Agent Prompt
+            </Button>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function ReviewBadge({ label }: { label: string }) {
+  return (
+    <span className={cn("inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border", reviewBadgeColor(label))}>
+      {label}
+    </span>
+  );
+}
+
+function ReviewList({ title, items, empty, tone }: { title: string; items: string[]; empty: string; tone?: "danger" }) {
+  return (
+    <div>
+      <p className="text-xs font-medium text-muted-foreground mb-1">{title}</p>
+      {items.length === 0 ? (
+        <p className="text-xs text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="space-y-1 text-xs">
+          {items.map((item, index) => (
+            <li key={`${title}-${index}`} className={cn("rounded border border-border bg-background/60 px-2 py-1", tone === "danger" && "text-red-700 border-red-100 bg-red-50")}>
+              {item}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 function PatchReviewCard({

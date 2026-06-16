@@ -9,6 +9,7 @@ import {
   listJobs
 } from "../services/automationJobService.js";
 import { importPatch } from "../services/importedPatchService.js";
+import { getAgentReviewForJob, regenerateAgentReviewForJob } from "../services/runnerResultReviewService.js";
 import type { AutomationJobStatus } from "@prisma/client";
 
 const router = Router();
@@ -36,6 +37,22 @@ router.get("/:id", requireRole("KING"), async (req, res, next) => {
       return;
     }
     res.json(job);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** GET /api/automation-jobs/:id/agent-review */
+router.get("/:id/agent-review", requireRole("KING"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const job = await getJob(id);
+    if (!job) {
+      res.status(404).json({ error: "Automation job not found" });
+      return;
+    }
+    const agentReview = await getAgentReviewForJob(id);
+    res.json({ agentReview: agentReview ?? null });
   } catch (err) {
     next(err);
   }
@@ -149,6 +166,17 @@ router.post("/:id/import-patch", requireRole("KING"), async (req, res, next) => 
     res.json(job);
   } catch (err) {
     next(err);
+  }
+});
+
+/** POST /api/automation-jobs/:id/agent-review/regenerate */
+router.post("/:id/agent-review/regenerate", requireRole("KING"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const agentReview = await regenerateAgentReviewForJob(id, { useAi: true });
+    res.json({ agentReview });
+  } catch (err) {
+    jobErrorHandler(err, res, next);
   }
 });
 

@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
-import type { AutomationJobDto, ImportedPatchStatus, ImplementationReportDto, PatchArtifactDto } from "@/types/api";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { AgentReviewSummaryDto, AutomationJobDto, ImportedPatchStatus, ImplementationReportDto, PatchArtifactDto } from "@/types/api";
 import { AutomationJobsPage } from "./AutomationJobsPage";
 
 const nowIso = new Date().toISOString();
@@ -82,7 +82,9 @@ const apiMocks = vi.hoisted(() => ({
   rejectPatchArtifact: vi.fn(),
   requestPatchRevision: vi.fn(),
   createPatchPr: vi.fn(),
-  importPatch: vi.fn()
+  importPatch: vi.fn(),
+  automationJobAgentReview: vi.fn(),
+  regenerateAutomationJobAgentReview: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -93,6 +95,10 @@ vi.mock("@/stores/authStore", () => ({
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  apiMocks.automationJobAgentReview.mockResolvedValue({ agentReview: null });
 });
 
 describe("AutomationJobsPage — context binding (M17E-2)", () => {
@@ -361,5 +367,127 @@ describe("AutomationJobsPage — M17G imported patch status display", () => {
     await userEvent.click(await screen.findByText("Apply imported patch"));
 
     expect(await screen.findByText(/No Changes/)).toBeInTheDocument();
+  });
+});
+
+describe("AutomationJobsPage — M17H agent review display", () => {
+  const makeReview = (overrides: Partial<AgentReviewSummaryDto>): AgentReviewSummaryDto => ({
+    id: "review-1",
+    automationJobId: "job-review-1",
+    workOrderId: "wo-review-1",
+    projectId: "proj-1",
+    reviewerAgentId: "agent-1",
+    verdict: "PASS",
+    confidence: "HIGH",
+    kingRecommendation: "APPROVE",
+    summary: "PASS: validation succeeded and the patch is ready for King review.",
+    whatPassed: ["Validation commands passed."],
+    whatFailed: [],
+    failedCommands: [],
+    riskNotes: [],
+    nextActions: ["King may approve the pending PatchArtifact after reviewing the diff."],
+    externalAgentPrompt: null,
+    sourceReportId: "report-1",
+    patchArtifactId: "patch-1",
+    rawModelOutput: null,
+    createdAt: nowIso,
+    updatedAt: nowIso,
+    reviewerAgent: { id: "agent-1", slug: "grand-vizier", name: "Aurelian", title: "Grand Vizier" },
+    ...overrides
+  });
+
+  const reviewJob: AutomationJobDto = {
+    ...baseJob,
+    id: "job-review-1",
+    status: "NEEDS_REVIEW",
+    mode: "SANDBOX_PATCH",
+    importedPatchStatus: "VALIDATED",
+    contextValidationStatus: "NOT_REQUIRED",
+    localDocumentSnapshotId: null,
+    workOrder: { id: "wo-review-1", title: "Review runner result", status: "NEEDS_REVIEW", projectId: "proj-1" }
+  };
+
+  it("renders Agent Review card with PASS / APPROVE state", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    apiMocks.automationJobs.mockResolvedValue([reviewJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(reviewJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+    apiMocks.automationJobAgentReview.mockResolvedValue({ agentReview: makeReview({}) });
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Review runner result"));
+
+    expect(await screen.findByText("Agent Review")).toBeInTheDocument();
+    expect(screen.getByText("PASS")).toBeInTheDocument();
+    expect(screen.getByText("APPROVE")).toBeInTheDocument();
+    expect(screen.getByText(/validation succeeded/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Regenerate Agent Review/i })).toBeInTheDocument();
+  });
+
+  it("renders VALIDATION_FAILED / REQUEST_REVISION state and external prompt button", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const failedJob = { ...reviewJob, importedPatchStatus: "VALIDATION_FAILED" as const };
+    apiMocks.automationJobs.mockResolvedValue([failedJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(failedJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+    apiMocks.automationJobAgentReview.mockResolvedValue({
+      agentReview: makeReview({
+        verdict: "VALIDATION_FAILED",
+        kingRecommendation: "REQUEST_REVISION",
+        summary: "Validation failed after the patch applied.",
+        whatFailed: ["API tests failed."],
+        failedCommands: [{ command: "npm run test --workspace @ai-kingdom/api", exitCode: 1, durationMs: 1200, failureSummary: "API test failed." }],
+        externalAgentPrompt: "Return a unified diff only."
+      })
+    });
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Review runner result"));
+
+    expect(await screen.findByText("VALIDATION_FAILED")).toBeInTheDocument();
+    expect(screen.getByText("REQUEST_REVISION")).toBeInTheDocument();
+    expect(screen.getByText("npm run test --workspace @ai-kingdom/api")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Copy External Agent Prompt/i })).toBeInTheDocument();
+  });
+
+  it("renders CHECK_FAILED / RETRY_WITH_FIXED_PATCH state", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const failedJob = { ...reviewJob, importedPatchStatus: "CHECK_FAILED" as const };
+    apiMocks.automationJobs.mockResolvedValue([failedJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(failedJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+    apiMocks.automationJobAgentReview.mockResolvedValue({
+      agentReview: makeReview({
+        verdict: "PATCH_FAILED",
+        kingRecommendation: "RETRY_WITH_FIXED_PATCH",
+        summary: "Patch failed to apply cleanly.",
+        whatFailed: ["Imported patch failed git apply --check or git apply."],
+        externalAgentPrompt: "Return a unified diff only."
+      })
+    });
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Review runner result"));
+
+    expect(await screen.findByText("PATCH_FAILED")).toBeInTheDocument();
+    expect(screen.getByText("RETRY_WITH_FIXED_PATCH")).toBeInTheDocument();
+  });
+
+  it("shows Generate Agent Review when review is missing", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    apiMocks.automationJobs.mockResolvedValue([reviewJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(reviewJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+    apiMocks.automationJobAgentReview.mockResolvedValue({ agentReview: null });
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+    await userEvent.click(await screen.findByText("Review runner result"));
+
+    expect(await screen.findByText("No agent review yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Generate Agent Review/i })).toBeInTheDocument();
   });
 });

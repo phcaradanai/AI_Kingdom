@@ -15,6 +15,7 @@ import {
 import { auditLog } from "./auditService.js";
 import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localDocumentAccessService.js";
 import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
+import { createOrUpdateAgentReviewForJob } from "./runnerResultReviewService.js";
 
 /** Statuses that count as "active" for duplicate prevention */
 export const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = [
@@ -348,6 +349,10 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
     resourceId: jobId,
     metadata: { runnerId, workOrderId: job.workOrderId, reportId: implReport.id, testResult: report.testResult }
   }).catch(() => undefined);
+
+  await createOrUpdateAgentReviewForJob(jobId, { useAi: false }).catch((err) => {
+    console.warn("[AutomationJob] Agent review generation failed; runner report remains submitted:", err instanceof Error ? err.message : String(err));
+  });
 
   return implReport;
 }

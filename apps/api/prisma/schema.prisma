@@ -469,6 +469,7 @@ model Agent {
   aiUsageTraceSteps AIUsageTraceStep[]
   assignedWorkOrders WorkOrder[]
   automationJobs     AutomationJob[] @relation("AgentAutomationJobs")
+  reviewSummaries    AgentReviewSummary[] @relation("AgentReviewSummaries")
 }
 
 model ExternalAgent {
@@ -526,6 +527,7 @@ model Project {
   localDocumentRoots     LocalDocumentRoot[]
   localDocumentSnapshots LocalDocumentSnapshot[]
   localDocumentInsights  LocalDocumentInsight[]
+  reviewSummaries        AgentReviewSummary[]
 }
 
 model RepositorySnapshot {
@@ -662,6 +664,7 @@ model WorkOrder {
   handoffBriefs           HandoffBrief[]
   automationJobs          AutomationJob[]
   patchArtifacts          PatchArtifact[]
+  reviewSummaries         AgentReviewSummary[]
 }
 
 model WorkSession {
@@ -709,6 +712,7 @@ model ImplementationReport {
   workSession           WorkSession?             @relation(fields: [workSessionId], references: [id], onDelete: SetNull)
   externalAgent         ExternalAgent?           @relation(fields: [externalAgentId], references: [id], onDelete: SetNull)
   automationJob         AutomationJob?           @relation(fields: [automationJobId], references: [id], onDelete: SetNull)
+  agentReviewSummaries  AgentReviewSummary[]     @relation("AgentReviewSourceReport")
 }
 
 model HandoffBrief {
@@ -1385,6 +1389,7 @@ model AutomationJob {
   steps            AgentRunStep[]
   implementationReports ImplementationReport[]
   patchArtifacts   PatchArtifact[]
+  reviewSummary    AgentReviewSummary?
 
   @@index([workOrderId])
   @@index([projectId])
@@ -1450,12 +1455,49 @@ model PatchArtifact {
   workOrder       WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
   project         Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
   reviewedByUser  User?         @relation("PatchArtifactReviewedBy", fields: [reviewedByUserId], references: [id], onDelete: SetNull)
+  agentReviewSummaries AgentReviewSummary[] @relation("AgentReviewPatchArtifact")
 
   @@index([automationJobId])
   @@index([workOrderId])
   @@index([projectId])
   @@index([riskLevel])
   @@index([validationStatus])
+}
+
+model AgentReviewSummary {
+  id                  String   @id @default(cuid())
+  automationJobId     String   @unique
+  workOrderId         String
+  projectId           String?
+  reviewerAgentId     String?
+  verdict             String
+  confidence          String
+  kingRecommendation  String
+  summary             String
+  whatPassed          Json     @default("[]")
+  whatFailed          Json     @default("[]")
+  failedCommands      Json     @default("[]")
+  riskNotes           Json     @default("[]")
+  nextActions         Json     @default("[]")
+  externalAgentPrompt String?
+  sourceReportId      String?
+  patchArtifactId     String?
+  rawModelOutput      String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  automationJob AutomationJob @relation(fields: [automationJobId], references: [id], onDelete: Cascade)
+  workOrder     WorkOrder     @relation(fields: [workOrderId], references: [id], onDelete: Cascade)
+  project       Project?      @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  reviewerAgent Agent?        @relation("AgentReviewSummaries", fields: [reviewerAgentId], references: [id], onDelete: SetNull)
+  sourceReport  ImplementationReport? @relation("AgentReviewSourceReport", fields: [sourceReportId], references: [id], onDelete: SetNull)
+  patchArtifact PatchArtifact? @relation("AgentReviewPatchArtifact", fields: [patchArtifactId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId])
+  @@index([projectId])
+  @@index([reviewerAgentId])
+  @@index([verdict])
+  @@index([kingRecommendation])
 }
 
 model LivingLoopRun {

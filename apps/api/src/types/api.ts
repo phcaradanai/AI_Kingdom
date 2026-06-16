@@ -229,6 +229,60 @@ export type PatchArtifactDto = {
   reviewedByUser: { id: string; displayName: string } | null;
 };
 
+export type AgentReviewVerdict =
+  | "PASS"
+  | "NEEDS_FIX"
+  | "PATCH_FAILED"
+  | "NO_CHANGES"
+  | "RISK_REVIEW"
+  | "VALIDATION_FAILED"
+  | "UNKNOWN";
+
+export type AgentReviewConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+export type AgentReviewKingRecommendation =
+  | "APPROVE"
+  | "REJECT"
+  | "REQUEST_REVISION"
+  | "RETRY_WITH_FIXED_PATCH"
+  | "REVIEW_MANUALLY";
+
+export type AgentReviewFailedCommandDto = {
+  command: string;
+  exitCode: number | null;
+  durationMs: number | null;
+  cwd?: string;
+  failureSummary?: string;
+  stdout?: string;
+  stderr?: string;
+  message?: string;
+  timedOut?: boolean;
+};
+
+export type AgentReviewSummaryDto = {
+  id: string;
+  automationJobId: string;
+  workOrderId: string;
+  projectId: string | null;
+  reviewerAgentId: string | null;
+  verdict: AgentReviewVerdict;
+  confidence: AgentReviewConfidence;
+  kingRecommendation: AgentReviewKingRecommendation;
+  summary: string;
+  whatPassed: string[];
+  whatFailed: string[];
+  failedCommands: AgentReviewFailedCommandDto[];
+  riskNotes: string[];
+  nextActions: string[];
+  externalAgentPrompt: string | null;
+  sourceReportId: string | null;
+  patchArtifactId: string | null;
+  rawModelOutput: string | null;
+  createdAt: string;
+  updatedAt: string;
+  reviewerAgent?: { id: string; slug: string; name: string; title: string } | null;
+};
+
 // ── M17D-4: Royal Brief ──────────────────────────────────────────────────────────
 
 export type RoyalBriefStatus = "DRAFT" | "READY" | "ARCHIVED";

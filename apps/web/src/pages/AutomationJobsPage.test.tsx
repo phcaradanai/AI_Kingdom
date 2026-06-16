@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AutomationJobDto } from "@/types/api";
 import { AutomationJobsPage } from "./AutomationJobsPage";
 
@@ -42,7 +42,9 @@ const apiMocks = vi.hoisted(() => ({
   approvePatchArtifact: vi.fn(),
   rejectPatchArtifact: vi.fn(),
   requestPatchRevision: vi.fn(),
-  createPatchPr: vi.fn()
+  createPatchPr: vi.fn(),
+  automationJobAgentReview: vi.fn(),
+  regenerateAutomationJobAgentReview: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -53,6 +55,10 @@ vi.mock("@/stores/authStore", () => ({
 
 afterEach(() => {
   vi.clearAllMocks();
+});
+
+beforeEach(() => {
+  apiMocks.automationJobAgentReview.mockResolvedValue({ agentReview: null });
 });
 
 describe("AutomationJobsPage", () => {

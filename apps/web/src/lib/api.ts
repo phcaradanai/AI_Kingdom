@@ -75,6 +75,7 @@ import type {
   EffectiveRequestPreviewDto,
   RepositorySnapshotDto,
   ProviderReconciliationSnapshotDto,
+  AgentReviewSummaryDto,
   AutomationJobDto,
   AutomationJobPayload,
   AgentRunnerDto,
@@ -613,6 +614,10 @@ export const api = {
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/approve`, { method: "POST" }),
   cancelAutomationJob: (id: string) =>
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/cancel`, { method: "POST" }),
+  automationJobAgentReview: (id: string) =>
+    apiRequest<{ agentReview: AgentReviewSummaryDto | null }>(`/automation-jobs/${id}/agent-review`),
+  regenerateAutomationJobAgentReview: (id: string) =>
+    apiRequest<{ agentReview: AgentReviewSummaryDto }>(`/automation-jobs/${id}/agent-review/regenerate`, { method: "POST" }),
   importPatch: (id: string, patchText: string) =>
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/import-patch`, {
       method: "POST",
