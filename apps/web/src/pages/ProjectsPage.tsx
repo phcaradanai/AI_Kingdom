@@ -1,5 +1,5 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, FolderKanban, RefreshCw, Save, Search, ShieldAlert } from "lucide-react";
+import { FormEvent, type ButtonHTMLAttributes, type ReactNode, useEffect, useMemo, useState } from "react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, FileText, FolderKanban, Inbox, PackageOpen, RefreshCw, Save, ScanSearch, Search, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -52,6 +52,8 @@ export function ProjectsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState<Record<string, ProjectSummary>>({});
+  const [shortcutBusy, setShortcutBusy] = useState<"scan" | "refresh" | null>(null);
+  const [shortcutStatus, setShortcutStatus] = useState<string | null>(null);
 
   const selected = useMemo(() => projects.find((project) => project.id === selectedId) ?? null, [projects, selectedId]);
   const selectedSummary = selected ? summaries[selected.id] : null;
@@ -115,6 +117,43 @@ export function ProjectsPage() {
     setSelectedId(project?.id ?? null);
     setDraft(project ? toPayload(project) : blankProject);
     setError(null);
+    setShortcutStatus(null);
+  }
+
+  async function runSelectedScan() {
+    if (!selected || !canEdit) return;
+    setShortcutBusy("scan");
+    setShortcutStatus(null);
+    try {
+      const localDocs = await api.getProjectLocalDocs(selected.id);
+      const root = localDocs.roots.find((item) => item.isActive) ?? localDocs.roots[0];
+      if (!root) {
+        setShortcutStatus("No local document root configured. Open Context Workspace to add one.");
+        return;
+      }
+      await api.scanProjectLocalDocumentRoot(selected.id, root.id);
+      setShortcutStatus("Local docs scan complete.");
+      await loadSummaries(projects);
+    } catch (scanError) {
+      setShortcutStatus(scanError instanceof Error ? scanError.message : "Local docs scan failed.");
+    } finally {
+      setShortcutBusy(null);
+    }
+  }
+
+  async function refreshSelectedContext() {
+    if (!selected || !canEdit) return;
+    setShortcutBusy("refresh");
+    setShortcutStatus(null);
+    try {
+      const response = await api.rebindProjectContexts(selected.id);
+      setShortcutStatus(`Context refresh complete: ${response.result.repaired} repaired, ${response.result.skipped} skipped.`);
+      await loadSummaries(projects);
+    } catch (refreshError) {
+      setShortcutStatus(refreshError instanceof Error ? refreshError.message : "Context refresh failed.");
+    } finally {
+      setShortcutBusy(null);
+    }
   }
 
   async function submit(event: FormEvent) {
@@ -221,6 +260,51 @@ export function ProjectsPage() {
               <ProjectInfoTile label="Context Health" value={selectedSummary?.contextStatus ?? "Loading"} tone={selectedSummary?.contextStatus ?? "UNKNOWN"} />
               <ProjectInfoTile label="Active Work" value={String(selectedSummary?.activeWorkCount ?? 0)} />
               <ProjectInfoTile label="Needs Refresh" value={String(selectedSummary?.affectedWorkCount ?? 0)} tone={(selectedSummary?.affectedWorkCount ?? 0) > 0 ? "STALE" : "FRESH"} />
+            </div>
+          ) : null}
+          {selected ? (
+            <div className="mt-4 rounded-lg border border-border bg-background/30 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Shortcuts</h3>
+                <div className="flex flex-wrap gap-2">
+                  {canEdit ? (
+                    <>
+                      <IconButton
+                        label="Run Local Docs Scan"
+                        title="Run Local Docs Scan"
+                        disabled={shortcutBusy !== null}
+                        onClick={() => void runSelectedScan()}
+                      >
+                        <ScanSearch className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton
+                        label="Bind / Refresh Context"
+                        title="Bind / Refresh Context"
+                        disabled={shortcutBusy !== null}
+                        onClick={() => void refreshSelectedContext()}
+                      >
+                        <RefreshCw className={cn("h-4 w-4", shortcutBusy === "refresh" && "animate-spin")} />
+                      </IconButton>
+                    </>
+                  ) : null}
+                  <ShortcutLink to={`/projects/${selected.id}`} label="Open Context Workspace">
+                    <ArrowUpRight className="h-4 w-4" />
+                  </ShortcutLink>
+                  <ShortcutLink to="/work-orders" label="Open Work Orders">
+                    <FolderKanban className="h-4 w-4" />
+                  </ShortcutLink>
+                  <ShortcutLink to="/inbox" label="Open Kingdom Inbox">
+                    <Inbox className="h-4 w-4" />
+                  </ShortcutLink>
+                  <ShortcutLink to="/artifacts" label="Open Artifacts / Local Docs">
+                    <PackageOpen className="h-4 w-4" />
+                  </ShortcutLink>
+                  <ShortcutLink to="/royal-brief" label="Open Royal Brief">
+                    <FileText className="h-4 w-4" />
+                  </ShortcutLink>
+                </div>
+              </div>
+              {shortcutStatus ? <p className="mt-2 text-xs text-muted-foreground">{shortcutStatus}</p> : null}
             </div>
           ) : null}
           {selected ? (
@@ -345,6 +429,31 @@ function ProjectInfoTile({ label, value, tone }: { label: string; value: string;
       <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
     </div>
+  );
+}
+
+function IconButton({ label, children, ...props }: { label: string; children: ReactNode } & ButtonHTMLAttributes<HTMLButtonElement>) {
+  return (
+    <button
+      aria-label={label}
+      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border bg-muted/20 text-primary transition hover:border-primary/50 hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary disabled:cursor-not-allowed disabled:opacity-50"
+      {...props}
+    >
+      {children}
+    </button>
+  );
+}
+
+function ShortcutLink({ to, label, children }: { to: string; label: string; children: ReactNode }) {
+  return (
+    <Link
+      aria-label={label}
+      title={label}
+      to={to}
+      className="inline-flex h-11 w-11 items-center justify-center rounded-md border border-border bg-muted/20 text-primary transition hover:border-primary/50 hover:bg-primary/10 focus:outline-none focus:ring-2 focus:ring-primary"
+    >
+      {children}
+    </Link>
   );
 }
 

@@ -1,4 +1,5 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectContextHealthDto, ProjectDto, PublicUser, WorkOrderDto } from "@/types/api";
@@ -67,6 +68,9 @@ const apiMocks = vi.hoisted(() => ({
   projects: vi.fn(),
   projectWorkOrders: vi.fn(),
   getProjectContextHealth: vi.fn(),
+  getProjectLocalDocs: vi.fn(),
+  scanProjectLocalDocumentRoot: vi.fn(),
+  rebindProjectContexts: vi.fn(),
   createProject: vi.fn(),
   updateProject: vi.fn()
 }));
@@ -108,7 +112,28 @@ describe("ProjectsPage", () => {
     expect(await screen.findByText("Context STALE")).toBeInTheDocument();
     expect(screen.getAllByText("Active work: 1").length).toBeGreaterThan(0);
     expect(screen.getByRole("link", { name: /Project Context/i })).toHaveAttribute("href", "/projects/proj-1");
-    expect(screen.getByRole("link", { name: /Kingdom Inbox/i })).toHaveAttribute("href", "/inbox");
+    expect(screen.getAllByRole("link", { name: /Kingdom Inbox/i }).some((link) => link.getAttribute("href") === "/inbox")).toBe(true);
+  });
+
+  it("shows shortcut icons and runs a local docs scan from the selected project", async () => {
+    setUser("KING");
+    apiMocks.projects.mockResolvedValue({ projects: [project] });
+    apiMocks.projectWorkOrders.mockResolvedValue({ workOrders: [activeWorkOrder] });
+    apiMocks.getProjectContextHealth.mockResolvedValue(staleHealth);
+    apiMocks.getProjectLocalDocs.mockResolvedValue({
+      roots: [{ id: "root-1", isActive: true }],
+      snapshot: null
+    });
+    apiMocks.scanProjectLocalDocumentRoot.mockResolvedValue({ id: "snap-1" });
+
+    renderPage();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Run Local Docs Scan" }));
+
+    await waitFor(() => expect(apiMocks.scanProjectLocalDocumentRoot).toHaveBeenCalledWith("proj-1", "root-1"));
+    expect(await screen.findByText("Local docs scan complete.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open Work Orders" })).toHaveAttribute("href", "/work-orders");
+    expect(screen.getByRole("link", { name: "Open Artifacts / Local Docs" })).toHaveAttribute("href", "/artifacts");
   });
 
   it("renders an empty state when no projects match filters", async () => {
