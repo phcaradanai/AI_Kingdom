@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import type { AIProviderConfig } from "./aiProviderRegistry.js";
 
 let openRouterModelCache: string[] | null = null;
 let lastCacheTime = 0;
@@ -36,6 +37,13 @@ export const _service = {
   fetchOpenRouterModels: _fetchOpenRouterModelsImpl
 };
 
+export type ProviderModelValidationResult = {
+  modelId: string;
+  status: "VALID" | "INVALID";
+  reason?: string;
+  checkedAt: string;
+};
+
 export async function fetchOpenRouterModels(): Promise<{ models: string[]; success: boolean }> {
   return _service.fetchOpenRouterModels();
 }
@@ -69,4 +77,58 @@ export async function validateOpenRouterModels(providerIds: string[]): Promise<v
       }
     });
   }
+}
+
+export async function validateProviderModelsBatch(provider: AIProviderConfig, modelIds: string[]): Promise<ProviderModelValidationResult[]> {
+  const checkedAt = new Date().toISOString();
+  const normalized = modelIds.map((modelId) => modelId.trim());
+
+  if (!provider.isActive || provider.environmentMode === "DISABLED") {
+    return normalized.map((modelId) => invalidResult(modelId, "Provider is disabled.", checkedAt));
+  }
+
+  if (!provider.hasCredentials) {
+    return normalized.map((modelId) => invalidResult(modelId, "Provider credentials are missing or unavailable.", checkedAt));
+  }
+
+  if (provider.type !== "openrouter") {
+    return normalized.map((modelId) => {
+      if (!modelId) return invalidResult(modelId, "Model id is required.", checkedAt);
+      return invalidResult(modelId, "Batch model validation is only available for OpenRouter providers.", checkedAt);
+    });
+  }
+
+  const { models, success } = await fetchOpenRouterModels();
+  const cachedModels = Array.isArray(provider.config?.openRouterModels)
+    ? provider.config.openRouterModels.filter((item): item is string => typeof item === "string")
+    : [];
+  const registryModels = models.length > 0 ? models : cachedModels;
+
+  if (success && models.length > 0) {
+    await prisma.aIProvider.update({
+      where: { id: provider.id },
+      data: {
+        lastValidationTime: new Date(),
+        config: {
+          ...(provider.config ?? {}),
+          openRouterModels: models
+        }
+      }
+    }).catch(() => undefined);
+  }
+
+  return normalized.map((modelId) => {
+    if (!modelId) return invalidResult(modelId, "Model id is required.", checkedAt);
+    if (registryModels.length === 0) {
+      return invalidResult(modelId, "OpenRouter model registry is unavailable.", checkedAt);
+    }
+    if (!registryModels.includes(modelId)) {
+      return invalidResult(modelId, "Model is not present in the validated OpenRouter registry.", checkedAt);
+    }
+    return { modelId, status: "VALID", checkedAt };
+  });
+}
+
+function invalidResult(modelId: string, reason: string, checkedAt: string): ProviderModelValidationResult {
+  return { modelId, status: "INVALID", reason, checkedAt };
 }

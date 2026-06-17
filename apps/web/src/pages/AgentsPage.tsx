@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2, Image, RotateCcw, ExternalLink } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
@@ -14,6 +14,17 @@ import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, DisplayProfilePayl
 import { api } from "@/lib/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
+const FALLBACK_MODEL_VALIDATION_TTL_MS = 5 * 60 * 1000;
+const FALLBACK_MODEL_DEBOUNCE_MS = 800;
+
+type FallbackModelValidationStatus = "VALID" | "INVALID" | "CHECKING" | "NOT_CHECKED";
+
+type FallbackModelValidationState = {
+  status: FallbackModelValidationStatus;
+  reason?: string;
+  checkedAt?: string;
+  modelId?: string;
+};
 
 const ROUTING_POLICY_OPTIONS = [
   { value: "GLOBAL_ROUTING", label: "Global Routing", description: "Use system-wide routing policy. Recommended for most agents." },
@@ -126,7 +137,14 @@ export function AgentsPage() {
   const [displaySaving, setDisplaySaving] = useState(false);
   const [displayError, setDisplayError] = useState<string | null>(null);
   const [displaySuccess, setDisplaySuccess] = useState(false);
+  const [fallbackModelValidation, setFallbackModelValidation] = useState<Record<string, FallbackModelValidationState>>({});
+  const [fallbackValidationWarning, setFallbackValidationWarning] = useState<string | null>(null);
   const avatarFileRef = useRef<HTMLInputElement>(null);
+  const fallbackValidationInFlightRef = useRef<Set<string>>(new Set());
+  const fallbackValidationLastCheckedRef = useRef<Map<string, number>>(new Map());
+  const fallbackValidationRequestSeqRef = useRef<Map<string, number>>(new Map());
+  const fallbackValidationHasAutoCheckedRef = useRef(false);
+  const fallbackModelsRef = useRef<string[]>(draft.fallbackModels ?? []);
 
   const selectedProvider = draft.preferredProviderId
     ? providers.find((p) => p.id === draft.preferredProviderId)
@@ -149,6 +167,109 @@ export function AgentsPage() {
         ? "Invalid"
         : "Not checked";
 
+  const fallbackModelsKey = (draft.fallbackModels ?? []).join("\n");
+
+  const fallbackValidationKey = useCallback((modelId: string, providerId = selectedProvider?.id ?? "") => {
+    return `${providerId || "no-provider"}::${modelId.trim()}`;
+  }, [selectedProvider?.id]);
+
+  const getFallbackValidationState = useCallback((modelId: string): FallbackModelValidationState => {
+    const trimmed = modelId.trim();
+    if (!trimmed) return { status: "NOT_CHECKED" };
+    if (!selectedProvider?.id) return { status: "NOT_CHECKED", reason: "Select a preferred provider before validation." };
+    return fallbackModelValidation[fallbackValidationKey(trimmed)] ?? { status: "NOT_CHECKED" };
+  }, [fallbackModelValidation, fallbackValidationKey, selectedProvider?.id]);
+
+  const shouldValidateFallbackModel = useCallback((modelId: string, force = false) => {
+    const trimmed = modelId.trim();
+    if (!trimmed || !selectedProvider?.id) return false;
+    const key = fallbackValidationKey(trimmed);
+    if (fallbackValidationInFlightRef.current.has(key)) return false;
+    if (force) return true;
+    const lastChecked = fallbackValidationLastCheckedRef.current.get(key);
+    if (!lastChecked) return true;
+    return Date.now() - lastChecked > FALLBACK_MODEL_VALIDATION_TTL_MS;
+  }, [fallbackValidationKey, selectedProvider?.id]);
+
+  const validateFallbackModels = useCallback(async (models: string[], options: { force?: boolean } = {}) => {
+    const providerId = selectedProvider?.id;
+    if (!providerId) return;
+
+    const uniqueModels = Array.from(new Set(models.map((model) => model.trim()).filter(Boolean)));
+    const modelsToValidate = uniqueModels.filter((model) => shouldValidateFallbackModel(model, options.force ?? false));
+    if (modelsToValidate.length === 0) return;
+
+    const requestEntries = modelsToValidate.map((model) => {
+      const key = fallbackValidationKey(model, providerId);
+      const nextSeq = (fallbackValidationRequestSeqRef.current.get(key) ?? 0) + 1;
+      fallbackValidationRequestSeqRef.current.set(key, nextSeq);
+      fallbackValidationInFlightRef.current.add(key);
+      return { key, model, seq: nextSeq };
+    });
+
+    setFallbackModelValidation((current) => {
+      const next = { ...current };
+      for (const entry of requestEntries) {
+        next[entry.key] = { status: "CHECKING", modelId: entry.model };
+      }
+      return next;
+    });
+
+    try {
+      const response = await api.validateProviderModels(providerId, modelsToValidate);
+      const byModel = new Map(response.results.map((result) => [result.modelId, result]));
+      const activeModels = new Set(fallbackModelsRef.current.map((model) => model.trim()).filter(Boolean));
+
+      setFallbackModelValidation((current) => {
+        const next = { ...current };
+        for (const entry of requestEntries) {
+          const latestSeq = fallbackValidationRequestSeqRef.current.get(entry.key);
+          if (latestSeq !== entry.seq || !activeModels.has(entry.model)) continue;
+          const result = byModel.get(entry.model);
+          if (result) {
+            next[entry.key] = {
+              status: result.status,
+              reason: result.reason,
+              checkedAt: result.checkedAt,
+              modelId: result.modelId
+            };
+            fallbackValidationLastCheckedRef.current.set(entry.key, Date.now());
+          } else {
+            next[entry.key] = {
+              status: "INVALID",
+              reason: "Validation result was not returned.",
+              checkedAt: new Date().toISOString(),
+              modelId: entry.model
+            };
+            fallbackValidationLastCheckedRef.current.set(entry.key, Date.now());
+          }
+        }
+        return next;
+      });
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : "Fallback model validation failed.";
+      setFallbackModelValidation((current) => {
+        const next = { ...current };
+        for (const entry of requestEntries) {
+          const latestSeq = fallbackValidationRequestSeqRef.current.get(entry.key);
+          if (latestSeq !== entry.seq) continue;
+          next[entry.key] = {
+            status: "INVALID",
+            reason,
+            checkedAt: new Date().toISOString(),
+            modelId: entry.model
+          };
+          fallbackValidationLastCheckedRef.current.set(entry.key, Date.now());
+        }
+        return next;
+      });
+    } finally {
+      for (const entry of requestEntries) {
+        fallbackValidationInFlightRef.current.delete(entry.key);
+      }
+    }
+  }, [fallbackValidationKey, selectedProvider?.id, shouldValidateFallbackModel]);
+
   useEffect(() => {
     if (selected?.id) {
       loadRoutingPreview(selected.id);
@@ -168,6 +289,26 @@ export function AgentsPage() {
       setProviderModels(null);
     }
   }, [selectedProvider?.id]);
+
+  useEffect(() => {
+    fallbackModelsRef.current = draft.fallbackModels ?? [];
+  }, [fallbackModelsKey]);
+
+  useEffect(() => {
+    const providerId = selectedProvider?.id;
+    const models = (draft.fallbackModels ?? []).map((model) => model.trim()).filter(Boolean);
+    if (!providerId || models.length === 0) return;
+
+    const isInitialForList = !fallbackValidationHasAutoCheckedRef.current;
+    const delay = isInitialForList ? 0 : FALLBACK_MODEL_DEBOUNCE_MS;
+
+    const timer = window.setTimeout(() => {
+      fallbackValidationHasAutoCheckedRef.current = true;
+      void validateFallbackModels(models);
+    }, delay);
+
+    return () => window.clearTimeout(timer);
+  }, [fallbackModelsKey, selectedProvider?.id, validateFallbackModels]);
 
   async function loadRoutingPreview(agentId: string) {
     setLoadingPreview(true);
@@ -205,6 +346,8 @@ export function AgentsPage() {
     setProviderModels(null);
     setNewFallbackProvider("");
     setNewFallbackModel("");
+    setFallbackValidationWarning(null);
+    fallbackValidationHasAutoCheckedRef.current = false;
   }
 
   async function onSaveDisplayProfile() {
@@ -285,6 +428,14 @@ export function AgentsPage() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
+    const nonEmptyFallbackModels = (draft.fallbackModels ?? []).map((model) => model.trim()).filter(Boolean);
+    const invalidFallbackModels = nonEmptyFallbackModels.filter((model) => getFallbackValidationState(model).status === "INVALID");
+    setFallbackValidationWarning(
+      invalidFallbackModels.length > 0
+        ? `Fallback model warning: ${invalidFallbackModels.length} model${invalidFallbackModels.length === 1 ? "" : "s"} currently invalid. Agent settings can still be saved.`
+        : null
+    );
+    void validateFallbackModels(nonEmptyFallbackModels, { force: true });
     try {
       if (selected) {
         const updated = await updateAgent(selected.id, cleanPayload(draft));
@@ -335,10 +486,19 @@ export function AgentsPage() {
     if (!model || (draft.fallbackModels ?? []).includes(model)) return;
     setDraft({ ...draft, fallbackModels: [...(draft.fallbackModels ?? []), model] });
     setNewFallbackModel("");
+    setFallbackValidationWarning(null);
   }
 
-  function removeFallbackModel(model: string) {
-    setDraft({ ...draft, fallbackModels: (draft.fallbackModels ?? []).filter((m) => m !== model) });
+  function removeFallbackModel(index: number) {
+    setDraft({ ...draft, fallbackModels: (draft.fallbackModels ?? []).filter((_, i) => i !== index) });
+    setFallbackValidationWarning(null);
+  }
+
+  function updateFallbackModel(index: number, model: string) {
+    const list = [...(draft.fallbackModels ?? [])];
+    list[index] = model;
+    setDraft({ ...draft, fallbackModels: list });
+    setFallbackValidationWarning(null);
   }
 
   function moveFallbackModel(index: number, direction: -1 | 1) {
@@ -522,7 +682,11 @@ export function AgentsPage() {
                   id="agent-provider"
                   className={selectCls}
                   value={draft.preferredProviderId ?? ""}
-                  onChange={(e) => setDraft({ ...draft, preferredProviderId: e.target.value || null, defaultModel: "" })}
+                  onChange={(e) => {
+                    fallbackValidationHasAutoCheckedRef.current = false;
+                    setFallbackValidationWarning(null);
+                    setDraft({ ...draft, preferredProviderId: e.target.value || null, defaultModel: "" });
+                  }}
                 >
                   <option value="">Use global routing (auto)</option>
                   {providers.map((provider) => (
@@ -610,22 +774,43 @@ export function AgentsPage() {
                 <label className="block text-sm font-medium text-foreground mb-1">Fallback Models</label>
                 <p className="text-xs text-muted-foreground mb-2">Ordered list of model IDs to try if the primary model fails. Uses the preferred provider.</p>
                 {(draft.fallbackModels ?? []).length > 0 && (
-                  <div className="mb-2 space-y-1">
+                  <div className="mb-2 space-y-1.5">
                     {(draft.fallbackModels ?? []).map((model, i) => {
-                      const isInvalid = !!(openRouterModelList.length > 0 && !openRouterModelList.includes(model));
+                      const validation = getFallbackValidationState(model);
+                      const statusLabel = fallbackModelStatusLabel(validation.status);
                       return (
-                        <div key={model} className="flex items-center gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1 text-xs">
-                          <span className="flex-1 font-mono text-foreground truncate">{model}</span>
-                          {isInvalid ? <ValidationBadge state="Invalid" /> : <ValidationBadge state={openRouterModelList.length > 0 ? "Valid" : "Not checked"} />}
+                        <div key={`${i}-${model}`} className="grid gap-1.5 rounded-md border border-border/40 bg-background/60 px-2 py-1.5 text-xs sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center">
+                          <div className="min-w-0">
+                            <Input
+                              aria-label={`Fallback model ${i + 1}`}
+                              className="h-8 font-mono text-xs"
+                              value={model}
+                              onChange={(e) => updateFallbackModel(i, e.target.value)}
+                              placeholder="openrouter/owl-alpha"
+                            />
+                            {validation.reason && (
+                              <p className="mt-1 line-clamp-2 text-[11px] leading-4 text-muted-foreground">{validation.reason}</p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <ValidationBadge state={statusLabel} title={validation.reason} />
+                            {validation.checkedAt && (
+                              <span className="hidden text-[11px] text-muted-foreground lg:inline">
+                                {new Date(validation.checkedAt).toLocaleTimeString()}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-end gap-1">
                           <button type="button" onClick={() => moveFallbackModel(i, -1)} disabled={i === 0} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
                             <ChevronUp className="h-3 w-3" />
                           </button>
                           <button type="button" onClick={() => moveFallbackModel(i, 1)} disabled={i === (draft.fallbackModels ?? []).length - 1} className="p-0.5 text-muted-foreground hover:text-foreground disabled:opacity-30">
                             <ChevronDown className="h-3 w-3" />
                           </button>
-                          <button type="button" onClick={() => removeFallbackModel(model)} className="p-0.5 text-muted-foreground hover:text-red-400">
+                          <button type="button" onClick={() => removeFallbackModel(i)} className="p-0.5 text-muted-foreground hover:text-red-400">
                             <X className="h-3 w-3" />
                           </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -1204,6 +1389,7 @@ export function AgentsPage() {
               </FormField>
             </div>
 
+            {fallbackValidationWarning ? <div className="rounded-md border border-yellow-400/30 bg-yellow-400/10 p-3 text-sm text-yellow-100">{fallbackValidationWarning}</div> : null}
             {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
             <Button>{selected ? "Save Agent" : "Create Agent"}</Button>
           </form>
@@ -1379,12 +1565,21 @@ export function AgentsPage() {
   );
 }
 
-function ValidationBadge({ state }: { state: "Valid" | "Invalid" | "Not checked" | "Ready" | "Disabled" | "Insufficient balance" | "Production blocked in sandbox" }) {
+type ValidationBadgeState = "Valid" | "Invalid" | "Checking" | "Not checked" | "Ready" | "Disabled" | "Insufficient balance" | "Production blocked in sandbox";
+
+function ValidationBadge({ state, title }: { state: ValidationBadgeState; title?: string }) {
   const variant =
     state === "Valid" || state === "Ready" ? "ok" :
       state === "Invalid" || state === "Disabled" ? "error" :
         "warn";
-  return <ProviderBadge label={state} variant={variant} />;
+  return <span title={title}><ProviderBadge label={state} variant={variant} /></span>;
+}
+
+function fallbackModelStatusLabel(status: FallbackModelValidationStatus): Extract<ValidationBadgeState, "Valid" | "Invalid" | "Checking" | "Not checked"> {
+  if (status === "VALID") return "Valid";
+  if (status === "INVALID") return "Invalid";
+  if (status === "CHECKING") return "Checking";
+  return "Not checked";
 }
 
 function PreviewField({ label, value }: { label: string; value: string }) {

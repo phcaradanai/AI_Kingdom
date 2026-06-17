@@ -5,6 +5,7 @@ import bcrypt from "bcryptjs";
 import type { UserRole } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
+import * as openRouterModelService from "../services/openRouterModelService.js";
 
 
 async function withServer(fn: (baseUrl: string) => Promise<void>) {
@@ -136,6 +137,121 @@ test("Non-KING roles cannot manage providers", async () => {
       assert.equal(createRes.status, 403); // Forbidden
     });
   } finally {
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("POST /providers/:id/models/validate-batch validates fallback models independently", async () => {
+  const user = await createUser("KING");
+  const providerId = `batch-openrouter-${Date.now()}`;
+  const originalFetchModels = openRouterModelService._service.fetchOpenRouterModels;
+  const originalCredential = process.env.TEST_OPENROUTER_BATCH_KEY;
+  process.env.TEST_OPENROUTER_BATCH_KEY = "test-key";
+
+  await prisma.aIProvider.create({
+    data: {
+      id: providerId,
+      name: "Batch OpenRouter",
+      type: "openrouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      defaultModel: "openrouter/owl-alpha",
+      isActive: true,
+      priority: 25,
+      costTier: "LOW",
+      capabilities: { supportsChat: true },
+      config: { credentialEnvKey: "TEST_OPENROUTER_BATCH_KEY" }
+    }
+  });
+
+  openRouterModelService._service.fetchOpenRouterModels = async () => ({
+    success: true,
+    models: ["openrouter/owl-alpha", "openai/gpt-4o-mini"]
+  });
+
+  try {
+    await withServer(async (baseUrl) => {
+      const token = await login(baseUrl, user.email);
+      assert.ok(token);
+
+      const response = await fetch(`${baseUrl}/api/providers/${providerId}/models/validate-batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ modelIds: ["openrouter/owl-alpha", "missing/model", ""] })
+      });
+
+      assert.equal(response.status, 200);
+      const body = await response.json() as {
+        results: Array<{ modelId: string; status: "VALID" | "INVALID"; reason?: string; checkedAt: string }>;
+      };
+
+      assert.equal(body.results.length, 3);
+      assert.deepEqual(body.results.map((result) => result.status), ["VALID", "INVALID", "INVALID"]);
+      assert.match(body.results[1]?.reason ?? "", /not present/i);
+      assert.match(body.results[2]?.reason ?? "", /required/i);
+      assert.ok(Date.parse(body.results[0]?.checkedAt ?? ""), "checkedAt must be an ISO timestamp");
+    });
+  } finally {
+    openRouterModelService._service.fetchOpenRouterModels = originalFetchModels;
+    if (originalCredential === undefined) {
+      delete process.env.TEST_OPENROUTER_BATCH_KEY;
+    } else {
+      process.env.TEST_OPENROUTER_BATCH_KEY = originalCredential;
+    }
+    await prisma.aIProvider.delete({ where: { id: providerId } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("POST /providers/:id/models/validate-batch returns blocked results when credentials are missing", async () => {
+  const user = await createUser("KING");
+  const providerId = `batch-openrouter-missing-credentials-${Date.now()}`;
+  const originalFetchModels = openRouterModelService._service.fetchOpenRouterModels;
+  const originalCredential = process.env.TEST_OPENROUTER_MISSING_KEY;
+  delete process.env.TEST_OPENROUTER_MISSING_KEY;
+
+  await prisma.aIProvider.create({
+    data: {
+      id: providerId,
+      name: "Batch OpenRouter Missing Credentials",
+      type: "openrouter",
+      baseUrl: "https://openrouter.ai/api/v1",
+      defaultModel: "openrouter/owl-alpha",
+      isActive: true,
+      priority: 25,
+      costTier: "LOW",
+      capabilities: { supportsChat: true },
+      config: { credentialEnvKey: "TEST_OPENROUTER_MISSING_KEY" }
+    }
+  });
+
+  openRouterModelService._service.fetchOpenRouterModels = async () => {
+    assert.fail("Model registry should not be fetched when provider credentials are missing");
+  };
+
+  try {
+    await withServer(async (baseUrl) => {
+      const token = await login(baseUrl, user.email);
+      assert.ok(token);
+
+      const response = await fetch(`${baseUrl}/api/providers/${providerId}/models/validate-batch`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ modelIds: ["openrouter/owl-alpha"] })
+      });
+
+      assert.equal(response.status, 200);
+      const body = await response.json() as { results: Array<{ status: "VALID" | "INVALID"; reason?: string }> };
+      assert.equal(body.results[0]?.status, "INVALID");
+      assert.match(body.results[0]?.reason ?? "", /credentials/i);
+    });
+  } finally {
+    openRouterModelService._service.fetchOpenRouterModels = originalFetchModels;
+    if (originalCredential === undefined) {
+      delete process.env.TEST_OPENROUTER_MISSING_KEY;
+    } else {
+      process.env.TEST_OPENROUTER_MISSING_KEY = originalCredential;
+    }
+    await prisma.aIProvider.delete({ where: { id: providerId } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
   }
 });

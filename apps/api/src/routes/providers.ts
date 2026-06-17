@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultAIProviders, listAIProviders, getAIProvider, createAIProvider, deleteAIProvider } from "../services/aiProviderRegistry.js";
-import { validateOpenRouterModels } from "../services/openRouterModelService.js";
+import { validateOpenRouterModels, validateProviderModelsBatch } from "../services/openRouterModelService.js";
 import { requireRole } from "../middleware/rbac.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
@@ -52,6 +52,10 @@ const providerCreateSchema = z.object({
 
 const providerTestSchema = z.object({
   prompt: z.string().trim().min(1).max(1000).optional()
+});
+
+const providerModelBatchValidationSchema = z.object({
+  modelIds: z.array(z.string().trim().max(200)).max(50)
 });
 
 router.get("/", async (_req, res, next) => {
@@ -192,6 +196,29 @@ router.get("/:id/models", requireRole("KING"), async (req, res, next) => {
       fromCache: !success,
       validationStatus: provider.modelValidationStatus
     });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/models/validate-batch", requireRole("KING"), async (req, res, next) => {
+  try {
+    const providerId = req.params.id ?? "";
+    if (!providerId) {
+      res.status(400).json({ error: "Provider id required" });
+      return;
+    }
+
+    const payload = providerModelBatchValidationSchema.parse(req.body);
+    const providers = await listAIProviders({ syncDefaults: false });
+    const provider = providers.find((item) => item.id === providerId) ?? await getAIProvider(providerId);
+    if (!provider) {
+      res.status(404).json({ error: "Provider not found" });
+      return;
+    }
+
+    const results = await validateProviderModelsBatch(provider, payload.modelIds);
+    res.json({ results });
   } catch (error) {
     next(error);
   }
