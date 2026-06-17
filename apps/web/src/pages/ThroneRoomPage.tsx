@@ -35,6 +35,7 @@ export function ThroneRoomPage() {
   const [error, setError] = useState<string | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
+  const [handoffWorkOrder, setHandoffWorkOrder] = useState<{ contextBindingStatus?: string } | null>(null);
   const [isCreatingHandoff, setIsCreatingHandoff] = useState(false);
   const submitCommand = useKingdomStore((state) => state.submitCommand);
   const isLoading = useKingdomStore((state) => state.isLoading);
@@ -63,10 +64,13 @@ export function ThroneRoomPage() {
     if (!latestTask || !latestSession) return;
     setHandoffMessage(null);
     setHandoffError(null);
+    setHandoffWorkOrder(null);
     setIsCreatingHandoff(true);
     try {
       const response = await api.createCouncilHandoff(latestTask.id, latestSession.id);
-      setHandoffMessage(`External handoff created: ${response.handoffBrief.title}`);
+      setHandoffWorkOrder(response.workOrder);
+      const briefTitle = response.handoffBrief?.title ?? "Existing handoff";
+      setHandoffMessage(`External handoff ready: ${briefTitle}`);
     } catch (handoffError) {
       setHandoffError(handoffError instanceof Error ? handoffError.message : "Unable to create external-agent handoff");
     } finally {
@@ -196,6 +200,11 @@ export function ThroneRoomPage() {
               )}
               {handoffError && (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{handoffError}</div>
+              )}
+              {handoffWorkOrder && (handoffWorkOrder.contextBindingStatus === "STALE" || handoffWorkOrder.contextBindingStatus === "MISSING") && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
+                  <span className="font-semibold">Context not fresh</span> — run a local docs scan on the linked project before creating SANDBOX_PATCH jobs.
+                </div>
               )}
 
               <div className="grid gap-4 xl:grid-cols-2">

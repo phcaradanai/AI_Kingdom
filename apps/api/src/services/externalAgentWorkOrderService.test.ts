@@ -345,3 +345,206 @@ test("M13 RBAC allows minister report submission but denies scribe writes and no
   await prisma.user.delete({ where: { id: minister.user.id } });
   await prisma.user.delete({ where: { id: scribe.user.id } });
 });
+
+// ---- M18A-3 handoff dedup tests ----
+
+import { createWorkOrder } from "./externalAgentWorkOrderService.js";
+
+async function makeCompletedTaskWithSession(userId: string) {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const task = await prisma.task.create({
+    data: { createdBy: userId, title: `M18A-3 Handoff Route Task ${suffix}`, command: "cmd", mode: "BUILD", status: "COMPLETED" }
+  });
+  const session = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", finalSummary: "Done" }
+  });
+  return { task, session };
+}
+
+async function cleanupHandoffRouteFixture(opts: { taskId?: string; userId?: string }) {
+  if (opts.taskId) {
+    await prisma.handoffBrief.deleteMany({ where: { workOrder: { sourceId: opts.taskId } } }).catch(() => undefined);
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_HANDOFF", sourceId: opts.taskId } }).catch(() => undefined);
+    await prisma.councilSession.deleteMany({ where: { taskId: opts.taskId } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: opts.taskId } }).catch(() => undefined);
+  }
+  if (opts.userId) await prisma.user.delete({ where: { id: opts.userId } }).catch(() => undefined);
+}
+
+test("M18A-3: first council handoff creates WO with sourceType=COUNCIL_HANDOFF and sourceId=task.id", async () => {
+  const { user } = await createUser("KING");
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "M18A-3 Handoff Dedup Task", command: "Implement dedup", mode: "BUILD", status: "COMPLETED" }
+  });
+  try {
+    const result = await createWorkOrder({
+      title: `External Handoff: ${task.title}`,
+      objective: "Implement dedup",
+      sourceType: "COUNCIL_HANDOFF",
+      sourceId: task.id,
+      status: "READY",
+      createdByUserId: user.id,
+      provenance: { source: "ROYAL_COMMAND_COUNCIL_HANDOFF", taskId: task.id, councilSessionId: "session-1" }
+    }, true);
+    assert.equal(result.status, "CREATED");
+    assert.ok(result.workOrder);
+    assert.equal(result.workOrder.sourceType, "COUNCIL_HANDOFF");
+    assert.equal(result.workOrder.sourceId, task.id);
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_HANDOFF", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M18A-3: repeated handoff for same task returns EXISTING work order", async () => {
+  const { user } = await createUser("KING");
+  const task = await prisma.task.create({
+    data: { createdBy: user.id, title: "M18A-3 Repeated Handoff Task", command: "Implement repeated dedup", mode: "BUILD", status: "COMPLETED" }
+  });
+  try {
+    const first = await createWorkOrder({
+      title: `External Handoff: ${task.title}`,
+      objective: "Implement repeated dedup",
+      sourceType: "COUNCIL_HANDOFF",
+      sourceId: task.id,
+      status: "READY",
+      createdByUserId: user.id
+    }, true);
+    assert.equal(first.status, "CREATED");
+
+    // Simulate second session for same task — different councilSessionId, same task.id
+    const second = await createWorkOrder({
+      title: `External Handoff: ${task.title}`,
+      objective: "Implement repeated dedup",
+      sourceType: "COUNCIL_HANDOFF",
+      sourceId: task.id,
+      status: "READY",
+      createdByUserId: user.id
+    }, true);
+    assert.equal(second.status, "EXISTING");
+    assert.equal(second.workOrder?.id, first.workOrder?.id, "must return same work order");
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_HANDOFF", sourceId: task.id } });
+    await prisma.task.delete({ where: { id: task.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M18A-3: different task with same title creates a separate work order", async () => {
+  const { user } = await createUser("KING");
+  const titleSuffix = `${Date.now()}`;
+  const task1 = await prisma.task.create({
+    data: { createdBy: user.id, title: `M18A-3 Shared Title ${titleSuffix}`, command: "cmd", mode: "BUILD", status: "COMPLETED" }
+  });
+  const task2 = await prisma.task.create({
+    data: { createdBy: user.id, title: `M18A-3 Shared Title ${titleSuffix}`, command: "cmd", mode: "BUILD", status: "COMPLETED" }
+  });
+  try {
+    const r1 = await createWorkOrder({
+      title: `External Handoff: M18A-3 Shared Title ${titleSuffix}`,
+      objective: "cmd",
+      sourceType: "COUNCIL_HANDOFF",
+      sourceId: task1.id,
+      status: "READY",
+      createdByUserId: user.id
+    }, true);
+    const r2 = await createWorkOrder({
+      title: `External Handoff: M18A-3 Shared Title ${titleSuffix}`,
+      objective: "cmd",
+      sourceType: "COUNCIL_HANDOFF",
+      sourceId: task2.id,
+      status: "READY",
+      createdByUserId: user.id
+    }, true);
+    assert.equal(r1.status, "CREATED");
+    assert.equal(r2.status, "CREATED");
+    assert.notEqual(r1.workOrder?.id, r2.workOrder?.id, "different tasks must produce different work orders");
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { sourceType: "COUNCIL_HANDOFF", sourceId: { in: [task1.id, task2.id] } } });
+    await prisma.task.delete({ where: { id: task1.id } }).catch(() => undefined);
+    await prisma.task.delete({ where: { id: task2.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M18A-3 route: first handoff returns 201 with new WO and HandoffBrief", async () => {
+  const { user, token } = await createUser("KING");
+  const { task, session } = await makeCompletedTaskWithSession(user.id);
+  try {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/tasks/${task.id}/council/${session.id}/handoff`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(res.status, 201);
+      const body = await res.json() as { workOrder: { id: string; sourceType: string; sourceId: string }; handoffBrief: { id: string } };
+      assert.equal(body.workOrder.sourceType, "COUNCIL_HANDOFF");
+      assert.equal(body.workOrder.sourceId, task.id);
+      assert.ok(body.handoffBrief?.id, "should include a handoff brief");
+    });
+  } finally {
+    await cleanupHandoffRouteFixture({ taskId: task.id, userId: user.id });
+  }
+});
+
+test("M18A-3 route: repeated handoff for same task returns 200 and does not create extra HandoffBrief", async () => {
+  const { user, token } = await createUser("KING");
+  const { task, session } = await makeCompletedTaskWithSession(user.id);
+  try {
+    await withServer(async (baseUrl) => {
+      const first = await fetch(`${baseUrl}/api/tasks/${task.id}/council/${session.id}/handoff`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(first.status, 201);
+      const firstBody = await first.json() as { workOrder: { id: string } };
+      const workOrderId = firstBody.workOrder.id;
+
+      const second = await fetch(`${baseUrl}/api/tasks/${task.id}/council/${session.id}/handoff`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(second.status, 200, "repeated handoff should return 200");
+      const secondBody = await second.json() as { workOrder: { id: string } };
+      assert.equal(secondBody.workOrder.id, workOrderId, "must return the same WO id");
+
+      const briefCount = await prisma.handoffBrief.count({ where: { workOrderId } });
+      assert.equal(briefCount, 1, "only one HandoffBrief should exist");
+    });
+  } finally {
+    await cleanupHandoffRouteFixture({ taskId: task.id, userId: user.id });
+  }
+});
+
+test("M18A-3 route: new session for same task still returns 200 EXISTING WO", async () => {
+  const { user, token } = await createUser("KING");
+  const { task, session: session1 } = await makeCompletedTaskWithSession(user.id);
+  const session2 = await prisma.councilSession.create({
+    data: { taskId: task.id, status: "COMPLETED", finalSummary: "Second run" }
+  });
+  try {
+    await withServer(async (baseUrl) => {
+      const first = await fetch(`${baseUrl}/api/tasks/${task.id}/council/${session1.id}/handoff`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(first.status, 201);
+      const { workOrder: wo1 } = await first.json() as { workOrder: { id: string } };
+
+      // Different session, same task → should return same WO
+      const second = await fetch(`${baseUrl}/api/tasks/${task.id}/council/${session2.id}/handoff`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(second.status, 200, "new session for same task should return 200 EXISTING");
+      const { workOrder: wo2 } = await second.json() as { workOrder: { id: string } };
+      assert.equal(wo2.id, wo1.id, "new session for same task must reuse same WO");
+
+      const briefCount = await prisma.handoffBrief.count({ where: { workOrderId: wo1.id } });
+      assert.equal(briefCount, 1, "only one HandoffBrief across both sessions");
+    });
+  } finally {
+    await cleanupHandoffRouteFixture({ taskId: task.id, userId: user.id });
+  }
+});

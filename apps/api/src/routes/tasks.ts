@@ -241,8 +241,8 @@ router.post("/:id/council/:sessionId/handoff", requireRole("KING", "CROWN_PRINCE
       ],
       projectId: task.projectId,
       targetProject: task.projectId ? null : "AI Kingdom",
-      sourceType: "COUNCIL_SESSION",
-      sourceId: session.id,
+      sourceType: "COUNCIL_HANDOFF",
+      sourceId: task.id,
       status: "READY",
       priority: task.mode === "BUILD" ? "HIGH" : "MEDIUM",
       createdByUserId: userId,
@@ -251,6 +251,15 @@ router.post("/:id/council/:sessionId/handoff", requireRole("KING", "CROWN_PRINCE
 
     if (!workOrderResult.workOrder) {
       res.status(409).json({ status: workOrderResult.status, reason: workOrderResult.reason ?? "Work order could not be created" });
+      return;
+    }
+
+    if (workOrderResult.status === "EXISTING") {
+      const existingBrief = await prisma.handoffBrief.findFirst({
+        where: { workOrderId: workOrderResult.workOrder.id },
+        orderBy: { createdAt: "desc" }
+      });
+      res.status(200).json({ workOrder: workOrderResult.workOrder, handoffBrief: existingBrief ?? null });
       return;
     }
 
