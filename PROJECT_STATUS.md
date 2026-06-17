@@ -69,7 +69,7 @@ Navigation is role-aware. The frontend also handles access-token refresh and cle
 Validation baseline at M18A-2 completion (2026-06-17):
 
 - `npm run typecheck` (api, runner, web workspaces) — pass
-- `npm run test --workspace @ai-kingdom/api` (673/673 passing — +13 lifecycle reconcile tests)
+- `npm run test --workspace @ai-kingdom/api` (674/674 passing — +13 lifecycle reconcile tests)
 - `npm run test --workspace @ai-kingdom/runner` (87/87 passing)
 - `npm run test --workspace @ai-kingdom/web` (57/57 passing)
 - `npm run build` (api, runner, web workspaces) — pass
