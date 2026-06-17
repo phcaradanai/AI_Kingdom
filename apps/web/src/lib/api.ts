@@ -337,6 +337,10 @@ export const api = {
   updateWorkOrder: (id: string, payload: Partial<WorkOrderPayload>) =>
     apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   deleteWorkOrder: (id: string) => apiRequest<void>(`/work-orders/${id}`, { method: "DELETE" }),
+  assignWorkOrderExternalAgent: (id: string, externalAgentId: string | null) =>
+    apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}/assign-external-agent`, { method: "POST", body: JSON.stringify({ externalAgentId }) }),
+  archiveWorkOrderAsCompleted: (id: string) =>
+    apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}/archive-completed`, { method: "POST" }),
   workOrderFromTask: (taskId: string) =>
     apiRequest<{ workOrder?: WorkOrderDto; status?: "PREVIEW_ONLY" | "REJECTED"; reason?: string }>(`/work-orders/from-task/${taskId}`, { method: "POST" }),
   workOrderFromMatter: (matterId: string) =>

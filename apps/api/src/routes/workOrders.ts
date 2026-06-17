@@ -438,4 +438,72 @@ router.post("/:id/handoff", requireRole("KING", "CROWN_PRINCE"), async (req, res
   }
 });
 
+/** POST /api/work-orders/:id/assign-external-agent — persist external agent assignment (KING/CROWN_PRINCE). */
+const assignExternalAgentSchema = z.object({
+  externalAgentId: z.string().trim().min(1).max(120).nullable()
+});
+
+router.post("/:id/assign-external-agent", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { externalAgentId } = assignExternalAgentSchema.parse(req.body);
+    const existing = await prisma.workOrder.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: "Work order not found" });
+      return;
+    }
+    const workOrder = await prisma.workOrder.update({
+      where: { id },
+      data: { assignedExternalAgentId: externalAgentId },
+      include
+    });
+    await auditLog({
+      userId: req.user?.id,
+      action: "assign_external_agent",
+      resourceType: "work_order",
+      resourceId: id,
+      metadata: { previousAgentId: existing.assignedExternalAgentId, newAgentId: externalAgentId }
+    });
+    res.json({ workOrder });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** POST /api/work-orders/:id/archive-completed — explicitly archive a completed work order (KING/CROWN_PRINCE). */
+router.post("/:id/archive-completed", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const existing = await prisma.workOrder.findUnique({ where: { id } });
+    if (!existing) {
+      res.status(404).json({ error: "Work order not found" });
+      return;
+    }
+    const workOrder = await prisma.workOrder.update({
+      where: { id },
+      data: {
+        status: "ARCHIVED",
+        workQuality: "COMPLETED_ARCHIVE",
+        archiveReason: "Manually archived as completed by King",
+        archivedAt: new Date()
+      },
+      include
+    });
+    await auditLog({
+      userId: req.user?.id,
+      action: "archive_completed_work_order",
+      resourceType: "work_order",
+      resourceId: id,
+      metadata: { previousStatus: existing.status, title: existing.title }
+    });
+    res.json({ workOrder });
+  } catch (error) {
+    next(error);
+  }
+});
+
 export default router;

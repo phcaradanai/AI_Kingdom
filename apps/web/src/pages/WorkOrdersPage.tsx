@@ -95,6 +95,10 @@ export function WorkOrdersPage() {
   const [contextBusy, setContextBusy] = useState(false);
   const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
   const [agentRecommendations, setAgentRecommendations] = useState<ExternalAgentRecommendationDto[]>([]);
+  const [assigningAgent, setAssigningAgent] = useState(false);
+  const [assignMessage, setAssignMessage] = useState<string | null>(null);
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [archivingCompleted, setArchivingCompleted] = useState(false);
 
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
 
@@ -199,6 +203,39 @@ export function WorkOrdersPage() {
       setError(err instanceof Error ? err.message : "Failed to repair context");
     } finally {
       setContextBusy(false);
+    }
+  }
+
+  async function assignExternalAgent(agentId: string, agentName: string) {
+    if (!selected || !canCreate) return;
+    setAssigningAgent(true);
+    setAssignMessage(null);
+    setAssignError(null);
+    try {
+      const response = await api.assignWorkOrderExternalAgent(selected.id, agentId);
+      setDraft((d) => ({ ...d, assignedExternalAgentId: agentId }));
+      setWorkOrders((prev) => prev.map((o) => o.id === selected.id ? response.workOrder : o));
+      setAssignMessage(`Assigned to ${agentName}`);
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : "Failed to assign external agent");
+    } finally {
+      setAssigningAgent(false);
+    }
+  }
+
+  async function archiveAsCompleted() {
+    if (!selected || !canCreate) return;
+    if (!window.confirm(`Archive "${selected.title}" as completed? This cannot be undone.`)) return;
+    setArchivingCompleted(true);
+    setError(null);
+    try {
+      await api.archiveWorkOrderAsCompleted(selected.id);
+      setSelectedId(null);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to archive work order");
+    } finally {
+      setArchivingCompleted(false);
     }
   }
 
@@ -584,7 +621,21 @@ export function WorkOrdersPage() {
 
         <div className="space-y-5">
           <Card>
-            <h2 className="font-display text-2xl">{selectedId ? "Work Order Detail" : "Create Work Order"}</h2>
+            <div className="flex items-start justify-between gap-3">
+              <h2 className="font-display text-2xl">{selectedId ? "Work Order Detail" : "Create Work Order"}</h2>
+              {selectedId && canCreate && selected?.status !== "ARCHIVED" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="text-xs shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-50"
+                  disabled={archivingCompleted}
+                  onClick={() => void archiveAsCompleted()}
+                >
+                  <Archive className="h-3.5 w-3.5" />
+                  {archivingCompleted ? "Archiving…" : "Archive as Completed"}
+                </Button>
+              )}
+            </div>
             <form className="mt-5 space-y-4" onSubmit={save}>
               <FormField id="wo-title" label="Title" required>
                 <Input id="wo-title" disabled={!canCreate} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Short, descriptive title for this work order" />
@@ -714,17 +765,29 @@ export function WorkOrdersPage() {
                       <div className="rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs text-green-700">{reconcileMessage}</div>
                     )}
                     {workOrderContext.contextBindingStatus !== "FRESH" ? (() => {
-                      const repairable = workOrderContext.current?.binding?.localDocumentSnapshotId != null;
+                      const localDocsChanged = workOrderContext.current?.binding?.localDocsChanged === true;
+                      const repairable = !localDocsChanged && workOrderContext.current?.binding?.localDocumentSnapshotId != null;
                       return (
                         <div className="rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-700 space-y-1">
                           <div className="flex items-center gap-1.5">
                             <AlertTriangle className="h-3.5 w-3.5" />
                             Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH.
                           </div>
+                          {localDocsChanged && (
+                            <div className="text-orange-700">
+                              Local docs changed since last scan — Bind/Refresh Context cannot fix this. Run a local docs scan on the linked project first, then re-bind context.
+                            </div>
+                          )}
                           <div className="flex items-center gap-3 flex-wrap">
                             <span>Repairable: <span className="font-semibold">{repairable ? "YES" : "NO"}</span></span>
                             {!repairable && (
-                              <span className="text-orange-600">{workOrderContext.projectId ? "No local docs snapshot — scan the project first." : "No linked project — assign a project first."}</span>
+                              <span className="text-orange-600">
+                                {localDocsChanged
+                                  ? "Run a local docs scan first — local files changed since last scan."
+                                  : workOrderContext.projectId
+                                    ? "No local docs snapshot — scan the project first."
+                                    : "No linked project — assign a project first."}
+                              </span>
                             )}
                             {repairable && canCreate && (
                               <button
@@ -774,13 +837,20 @@ export function WorkOrdersPage() {
                   <Bot className="h-4 w-4 text-muted-foreground" />
                   <h2 className="font-display text-lg">Suggested External Agent</h2>
                 </div>
+                {assignMessage && (
+                  <div className="mb-3 rounded-md border border-green-400/30 bg-green-400/10 p-2 text-xs text-green-700">{assignMessage}</div>
+                )}
+                {assignError && (
+                  <div className="mb-3 rounded-md border border-red-400/30 bg-red-400/10 p-2 text-xs text-red-300">{assignError}</div>
+                )}
                 {agentRecommendations.length === 0 || !agentRecommendations[0] ? (
                   <p className="text-xs text-muted-foreground">No active external agents available.</p>
                 ) : (
                   <div className="space-y-3">
                     <AgentRecommendationCard
                       rec={agentRecommendations[0]}
-                      onUse={canCreate ? (id) => setDraft((d) => ({ ...d, assignedExternalAgentId: id })) : undefined}
+                      busy={assigningAgent}
+                      onUse={canCreate ? (id, name) => void assignExternalAgent(id, name) : undefined}
                     />
                     {agentRecommendations.length > 1 && (
                       <details className="text-xs text-muted-foreground">
@@ -800,8 +870,9 @@ export function WorkOrdersPage() {
                               {canCreate && (
                                 <button
                                   type="button"
-                                  className="text-primary hover:underline text-xs"
-                                  onClick={() => setDraft((d) => ({ ...d, assignedExternalAgentId: rec.externalAgentId }))}
+                                  disabled={assigningAgent}
+                                  className="text-primary hover:underline text-xs disabled:opacity-50"
+                                  onClick={() => void assignExternalAgent(rec.externalAgentId, rec.name)}
                                 >
                                   Use
                                 </button>
@@ -1235,10 +1306,12 @@ function confidenceCls(confidence: "HIGH" | "MEDIUM" | "LOW"): string {
 
 function AgentRecommendationCard({
   rec,
+  busy,
   onUse
 }: {
   rec: ExternalAgentRecommendationDto;
-  onUse?: (id: string) => void;
+  busy?: boolean;
+  onUse?: (id: string, name: string) => void;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3">
@@ -1263,8 +1336,8 @@ function AgentRecommendationCard({
         )}
       </div>
       {onUse && (
-        <Button variant="outline" onClick={() => onUse(rec.externalAgentId)}>
-          Use This Agent
+        <Button variant="outline" disabled={busy} onClick={() => onUse(rec.externalAgentId, rec.name)}>
+          {busy ? "Assigning…" : "Use This Agent"}
         </Button>
       )}
     </div>
