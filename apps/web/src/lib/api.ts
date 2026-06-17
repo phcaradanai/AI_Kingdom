@@ -354,6 +354,8 @@ export const api = {
   getProjectContextHealth: (id: string) => apiRequest<ProjectContextHealthDto>(`/projects/${id}/context-health`),
   rebindWorkOrderContext: (id: string) =>
     apiRequest<{ result: import("@/types/api").RepairWorkOrderContextResultDto }>(`/work-orders/${id}/rebind-context`, { method: "POST" }),
+  refreshWorkOrderContext: (id: string) =>
+    apiRequest<{ result: import("@/types/api").RefreshWorkOrderContextResultDto }>(`/work-orders/${id}/refresh-context`, { method: "POST" }),
   rebindProjectContexts: (projectId: string) =>
     apiRequest<{ result: import("@/types/api").BulkRepairResultDto }>(`/projects/${projectId}/rebind-contexts`, { method: "POST" }),
   reconcileContextWarnings: () =>

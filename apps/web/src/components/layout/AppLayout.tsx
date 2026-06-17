@@ -1,7 +1,8 @@
 import { Activity, Archive, Bell, BookOpen, Bot, Brain, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LogOut, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault, Zap } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
@@ -69,12 +70,33 @@ export function AppLayout() {
   const clearSession = useAuthStore((state) => state.clearSession);
   const refresh = useKingdomStore((state) => state.refresh);
   const navigate = useNavigate();
+  const [inboxPriorityCount, setInboxPriorityCount] = useState(0);
 
   const allVisibleNavItems = navCategories.flatMap(c => c.items).filter(item => user && item.roles.includes(user.role as UserRole));
 
   useEffect(() => {
     void refresh();
   }, [refresh, user?.role]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (user?.role !== "KING" && user?.role !== "CROWN_PRINCE") {
+      setInboxPriorityCount(0);
+      return;
+    }
+
+    api.getNextActions({ limit: 1 })
+      .then((result) => {
+        if (!cancelled) setInboxPriorityCount(result.summary.criticalCount + result.summary.highCount);
+      })
+      .catch(() => {
+        if (!cancelled) setInboxPriorityCount(0);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.role]);
 
   useEffect(() => {
     const expire = () => {
@@ -125,7 +147,12 @@ export function AppLayout() {
                       }
                     >
                       <item.icon className={cn("h-4 w-4 shrink-0", "opacity-80")} />
-                      {item.label}
+                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      {item.to === "/inbox" && inboxPriorityCount > 0 && (
+                        <span className="ml-auto rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold leading-none text-amber-300">
+                          {inboxPriorityCount}
+                        </span>
+                      )}
                     </NavLink>
                   ))}
                 </div>
@@ -180,7 +207,12 @@ export function AppLayout() {
                 }
               >
                 <item.icon className="h-3.5 w-3.5" />
-                {item.label}
+                <span>{item.label}</span>
+                {item.to === "/inbox" && inboxPriorityCount > 0 && (
+                  <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none text-background">
+                    {inboxPriorityCount}
+                  </span>
+                )}
               </NavLink>
             ))}
           </div>
