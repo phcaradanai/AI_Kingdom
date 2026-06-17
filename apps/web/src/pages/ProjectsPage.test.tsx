@@ -1,0 +1,134 @@
+import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { ProjectContextHealthDto, ProjectDto, PublicUser, WorkOrderDto } from "@/types/api";
+import { ProjectsPage } from "./ProjectsPage";
+
+const nowIso = new Date().toISOString();
+
+const project: ProjectDto = {
+  id: "proj-1",
+  name: "Castle Keep",
+  codename: "KEEP",
+  description: "Fortify the project context.",
+  status: "ACTIVE",
+  priority: "HIGH",
+  goals: ["Keep context fresh"],
+  keywords: ["castle"],
+  aliases: ["keep"],
+  repositoryUrl: "https://github.com/kingdom/castle-keep",
+  localPath: null,
+  activeMilestone: "M17E Project Context",
+  ownerUserId: null,
+  createdAt: nowIso,
+  updatedAt: nowIso
+};
+
+const staleHealth: ProjectContextHealthDto = {
+  status: "STALE",
+  lines: ["Local docs changed after latest snapshot."],
+  binding: {
+    status: "STALE",
+    projectId: "proj-1",
+    localDocumentSnapshotId: "snap-old",
+    repositorySnapshotId: null,
+    localSnapshotScannedAt: nowIso,
+    repositoryCommitSha: null,
+    repositoryBranch: null,
+    detectedStack: ["React"],
+    packageScripts: {},
+    riskZones: [],
+    importantDocs: [],
+    rootIds: [],
+    rootNames: [],
+    rootPathHashes: [],
+    localDocsChanged: true,
+    warnings: []
+  },
+  openWorkOrders: [{
+    id: "wo-1",
+    title: "Refresh stale context",
+    status: "READY",
+    contextBindingStatus: "STALE",
+    contextBoundAt: nowIso,
+    localDocumentSnapshotId: "snap-old",
+    boundToLatestSnapshot: false
+  }]
+};
+
+const activeWorkOrder = {
+  id: "wo-1",
+  title: "Refresh stale context",
+  status: "READY",
+  contextBindingStatus: "STALE"
+} as WorkOrderDto;
+
+const apiMocks = vi.hoisted(() => ({
+  projects: vi.fn(),
+  projectWorkOrders: vi.fn(),
+  getProjectContextHealth: vi.fn(),
+  createProject: vi.fn(),
+  updateProject: vi.fn()
+}));
+
+vi.mock("@/lib/api", () => ({ api: apiMocks }));
+
+let currentUser: PublicUser | null = null;
+vi.mock("@/stores/authStore", () => ({
+  useAuthStore: (selector: (state: { user: PublicUser | null }) => unknown) => selector({ user: currentUser })
+}));
+
+function setUser(role: PublicUser["role"]) {
+  currentUser = { id: "user-1", email: `${role.toLowerCase()}@aikingdom.local`, displayName: role, role };
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <ProjectsPage />
+    </MemoryRouter>
+  );
+}
+
+afterEach(() => {
+  vi.clearAllMocks();
+  currentUser = null;
+});
+
+describe("ProjectsPage", () => {
+  it("renders project cards with context health and active work count", async () => {
+    setUser("KING");
+    apiMocks.projects.mockResolvedValue({ projects: [project] });
+    apiMocks.projectWorkOrders.mockResolvedValue({ workOrders: [activeWorkOrder] });
+    apiMocks.getProjectContextHealth.mockResolvedValue(staleHealth);
+
+    renderPage();
+
+    expect((await screen.findAllByText("Castle Keep")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Context STALE")).toBeInTheDocument();
+    expect(screen.getAllByText("Active work: 1").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /Project Context/i })).toHaveAttribute("href", "/projects/proj-1");
+    expect(screen.getByRole("link", { name: /Kingdom Inbox/i })).toHaveAttribute("href", "/inbox");
+  });
+
+  it("renders an empty state when no projects match filters", async () => {
+    setUser("KING");
+    apiMocks.projects.mockResolvedValue({ projects: [] });
+
+    renderPage();
+
+    expect(await screen.findByText("No projects found")).toBeInTheDocument();
+    expect(screen.getByText("Create a project or clear filters to see project context health here.")).toBeInTheDocument();
+  });
+
+  it("renders an error state with retry when projects fail to load", async () => {
+    setUser("KING");
+    apiMocks.projects.mockRejectedValue(new Error("Project API failed"));
+
+    renderPage();
+
+    expect(await screen.findByText("Projects unavailable")).toBeInTheDocument();
+    expect(screen.getByText("Project API failed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument();
+  });
+});

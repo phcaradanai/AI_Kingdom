@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { LocalDocumentRootDto, LocalDocumentSnapshotDto, ProjectOverviewDto, PublicUser } from "@/types/api";
+import type { LocalDocumentRootDto, LocalDocumentSnapshotDto, ProjectContextHealthDto, ProjectOverviewDto, PublicUser } from "@/types/api";
 import { ProjectDetailPage } from "./ProjectDetailPage";
 
 const nowIso = new Date().toISOString();
@@ -62,6 +62,30 @@ const mockSnapshot: LocalDocumentSnapshotDto = {
   createdAt: nowIso
 };
 
+const freshContextHealth: ProjectContextHealthDto = {
+  status: "FRESH",
+  lines: ["Latest known project context is fresh."],
+  binding: {
+    status: "FRESH",
+    projectId: "proj-1",
+    localDocumentSnapshotId: "snap-1",
+    repositorySnapshotId: null,
+    localSnapshotScannedAt: nowIso,
+    repositoryCommitSha: null,
+    repositoryBranch: null,
+    detectedStack: ["Express", "TypeScript"],
+    packageScripts: { test: "vitest" },
+    riskZones: [],
+    importantDocs: ["README.md"],
+    rootIds: ["root-1"],
+    rootNames: ["main-repo"],
+    rootPathHashes: ["a".repeat(64)],
+    localDocsChanged: false,
+    warnings: []
+  },
+  openWorkOrders: []
+};
+
 const apiMocks = vi.hoisted(() => ({
   projectOverview: vi.fn(),
   projectTasks: vi.fn(),
@@ -77,7 +101,9 @@ const apiMocks = vi.hoisted(() => ({
   addProjectLocalDocumentRoot: vi.fn(),
   scanProjectLocalDocumentRoot: vi.fn(),
   readProjectLocalDocumentFile: vi.fn(),
-  getProjectContextHealth: vi.fn()
+  getProjectContextHealth: vi.fn(),
+  rebindProjectContexts: vi.fn(),
+  reconcileContextWarnings: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -102,10 +128,7 @@ function mockBaseApi(localDocs: { roots: LocalDocumentRootDto[]; snapshot: Local
   apiMocks.getProjectRepositorySnapshot.mockResolvedValue({ snapshot: null });
   apiMocks.getProjectLocalDocs.mockResolvedValue(localDocs);
   apiMocks.getProjectContextHealth.mockResolvedValue({
-    status: "FRESH",
-    lines: [],
-    binding: null,
-    openWorkOrders: []
+    ...freshContextHealth
   });
 }
 
@@ -202,6 +225,77 @@ describe("ProjectDetailPage — Local Docs", () => {
     expect(screen.queryByRole("button", { name: "Add Local Root" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Scan Now/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Preview File (King only)")).not.toBeInTheDocument();
+  });
+
+  it("renders the Project Context Health card with source-of-truth links", async () => {
+    setUser("KING");
+    mockBaseApi({ roots: [mockRoot], snapshot: mockSnapshot });
+
+    renderPage();
+
+    expect(await screen.findByText("Project Context Health")).toBeInTheDocument();
+    expect(screen.getByText("Context status")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /Work Orders/i }).some((link) => link.getAttribute("href") === "/work-orders")).toBe(true);
+    expect(screen.getAllByRole("link", { name: /Kingdom Inbox/i }).some((link) => link.getAttribute("href") === "/inbox")).toBe(true);
+  });
+
+  it("explains STALE context and tells the King to scan local docs before refresh", async () => {
+    setUser("KING");
+    mockBaseApi({ roots: [mockRoot], snapshot: { ...mockSnapshot, scanStatus: "STALE", isStale: true } });
+    apiMocks.getProjectContextHealth.mockResolvedValue({
+      ...freshContextHealth,
+      status: "STALE",
+      lines: ["Local docs changed after latest snapshot."],
+      binding: { ...freshContextHealth.binding, status: "STALE", localDocsChanged: true },
+      openWorkOrders: [{
+        id: "wo-1",
+        title: "Patch the drawbridge",
+        status: "READY",
+        contextBindingStatus: "STALE",
+        contextBoundAt: nowIso,
+        localDocumentSnapshotId: "old-snap",
+        boundToLatestSnapshot: false
+      }]
+    });
+
+    renderPage();
+
+    expect(await screen.findByText("Local docs changed after the latest scan.")).toBeInTheDocument();
+    expect(screen.getByText("Run Local Docs Scan first, then refresh WorkOrder context.")).toBeInTheDocument();
+    expect(screen.getByText("Bind / Refresh alone cannot fix stale snapshots when local docs have changed.")).toBeInTheDocument();
+  });
+
+  it("renders the Run Local Docs Scan CTA when a local root exists", async () => {
+    setUser("CROWN_PRINCE");
+    mockBaseApi({ roots: [mockRoot], snapshot: mockSnapshot });
+
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: /Run Local Docs Scan/ })).toBeInTheDocument();
+  });
+
+  it("links affected WorkOrders to the Work Orders source page", async () => {
+    setUser("KING");
+    mockBaseApi({ roots: [mockRoot], snapshot: mockSnapshot });
+    apiMocks.getProjectContextHealth.mockResolvedValue({
+      ...freshContextHealth,
+      status: "PARTIAL",
+      lines: ["One work order has partial context."],
+      binding: { ...freshContextHealth.binding, status: "PARTIAL" },
+      openWorkOrders: [{
+        id: "wo-1",
+        title: "Patch the drawbridge",
+        status: "READY",
+        contextBindingStatus: "PARTIAL",
+        contextBoundAt: nowIso,
+        localDocumentSnapshotId: "snap-1",
+        boundToLatestSnapshot: true
+      }]
+    });
+
+    renderPage();
+
+    expect(await screen.findByRole("link", { name: /Patch the drawbridge/i })).toHaveAttribute("href", "/work-orders");
   });
 
   it("KING can preview a file; CROWN_PRINCE cannot see the preview section", async () => {

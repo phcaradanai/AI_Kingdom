@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Download, FolderKanban, ScanSearch } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Download, FileText, FolderKanban, GitBranch, RefreshCw, ScanSearch, ShieldAlert } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -7,9 +7,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { ArtifactDto, LocalDocumentRootDto, LocalDocumentSnapshotDto, MatterDto, MemoryDto, ObsidianExportDto, ProjectContextHealthDto, ProjectOverviewDto, RepositorySnapshotDto, ReportDto, TaskDto, WorkOrderDto } from "@/types/api";
+import type { ArtifactDto, ContextBindingStatusDto, LocalDocumentRootDto, LocalDocumentSnapshotDto, MatterDto, MemoryDto, ObsidianExportDto, ProjectContextHealthDto, ProjectOverviewDto, RepositorySnapshotDto, ReportDto, TaskDto, WorkOrderDto } from "@/types/api";
 
 type WorkspaceData = {
   overview: ProjectOverviewDto;
@@ -32,11 +32,14 @@ export function ProjectDetailPage() {
   const [scanError, setScanError] = useState<string | null>(null);
   const [scanning, setScanning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [localDocRoots, setLocalDocRoots] = useState<LocalDocumentRootDto[]>([]);
   const [localDocSnapshot, setLocalDocSnapshot] = useState<LocalDocumentSnapshotDto | null>(null);
   const [localDocsError, setLocalDocsError] = useState<string | null>(null);
   const [contextHealth, setContextHealth] = useState<ProjectContextHealthDto | null>(null);
+  const [contextActionStatus, setContextActionStatus] = useState<string | null>(null);
+  const [contextActionLoading, setContextActionLoading] = useState(false);
   const [localDocsScanningRootId, setLocalDocsScanningRootId] = useState<string | null>(null);
   const [showAddRootForm, setShowAddRootForm] = useState(false);
   const [newRootName, setNewRootName] = useState("");
@@ -53,32 +56,47 @@ export function ProjectDetailPage() {
 
   async function load() {
     if (!id) return;
-    const [overview, tasks, matters, workOrders, reports, memories, artifacts, repoResult, localDocsResult] = await Promise.all([
-      api.projectOverview(id),
-      api.projectTasks(id),
-      api.projectMatters(id),
-      api.projectWorkOrders(id),
-      api.projectReports(id),
-      api.projectMemories(id),
-      api.projectArtifacts(id),
-      api.getProjectRepositorySnapshot(id).catch(() => ({ snapshot: null })),
-      api.getProjectLocalDocs(id).catch(() => ({ roots: [], snapshot: null }))
-    ]);
-    setData({
-      overview,
-      tasks: tasks.tasks,
-      matters: matters.matters,
-      workOrders: workOrders.workOrders,
-      reports: reports.reports,
-      memories: memories.memories,
-      artifacts: artifacts.artifacts
-    });
-    setRepoSnapshot(repoResult.snapshot);
-    setLocalDocRoots(localDocsResult.roots);
-    setLocalDocSnapshot(localDocsResult.snapshot);
-    api.getProjectContextHealth(id)
-      .then(setContextHealth)
-      .catch(() => setContextHealth(null));
+    setLoading(true);
+    setError(null);
+    try {
+      const [overview, tasks, matters, workOrders, reports, memories, artifacts, repoResult, localDocsResult] = await Promise.all([
+        api.projectOverview(id),
+        api.projectTasks(id),
+        api.projectMatters(id),
+        api.projectWorkOrders(id),
+        api.projectReports(id),
+        api.projectMemories(id),
+        api.projectArtifacts(id),
+        api.getProjectRepositorySnapshot(id).catch(() => ({ snapshot: null })),
+        api.getProjectLocalDocs(id).catch(() => ({ roots: [], snapshot: null }))
+      ]);
+      setData({
+        overview,
+        tasks: tasks.tasks,
+        matters: matters.matters,
+        workOrders: workOrders.workOrders,
+        reports: reports.reports,
+        memories: memories.memories,
+        artifacts: artifacts.artifacts
+      });
+      setRepoSnapshot(repoResult.snapshot);
+      setLocalDocRoots(localDocsResult.roots);
+      setLocalDocSnapshot(localDocsResult.snapshot);
+      void loadContextHealth();
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "Unable to load project");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadContextHealth() {
+    if (!id) return;
+    try {
+      setContextHealth(await api.getProjectContextHealth(id));
+    } catch {
+      setContextHealth(null);
+    }
   }
 
   async function scanLocalDocsRoot(rootId: string) {
@@ -90,6 +108,8 @@ export function ProjectDetailPage() {
       setLocalDocSnapshot(snapshot);
       const refreshed = await api.getProjectLocalDocs(id);
       setLocalDocRoots(refreshed.roots);
+      setLocalDocSnapshot(refreshed.snapshot ?? snapshot);
+      await loadContextHealth();
     } catch (err) {
       setLocalDocsError(err instanceof Error ? err.message : "Scan failed");
     } finally {
@@ -136,6 +156,7 @@ export function ProjectDetailPage() {
     try {
       const result = await api.scanProjectRepository(id);
       setRepoSnapshot(result.snapshot);
+      await loadContextHealth();
     } catch (err) {
       setScanError(err instanceof Error ? err.message : "Scan failed");
     } finally {
@@ -144,7 +165,7 @@ export function ProjectDetailPage() {
   }
 
   useEffect(() => {
-    void load().catch((loadError) => setError(loadError instanceof Error ? loadError.message : "Unable to load project"));
+    void load();
   }, [id]);
 
   async function exportObsidian() {
@@ -152,11 +173,61 @@ export function ProjectDetailPage() {
     setExportPayload(await api.exportProjectObsidian(id));
   }
 
+  async function runLocalDocsScan() {
+    const root = localDocRoots.find((item) => item.isActive) ?? localDocRoots[0];
+    if (!root) {
+      setLocalDocsError("No local document root is configured for this project.");
+      return;
+    }
+    await scanLocalDocsRoot(root.id);
+  }
+
+  async function refreshProjectContexts() {
+    if (!id) return;
+    setContextActionLoading(true);
+    setContextActionStatus(null);
+    try {
+      const response = await api.rebindProjectContexts(id);
+      setContextActionStatus(`Context refresh complete: ${response.result.repaired} repaired, ${response.result.skipped} skipped.`);
+      await loadContextHealth();
+      const workOrders = await api.projectWorkOrders(id);
+      setData((current) => current ? { ...current, workOrders: workOrders.workOrders } : current);
+    } catch (err) {
+      setContextActionStatus(err instanceof Error ? err.message : "Unable to refresh context");
+    } finally {
+      setContextActionLoading(false);
+    }
+  }
+
+  async function reconcileOldWorkOrders() {
+    if (!id) return;
+    setContextActionLoading(true);
+    setContextActionStatus(null);
+    try {
+      const response = await api.reconcileContextWarnings();
+      setContextActionStatus(`Reconcile complete: ${response.result.contextRepaired} refreshed, ${response.result.archived} archived, ${response.result.skipped} skipped.`);
+      await loadContextHealth();
+      const workOrders = await api.projectWorkOrders(id);
+      setData((current) => current ? { ...current, workOrders: workOrders.workOrders } : current);
+    } catch (err) {
+      setContextActionStatus(err instanceof Error ? err.message : "Unable to reconcile old work orders");
+    } finally {
+      setContextActionLoading(false);
+    }
+  }
+
   if (!project) {
     return (
       <>
         <PageHeader eyebrow="Project Workspace" title="Project" description="Loading project workspace." />
-        {error ? <Card>{error}</Card> : null}
+        {loading ? <ProjectLoadingState /> : null}
+        {error ? (
+          <Card className="border-red-500/40 bg-red-500/10">
+            <h2 className="font-display text-lg">Project unavailable</h2>
+            <p className="mt-2 text-sm text-red-100">{error}</p>
+            <Button className="mt-4" variant="outline" onClick={() => void load()}><RefreshCw className="h-4 w-4" />Retry</Button>
+          </Card>
+        ) : null}
       </>
     );
   }
@@ -167,6 +238,21 @@ export function ProjectDetailPage() {
         eyebrow="Project Workspace"
         title={project.name}
         description={project.description || "Linked kingdom work, artifacts, decisions, and execution context."}
+      />
+
+      <ProjectContextHealthCard
+        health={contextHealth}
+        localDocSnapshot={localDocSnapshot}
+        localDocRoots={localDocRoots}
+        repoSnapshot={repoSnapshot}
+        workOrders={data?.workOrders ?? []}
+        scanning={Boolean(localDocsScanningRootId)}
+        canEditLocalDocs={canEditLocalDocs}
+        actionLoading={contextActionLoading}
+        actionStatus={contextActionStatus}
+        onRunLocalDocsScan={() => void runLocalDocsScan()}
+        onRefreshContext={() => void refreshProjectContexts()}
+        onReconcile={() => void reconcileOldWorkOrders()}
       />
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -290,29 +376,6 @@ export function ProjectDetailPage() {
 
         {localDocsError ? <p className="mt-3 text-sm text-red-400">{localDocsError}</p> : null}
 
-        {/* M17E-2: open work order context bindings vs latest snapshot */}
-        {contextHealth ? (
-          <div className="mt-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-xs">
-            <div className="font-semibold">Context binding: {contextHealth.status}</div>
-            {contextHealth.openWorkOrders.length > 0 ? (
-              <div className="mt-1 space-y-0.5 text-muted-foreground">
-                {contextHealth.openWorkOrders.slice(0, 8).map((w) => (
-                  <div key={w.id}>
-                    {w.title} — {w.contextBindingStatus}
-                    {localDocSnapshot
-                      ? w.boundToLatestSnapshot
-                        ? " · bound to latest snapshot"
-                        : " · NOT bound to latest snapshot"
-                      : ""}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-1 text-muted-foreground">No open work orders bound to this project.</p>
-            )}
-          </div>
-        ) : null}
-
         {showAddRootForm ? (
           <div className="mt-4 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
             <Input placeholder="Name (e.g. main repo)" value={newRootName} onChange={(e) => setNewRootName(e.target.value)} />
@@ -428,12 +491,211 @@ export function ProjectDetailPage() {
       </Card>
 
       <div className="mt-5 flex flex-wrap gap-2">
+        <Link to="/work-orders"><Button variant="outline">Open affected WorkOrders</Button></Link>
+        <Link to="/inbox"><Button variant="outline">Kingdom Inbox</Button></Link>
         <Link to="/project-inbox"><Button variant="outline">Review Project Inbox</Button></Link>
         <Link to="/artifacts"><Button variant="outline">Create Artifact</Button></Link>
+        <Link to="/royal-brief"><Button variant="outline">Royal Brief</Button></Link>
         <Link to="/projects"><Button variant="outline"><FolderKanban className="h-4 w-4" />All Projects</Button></Link>
       </div>
     </>
   );
+}
+
+function ProjectContextHealthCard({
+  health,
+  localDocSnapshot,
+  localDocRoots,
+  repoSnapshot,
+  workOrders,
+  scanning,
+  canEditLocalDocs,
+  actionLoading,
+  actionStatus,
+  onRunLocalDocsScan,
+  onRefreshContext,
+  onReconcile
+}: {
+  health: ProjectContextHealthDto | null;
+  localDocSnapshot: LocalDocumentSnapshotDto | null;
+  localDocRoots: LocalDocumentRootDto[];
+  repoSnapshot: RepositorySnapshotDto | null;
+  workOrders: WorkOrderDto[];
+  scanning: boolean;
+  canEditLocalDocs: boolean;
+  actionLoading: boolean;
+  actionStatus: string | null;
+  onRunLocalDocsScan: () => void;
+  onRefreshContext: () => void;
+  onReconcile: () => void;
+}) {
+  const activeAffected = (health?.openWorkOrders ?? workOrders)
+    .filter((order) => !["COMPLETED", "ARCHIVED", "CANCELLED"].includes(order.status))
+    .filter((order) => "contextBindingStatus" in order ? order.contextBindingStatus !== "FRESH" : true);
+  const status = health?.status ?? deriveContextHealth(localDocSnapshot, workOrders);
+  const localDocsChanged = Boolean(health?.binding?.localDocsChanged || localDocSnapshot?.isStale);
+  const shouldScanFirst = status === "STALE" && localDocsChanged;
+  const latestRootScan = localDocRoots
+    .map((root) => root.lastScannedAt)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1) ?? null;
+  const changedEvidence = health?.lines?.filter((line) => /changed|stale|missing|partial|snapshot/i.test(line)).slice(0, 4) ?? [];
+
+  return (
+    <Card className="mb-5 border-primary/30 bg-primary/5">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="font-display text-2xl">Project Context Health</h2>
+            <StatusPill status={status} />
+          </div>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+            This is the source-of-truth view for local docs, repository snapshots, and active WorkOrder context binding.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {canEditLocalDocs ? (
+            <Button onClick={onRunLocalDocsScan} disabled={scanning || localDocRoots.length === 0}>
+              <ScanSearch className="h-4 w-4" />
+              {scanning ? "Scanning…" : "Run Local Docs Scan"}
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={onRefreshContext} disabled={actionLoading || shouldScanFirst}>
+            <RefreshCw className="h-4 w-4" />
+            Bind / Refresh Context
+          </Button>
+          <Link to="/work-orders"><Button variant="outline"><ArrowUpRight className="h-4 w-4" />Open affected WorkOrders</Button></Link>
+          <Button variant="outline" onClick={onReconcile} disabled={actionLoading}>Reconcile Old Work Orders</Button>
+        </div>
+      </div>
+
+      {status === "STALE" ? (
+        <div className="mt-5 rounded-lg border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+            <div>
+              <div className="font-semibold">Local docs changed after the latest scan.</div>
+              <div className="mt-1">Run Local Docs Scan first, then refresh WorkOrder context.</div>
+              <div className="mt-1 text-amber-100/80">Bind / Refresh alone cannot fix stale snapshots when local docs have changed.</div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {actionStatus ? (
+        <div className="mt-4 rounded-lg border border-border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">{actionStatus}</div>
+      ) : null}
+
+      <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <HealthFact label="Context status" value={status} />
+        <HealthFact label="Last local docs scan" value={localDocSnapshot?.scannedAt ?? latestRootScan} />
+        <HealthFact label="Repository snapshot" value={repoSnapshot?.generatedAt ?? null} />
+        <HealthFact label="Affected active WorkOrders" value={String(activeAffected.length)} />
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="font-display text-lg">What caused this?</h3>
+          <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+            {changedEvidence.length > 0 ? changedEvidence.map((line, index) => (
+              <div key={`${line}-${index}`} className="rounded-md border border-border bg-muted/20 px-3 py-2">{line}</div>
+            )) : (
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+                {status === "FRESH" ? "Latest known project context is fresh." : "No detailed changed-file list is available from the current context health response."}
+              </div>
+            )}
+            {localDocsChanged ? <div>Changed files: available through Local Docs scan evidence when returned by the API.</div> : null}
+          </div>
+        </div>
+
+        <div className="rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="font-display text-lg">Source of Truth</h3>
+          <div className="mt-3 grid gap-2">
+            <SmallSourceLink to="/work-orders" label="Work Orders" />
+            <SmallSourceLink to="/inbox" label="Kingdom Inbox" />
+            <SmallSourceLink to="/project-inbox" label="Project Inbox" />
+            <SmallSourceLink to="/artifacts" label="Artifacts / local docs" />
+            <SmallSourceLink to="/royal-brief" label="Royal Brief" />
+          </div>
+        </div>
+      </div>
+
+      {activeAffected.length > 0 ? (
+        <div className="mt-5 rounded-lg border border-border bg-background/40 p-4">
+          <h3 className="font-display text-lg">Affected active WorkOrders</h3>
+          <div className="mt-3 grid gap-2">
+            {activeAffected.slice(0, 6).map((order) => (
+              <Link key={order.id} to="/work-orders" className="flex items-start justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm hover:border-primary/50">
+                <span className="min-w-0 break-words">{order.title}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{"contextBindingStatus" in order ? order.contextBindingStatus : "Review"}</span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      ) : null}
+    </Card>
+  );
+}
+
+function ProjectLoadingState() {
+  return (
+    <div className="grid gap-4">
+      {[0, 1, 2].map((item) => (
+        <Card key={item}>
+          <div className="h-5 w-1/3 rounded bg-muted/50" />
+          <div className="mt-4 h-3 rounded bg-muted/30" />
+          <div className="mt-2 h-3 w-2/3 rounded bg-muted/30" />
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function StatusPill({ status }: { status: ContextBindingStatusDto }) {
+  const Icon = status === "FRESH" ? CheckCircle2 : status === "STALE" ? AlertTriangle : ShieldAlert;
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-semibold", contextStatusClass(status))}>
+      <Icon className="h-3.5 w-3.5" />
+      {status}
+    </span>
+  );
+}
+
+function HealthFact({ label, value }: { label: string; value: string | null }) {
+  const displayValue = value && /^\d{4}-/.test(value) ? formatDate(value) : value ?? "Not available";
+  return (
+    <div className="rounded-lg border border-border bg-background/40 p-3">
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 break-words text-sm font-semibold">{displayValue}</div>
+    </div>
+  );
+}
+
+function SmallSourceLink({ to, label }: { to: string; label: string }) {
+  const Icon = label.includes("Brief") ? FileText : label.includes("Project") ? FolderKanban : label.includes("Artifacts") ? GitBranch : ArrowUpRight;
+  return (
+    <Link to={to} className="flex items-center justify-between gap-3 rounded-md border border-border bg-muted/20 px-3 py-2 text-sm hover:border-primary/50">
+      <span>{label}</span>
+      <Icon className="h-4 w-4 text-primary" />
+    </Link>
+  );
+}
+
+function deriveContextHealth(snapshot: LocalDocumentSnapshotDto | null, workOrders: WorkOrderDto[]): ContextBindingStatusDto {
+  if (snapshot?.isStale || snapshot?.scanStatus === "STALE") return "STALE";
+  const active = workOrders.filter((order) => !["COMPLETED", "ARCHIVED", "CANCELLED"].includes(order.status));
+  if (active.some((order) => order.contextBindingStatus === "MISSING")) return "MISSING";
+  if (active.some((order) => order.contextBindingStatus === "STALE")) return "STALE";
+  if (active.some((order) => order.contextBindingStatus === "PARTIAL")) return "PARTIAL";
+  return snapshot ? "FRESH" : "MISSING";
+}
+
+function contextStatusClass(status: ContextBindingStatusDto) {
+  if (status === "FRESH") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "MISSING") return "border-red-500/40 bg-red-500/10 text-red-200";
+  if (status === "STALE") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  return "border-cyan-500/40 bg-cyan-500/10 text-cyan-200";
 }
 
 function Metric({ label, value, warn }: { label: string; value: number; warn?: boolean }) {

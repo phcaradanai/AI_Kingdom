@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { FolderKanban, Save, Search } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, CheckCircle2, Clock3, FolderKanban, RefreshCw, Save, Search, ShieldAlert } from "lucide-react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { ProjectDto, ProjectPayload, ProjectPriority, ProjectStatus } from "@/types/api";
+import type { ContextBindingStatusDto, ProjectDto, ProjectPayload, ProjectPriority, ProjectStatus, WorkOrderDto } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -31,6 +31,14 @@ const blankProject: ProjectPayload = {
   activeMilestone: ""
 };
 
+type ProjectSummary = {
+  contextStatus: ContextBindingStatusDto | "UNKNOWN";
+  activeWorkCount: number;
+  affectedWorkCount: number;
+  lastContextBoundAt: string | null;
+  loadError: boolean;
+};
+
 export function ProjectsPage() {
   const user = useAuthStore((state) => state.user);
   const canEdit = user?.role === "KING" || user?.role === "CROWN_PRINCE";
@@ -41,12 +49,62 @@ export function ProjectsPage() {
   const [status, setStatus] = useState("");
   const [priority, setPriority] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [summaries, setSummaries] = useState<Record<string, ProjectSummary>>({});
 
   const selected = useMemo(() => projects.find((project) => project.id === selectedId) ?? null, [projects, selectedId]);
+  const selectedSummary = selected ? summaries[selected.id] : null;
 
   async function load() {
-    const response = await api.projects({ q: query || undefined, status: status || undefined, priority: priority || undefined });
-    setProjects(response.projects);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const response = await api.projects({ q: query || undefined, status: status || undefined, priority: priority || undefined });
+      setProjects(response.projects);
+      setSelectedId((current) => current && response.projects.some((project) => project.id === current) ? current : response.projects[0]?.id ?? null);
+      void loadSummaries(response.projects);
+    } catch (err) {
+      setProjects([]);
+      setSummaries({});
+      setLoadError(err instanceof Error ? err.message : "Unable to load projects");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function loadSummaries(items: ProjectDto[]) {
+    const entries = await Promise.all(items.map(async (project) => {
+      try {
+        const [workOrdersResult, health] = await Promise.all([
+          api.projectWorkOrders(project.id).catch(() => ({ workOrders: [] as WorkOrderDto[] })),
+          api.getProjectContextHealth(project.id).catch(() => null)
+        ]);
+        const activeWorkOrders = workOrdersResult.workOrders.filter((order) => !["COMPLETED", "ARCHIVED", "CANCELLED"].includes(order.status));
+        const affected = health?.openWorkOrders.filter((order) => !["COMPLETED", "ARCHIVED", "CANCELLED"].includes(order.status)).length ?? activeWorkOrders.filter((order) => order.contextBindingStatus && order.contextBindingStatus !== "FRESH").length;
+        const lastContextBoundAt = health?.openWorkOrders
+          .map((order) => order.contextBoundAt)
+          .filter((value): value is string => Boolean(value))
+          .sort()
+          .at(-1) ?? null;
+        return [project.id, {
+          contextStatus: health?.status ?? deriveContextStatus(activeWorkOrders),
+          activeWorkCount: activeWorkOrders.length,
+          affectedWorkCount: affected,
+          lastContextBoundAt,
+          loadError: false
+        } satisfies ProjectSummary] as const;
+      } catch {
+        return [project.id, {
+          contextStatus: "UNKNOWN",
+          activeWorkCount: 0,
+          affectedWorkCount: 0,
+          lastContextBoundAt: null,
+          loadError: true
+        } satisfies ProjectSummary] as const;
+      }
+    }));
+    setSummaries(Object.fromEntries(entries));
   }
 
   useEffect(() => {
@@ -78,7 +136,7 @@ export function ProjectsPage() {
       <PageHeader
         eyebrow="Project Workspace"
         title="Projects"
-        description="Organize long-running kingdom initiatives, route work automatically, and keep project context compact."
+        description="Project source context, local docs, artifacts, and active implementation work in one command surface."
       />
 
       <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
@@ -110,29 +168,74 @@ export function ProjectsPage() {
           </Card>
 
           {canEdit ? <Button className="w-full" onClick={() => select(null)}>Create Project</Button> : null}
-          {projects.map((project) => (
-            <Card key={project.id} className={cn("transition", selectedId === project.id && "border-primary/60 bg-primary/10")}>
-              <button className="w-full text-left" onClick={() => select(project)}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-display text-lg">{project.name}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">{project.activeMilestone || project.codename || "No milestone set"}</p>
-                  </div>
-                  <FolderKanban className="h-5 w-5 text-primary" />
+          {loadError ? (
+            <Card className="border-red-500/40 bg-red-500/10">
+              <div className="flex items-start gap-3">
+                <ShieldAlert className="mt-0.5 h-5 w-5 text-red-300" />
+                <div>
+                  <h2 className="font-display text-lg">Projects unavailable</h2>
+                  <p className="mt-1 text-sm text-red-100">{loadError}</p>
+                  <Button className="mt-3" variant="outline" onClick={() => void load()}><RefreshCw className="h-4 w-4" />Retry</Button>
                 </div>
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                  <span className="rounded-full border border-border px-2 py-1">{project.status}</span>
-                  <span className="rounded-full border border-border px-2 py-1">{project.priority}</span>
-                  <span>{formatDate(project.updatedAt)}</span>
-                </div>
-              </button>
-              <Link className="mt-4 inline-flex text-sm text-primary hover:underline" to={`/projects/${project.id}`}>Open workspace</Link>
+              </div>
             </Card>
-          ))}
+          ) : null}
+          {loading ? (
+            <div className="space-y-3">
+              {[0, 1, 2].map((item) => <ProjectSkeleton key={item} />)}
+            </div>
+          ) : null}
+          {!loading && !loadError && projects.length === 0 ? (
+            <Card>
+              <h2 className="font-display text-lg">No projects found</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Create a project or clear filters to see project context health here.</p>
+            </Card>
+          ) : null}
+          {!loading && !loadError ? projects.map((project) => (
+            <ProjectListCard
+              key={project.id}
+              project={project}
+              summary={summaries[project.id]}
+              selected={selectedId === project.id}
+              onSelect={() => select(project)}
+            />
+          )) : null}
         </div>
 
         <Card>
-          <h2 className="font-display text-2xl">{selected ? selected.name : "Project Detail"}</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="font-display text-2xl">{selected ? selected.name : "Project Detail"}</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {selected ? selected.activeMilestone || selected.codename || "Review project source context and routing fields." : "Create or select a project."}
+              </p>
+            </div>
+            {selected ? (
+              <Link className="inline-flex" to={`/projects/${selected.id}`}>
+                <Button type="button"><ArrowUpRight className="h-4 w-4" />Open Context Workspace</Button>
+              </Link>
+            ) : null}
+          </div>
+          {selected ? (
+            <div className="mt-5 grid gap-3 lg:grid-cols-3">
+              <ProjectInfoTile label="Context Health" value={selectedSummary?.contextStatus ?? "Loading"} tone={selectedSummary?.contextStatus ?? "UNKNOWN"} />
+              <ProjectInfoTile label="Active Work" value={String(selectedSummary?.activeWorkCount ?? 0)} />
+              <ProjectInfoTile label="Needs Refresh" value={String(selectedSummary?.affectedWorkCount ?? 0)} tone={(selectedSummary?.affectedWorkCount ?? 0) > 0 ? "STALE" : "FRESH"} />
+            </div>
+          ) : null}
+          {selected ? (
+            <div className="mt-5 rounded-lg border border-border bg-muted/20 p-4">
+              <h3 className="font-display text-lg">Source of Truth</h3>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <SourceLink to={`/projects/${selected.id}`} label="Project Context" description="Local docs, repository snapshot, context health." />
+                <SourceLink to="/work-orders" label="Work Orders" description="Implementation queue and affected active work." />
+                <SourceLink to="/inbox" label="Kingdom Inbox" description="Live next actions and blocking context items." />
+                <SourceLink to="/project-inbox" label="Project Inbox" description="Unassigned or low-confidence project routing." />
+                <SourceLink to="/artifacts" label="Artifacts / Local Docs" description="Generated source artifacts and project documents." />
+                <SourceLink to="/royal-brief" label="Royal Brief" description="Daily generated context and health summary." />
+              </div>
+            </div>
+          ) : null}
           <form className="mt-5 space-y-4" onSubmit={submit}>
             <div className="grid gap-3 sm:grid-cols-2">
               <FormField id="proj-name" label="Name" required>
@@ -188,6 +291,107 @@ export function ProjectsPage() {
       </div>
     </>
   );
+}
+
+function ProjectListCard({ project, summary, selected, onSelect }: { project: ProjectDto; summary?: ProjectSummary; selected: boolean; onSelect: () => void }) {
+  const contextStatus = summary?.contextStatus ?? "UNKNOWN";
+  return (
+    <Card className={cn("transition", selected && "border-primary/60 bg-primary/10")}>
+      <button className="w-full text-left" onClick={onSelect}>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="break-words font-display text-lg leading-tight">{project.name}</h2>
+            <p className="mt-1 break-words text-xs text-muted-foreground">{project.activeMilestone || project.codename || "No milestone set"}</p>
+          </div>
+          <FolderKanban className="h-5 w-5 shrink-0 text-primary" />
+        </div>
+        <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
+          <Badge>{project.status}</Badge>
+          <Badge>{project.priority}</Badge>
+          <StatusBadge status={contextStatus} />
+        </div>
+        <div className="mt-3 grid gap-2 text-xs text-muted-foreground">
+          <div className="break-words">
+            <span className="text-foreground">Repo: </span>{project.repositoryUrl || project.localPath || "No repository reference"}
+          </div>
+          <div className="flex flex-wrap gap-x-4 gap-y-1">
+            <span><Clock3 className="mr-1 inline h-3.5 w-3.5" />Last activity: {formatDate(project.updatedAt)}</span>
+            <span>Active work: {summary?.activeWorkCount ?? "…"}</span>
+            <span>Affected: {summary?.affectedWorkCount ?? "…"}</span>
+          </div>
+        </div>
+      </button>
+      <Link className="mt-4 inline-flex text-sm text-primary hover:underline" to={`/projects/${project.id}`}>Open workspace</Link>
+    </Card>
+  );
+}
+
+function ProjectSkeleton() {
+  return (
+    <Card>
+      <div className="h-5 w-2/3 rounded bg-muted/50" />
+      <div className="mt-3 h-3 w-1/2 rounded bg-muted/40" />
+      <div className="mt-4 grid gap-2">
+        <div className="h-3 rounded bg-muted/30" />
+        <div className="h-3 w-4/5 rounded bg-muted/30" />
+      </div>
+    </Card>
+  );
+}
+
+function ProjectInfoTile({ label, value, tone }: { label: string; value: string; tone?: ContextBindingStatusDto | "UNKNOWN" }) {
+  return (
+    <div className={cn("rounded-lg border border-border bg-muted/20 p-3", tone && tone !== "FRESH" && "border-amber-500/40 bg-amber-500/10", tone === "FRESH" && "border-emerald-500/30 bg-emerald-500/10")}>
+      <div className="text-xs uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="mt-1 text-lg font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function SourceLink({ to, label, description }: { to: string; label: string; description: string }) {
+  return (
+    <Link to={to} className="rounded-lg border border-border bg-background/40 p-3 transition hover:border-primary/50 hover:bg-primary/10">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <div className="font-semibold">{label}</div>
+          <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+        </div>
+        <ArrowUpRight className="h-4 w-4 shrink-0 text-primary" />
+      </div>
+    </Link>
+  );
+}
+
+function StatusBadge({ status }: { status: ContextBindingStatusDto | "UNKNOWN" }) {
+  const Icon = status === "FRESH" ? CheckCircle2 : status === "UNKNOWN" ? AlertTriangle : ShieldAlert;
+  return (
+    <span className={cn("inline-flex items-center gap-1 rounded-full border px-2 py-1", contextStatusClass(status))}>
+      <Icon className="h-3.5 w-3.5" />
+      Context {status}
+    </span>
+  );
+}
+
+function Badge({ children }: { children: string }) {
+  return <span className="rounded-full border border-border px-2 py-1">{children}</span>;
+}
+
+function deriveContextStatus(workOrders: WorkOrderDto[]): ContextBindingStatusDto | "UNKNOWN" {
+  const active = workOrders.filter((order) => !["COMPLETED", "ARCHIVED", "CANCELLED"].includes(order.status));
+  if (active.length === 0) return "FRESH";
+  if (active.some((order) => order.contextBindingStatus === "MISSING")) return "MISSING";
+  if (active.some((order) => order.contextBindingStatus === "STALE")) return "STALE";
+  if (active.some((order) => order.contextBindingStatus === "PARTIAL")) return "PARTIAL";
+  if (active.every((order) => order.contextBindingStatus === "FRESH")) return "FRESH";
+  return "UNKNOWN";
+}
+
+function contextStatusClass(status: ContextBindingStatusDto | "UNKNOWN") {
+  if (status === "FRESH") return "border-emerald-500/40 bg-emerald-500/10 text-emerald-200";
+  if (status === "MISSING") return "border-red-500/40 bg-red-500/10 text-red-200";
+  if (status === "STALE") return "border-amber-500/40 bg-amber-500/10 text-amber-200";
+  if (status === "PARTIAL") return "border-cyan-500/40 bg-cyan-500/10 text-cyan-200";
+  return "border-border bg-muted/30 text-muted-foreground";
 }
 
 function toPayload(project: ProjectDto): ProjectPayload {
