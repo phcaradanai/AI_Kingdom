@@ -18,7 +18,8 @@ import { routeProjectForSource } from "../services/projectRoutingService.js";
 import {
   bindFreshContextToWorkOrder,
   explainContextBindingStatus,
-  markWorkOrderContextStale
+  markWorkOrderContextStale,
+  repairWorkOrderContext
 } from "../services/projectContextBindingService.js";
 
 const router = Router();
@@ -340,6 +341,20 @@ router.post("/:id/bind-context", requireRole("KING", "CROWN_PRINCE"), async (req
 });
 
 const markStaleSchema = z.object({ reason: z.string().trim().min(1).max(500).default("Manually marked stale") });
+
+/** POST /api/work-orders/:id/rebind-context — repair stale or missing context binding (KING/CROWN_PRINCE). */
+router.post("/:id/rebind-context", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const result = await repairWorkOrderContext(req.params.id as string, { userId: req.user?.id });
+    res.json({ result });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
 
 /** POST /api/work-orders/:id/mark-context-stale — KING/CROWN_PRINCE. */
 router.post("/:id/mark-context-stale", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {

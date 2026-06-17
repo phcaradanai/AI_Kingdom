@@ -1959,3 +1959,19 @@ export type ProjectContextHealthDto = {
     boundToLatestSnapshot: boolean;
   }>;
 };
+
+export type RepairWorkOrderContextResultDto = {
+  workOrderId: string;
+  status: "BOUND" | "SKIPPED";
+  previousStatus: string;
+  newStatus: string | null;
+  skipReason?: string;
+};
+
+export type BulkRepairResultDto = {
+  projectId: string;
+  repaired: number;
+  attempted: number;
+  skipped: number;
+  results: RepairWorkOrderContextResultDto[];
+};

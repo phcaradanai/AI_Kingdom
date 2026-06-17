@@ -14,7 +14,7 @@ import {
   listLocalDocumentInsights,
   readLocalDocumentFile
 } from "../services/localDocumentAccessService.js";
-import { explainContextBindingStatus } from "../services/projectContextBindingService.js";
+import { explainContextBindingStatus, repairProjectWorkOrderContexts } from "../services/projectContextBindingService.js";
 
 const router = Router();
 
@@ -381,6 +381,20 @@ function listProjectRows(model: "task" | "matter" | "workOrder" | "report" | "me
     }
   };
 }
+
+/** POST /api/projects/:id/rebind-contexts — bulk-repair MISSING/STALE work order context bindings (KING/CROWN_PRINCE). */
+router.post("/:id/rebind-contexts", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const result = await repairProjectWorkOrderContexts(req.params.id as string, { userId: req.user?.id });
+    res.json({ result });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
 
 function uniqueLower(values: string[]) {
   return [...new Set(values.map((value) => value.toLowerCase()))];

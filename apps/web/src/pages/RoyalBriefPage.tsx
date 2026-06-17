@@ -92,7 +92,29 @@ export function RoyalBriefPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [showProvenance, setShowProvenance] = useState(false);
+  const [repairingContextId, setRepairingContextId] = useState<string | null>(null);
+  const [repairMessage, setRepairMessage] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
+  const canRepair = user?.role === "KING" || user?.role === "CROWN_PRINCE";
+
+  async function repairWorkOrderContext(workOrderId: string) {
+    if (!canRepair) return;
+    setRepairingContextId(workOrderId);
+    setRepairMessage(null);
+    try {
+      const res = await api.rebindWorkOrderContext(workOrderId);
+      const r = res.result;
+      if (r.status === "SKIPPED") {
+        setRepairMessage(`Skipped — work order has no linked project.`);
+      } else {
+        setRepairMessage(`Context rebound: ${r.previousStatus} → ${r.newStatus ?? "—"}`);
+      }
+    } catch {
+      setRepairMessage("Repair failed. Try again or scan local docs first.");
+    } finally {
+      setRepairingContextId(null);
+    }
+  }
 
   useEffect(() => {
     api.latestRoyalBrief()
@@ -235,12 +257,27 @@ export function RoyalBriefPage() {
           <StatCard className="bg-transparent border-none p-0" title="Stale-Context Patches" value={contextHealth.patchesWithStaleBaseContext?.length ?? 0} />
           <StatCard className="bg-transparent border-none p-0" title="Projects Need Refresh" value={contextHealth.projectsNeedingContextRefresh?.length ?? 0} />
         </div>
+        {repairMessage && (
+          <div className="mb-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">{repairMessage}</div>
+        )}
         {(contextHealth.workOrdersBlockedByContext?.length ?? 0) > 0 ? (
           <div className="space-y-2">
             {contextHealth.workOrdersBlockedByContext.map((w: any) => (
               <div key={w.id} className="flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-2 text-sm">
                 <span className="font-semibold text-foreground">{w.title}</span>
-                <span className="text-xs text-amber-400">{w.contextBindingStatus} context · {w.projectName}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-amber-400">{w.contextBindingStatus} context · {w.projectName}</span>
+                  {canRepair && (
+                    <button
+                      type="button"
+                      disabled={repairingContextId === w.id}
+                      onClick={() => void repairWorkOrderContext(w.id)}
+                      className="text-xs font-semibold text-primary underline hover:text-primary/80 disabled:opacity-50"
+                    >
+                      {repairingContextId === w.id ? "Repairing…" : "Repair Context"}
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

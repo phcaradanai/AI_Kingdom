@@ -186,6 +186,20 @@ export function WorkOrdersPage() {
     }
   }
 
+  async function repairContext() {
+    if (!selected || !canCreate) return;
+    setContextBusy(true);
+    setError(null);
+    try {
+      await api.rebindWorkOrderContext(selected.id);
+      await refreshContext(selected.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to repair context");
+    } finally {
+      setContextBusy(false);
+    }
+  }
+
   async function createJob() {
     if (!selected || !canCreate) return;
     setCreatingJob(true);
@@ -668,12 +682,33 @@ export function WorkOrdersPage() {
                         <span className="text-xs text-muted-foreground">never bound</span>
                       )}
                     </div>
-                    {workOrderContext.contextBindingStatus !== "FRESH" ? (
-                      <div className="flex items-center gap-1.5 text-xs text-orange-700 bg-orange-50 border border-orange-200 rounded px-2 py-1">
-                        <AlertTriangle className="h-3.5 w-3.5" />
-                        Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH. Scan local docs and bind/refresh context.
-                      </div>
-                    ) : null}
+                    {workOrderContext.contextBindingStatus !== "FRESH" ? (() => {
+                      const repairable = workOrderContext.current?.binding?.localDocumentSnapshotId != null;
+                      return (
+                        <div className="rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-700 space-y-1">
+                          <div className="flex items-center gap-1.5">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH.
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <span>Repairable: <span className="font-semibold">{repairable ? "YES" : "NO"}</span></span>
+                            {!repairable && (
+                              <span className="text-orange-600">{workOrderContext.projectId ? "No local docs snapshot — scan the project first." : "No linked project — assign a project first."}</span>
+                            )}
+                            {repairable && canCreate && (
+                              <button
+                                type="button"
+                                disabled={contextBusy}
+                                onClick={() => void repairContext()}
+                                className="font-semibold text-orange-700 underline hover:text-orange-900 disabled:opacity-50"
+                              >
+                                {contextBusy ? "Repairing…" : "Repair Context"}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })() : null}
                     <div className="grid gap-1 text-xs text-muted-foreground font-mono">
                       <div>Local snapshot: {workOrderContext.localDocumentSnapshotId ?? "—"}</div>
                       <div>Repository snapshot: {workOrderContext.repositorySnapshotId ?? "—"}</div>

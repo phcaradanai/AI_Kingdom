@@ -406,6 +406,99 @@ export async function attachContextToPatchArtifact(
   });
 }
 
+export type RepairWorkOrderContextResult = {
+  workOrderId: string;
+  status: "BOUND" | "SKIPPED";
+  previousStatus: string;
+  newStatus: string | null;
+  skipReason?: "no_project";
+};
+
+export type BulkRepairResult = {
+  projectId: string;
+  repaired: number;
+  attempted: number;
+  skipped: number;
+  results: RepairWorkOrderContextResult[];
+};
+
+/**
+ * Re-binds the latest project context to a single work order.
+ * Skips (without writing) if the work order has no linked project.
+ * Never triggers a scan — only re-reads whatever snapshot already exists.
+ */
+export async function repairWorkOrderContext(
+  workOrderId: string,
+  options: { userId?: string | null } = {}
+): Promise<RepairWorkOrderContextResult> {
+  const workOrder = await prisma.workOrder.findUnique({
+    where: { id: workOrderId },
+    select: { id: true, projectId: true, contextBindingStatus: true }
+  });
+  if (!workOrder) {
+    const err = new Error("WorkOrder not found");
+    err.name = "NotFoundError";
+    throw err;
+  }
+
+  if (!workOrder.projectId) {
+    return {
+      workOrderId,
+      status: "SKIPPED",
+      previousStatus: workOrder.contextBindingStatus,
+      newStatus: null,
+      skipReason: "no_project"
+    };
+  }
+
+  const previousStatus = workOrder.contextBindingStatus;
+  const { workOrder: updated } = await bindFreshContextToWorkOrder(workOrderId, options);
+  return {
+    workOrderId,
+    status: "BOUND",
+    previousStatus,
+    newStatus: updated.contextBindingStatus
+  };
+}
+
+/**
+ * Bulk-repairs context bindings for all MISSING or STALE work orders in a project.
+ */
+export async function repairProjectWorkOrderContexts(
+  projectId: string,
+  options: { userId?: string | null } = {}
+): Promise<BulkRepairResult> {
+  const project = await prisma.project.findUnique({ where: { id: projectId }, select: { id: true } });
+  if (!project) {
+    const err = new Error("Project not found");
+    err.name = "NotFoundError";
+    throw err;
+  }
+
+  const workOrders = await prisma.workOrder.findMany({
+    where: { projectId, contextBindingStatus: { in: ["MISSING", "STALE"] } },
+    select: { id: true }
+  });
+
+  const results: RepairWorkOrderContextResult[] = [];
+  let repaired = 0;
+  let attempted = 0;
+  let skipped = 0;
+
+  for (const wo of workOrders) {
+    const result = await repairWorkOrderContext(wo.id, options);
+    results.push(result);
+    if (result.status === "SKIPPED") {
+      skipped++;
+    } else {
+      attempted++;
+      if (result.newStatus === "FRESH") repaired++;
+    }
+  }
+
+  return { projectId, repaired, attempted, skipped, results };
+}
+
 /**
  * Human-readable explanation of a project's (and optionally a work order's)
  * context binding state. Read-only.

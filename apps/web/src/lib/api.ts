@@ -347,6 +347,10 @@ export const api = {
   markWorkOrderContextStale: (id: string, reason?: string) =>
     apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}/mark-context-stale`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) }),
   getProjectContextHealth: (id: string) => apiRequest<ProjectContextHealthDto>(`/projects/${id}/context-health`),
+  rebindWorkOrderContext: (id: string) =>
+    apiRequest<{ result: import("@/types/api").RepairWorkOrderContextResultDto }>(`/work-orders/${id}/rebind-context`, { method: "POST" }),
+  rebindProjectContexts: (projectId: string) =>
+    apiRequest<{ result: import("@/types/api").BulkRepairResultDto }>(`/projects/${projectId}/rebind-contexts`, { method: "POST" }),
   getWorkOrderRecommendations: (id: string) =>
     apiRequest<{ recommendations: import("@/types/api").ExternalAgentRecommendationDto[] }>(`/work-orders/${id}/external-agent-recommendations`),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>

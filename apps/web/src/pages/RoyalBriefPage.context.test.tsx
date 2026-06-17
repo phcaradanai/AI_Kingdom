@@ -54,7 +54,8 @@ const mockBrief: RoyalBriefDto = {
 
 const apiMocks = vi.hoisted(() => ({
   latestRoyalBrief: vi.fn(),
-  generateRoyalBrief: vi.fn()
+  generateRoyalBrief: vi.fn(),
+  rebindWorkOrderContext: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
