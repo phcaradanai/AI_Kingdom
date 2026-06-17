@@ -1,6 +1,7 @@
-import { AlertTriangle, BookOpen, CheckCircle2, ClipboardCheck, Cpu, FileText, Handshake, ScrollText, Search, Send, Server, ShieldCheck, Sparkles, Clock3, XCircle } from "lucide-react";
+import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, ChevronDown, ClipboardCheck, Cpu, ExternalLink, FileText, Handshake, Hammer, Layers, ScrollText, Search, Send, Server, ShieldCheck, Sparkles, Clock3, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -12,13 +13,13 @@ import { api } from "@/lib/api";
 import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { CouncilResponseDto, CouncilSessionDto, TaskMode } from "@/types/api";
+import type { CouncilResponseDto, CouncilSessionDto, TaskDto, TaskMode } from "@/types/api";
 
-const modes: Array<{ value: TaskMode; label: string; description: string }> = [
-  { value: "ASK", label: "Ask", description: "Clarify a question or decision." },
-  { value: "PLAN", label: "Plan", description: "Shape a roadmap or execution path." },
-  { value: "RESEARCH", label: "Research", description: "Investigate evidence and options." },
-  { value: "BUILD", label: "Build", description: "Prepare implementation work." }
+const modes: Array<{ value: TaskMode; label: string; description: string; useWhen: string }> = [
+  { value: "ASK", label: "ASK", description: "Use for a focused answer, decision, or quick strategic read.", useWhen: "Best when the King needs counsel, not a project plan." },
+  { value: "PLAN", label: "PLAN", description: "Use for roadmaps, milestones, dependencies, and sequencing.", useWhen: "Best before creating work orders or coordinating agents." },
+  { value: "RESEARCH", label: "RESEARCH", description: "Use for evidence gathering, tradeoffs, market checks, and options.", useWhen: "Best when the council should investigate before recommending." },
+  { value: "BUILD", label: "BUILD", description: "Use for implementation-ready scope, risks, validation, and handoff.", useWhen: "Best before a manual external-agent handoff." }
 ];
 
 const councilRoles = [
@@ -35,8 +36,12 @@ export function ThroneRoomPage() {
   const [error, setError] = useState<string | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
-  const [handoffWorkOrder, setHandoffWorkOrder] = useState<{ contextBindingStatus?: string } | null>(null);
+  const [handoffWorkOrder, setHandoffWorkOrder] = useState<{ id?: string; contextBindingStatus?: string } | null>(null);
   const [isCreatingHandoff, setIsCreatingHandoff] = useState(false);
+  const [createdWorkOrderIds, setCreatedWorkOrderIds] = useState<string[]>([]);
+  const [workOrderMessage, setWorkOrderMessage] = useState<string | null>(null);
+  const [workOrderError, setWorkOrderError] = useState<string | null>(null);
+  const [isCreatingWorkOrder, setIsCreatingWorkOrder] = useState(false);
   const submitCommand = useKingdomStore((state) => state.submitCommand);
   const isLoading = useKingdomStore((state) => state.isLoading);
   const isProcessing = useKingdomStore((state) => state.isProcessing);
@@ -78,6 +83,26 @@ export function ThroneRoomPage() {
     }
   }
 
+  async function createWorkOrder() {
+    if (!latestSession) return;
+    setWorkOrderMessage(null);
+    setWorkOrderError(null);
+    setIsCreatingWorkOrder(true);
+    try {
+      const result = await api.planCouncilWorkOrder(latestSession.id);
+      setCreatedWorkOrderIds(result.draftedWorkOrderIds);
+      setWorkOrderMessage(
+        result.drafted > 0
+          ? `${result.drafted} work order${result.drafted === 1 ? "" : "s"} drafted from the council recommendation.`
+          : "No new work orders were drafted; existing items may already cover this recommendation."
+      );
+    } catch (workOrderError) {
+      setWorkOrderError(workOrderError instanceof Error ? workOrderError.message : "Unable to create work order from council recommendation");
+    } finally {
+      setIsCreatingWorkOrder(false);
+    }
+  }
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
@@ -88,6 +113,16 @@ export function ThroneRoomPage() {
 
       <SectionCard contentClassName="p-6">
         <form onSubmit={onSubmit}>
+          <div className="mb-5 flex flex-col gap-2 border-b border-border/60 pb-5 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="font-display text-2xl">Royal Decree</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Choose how the council should treat this command before issuing it.</p>
+            </div>
+            <div className="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-primary">
+              Issue Decree stays the primary action
+            </div>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
             {modes.map((item) => (
               <button
@@ -101,8 +136,12 @@ export function ThroneRoomPage() {
                     : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
                 )}
               >
-                <div className="font-display tracking-wide text-base">{item.label}</div>
-                <div className="mt-1.5 text-xs opacity-80 leading-relaxed">{item.description}</div>
+                <div className="flex w-full items-center justify-between gap-2">
+                  <div className="font-display tracking-wide text-base">{item.label}</div>
+                  {mode === item.value && <CheckCircle2 className="h-4 w-4" />}
+                </div>
+                <div className="mt-2 text-sm opacity-90 leading-relaxed">{item.description}</div>
+                <div className="mt-3 rounded-md border border-current/10 bg-background/30 px-2.5 py-2 text-xs opacity-80 leading-relaxed">{item.useWhen}</div>
               </button>
             ))}
           </div>
@@ -171,30 +210,41 @@ export function ThroneRoomPage() {
           </div>
           
           {latestSession && (
-            <div className="mt-8 space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <h3 className="font-display text-lg text-primary">Role-Based Council</h3>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={latestSession.status !== "COMPLETED" || isCreatingHandoff}
-                  onClick={createHandoff}
-                >
-                  <Handshake className="mr-2 h-4 w-4" />
-                  {isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}
-                </Button>
-              </div>
+            <div className="mt-8 space-y-5">
+              <CouncilProgressPanel session={latestSession} />
 
-              {extractContextWarning(latestSession.finalSummary) && (
-                <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-sm text-amber-300">
-                  <div className="mb-1 flex items-center gap-2 font-semibold">
-                    <AlertTriangle className="h-4 w-4" />
-                    Context Warning
-                  </div>
-                  <MarkdownDocument content={extractContextWarning(latestSession.finalSummary) ?? ""} className="max-w-none text-sm" />
-                </div>
+              {latestSession.finalSummary && (
+                <FinalRecommendationPanel session={latestSession} />
               )}
 
+              <RecommendedNextStepCard
+                task={latestTask}
+                session={latestSession}
+                createdWorkOrderIds={createdWorkOrderIds}
+                handoffWorkOrderId={handoffWorkOrder?.id}
+                isCreatingWorkOrder={isCreatingWorkOrder}
+                isCreatingHandoff={isCreatingHandoff}
+                onCreateWorkOrder={createWorkOrder}
+                onCreateHandoff={createHandoff}
+              />
+
+              <CouncilSourceLinks
+                task={latestTask}
+                session={latestSession}
+                createdWorkOrderIds={createdWorkOrderIds}
+                handoffWorkOrderId={handoffWorkOrder?.id}
+              />
+
+              {extractContextWarning(latestSession.finalSummary) && (
+                <ContextWarningPanel warning={extractContextWarning(latestSession.finalSummary) ?? ""} />
+              )}
+
+              {workOrderMessage && (
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{workOrderMessage}</div>
+              )}
+              {workOrderError && (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{workOrderError}</div>
+              )}
               {handoffMessage && (
                 <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-300">{handoffMessage}</div>
               )}
@@ -203,55 +253,29 @@ export function ThroneRoomPage() {
               )}
               {handoffWorkOrder && (handoffWorkOrder.contextBindingStatus === "STALE" || handoffWorkOrder.contextBindingStatus === "MISSING") && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-300">
-                  <span className="font-semibold">Context not fresh</span> — run a local docs scan on the linked project before creating SANDBOX_PATCH jobs.
+                  <span className="font-semibold">Context not fresh</span> - run a local docs scan on the linked project before creating SANDBOX_PATCH jobs.
                 </div>
               )}
 
-              <div className="grid gap-4 xl:grid-cols-2">
-                {councilRoles.map((role) => (
-                  <CouncilRoleSection
-                    key={role.role}
-                    session={latestSession}
-                    role={role.role}
-                    label={role.label}
-                    icon={role.icon}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {latestSession?.finalSummary && (
-            <div className="mt-8 rounded-xl border border-primary/20 bg-background/60 p-6 backdrop-blur-md">
-              <div className="flex flex-wrap items-center justify-between gap-4 mb-4 border-b border-border/50 pb-4">
-                <h3 className="font-display text-lg text-primary flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Final Recommendation
-                </h3>
-                {latestSession.providerName && (
-                  <div className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground bg-muted/50 px-2.5 py-1 rounded-md border border-border/50">
-                    <Cpu className="h-3 w-3" />
-                    {getProviderDisplayName(latestSession.providerName)}
-                    {latestSession.modelUsed ? ` · ${getModelDisplayName(latestSession.modelUsed)}` : ""}
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-end justify-between gap-3">
+                  <div>
+                    <h3 className="font-display text-lg text-primary">Role-Based Council</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">Role identity stays visible while long reports stay collapsed until review.</p>
                   </div>
-                )}
+                </div>
+                <div className="grid gap-4 xl:grid-cols-2">
+                  {councilRoles.map((role) => (
+                    <CouncilRoleSection
+                      key={role.role}
+                      session={latestSession}
+                      role={role.role}
+                      label={role.label}
+                      icon={role.icon}
+                    />
+                  ))}
+                </div>
               </div>
-              <MarkdownDocument content={stripContextWarning(latestSession.finalSummary)} className="max-w-none" />
-              <div className="mt-6 flex flex-wrap gap-4 text-xs text-muted-foreground border-t border-border/50 pt-4">
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-primary/50"></div>
-                  <span className="font-semibold text-foreground/80">{latestSession.consultedMemoryIds.length}</span> Memories consulted
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="h-1.5 w-1.5 rounded-full bg-primary/50"></div>
-                  <span className="font-semibold text-foreground/80">{latestSession.autoSavedMemoryIds.length}</span> Memories auto-saved
-                </div>
-              </div>
-              {latestSession.fallbackNotice && (
-                <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-500/90 font-medium">
-                  {getProviderTerminologyText(latestSession.fallbackNotice)}
-                </div>
-              )}
             </div>
           )}
         </SectionCard>
@@ -309,6 +333,213 @@ export function ThroneRoomPage() {
   );
 }
 
+function CouncilProgressPanel({ session }: { session: CouncilSessionDto }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/55 p-4">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-display text-lg text-primary">Council Progress</h3>
+          <p className="mt-1 text-sm text-muted-foreground">{getCouncilProgressMessage(session)}</p>
+        </div>
+        <StatusBadge status={session.status} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {councilRoles.map((role) => {
+          const Icon = role.icon;
+          const status = getRoleStatus(session, role.role);
+          const StatusIcon = status === "completed" ? CheckCircle2 : status === "failed" ? XCircle : Clock3;
+          return (
+            <div key={role.role} className="rounded-lg border border-border/70 bg-muted/15 p-3">
+              <div className="mb-2 flex items-center gap-2 text-sm font-semibold">
+                <Icon className="h-4 w-4 text-primary" />
+                {role.role.replace("Royal ", "")}
+              </div>
+              <div className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest",
+                status === "completed" && "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+                status === "failed" && "border-destructive/30 bg-destructive/10 text-destructive",
+                status === "pending" && "border-amber-500/30 bg-amber-500/10 text-amber-300"
+              )}>
+                <StatusIcon className="h-3 w-3" />
+                {status === "completed" ? "Role completed" : status === "failed" ? "Failed role" : "Council convening"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {session.finalSummary && (
+        <div className="mt-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-semibold text-emerald-300">
+          Final synthesis ready
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FinalRecommendationPanel({ session }: { session: CouncilSessionDto }) {
+  if (!session.finalSummary) return null;
+  return (
+    <div className="rounded-xl border border-primary/20 bg-background/60 p-6 backdrop-blur-md">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-4 border-b border-border/50 pb-4">
+        <h3 className="font-display text-lg text-primary flex items-center gap-2">
+          <FileText className="h-5 w-5" />
+          Final Recommendation
+        </h3>
+        {session.providerName && (
+          <div className="flex items-center gap-1.5 rounded-md border border-border/50 bg-muted/50 px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            <Cpu className="h-3 w-3" />
+            {getProviderDisplayName(session.providerName)}
+            {session.modelUsed ? ` · ${getModelDisplayName(session.modelUsed)}` : ""}
+          </div>
+        )}
+      </div>
+      <MarkdownDocument content={stripContextWarning(session.finalSummary)} className="max-w-none" />
+      <div className="mt-6 flex flex-wrap gap-4 border-t border-border/50 pt-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-1.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-primary/50"></div>
+          <span className="font-semibold text-foreground/80">{session.consultedMemoryIds.length}</span> Memories consulted
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="h-1.5 w-1.5 rounded-full bg-primary/50"></div>
+          <span className="font-semibold text-foreground/80">{session.autoSavedMemoryIds.length}</span> Memories auto-saved
+        </div>
+      </div>
+      {session.fallbackNotice && (
+        <div className="mt-4 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs font-medium text-amber-500/90">
+          {getProviderTerminologyText(session.fallbackNotice)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecommendedNextStepCard({
+  task,
+  session,
+  createdWorkOrderIds,
+  handoffWorkOrderId,
+  isCreatingWorkOrder,
+  isCreatingHandoff,
+  onCreateWorkOrder,
+  onCreateHandoff
+}: {
+  task: TaskDto;
+  session: CouncilSessionDto;
+  createdWorkOrderIds: string[];
+  handoffWorkOrderId?: string;
+  isCreatingWorkOrder: boolean;
+  isCreatingHandoff: boolean;
+  onCreateWorkOrder: () => void;
+  onCreateHandoff: () => void;
+}) {
+  const nextStep = getRecommendedNextStep(task, session, createdWorkOrderIds.length > 0 || Boolean(handoffWorkOrderId));
+  const hasReport = (session.reports?.length ?? 0) > 0 || task.reports.length > 0;
+  const canAct = session.status === "COMPLETED";
+
+  return (
+    <div className="rounded-xl border border-primary/30 bg-primary/10 p-5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="max-w-2xl">
+          <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+            <ArrowRight className="h-3 w-3" />
+            Recommended Next Step
+          </div>
+          <h3 className="font-display text-xl">{nextStep.title}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-foreground/75">{nextStep.description}</p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
+          <Button type="button" disabled={!canAct || isCreatingWorkOrder} onClick={onCreateWorkOrder}>
+            <Hammer className="h-4 w-4" />
+            {isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order"}
+          </Button>
+          <Button type="button" variant="secondary" disabled={!canAct || isCreatingHandoff} onClick={onCreateHandoff}>
+            <Handshake className="h-4 w-4" />
+            {isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-4 flex flex-wrap gap-2 border-t border-primary/20 pt-4">
+        {(createdWorkOrderIds.length > 0 || handoffWorkOrderId) && (
+          <Link to="/work-orders" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-sm font-semibold text-primary hover:border-primary/50">
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open Created Work Order
+          </Link>
+        )}
+        <Link to={hasReport ? "/reports" : "/royal-brief"} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-sm font-semibold text-primary hover:border-primary/50">
+          <ExternalLink className="h-3.5 w-3.5" />
+          {hasReport ? "Open Source Brief / Report" : "Open Royal Brief"}
+        </Link>
+        {task.projectId && (
+          <Link to={`/projects/${task.projectId}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-sm font-semibold text-primary hover:border-primary/50">
+            <ExternalLink className="h-3.5 w-3.5" />
+            Open Project Context
+          </Link>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CouncilSourceLinks({
+  task,
+  session,
+  createdWorkOrderIds,
+  handoffWorkOrderId
+}: {
+  task: TaskDto;
+  session: CouncilSessionDto;
+  createdWorkOrderIds: string[];
+  handoffWorkOrderId?: string;
+}) {
+  const reportCount = new Set([...(session.reports ?? []), ...task.reports].map((report) => report.id)).size;
+  const links = [
+    { label: "Council Record", description: "Full council archive and source session.", to: "/council", show: true },
+    { label: "Royal Brief", description: "Daily summary remains the generated brief source.", to: "/royal-brief", show: true },
+    { label: "Project Context", description: task.projectId ? "Project docs, artifacts, and context binding." : "No project is linked to this decree yet.", to: task.projectId ? `/projects/${task.projectId}` : "/projects", show: true },
+    { label: "Work Order", description: createdWorkOrderIds.length > 0 || handoffWorkOrderId ? "Open the implementation queue for the created item." : "Implementation queue for council follow-up.", to: "/work-orders", show: true },
+    { label: "Generated Report", description: `${reportCount} report${reportCount === 1 ? "" : "s"} linked to this council.`, to: "/reports", show: reportCount > 0 },
+    { label: "Usage Trace", description: "Provider trace for final synthesis.", to: session.finalTraceId ? `/usage-traces/${session.finalTraceId}` : "", show: Boolean(session.finalTraceId) }
+  ];
+
+  return (
+    <div className="rounded-xl border border-border bg-background/50 p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <Layers className="h-4 w-4 text-primary" />
+        <h3 className="font-display text-lg text-primary">Source of Truth</h3>
+      </div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {links.filter((link) => link.show).map((link) => (
+          <Link key={link.label} to={link.to} className="group rounded-lg border border-border bg-muted/15 p-3 transition-colors hover:border-primary/45 hover:bg-muted/30">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-semibold">{link.label}</div>
+              <ExternalLink className="h-3.5 w-3.5 text-primary opacity-70 group-hover:opacity-100" />
+            </div>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{link.description}</p>
+          </Link>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ContextWarningPanel({ warning }: { warning: string }) {
+  return (
+    <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
+      <div className="mb-2 flex items-center gap-2 font-semibold">
+        <AlertTriangle className="h-4 w-4" />
+        Context Warning - Automation Gate
+      </div>
+      <p className="mb-3 text-amber-200/90">
+        Council counsel is still available. This warning blocks automation only until project context is fresh.
+      </p>
+      <div className="mb-3 rounded-md border border-amber-500/20 bg-background/30 px-3 py-2 font-semibold">
+        Run local docs scan before SANDBOX_PATCH.
+      </div>
+      <MarkdownDocument content={warning} className="max-w-none text-sm" />
+    </div>
+  );
+}
+
 function CouncilRoleSection({
   session,
   role,
@@ -320,18 +551,16 @@ function CouncilRoleSection({
   label: string;
   icon: LucideIcon;
 }) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const response = findRoleResponse(session.responses, role);
   const isGrandVizier = role === "Grand Vizier";
   const content = isGrandVizier
     ? stripContextWarning(session.finalSummary || response?.response || "")
     : response?.response || "";
-  const status = response || (isGrandVizier && session.finalSummary)
-    ? "completed"
-    : session.status === "FAILED"
-    ? "failed"
-    : "pending";
+  const status = getRoleStatus(session, role);
   const references = extractReferences(content || response?.response || "");
   const StatusIcon = status === "completed" ? CheckCircle2 : status === "failed" ? XCircle : Clock3;
+  const summary = summarizeCouncilContent(content);
 
   return (
     <div className="rounded-lg border border-border bg-background/50 p-4">
@@ -352,12 +581,31 @@ function CouncilRoleSection({
           status === "pending" && "border-amber-500/30 bg-amber-500/10 text-amber-300"
         )}>
           <StatusIcon className="h-3 w-3" />
-          {status}
+          {status === "completed" ? "completed" : status === "failed" ? "failed" : "pending"}
         </span>
       </div>
 
       {content ? (
-        <MarkdownDocument content={content} className="max-w-none text-sm" />
+        <div className="space-y-3">
+          <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-sm leading-relaxed text-foreground/80">
+            {summary}
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-8 px-2 text-xs"
+            aria-expanded={isExpanded}
+            onClick={() => setIsExpanded((current) => !current)}
+          >
+            <ChevronDown className={cn("h-4 w-4 transition-transform", isExpanded && "rotate-180")} />
+            {isExpanded ? `Hide ${role} details` : `Show ${role} details`}
+          </Button>
+          {isExpanded && (
+            <div className="rounded-lg border border-border/70 bg-background/60 p-4">
+              <MarkdownDocument content={content} className="max-w-none text-sm" />
+            </div>
+          )}
+        </div>
       ) : (
         <div className="rounded-md border border-border/60 bg-muted/20 p-3 text-sm text-muted-foreground">
           Awaiting role-specific counsel.
@@ -376,6 +624,71 @@ function CouncilRoleSection({
       )}
     </div>
   );
+}
+
+type RoleProgressStatus = "completed" | "failed" | "pending";
+
+function getRoleStatus(session: CouncilSessionDto, role: string): RoleProgressStatus {
+  const response = findRoleResponse(session.responses, role);
+  const isGrandVizier = role === "Grand Vizier";
+  if (response || (isGrandVizier && session.finalSummary)) return "completed";
+  if (session.status === "FAILED") return "failed";
+  return "pending";
+}
+
+function getCouncilProgressMessage(session: CouncilSessionDto): string {
+  if (session.finalSummary) return "Final synthesis ready. Review the recommendation, then choose a manual follow-up path.";
+  if (session.status === "FAILED") return "A council role failed. Review the failed role before creating follow-up work.";
+  if (session.status === "RUNNING") return "Council convening. Role updates appear here as they complete.";
+  return "Council is queued. The final synthesis will appear here when ready.";
+}
+
+function getRecommendedNextStep(task: TaskDto, session: CouncilSessionDto, hasCreatedWorkOrder: boolean) {
+  const warning = extractContextWarning(session.finalSummary);
+  if (session.status === "FAILED") {
+    return {
+      title: "Review failed role output",
+      description: "Council did not complete cleanly. Use the role reports and council record as the source before creating follow-up work."
+    };
+  }
+  if (session.status !== "COMPLETED") {
+    return {
+      title: "Wait for final synthesis",
+      description: "The council is still convening. Create work orders or handoffs only after the Grand Vizier produces a final recommendation."
+    };
+  }
+  if (warning) {
+    return {
+      title: "Run local docs scan before SANDBOX_PATCH",
+      description: "The council completed, but automation needs fresh project context. Manual review and handoff remain available; patch execution should wait for fresh local docs."
+    };
+  }
+  if (hasCreatedWorkOrder) {
+    return {
+      title: "Open the created work order",
+      description: "A follow-up item now exists in the implementation queue. Use Work Orders as the source of truth for assignment, context, automation, and reports."
+    };
+  }
+  if (task.mode === "BUILD") {
+    return {
+      title: "Create an implementation handoff",
+      description: "This decree was issued in BUILD mode. Create a Work Order or External Agent Handoff so execution stays in the implementation queue."
+    };
+  }
+  return {
+    title: "Choose the follow-up path",
+    description: "Use Create Work Order for implementation tracking, or create an External Agent Handoff when another coding agent should receive the council brief."
+  };
+}
+
+function summarizeCouncilContent(content: string): string {
+  const cleaned = stripContextWarning(content)
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-*#\s]+/, "").trim())
+    .filter(Boolean)
+    .find((line) => line.length > 20);
+  if (!cleaned) return "Role report is ready for review.";
+  return cleaned.length > 220 ? `${cleaned.slice(0, 217).trim()}...` : cleaned;
 }
 
 function findRoleResponse(responses: CouncilResponseDto[], role: string): CouncilResponseDto | undefined {
