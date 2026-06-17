@@ -94,6 +94,8 @@ export function RoyalBriefPage() {
   const [showProvenance, setShowProvenance] = useState(false);
   const [repairingContextId, setRepairingContextId] = useState<string | null>(null);
   const [repairMessage, setRepairMessage] = useState<string | null>(null);
+  const [reconciling, setReconciling] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
   const user = useAuthStore((state) => state.user);
   const canRepair = user?.role === "KING" || user?.role === "CROWN_PRINCE";
 
@@ -113,6 +115,29 @@ export function RoyalBriefPage() {
       setRepairMessage("Repair failed. Try again or scan local docs first.");
     } finally {
       setRepairingContextId(null);
+    }
+  }
+
+  async function reconcileOldWorkOrders() {
+    if (!canRepair) return;
+    setReconciling(true);
+    setReconcileMessage(null);
+    try {
+      const res = await api.reconcileContextWarnings();
+      const r = res.result;
+      const parts: string[] = [];
+      if (r.archived > 0) parts.push(`${r.archived} archived`);
+      if (r.contextRepaired > 0) parts.push(`${r.contextRepaired} context repaired`);
+      if (r.skipped > 0) parts.push(`${r.skipped} skipped`);
+      setReconcileMessage(
+        r.totalInspected === 0
+          ? "No stale work orders found — context health is clean."
+          : `Reconciled ${r.totalInspected} work order(s): ${parts.join(", ") || "no changes"}.`
+      );
+    } catch {
+      setReconcileMessage("Reconcile failed. Try again.");
+    } finally {
+      setReconciling(false);
     }
   }
 
@@ -257,11 +282,26 @@ export function RoyalBriefPage() {
           <StatCard className="bg-transparent border-none p-0" title="Stale-Context Patches" value={contextHealth.patchesWithStaleBaseContext?.length ?? 0} />
           <StatCard className="bg-transparent border-none p-0" title="Projects Need Refresh" value={contextHealth.projectsNeedingContextRefresh?.length ?? 0} />
         </div>
+        {reconcileMessage && (
+          <div className="mb-3 rounded-lg border border-green-500/30 bg-green-500/10 px-3 py-2 text-xs text-green-400">{reconcileMessage}</div>
+        )}
         {repairMessage && (
           <div className="mb-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs text-primary">{repairMessage}</div>
         )}
         {(contextHealth.workOrdersBlockedByContext?.length ?? 0) > 0 ? (
           <div className="space-y-2">
+            {canRepair && (
+              <div className="flex justify-end mb-1">
+                <button
+                  type="button"
+                  disabled={reconciling}
+                  onClick={() => void reconcileOldWorkOrders()}
+                  className="text-xs font-semibold text-muted-foreground underline hover:text-foreground disabled:opacity-50"
+                >
+                  {reconciling ? "Reconciling…" : "Reconcile Old Work Orders"}
+                </button>
+              </div>
+            )}
             {contextHealth.workOrdersBlockedByContext.map((w: any) => (
               <div key={w.id} className="flex items-center justify-between rounded-lg border border-border/60 bg-card/30 px-4 py-2 text-sm">
                 <span className="font-semibold text-foreground">{w.title}</span>

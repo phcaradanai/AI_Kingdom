@@ -351,6 +351,8 @@ export const api = {
     apiRequest<{ result: import("@/types/api").RepairWorkOrderContextResultDto }>(`/work-orders/${id}/rebind-context`, { method: "POST" }),
   rebindProjectContexts: (projectId: string) =>
     apiRequest<{ result: import("@/types/api").BulkRepairResultDto }>(`/projects/${projectId}/rebind-contexts`, { method: "POST" }),
+  reconcileContextWarnings: () =>
+    apiRequest<{ result: import("@/types/api").ReconcileContextWarningsResultDto }>("/work-orders/reconcile-context-warnings", { method: "POST" }),
   getWorkOrderRecommendations: (id: string) =>
     apiRequest<{ recommendations: import("@/types/api").ExternalAgentRecommendationDto[] }>(`/work-orders/${id}/external-agent-recommendations`),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>

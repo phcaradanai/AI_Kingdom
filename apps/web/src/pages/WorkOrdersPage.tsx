@@ -93,6 +93,7 @@ export function WorkOrdersPage() {
   const [patchActionId, setPatchActionId] = useState<string | null>(null);
   const [workOrderContext, setWorkOrderContext] = useState<WorkOrderContextDto | null>(null);
   const [contextBusy, setContextBusy] = useState(false);
+  const [reconcileMessage, setReconcileMessage] = useState<string | null>(null);
   const [agentRecommendations, setAgentRecommendations] = useState<ExternalAgentRecommendationDto[]>([]);
 
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
@@ -124,6 +125,7 @@ export function WorkOrdersPage() {
     setDraft(order ? toPayload(order) : blankWorkOrder);
     setGeneratedPrompt("");
     setError(null);
+    setReconcileMessage(null);
     if (order) {
       Promise.all([
         api.automationJobs({ workOrderId: order.id }),
@@ -195,6 +197,32 @@ export function WorkOrdersPage() {
       await refreshContext(selected.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to repair context");
+    } finally {
+      setContextBusy(false);
+    }
+  }
+
+  async function reconcileContext() {
+    if (!canCreate) return;
+    setContextBusy(true);
+    setError(null);
+    setReconcileMessage(null);
+    try {
+      const res = await api.reconcileContextWarnings();
+      const r = res.result;
+      const parts: string[] = [];
+      if (r.archived > 0) parts.push(`${r.archived} archived`);
+      if (r.contextRepaired > 0) parts.push(`${r.contextRepaired} context repaired`);
+      if (r.skipped > 0) parts.push(`${r.skipped} skipped`);
+      setReconcileMessage(
+        r.totalInspected === 0
+          ? "No stale work orders found."
+          : `Reconciled ${r.totalInspected}: ${parts.join(", ") || "no changes"}.`
+      );
+      await load();
+      if (selected) await refreshContext(selected.id);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Reconcile failed");
     } finally {
       setContextBusy(false);
     }
@@ -682,6 +710,9 @@ export function WorkOrdersPage() {
                         <span className="text-xs text-muted-foreground">never bound</span>
                       )}
                     </div>
+                    {reconcileMessage && (
+                      <div className="rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs text-green-700">{reconcileMessage}</div>
+                    )}
                     {workOrderContext.contextBindingStatus !== "FRESH" ? (() => {
                       const repairable = workOrderContext.current?.binding?.localDocumentSnapshotId != null;
                       return (
@@ -690,7 +721,7 @@ export function WorkOrdersPage() {
                             <AlertTriangle className="h-3.5 w-3.5" />
                             Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH.
                           </div>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 flex-wrap">
                             <span>Repairable: <span className="font-semibold">{repairable ? "YES" : "NO"}</span></span>
                             {!repairable && (
                               <span className="text-orange-600">{workOrderContext.projectId ? "No local docs snapshot — scan the project first." : "No linked project — assign a project first."}</span>
@@ -703,6 +734,16 @@ export function WorkOrdersPage() {
                                 className="font-semibold text-orange-700 underline hover:text-orange-900 disabled:opacity-50"
                               >
                                 {contextBusy ? "Repairing…" : "Repair Context"}
+                              </button>
+                            )}
+                            {canCreate && (
+                              <button
+                                type="button"
+                                disabled={contextBusy}
+                                onClick={() => void reconcileContext()}
+                                className="font-semibold text-orange-500 underline hover:text-orange-700 disabled:opacity-50"
+                              >
+                                {contextBusy ? "Working…" : "Reconcile Old Work Orders"}
                               </button>
                             )}
                           </div>

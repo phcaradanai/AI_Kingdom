@@ -21,6 +21,7 @@ import {
   markWorkOrderContextStale,
   repairWorkOrderContext
 } from "../services/projectContextBindingService.js";
+import { reconcileContextWarnings } from "../services/workOrderLifecycleReconcileService.js";
 
 const router = Router();
 
@@ -267,6 +268,16 @@ router.post("/from-matter/:matterId", requireRole("KING", "CROWN_PRINCE"), async
       res.status(404).json({ error: error.message });
       return;
     }
+    next(error);
+  }
+});
+
+/** POST /api/work-orders/reconcile-context-warnings — bulk-reconcile active WOs with stale/missing context (KING/CROWN_PRINCE). */
+router.post("/reconcile-context-warnings", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const result = await reconcileContextWarnings();
+    res.json({ result });
+  } catch (error) {
     next(error);
   }
 });

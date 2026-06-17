@@ -1975,3 +1975,21 @@ export type BulkRepairResultDto = {
   skipped: number;
   results: RepairWorkOrderContextResultDto[];
 };
+
+export type ReconcileWorkOrderResultDto = {
+  workOrderId: string;
+  title: string;
+  action: "ARCHIVED" | "CONTEXT_REPAIRED" | "SKIPPED";
+  reason: string;
+  evidenceFound: string[];
+  previousStatus: string;
+  newStatus: string | null;
+};
+
+export type ReconcileContextWarningsResultDto = {
+  totalInspected: number;
+  archived: number;
+  contextRepaired: number;
+  skipped: number;
+  results: ReconcileWorkOrderResultDto[];
+};
