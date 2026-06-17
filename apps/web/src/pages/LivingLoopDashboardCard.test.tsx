@@ -1,4 +1,6 @@
 import { render, screen } from "@testing-library/react";
+import type React from "react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LivingLoopStatusDto } from "@/types/api";
 import { LivingLoopDashboardCard, RunLivingLoopButton } from "./DashboardPage";
@@ -38,6 +40,10 @@ const apiMocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
 
+vi.mock("@/stores/authStore", () => ({
+  useAuthStore: (selector: (state: { user: null }) => unknown) => selector({ user: null })
+}));
+
 afterEach(() => {
   vi.clearAllMocks();
 });
@@ -48,11 +54,15 @@ function getStatCardValue(title: string): string {
   return card.querySelector(".font-display")?.textContent ?? "";
 }
 
+function renderWithRouter(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
 describe("LivingLoopDashboardCard", () => {
   it("renders pending and high/critical counts from the loop status", async () => {
     apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
 
-    render(<LivingLoopDashboardCard />);
+    renderWithRouter(<LivingLoopDashboardCard />);
 
     expect(await screen.findByText("Pending")).toBeInTheDocument();
     expect(getStatCardValue("Pending")).toBe("2");
@@ -64,7 +74,7 @@ describe("LivingLoopDashboardCard", () => {
   it("shows auto validation jobs today and validation failures needing review", async () => {
     apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
 
-    render(<LivingLoopDashboardCard />);
+    renderWithRouter(<LivingLoopDashboardCard />);
 
     expect(await screen.findByText("Auto Validation Today")).toBeInTheDocument();
     expect(getStatCardValue("Auto Validation Today")).toBe("4");
@@ -74,7 +84,7 @@ describe("LivingLoopDashboardCard", () => {
   it("shows auto patch jobs today and patches needing review", async () => {
     apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
 
-    render(<LivingLoopDashboardCard />);
+    renderWithRouter(<LivingLoopDashboardCard />);
 
     expect(await screen.findByText("Auto Patch Jobs Today")).toBeInTheDocument();
     expect(getStatCardValue("Auto Patch Jobs Today")).toBe("0");
