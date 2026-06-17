@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ExternalAgentRecommendationDto, PatchArtifactDto, PublicUser, WorkOrderContextDto, WorkOrderDto } from "@/types/api";
 import { WorkOrdersPage } from "./WorkOrdersPage";
@@ -115,6 +116,7 @@ const apiMocks = vi.hoisted(() => ({
   createHandoffBrief: vi.fn(),
   getWorkOrderRecommendations: vi.fn(),
   rebindWorkOrderContext: vi.fn(),
+  refreshWorkOrderContext: vi.fn(),
   reconcileContextWarnings: vi.fn(),
   assignWorkOrderExternalAgent: vi.fn(),
   archiveWorkOrderAsCompleted: vi.fn()
@@ -140,7 +142,16 @@ function mockBaseApi(context: WorkOrderContextDto, patches: PatchArtifactDto[] =
   apiMocks.getWorkOrderContext.mockResolvedValue({ context });
   apiMocks.getWorkOrderRecommendations.mockResolvedValue({ recommendations: [] });
   apiMocks.rebindWorkOrderContext.mockResolvedValue({ result: { workOrderId: "wo-1", status: "BOUND", previousStatus: "MISSING", newStatus: "FRESH" } });
+  apiMocks.refreshWorkOrderContext.mockResolvedValue({ result: { workOrderId: "wo-1", status: "REFRESHED", previousStatus: "MISSING", newStatus: "FRESH" } });
   apiMocks.reconcileContextWarnings.mockResolvedValue({ result: { totalInspected: 0, archived: 0, contextRepaired: 0, skipped: 0, results: [] } });
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <WorkOrdersPage />
+    </MemoryRouter>
+  );
 }
 
 async function selectOrder() {
@@ -165,30 +176,63 @@ const mockRec: ExternalAgentRecommendationDto = {
 };
 
 describe("WorkOrdersPage — Project Context (M17E-2)", () => {
+  it("renders the Work Orders page", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Work Orders" })).toBeInTheDocument();
+    expect(screen.getByText("Work Queue")).toBeInTheDocument();
+  });
+
   it("shows the Project Context panel with binding details for a FRESH binding", async () => {
     setUser("KING");
     mockBaseApi(makeContext("FRESH"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     expect(await screen.findByText("Project Context")).toBeInTheDocument();
-    expect(screen.getByText("Context: FRESH")).toBeInTheDocument();
+    expect(screen.getAllByText("Context: FRESH").length).toBeGreaterThan(0);
     expect(screen.getByText("Local snapshot: snap-1")).toBeInTheDocument();
     expect(screen.getByText("Stack: Express, TypeScript")).toBeInTheDocument();
     expect(screen.getByText(/Important docs: README\.md/)).toBeInTheDocument();
     expect(screen.queryByText(/SANDBOX_PATCH jobs are blocked/)).not.toBeInTheDocument();
   });
 
+  it("selected work order shows Next Step card and source-of-truth links", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+
+    renderPage();
+    await selectOrder();
+
+    expect(await screen.findByText("Next Step")).toBeInTheDocument();
+    expect(screen.getAllByText("Assign external agent").length).toBeGreaterThan(0);
+
+    const links = Array.from(document.querySelectorAll("a")).map((link) => ({
+      text: link.textContent ?? "",
+      href: link.getAttribute("href")
+    }));
+    expect(links.some((link) => link.text.includes("Project context") && link.href === "/projects/proj-1")).toBe(true);
+    expect(links.some((link) => link.text.includes("Automation jobs") && link.href === "/automation-jobs")).toBe(true);
+    expect(links.some((link) => link.text.includes("External agent") && link.href === "/external-agents")).toBe(true);
+    expect(links.some((link) => link.text.includes("Reports") && link.href === "#work-order-history")).toBe(true);
+  });
+
   it("renders a stale context warning when the binding is STALE", async () => {
     setUser("KING");
     mockBaseApi(makeContext("STALE"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
-    expect(await screen.findByText("Context: STALE")).toBeInTheDocument();
+    expect((await screen.findAllByText("Context: STALE")).length).toBeGreaterThan(0);
     expect(screen.getByText(/Context is STALE — SANDBOX_PATCH jobs are blocked/)).toBeInTheDocument();
+    expect(screen.getAllByText(/Refresh context from the latest scanned local docs before creating a patch job/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Create Automation Job" })).toBeDisabled();
+    expect(screen.getAllByText(/Blocked: context is STALE/).length).toBeGreaterThan(0);
   });
 
   it("lets the KING bind/refresh and mark context stale", async () => {
@@ -198,11 +242,13 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
     apiMocks.bindWorkOrderContext.mockResolvedValue({ workOrder: mockOrder, binding: null });
     apiMocks.markWorkOrderContextStale.mockResolvedValue({ workOrder: mockOrder });
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
-    await userEvent.click(await screen.findByRole("button", { name: "Bind/Refresh Context" }));
-    await waitFor(() => expect(apiMocks.bindWorkOrderContext).toHaveBeenCalledWith("wo-1"));
+    const refreshButtons = await screen.findAllByRole("button", { name: "Refresh Context" });
+    expect(refreshButtons.length).toBeGreaterThan(0);
+    await userEvent.click(refreshButtons[0]!);
+    await waitFor(() => expect(apiMocks.refreshWorkOrderContext).toHaveBeenCalledWith("wo-1"));
 
     await userEvent.click(screen.getByRole("button", { name: "Mark Context Stale" }));
     await waitFor(() => expect(apiMocks.markWorkOrderContextStale).toHaveBeenCalledWith("wo-1", expect.any(String)));
@@ -212,11 +258,11 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
     setUser("SCRIBE");
     mockBaseApi(makeContext("FRESH"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     expect(await screen.findByText("Project Context")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Bind/Refresh Context" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh Context" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark Context Stale" })).not.toBeInTheDocument();
   });
 
@@ -224,7 +270,7 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
     setUser("KING");
     mockBaseApi(makeContext("FRESH"), [mockPatch]);
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     expect(await screen.findByText("Base Context Used")).toBeInTheDocument();
@@ -233,7 +279,7 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
     expect(screen.getByText(/Risk zones touched: apps\/api\/src\/services\/authService\.ts \(HIGH\)/)).toBeInTheDocument();
   });
 
-  it("shows 'local docs changed' message and hides Repair Context when localDocsChanged is true", async () => {
+  it("shows local docs scan guidance when localDocsChanged is true", async () => {
     setUser("KING");
     const staleWithLocalDocsChanged: WorkOrderContextDto = {
       ...makeContext("STALE"),
@@ -262,16 +308,14 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
     };
     mockBaseApi(staleWithLocalDocsChanged);
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
-    expect(await screen.findByText(/Local docs changed since last scan/)).toBeInTheDocument();
-    expect(screen.getByText(/Bind\/Refresh Context cannot fix this/)).toBeInTheDocument();
+    expect((await screen.findAllByText(/Run a local docs scan on the linked project/)).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Repair Context" })).not.toBeInTheDocument();
-    expect(screen.getByText(/Repairable:/).textContent).toContain("NO");
   });
 
-  it("shows Repair Context button when context is STALE but localDocsChanged is false", async () => {
+  it("shows Refresh Context guidance when context is STALE but localDocsChanged is false", async () => {
     setUser("KING");
     const staleRepairable: WorkOrderContextDto = {
       ...makeContext("STALE"),
@@ -301,14 +345,14 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
     mockBaseApi(staleRepairable);
     apiMocks.rebindWorkOrderContext.mockResolvedValue({ result: { workOrderId: "wo-1", status: "BOUND", previousStatus: "STALE", newStatus: "FRESH" } });
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     // Wait for the context badge to confirm the panel has rendered
-    expect(await screen.findByText("Context: STALE")).toBeInTheDocument();
+    expect((await screen.findAllByText("Context: STALE")).length).toBeGreaterThan(0);
     expect(screen.getByText(/Context is STALE — SANDBOX_PATCH jobs are blocked/)).toBeInTheDocument();
     expect(screen.queryByText(/Local docs changed since last scan/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Repair Context" })).toBeInTheDocument();
+    expect((await screen.findAllByRole("button", { name: "Refresh Context" })).length).toBeGreaterThan(0);
   });
 });
 
@@ -322,7 +366,7 @@ describe("WorkOrdersPage — Use This Agent (M18A-4)", () => {
       workOrder: { ...mockOrder, assignedExternalAgentId: "agent-1", assignedExternalAgent: { id: "agent-1", name: "Claude Code" } }
     });
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     await userEvent.click(await screen.findByRole("button", { name: "Use This Agent" }));
@@ -340,7 +384,7 @@ describe("WorkOrdersPage — Use This Agent (M18A-4)", () => {
       workOrder: { ...mockOrder, assignedExternalAgentId: "agent-1" }
     });
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     await userEvent.click(await screen.findByRole("button", { name: "Use This Agent" }));
@@ -354,7 +398,7 @@ describe("WorkOrdersPage — Use This Agent (M18A-4)", () => {
     apiMocks.getWorkOrderRecommendations.mockResolvedValue({ recommendations: [mockRec] });
     apiMocks.assignWorkOrderExternalAgent.mockRejectedValue(new Error("Server error assigning agent"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     await userEvent.click(await screen.findByRole("button", { name: "Use This Agent" }));
@@ -366,7 +410,7 @@ describe("WorkOrdersPage — Use This Agent (M18A-4)", () => {
     mockBaseApi(makeContext("FRESH"));
     apiMocks.getWorkOrderRecommendations.mockResolvedValue({ recommendations: [mockRec] });
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     await screen.findByText("Suggested External Agent");
@@ -379,7 +423,7 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
     setUser("KING");
     mockBaseApi(makeContext("FRESH"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     expect(await screen.findByRole("button", { name: "Archive as Completed" })).toBeInTheDocument();
@@ -389,7 +433,7 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
     setUser("CROWN_PRINCE");
     mockBaseApi(makeContext("FRESH"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     expect(await screen.findByRole("button", { name: "Archive as Completed" })).toBeInTheDocument();
@@ -399,10 +443,10 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
     setUser("MINISTER");
     mockBaseApi(makeContext("FRESH"));
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
-    await screen.findByText("Work Order Detail");
+    await screen.findByText("Overview");
     expect(screen.queryByRole("button", { name: "Archive as Completed" })).not.toBeInTheDocument();
   });
 
@@ -415,7 +459,7 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     await userEvent.click(await screen.findByRole("button", { name: "Archive as Completed" }));
@@ -431,7 +475,7 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
     mockBaseApi(makeContext("FRESH"));
     vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await selectOrder();
 
     await userEvent.click(await screen.findByRole("button", { name: "Archive as Completed" }));
@@ -452,12 +496,12 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
     apiMocks.rebindWorkOrderContext.mockResolvedValue({ result: { workOrderId: "wo-1", status: "BOUND", previousStatus: "MISSING", newStatus: "FRESH" } });
     apiMocks.reconcileContextWarnings.mockResolvedValue({ result: { totalInspected: 0, archived: 0, contextRepaired: 0, skipped: 0, results: [] } });
 
-    render(<WorkOrdersPage />);
+    renderPage();
     await screen.findByText("Fix the drawbridge");
     const { default: userEvent } = await import("@testing-library/user-event");
     await userEvent.click(screen.getByText("Fix the drawbridge"));
 
-    await screen.findByText("Work Order Detail");
+    await screen.findByText("Overview");
     expect(screen.queryByRole("button", { name: "Archive as Completed" })).not.toBeInTheDocument();
   });
 });

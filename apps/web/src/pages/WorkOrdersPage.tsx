@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
-import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye } from "lucide-react";
+import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye, ArrowRight, ExternalLink, Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
@@ -63,6 +64,341 @@ function getStatusLabel(status: string) {
   return labels[status] ?? `Unknown (${status})`;
 }
 
+function getContextStatus(order: WorkOrderDto | null, context: WorkOrderContextDto | null) {
+  return context?.contextBindingStatus ?? order?.contextBindingStatus ?? "MISSING";
+}
+
+function hasActiveAutomationJob(jobs: AutomationJobDto[]) {
+  return jobs.some((job) => ["QUEUED", "APPROVED", "CLAIMED", "RUNNING", "NEEDS_REVIEW"].includes(job.status));
+}
+
+function getContextGuidance(order: WorkOrderDto, context: WorkOrderContextDto | null) {
+  const status = getContextStatus(order, context);
+  const localDocsChanged = context?.current?.binding?.localDocsChanged === true;
+  const hasSnapshot = Boolean(context?.localDocumentSnapshotId || context?.current?.binding?.localDocumentSnapshotId);
+
+  if (status === "FRESH") {
+    return "Project context is fresh. SANDBOX_PATCH can be prepared when the work order is ready.";
+  }
+  if (!order.projectId && !context?.projectId) {
+    return "Assign a project before creating runner automation.";
+  }
+  if (localDocsChanged) {
+    return "Local docs changed since the last scan. Run a local docs scan on the linked project, then refresh context.";
+  }
+  if (!hasSnapshot) {
+    return "Run a local docs scan on the linked project, then refresh context.";
+  }
+  return "Refresh context from the latest scanned local docs before creating a patch job.";
+}
+
+function getAutomationBlockedReason(order: WorkOrderDto | null, context: WorkOrderContextDto | null, jobs: AutomationJobDto[]) {
+  if (!order) return null;
+  if (hasActiveAutomationJob(jobs)) return "An automation job is already active or waiting for review.";
+  const status = getContextStatus(order, context);
+  if (status !== "FRESH") return `Blocked: context is ${status}. ${getContextGuidance(order, context)}`;
+  return null;
+}
+
+function getRecommendedNextStep({
+  order,
+  context,
+  jobs,
+  patches,
+  generatedPrompt
+}: {
+  order: WorkOrderDto;
+  context: WorkOrderContextDto | null;
+  jobs: AutomationJobDto[];
+  patches: PatchArtifactDto[];
+  generatedPrompt: string;
+}) {
+  const contextStatus = getContextStatus(order, context);
+  const latestReport = order.implementationReports?.[0];
+
+  if (contextStatus !== "FRESH") {
+    return {
+      title: "Run local docs scan before patch",
+      description: getContextGuidance(order, context),
+      blocked: true,
+      sourceLabel: "Open project context",
+      sourceTo: order.projectId ? `/projects/${order.projectId}` : "/projects"
+    };
+  }
+  if (!order.assignedExternalAgentId) {
+    return {
+      title: "Assign external agent",
+      description: "Choose the external agent that should execute this work order, then generate the handoff.",
+      sourceLabel: "Review external agents",
+      sourceTo: "/external-agents"
+    };
+  }
+  if ((order.handoffBriefs?.length ?? 0) === 0) {
+    return {
+      title: "Generate handoff",
+      description: "Create the handoff brief so the assigned agent gets the current instructions and constraints.",
+      sourceLabel: "Review handoff section",
+      sourceTo: "#work-order-handoff"
+    };
+  }
+  if (!generatedPrompt) {
+    return {
+      title: "Copy handoff prompt",
+      description: "Generate or copy the external prompt before moving the order into implementation.",
+      sourceLabel: "Open prompt section",
+      sourceTo: "#work-order-prompt"
+    };
+  }
+  if (order.status === "IN_PROGRESS" || (order.implementationReports?.length ?? 0) === 0) {
+    return {
+      title: "Submit report",
+      description: "Capture what changed, what passed, and what still needs a decision.",
+      sourceLabel: "Open submit report",
+      sourceTo: "#work-order-submit-report"
+    };
+  }
+  if (patches.some((patch) => patch.validationStatus === "PENDING") || jobs.some((job) => job.status === "NEEDS_REVIEW") || order.status === "NEEDS_REVIEW") {
+    return {
+      title: "Review result",
+      description: latestReport?.nextRecommendedAction || "Review the report, patch artifact, and validation result before approving or archiving.",
+      sourceLabel: "Open review history",
+      sourceTo: "#work-order-history"
+    };
+  }
+  if (order.status === "COMPLETED") {
+    return {
+      title: "Archive completed",
+      description: "This work order is complete. Archive it only after the final report and any automation review are accepted.",
+      sourceLabel: "Review history",
+      sourceTo: "#work-order-history",
+      dangerous: true
+    };
+  }
+  return {
+    title: "Review work order",
+    description: latestReport?.nextRecommendedAction || "Confirm the overview, context, assigned agent, and handoff before taking the next action.",
+    sourceLabel: "Review overview",
+    sourceTo: "#work-order-overview"
+  };
+}
+
+function WorkOrderSection({
+  id,
+  title,
+  description,
+  source,
+  children
+}: {
+  id?: string;
+  title: string;
+  description?: string;
+  source?: { label: string; to: string };
+  children: ReactNode;
+}) {
+  return (
+    <Card id={id}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-display text-lg">{title}</h2>
+          {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+        </div>
+        {source ? (
+          source.to.startsWith("#") ? (
+            <a href={source.to} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+              {source.label}
+              <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : (
+            <Link to={source.to} className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline">
+              {source.label}
+              <ExternalLink className="h-3 w-3" />
+            </Link>
+          )
+        ) : null}
+      </div>
+      <div className="mt-4">{children}</div>
+    </Card>
+  );
+}
+
+function WorkOrderStatusSummary({
+  order,
+  contextStatus,
+  nextStep
+}: {
+  order: WorkOrderDto;
+  contextStatus: string;
+  nextStep: ReturnType<typeof getRecommendedNextStep>;
+}) {
+  const assignedAgent = order.assignedExternalAgent?.name ?? "Unassigned";
+  return (
+    <Card className="border-primary/30 bg-primary/5">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Work Order Detail</p>
+          <h2 className="mt-2 break-words font-display text-2xl leading-tight">{order.title}</h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{order.objective || "No objective recorded."}</p>
+        </div>
+        <div className="flex flex-wrap gap-2 lg:justify-end">
+          <span className="rounded-full border border-border bg-background/40 px-2.5 py-1 text-xs font-semibold">{getStatusLabel(order.status)}</span>
+          <span className="rounded-full border border-border bg-background/40 px-2.5 py-1 text-xs font-semibold">{order.priority}</span>
+          <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", contextStatusColor(contextStatus))}>
+            Context: {contextStatus}
+          </span>
+        </div>
+      </div>
+      <div className="mt-5 grid gap-3 md:grid-cols-3">
+        <div className="rounded-md border border-border/70 bg-background/30 p-3">
+          <div className="text-xs text-muted-foreground">Assigned external agent</div>
+          <div className="mt-1 text-sm font-semibold">{assignedAgent}</div>
+        </div>
+        <div className="rounded-md border border-border/70 bg-background/30 p-3">
+          <div className="text-xs text-muted-foreground">State</div>
+          <div className="mt-1 text-sm font-semibold">{getStatusLabel(order.status)}</div>
+        </div>
+        <div className="rounded-md border border-border/70 bg-background/30 p-3">
+          <div className="text-xs text-muted-foreground">Next recommended action</div>
+          <div className="mt-1 text-sm font-semibold">{nextStep.title}</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function WorkOrderNextStepCard({
+  nextStep,
+  blockedReason
+}: {
+  nextStep: ReturnType<typeof getRecommendedNextStep>;
+  blockedReason: string | null;
+}) {
+  const tone = nextStep.dangerous
+    ? "border-red-500/30 bg-red-500/10"
+    : nextStep.blocked || blockedReason
+      ? "border-amber-500/30 bg-amber-500/10"
+      : "border-emerald-500/30 bg-emerald-500/10";
+
+  return (
+    <Card className={cn("border", tone)}>
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <div className="flex items-center gap-2 text-sm font-semibold">
+            {nextStep.blocked || blockedReason ? <AlertTriangle className="h-4 w-4 text-amber-500" /> : <ArrowRight className="h-4 w-4 text-primary" />}
+            Next Step
+          </div>
+          <h2 className="mt-2 font-display text-xl">{nextStep.title}</h2>
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{blockedReason ?? nextStep.description}</p>
+        </div>
+        {nextStep.sourceTo.startsWith("#") ? (
+          <a href={nextStep.sourceTo} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline">
+            {nextStep.sourceLabel}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+        ) : (
+          <Link to={nextStep.sourceTo} className="inline-flex shrink-0 items-center gap-1 text-sm font-semibold text-primary hover:underline">
+            {nextStep.sourceLabel}
+            <ExternalLink className="h-3.5 w-3.5" />
+          </Link>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+function WorkOrderSourceLinks({ order }: { order: WorkOrderDto }) {
+  const projectTo = order.projectId ? `/projects/${order.projectId}` : "/projects";
+  const links = [
+    { label: "Project context", to: projectTo, description: "Project docs, routing, and context binding." },
+    { label: "Reports", to: "#work-order-history", description: "Implementation reports and review history for this work order." },
+    { label: "Automation jobs", to: "/automation-jobs", description: "Runner execution and patch review source." },
+    { label: "External agent", to: "/external-agents", description: "Agent registry and assignment context." }
+  ];
+  return (
+    <Card className="p-4">
+      <div className="flex items-center gap-2">
+        <Layers className="h-4 w-4 text-muted-foreground" />
+        <h2 className="font-display text-base">Source of Truth</h2>
+      </div>
+      <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
+        {links.map((link) => {
+          const className = "rounded-md border border-border/70 bg-muted/20 p-3 text-left transition hover:border-primary/50 hover:bg-primary/5";
+          const content = (
+            <>
+              <div className="flex items-center justify-between gap-2 text-sm font-semibold">
+                {link.label}
+                <ExternalLink className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{link.description}</p>
+            </>
+          );
+          return link.to.startsWith("#") ? (
+            <a key={link.label} href={link.to} className={className}>{content}</a>
+          ) : (
+            <Link key={link.label} to={link.to} className={className}>{content}</Link>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function StatusQuickFilters({
+  statusFilter,
+  includeArchived,
+  workOrders,
+  onStatus,
+  onArchived
+}: {
+  statusFilter: string;
+  includeArchived: boolean;
+  workOrders: WorkOrderDto[];
+  onStatus: (status: string) => void;
+  onArchived: () => void;
+}) {
+  const counts = {
+    NEEDS_REVIEW: workOrders.filter((order) => order.status === "NEEDS_REVIEW").length,
+    READY: workOrders.filter((order) => order.status === "READY").length,
+    IN_PROGRESS: workOrders.filter((order) => order.status === "IN_PROGRESS").length,
+    ARCHIVED: workOrders.filter((order) => order.status === "ARCHIVED").length
+  };
+  const items = [
+    { label: "Needs Review", status: "NEEDS_REVIEW", count: counts.NEEDS_REVIEW },
+    { label: "Ready", status: "READY", count: counts.READY },
+    { label: "In Progress", status: "IN_PROGRESS", count: counts.IN_PROGRESS }
+  ];
+  return (
+    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+      <button
+        type="button"
+        onClick={() => onStatus("")}
+        className={cn("rounded-md border px-3 py-2 text-left text-xs transition", !statusFilter && !includeArchived ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+      >
+        <span className="block font-semibold">Active</span>
+        <span>{workOrders.length}</span>
+      </button>
+      {items.map((item) => (
+        <button
+          key={item.status}
+          type="button"
+          onClick={() => onStatus(item.status)}
+          className={cn("rounded-md border px-3 py-2 text-left text-xs transition", statusFilter === item.status ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+        >
+          <span className="block font-semibold">{item.label}</span>
+          <span>{item.count}</span>
+        </button>
+      ))}
+      <button
+        type="button"
+        onClick={onArchived}
+        className={cn("rounded-md border px-3 py-2 text-left text-xs transition", statusFilter === "ARCHIVED" && includeArchived ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+      >
+        <span className="block font-semibold">Archived</span>
+        <span>{counts.ARCHIVED}</span>
+      </button>
+    </div>
+  );
+}
+
 export function WorkOrdersPage() {
   const user = useAuthStore((state) => state.user);
   const canCreate = user?.role === "KING" || user?.role === "CROWN_PRINCE";
@@ -73,6 +409,8 @@ export function WorkOrdersPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [draft, setDraft] = useState<WorkOrderPayload>(blankWorkOrder);
   const [reportDraft, setReportDraft] = useState(blankReport);
+  const [loadingWorkOrders, setLoadingWorkOrders] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   
   const [statusFilter, setStatusFilter] = useState("");
   const [priorityFilter, setPriorityFilter] = useState("");
@@ -100,24 +438,38 @@ export function WorkOrdersPage() {
   const [assignError, setAssignError] = useState<string | null>(null);
   const [archivingCompleted, setArchivingCompleted] = useState(false);
 
-  const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
+  const selected = useMemo(() => selectedId ? workOrders.find((order) => order.id === selectedId) ?? null : null, [selectedId, workOrders]);
 
   async function load() {
-    const [orders, agents, projectResponse] = await Promise.all([
-      api.workOrders({
-        status: statusFilter || undefined,
-        priority: priorityFilter || undefined,
-        externalAgentId: agentFilter || undefined,
-        includeArchived,
-        includeLegacy,
-        includeTestData
-      }),
-      api.externalAgents(),
-      api.projects()
-    ]);
-    setWorkOrders(orders.workOrders);
-    setExternalAgents(agents.externalAgents);
-    setProjects(projectResponse.projects);
+    setLoadingWorkOrders(true);
+    setLoadError(null);
+    try {
+      const [orders, agents, projectResponse] = await Promise.all([
+        api.workOrders({
+          status: statusFilter || undefined,
+          priority: priorityFilter || undefined,
+          externalAgentId: agentFilter || undefined,
+          includeArchived,
+          includeLegacy,
+          includeTestData
+        }),
+        api.externalAgents(),
+        api.projects()
+      ]);
+      setWorkOrders(orders.workOrders);
+      setExternalAgents(agents.externalAgents);
+      setProjects(projectResponse.projects);
+      if (selectedId && !orders.workOrders.some((order) => order.id === selectedId)) {
+        setSelectedId(null);
+      }
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Unable to load work orders.");
+      setWorkOrders([]);
+      setExternalAgents([]);
+      setProjects([]);
+    } finally {
+      setLoadingWorkOrders(false);
+    }
   }
 
   useEffect(() => {
@@ -192,15 +544,15 @@ export function WorkOrdersPage() {
     }
   }
 
-  async function repairContext() {
+  async function runRefreshContext() {
     if (!selected || !canCreate) return;
     setContextBusy(true);
     setError(null);
     try {
-      await api.rebindWorkOrderContext(selected.id);
+      await api.refreshWorkOrderContext(selected.id);
       await refreshContext(selected.id);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to repair context");
+      setError(err instanceof Error ? err.message : "Failed to refresh context");
     } finally {
       setContextBusy(false);
     }
@@ -465,6 +817,26 @@ export function WorkOrdersPage() {
     }
   };
 
+  const selectedContextStatus = getContextStatus(selected, workOrderContext);
+  const selectedNextStep = selected ? getRecommendedNextStep({
+    order: selected,
+    context: workOrderContext,
+    jobs: automationJobs,
+    patches: patchArtifacts,
+    generatedPrompt
+  }) : null;
+  const automationBlockedReason = getAutomationBlockedReason(selected, workOrderContext, automationJobs);
+
+  function applyQuickStatus(status: string) {
+    setIncludeArchived(false);
+    setStatusFilter(status);
+  }
+
+  function applyArchivedFilter() {
+    setIncludeArchived(true);
+    setStatusFilter("ARCHIVED");
+  }
+
   function renderWorkOrderBadges(order: WorkOrderDto) {
     const badges = [];
     if (order.status === "ARCHIVED") {
@@ -492,14 +864,26 @@ export function WorkOrdersPage() {
     <>
       <PageHeader
         eyebrow="External Work"
-        title="Work orders and handoffs"
-        description="Create structured execution packages, copy prompts to external app agents, capture implementation reports, and generate handoff briefs."
+        title="Work Orders"
+        description="Review implementation packages, decide the next safe action, and follow source-of-truth links for context, reports, agents, and automation."
       />
 
       <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <div className="space-y-4">
           <Card>
-            <h2 className="font-display text-lg">Filters</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="font-display text-lg">Work Queue</h2>
+              {loadingWorkOrders ? <Clock className="h-4 w-4 animate-pulse text-muted-foreground" /> : null}
+            </div>
+            <div className="mt-4">
+              <StatusQuickFilters
+                statusFilter={statusFilter}
+                includeArchived={includeArchived}
+                workOrders={workOrders}
+                onStatus={applyQuickStatus}
+                onArchived={applyArchivedFilter}
+              />
+            </div>
             <div className="mt-4 grid gap-3">
               <FormField id="filter-status" label="Status">
                 <select id="filter-status" className={selectCls} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
@@ -586,48 +970,84 @@ export function WorkOrdersPage() {
             </Card>
           )}
 
-          {workOrders.map((order) => (
-            <Card key={order.id} className={cn("transition relative", selected?.id === order.id && "border-primary/60 bg-primary/10")}>
-              {canCreate && (
-                <button
-                  type="button"
-                  className="absolute top-4 left-4 z-10 text-muted-foreground hover:text-foreground"
-                  onClick={() => toggleSelect(order.id)}
-                >
-                  {selectedIds.includes(order.id) ? (
-                    <CheckSquare className="h-5 w-5 text-primary" />
-                  ) : (
-                    <Square className="h-5 w-5" />
-                  )}
-                </button>
-              )}
-              <button className={cn("w-full text-left", canCreate ? "pl-11" : "")} onClick={() => select(order)}>
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <h2 className="font-display text-lg leading-tight">{order.title}</h2>
-                    <p className="mt-1 text-xs text-muted-foreground">{formatDate(order.updatedAt)}</p>
-                  </div>
-                  <span className="rounded-full border border-border px-2 py-0.5 text-xs font-semibold">{order.priority}</span>
-                </div>
-                {renderWorkOrderBadges(order)}
-                <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground border-t border-border/50 pt-2">
-                  <span>{getStatusLabel(order.status)}</span>
-                  {order.assignedExternalAgent ? <span>{order.assignedExternalAgent.name}</span> : <span>Unassigned</span>}
-                </div>
-              </button>
+          {loadError ? (
+            <Card className="border-red-500/30 bg-red-500/10">
+              <p className="text-sm font-semibold text-red-100">Unable to load work orders.</p>
+              <p className="mt-1 text-xs text-red-100/80">{loadError}</p>
+              <Button type="button" variant="outline" className="mt-3" onClick={() => void load()}>Retry</Button>
             </Card>
-          ))}
+          ) : null}
+
+          {loadingWorkOrders && workOrders.length === 0 ? (
+            <Card className="text-sm text-muted-foreground">Loading work orders...</Card>
+          ) : null}
+
+          {!loadingWorkOrders && !loadError && workOrders.length === 0 ? (
+            <Card>
+              <p className="text-sm font-semibold">No work orders match these filters.</p>
+              <p className="mt-1 text-xs text-muted-foreground">Clear filters or generate a work order from a task or matter.</p>
+            </Card>
+          ) : null}
+
+          <div className="space-y-3">
+            {workOrders.map((order) => (
+              <Card key={order.id} className={cn("relative p-4 transition", selected?.id === order.id && "border-primary/60 bg-primary/10")}>
+                {canCreate && (
+                  <button
+                    type="button"
+                    aria-label={selectedIds.includes(order.id) ? `Deselect ${order.title}` : `Select ${order.title}`}
+                    className="absolute left-3 top-3 z-10 text-muted-foreground hover:text-foreground"
+                    onClick={() => toggleSelect(order.id)}
+                  >
+                    {selectedIds.includes(order.id) ? (
+                      <CheckSquare className="h-4 w-4 text-primary" />
+                    ) : (
+                      <Square className="h-4 w-4" />
+                    )}
+                  </button>
+                )}
+                <button className={cn("w-full text-left", canCreate ? "pl-7" : "")} onClick={() => select(order)}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="break-words font-display text-base leading-snug">{order.title}</h2>
+                      <p className="mt-1 text-xs text-muted-foreground">Updated {formatDate(order.updatedAt)}</p>
+                    </div>
+                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold">{order.priority}</span>
+                  </div>
+                  {renderWorkOrderBadges(order)}
+                  <div className="mt-3 flex flex-wrap gap-2 border-t border-border/50 pt-2 text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground/80">{getStatusLabel(order.status)}</span>
+                    {order.assignedExternalAgent ? <span>{order.assignedExternalAgent.name}</span> : <span>Unassigned</span>}
+                    <span>Context: {order.contextBindingStatus ?? "Unknown"}</span>
+                  </div>
+                </button>
+              </Card>
+            ))}
+          </div>
         </div>
 
         <div className="space-y-5">
+          {selected && selectedNextStep ? (
+            <>
+              <WorkOrderStatusSummary order={selected} contextStatus={selectedContextStatus} nextStep={selectedNextStep} />
+              <WorkOrderNextStepCard nextStep={selectedNextStep} blockedReason={automationBlockedReason && selectedNextStep.blocked ? automationBlockedReason : null} />
+              <WorkOrderSourceLinks order={selected} />
+            </>
+          ) : null}
+
           <Card>
             <div className="flex items-start justify-between gap-3">
-              <h2 className="font-display text-2xl">{selectedId ? "Work Order Detail" : "Create Work Order"}</h2>
+              <div>
+                <h2 className="font-display text-2xl">{selectedId ? "Overview" : "Create Work Order"}</h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {selectedId ? "This page summarizes the order and preserves the editable source fields." : "Create a structured work order for external execution."}
+                </p>
+              </div>
               {selectedId && canCreate && selected?.status !== "ARCHIVED" && (
                 <Button
                   type="button"
                   variant="outline"
-                  className="text-xs shrink-0 border-amber-500/30 text-amber-700 hover:bg-amber-50"
+                  className="shrink-0 border-red-500/40 bg-red-500/10 text-xs text-red-100 hover:bg-red-500/20"
                   disabled={archivingCompleted}
                   onClick={() => void archiveAsCompleted()}
                 >
@@ -732,16 +1152,21 @@ export function WorkOrdersPage() {
               )}
 
               {/* M17E-2: Project Context binding panel */}
-              <Card>
+              <WorkOrderSection
+                id="work-order-project-context"
+                title="Project Context"
+                description="Context binding is the source of truth for whether local patch automation is safe."
+                source={{ label: "Open Projects", to: selected.projectId ? `/projects/${selected.projectId}` : "/projects" }}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-lg flex items-center gap-2">
+                  <h3 className="font-display text-lg flex items-center gap-2">
                     <Shield className="h-4 w-4 text-muted-foreground" />
-                    Project Context
-                  </h2>
+                    Binding Status
+                  </h3>
                   {canCreate ? (
                     <div className="flex gap-2">
-                      <Button variant="outline" disabled={contextBusy || !selected.projectId} onClick={() => void bindContext()}>
-                        {contextBusy ? "Working…" : "Bind/Refresh Context"}
+                      <Button variant="outline" disabled={contextBusy || !selected.projectId} onClick={() => void runRefreshContext()}>
+                        {contextBusy ? "Working…" : "Refresh Context"}
                       </Button>
                       <Button variant="outline" disabled={contextBusy} onClick={() => void markContextStale()}>
                         Mark Context Stale
@@ -764,55 +1189,40 @@ export function WorkOrdersPage() {
                     {reconcileMessage && (
                       <div className="rounded border border-green-200 bg-green-50 px-2 py-1.5 text-xs text-green-700">{reconcileMessage}</div>
                     )}
-                    {workOrderContext.contextBindingStatus !== "FRESH" ? (() => {
-                      const localDocsChanged = workOrderContext.current?.binding?.localDocsChanged === true;
-                      const repairable = !localDocsChanged && workOrderContext.current?.binding?.localDocumentSnapshotId != null;
-                      return (
-                        <div className="rounded border border-orange-200 bg-orange-50 px-2 py-1.5 text-xs text-orange-700 space-y-1">
-                          <div className="flex items-center gap-1.5">
-                            <AlertTriangle className="h-3.5 w-3.5" />
-                            Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH.
-                          </div>
-                          {localDocsChanged && (
-                            <div className="text-orange-700">
-                              Local docs changed since last scan — Bind/Refresh Context cannot fix this. Run a local docs scan on the linked project first, then re-bind context.
-                            </div>
-                          )}
-                          <div className="flex items-center gap-3 flex-wrap">
-                            <span>Repairable: <span className="font-semibold">{repairable ? "YES" : "NO"}</span></span>
-                            {!repairable && (
-                              <span className="text-orange-600">
-                                {localDocsChanged
-                                  ? "Run a local docs scan first — local files changed since last scan."
-                                  : workOrderContext.projectId
-                                    ? "No local docs snapshot — scan the project first."
-                                    : "No linked project — assign a project first."}
-                              </span>
-                            )}
-                            {repairable && canCreate && (
-                              <button
-                                type="button"
-                                disabled={contextBusy}
-                                onClick={() => void repairContext()}
-                                className="font-semibold text-orange-700 underline hover:text-orange-900 disabled:opacity-50"
-                              >
-                                {contextBusy ? "Repairing…" : "Repair Context"}
-                              </button>
-                            )}
-                            {canCreate && (
-                              <button
-                                type="button"
-                                disabled={contextBusy}
-                                onClick={() => void reconcileContext()}
-                                className="font-semibold text-orange-500 underline hover:text-orange-700 disabled:opacity-50"
-                              >
-                                {contextBusy ? "Working…" : "Reconcile Old Work Orders"}
-                              </button>
-                            )}
-                          </div>
+                    {workOrderContext.contextBindingStatus !== "FRESH" ? (
+                      <div className="rounded border border-orange-200 bg-orange-50 px-3 py-2 text-xs text-orange-700 space-y-1">
+                        <div className="flex items-center gap-1.5">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Context is {workOrderContext.contextBindingStatus} — SANDBOX_PATCH jobs are blocked until context is FRESH.
                         </div>
-                      );
-                    })() : null}
+                        <div>{getContextGuidance(selected, workOrderContext)}</div>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {selected.projectId && canCreate && (
+                            <button
+                              type="button"
+                              disabled={contextBusy}
+                              onClick={() => void runRefreshContext()}
+                              className="font-semibold text-orange-700 underline hover:text-orange-900 disabled:opacity-50"
+                            >
+                              {contextBusy ? "Refreshing…" : "Refresh Context"}
+                            </button>
+                          )}
+                          {!selected.projectId && (
+                            <span className="text-orange-600">No linked project — assign a project first.</span>
+                          )}
+                          {canCreate && (
+                            <button
+                              type="button"
+                              disabled={contextBusy}
+                              onClick={() => void reconcileContext()}
+                              className="font-semibold text-orange-500 underline hover:text-orange-700 disabled:opacity-50"
+                            >
+                              {contextBusy ? "Working…" : "Reconcile Old Work Orders"}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    ) : null}
                     <div className="grid gap-1 text-xs text-muted-foreground font-mono">
                       <div>Local snapshot: {workOrderContext.localDocumentSnapshotId ?? "—"}</div>
                       <div>Repository snapshot: {workOrderContext.repositorySnapshotId ?? "—"}</div>
@@ -830,12 +1240,17 @@ export function WorkOrdersPage() {
                 ) : (
                   <p className="mt-3 text-xs text-muted-foreground">No context binding information available for this work order.</p>
                 )}
-              </Card>
+              </WorkOrderSection>
 
-              <Card>
+              <WorkOrderSection
+                id="work-order-agent"
+                title="Suggested External Agent"
+                description="Assignment stays on the Work Order, with registry details on the External Agents page."
+                source={{ label: "Open External Agents", to: "/external-agents" }}
+              >
                 <div className="flex items-center gap-2 mb-3">
                   <Bot className="h-4 w-4 text-muted-foreground" />
-                  <h2 className="font-display text-lg">Suggested External Agent</h2>
+                  <h3 className="font-display text-lg">Best Match</h3>
                 </div>
                 {assignMessage && (
                   <div className="mb-3 rounded-md border border-green-400/30 bg-green-400/10 p-2 text-xs text-green-700">{assignMessage}</div>
@@ -884,11 +1299,16 @@ export function WorkOrdersPage() {
                     )}
                   </div>
                 )}
-              </Card>
+              </WorkOrderSection>
 
-              <Card>
+              <WorkOrderSection
+                id="work-order-prompt"
+                title="External Prompt / Handoff"
+                description="Generate or copy the prompt for the assigned external agent."
+                source={{ label: "Review handoffs", to: "#work-order-handoff" }}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-lg">External Prompt</h2>
+                  <h3 className="font-display text-lg">Prompt Builder</h3>
                   <div className="flex gap-2">
                     {canCreate ? <Button variant="outline" onClick={() => void buildPrompt()}><FileText className="h-4 w-4" />Generate</Button> : null}
                     {generatedPrompt ? <Button variant="outline" onClick={() => void copy(generatedPrompt)}><Clipboard className="h-4 w-4" />Copy</Button> : null}
@@ -897,11 +1317,15 @@ export function WorkOrdersPage() {
                 <FormField id="wo-prompt" label="Generated Prompt" className="mt-4">
                   <Textarea id="wo-prompt" className="min-h-72 font-mono text-xs" value={generatedPrompt} onChange={(e) => setGeneratedPrompt(e.target.value)} placeholder="Generated copy-paste prompt appears here." />
                 </FormField>
-              </Card>
+              </WorkOrderSection>
 
               {canReport ? (
-                <Card>
-                  <h2 className="font-display text-lg">Implementation Report</h2>
+                <WorkOrderSection
+                  id="work-order-submit-report"
+                  title="Submit Report"
+                  description="Capture implementation evidence without changing the work-order lifecycle rules."
+                  source={{ label: "Review reports", to: "#work-order-history" }}
+                >
                   <form className="mt-4 space-y-3" onSubmit={submitReport}>
                     <FormField id="ir-summary" label="Summary">
                       <Textarea id="ir-summary" value={reportDraft.summary} onChange={(e) => setReportDraft({ ...reportDraft, summary: e.target.value })} placeholder="Brief description of what was implemented." />
@@ -934,26 +1358,40 @@ export function WorkOrdersPage() {
                     </FormField>
                     <Button>Submit Report</Button>
                   </form>
-                </Card>
+                </WorkOrderSection>
               ) : null}
 
               {/* Automation Jobs panel */}
               {user?.role === "KING" && (
-                <Card>
+                <WorkOrderSection
+                  id="work-order-automation"
+                  title="Runner Automation"
+                  description="Automation jobs are the source of runner and patch execution status."
+                  source={{ label: "Open Automation Jobs", to: "/automation-jobs" }}
+                >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h2 className="font-display text-lg flex items-center gap-2">
+                    <h3 className="font-display text-lg flex items-center gap-2">
                       <Bot className="h-4 w-4 text-muted-foreground" />
-                      Runner Automation
-                    </h2>
+                      Sandbox Patch Job
+                    </h3>
                     <Button
                       variant="outline"
                       onClick={() => void createJob()}
-                      disabled={creatingJob || automationJobs.some((j) => ["QUEUED","APPROVED","CLAIMED","RUNNING","NEEDS_REVIEW"].includes(j.status))}
+                      disabled={creatingJob || Boolean(automationBlockedReason)}
                     >
                       <Play className="h-4 w-4" />
                       {creatingJob ? "Creating…" : "Create Automation Job"}
                     </Button>
                   </div>
+                  {automationBlockedReason ? (
+                    <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+                      {automationBlockedReason}
+                    </div>
+                  ) : (
+                    <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
+                      Context is FRESH and no active automation job is blocking a new SANDBOX_PATCH request.
+                    </div>
+                  )}
                   <div className="mt-3 space-y-2">
                     {automationJobs.length === 0 ? (
                       <p className="text-xs text-muted-foreground">No automation jobs for this work order.</p>
@@ -986,16 +1424,21 @@ export function WorkOrdersPage() {
                       ))
                     )}
                   </div>
-                </Card>
+                </WorkOrderSection>
               )}
 
               {/* Patch Artifacts panel */}
               {user?.role === "KING" && patchArtifacts.length > 0 && (
-                <Card>
-                  <h2 className="font-display text-lg flex items-center gap-2 mb-3">
+                <WorkOrderSection
+                  id="work-order-patch-review"
+                  title="Patch Review"
+                  description="Review imported or runner-generated patch artifacts before approving."
+                  source={{ label: "Open Automation Jobs", to: "/automation-jobs" }}
+                >
+                  <h3 className="font-display text-lg flex items-center gap-2 mb-3">
                     <Eye className="h-4 w-4 text-muted-foreground" />
-                    Patch Review
-                  </h2>
+                    Patches Needing Review
+                  </h3>
                   <div className="space-y-3">
                     {patchArtifacts.map((artifact) => (
                       <PatchArtifactCard
@@ -1007,15 +1450,25 @@ export function WorkOrdersPage() {
                       />
                     ))}
                   </div>
-                </Card>
+                </WorkOrderSection>
               )}
 
-              <Card>
+              <WorkOrderSection
+                id="work-order-history"
+                title="History / Reports"
+                description="Handoff briefs and implementation reports are review evidence for this work order."
+                source={{ label: "Open Work Orders", to: "/work-orders" }}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h2 className="font-display text-lg">Handoff Briefs</h2>
+                  <h3 id="work-order-handoff" className="font-display text-lg">Handoff Briefs</h3>
                   {canCreate ? <Button variant="outline" onClick={() => void handoff()}><Handshake className="h-4 w-4" />Generate Handoff</Button> : null}
                 </div>
                 <div className="mt-4 space-y-3">
+                  {(selected.handoffBriefs?.length ?? 0) === 0 && (selected.implementationReports?.length ?? 0) === 0 ? (
+                    <div className="rounded-md border border-border bg-muted/20 p-3 text-sm text-muted-foreground">
+                      No handoff briefs or reports have been recorded yet.
+                    </div>
+                  ) : null}
                   {(selected.handoffBriefs ?? []).map((brief) => (
                     <div key={brief.id} className="rounded-md border border-border bg-muted/30 p-3">
                       <div className="flex items-center justify-between gap-3">
@@ -1032,7 +1485,7 @@ export function WorkOrdersPage() {
                     </div>
                   ))}
                 </div>
-              </Card>
+              </WorkOrderSection>
             </>
           ) : null}
         </div>
