@@ -464,3 +464,14 @@ export type NextActionQueueDto = {
     escalatedCount: number;
   };
 };
+
+export type RefreshWorkOrderContextResult = {
+  workOrderId: string;
+  status: "REFRESHED" | "SKIPPED";
+  oldStatus: string;
+  newStatus: string | null;
+  scanRan: boolean;
+  scanFailures: string[];
+  warnings: string[];
+  skipReason?: string;
+};

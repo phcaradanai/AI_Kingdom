@@ -22,6 +22,7 @@ import {
   repairWorkOrderContext
 } from "../services/projectContextBindingService.js";
 import { reconcileContextWarnings } from "../services/workOrderLifecycleReconcileService.js";
+import { refreshWorkOrderContext } from "../services/refreshWorkOrderContextService.js";
 
 const router = Router();
 
@@ -357,6 +358,20 @@ const markStaleSchema = z.object({ reason: z.string().trim().min(1).max(500).def
 router.post("/:id/rebind-context", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
   try {
     const result = await repairWorkOrderContext(req.params.id as string, { userId: req.user?.id });
+    res.json({ result });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** POST /api/work-orders/:id/refresh-context — scan local docs then rebind context (KING/CROWN_PRINCE). */
+router.post("/:id/refresh-context", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const result = await refreshWorkOrderContext(req.params.id as string, { userId: req.user?.id });
     res.json({ result });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {

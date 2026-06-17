@@ -516,20 +516,6 @@ export function WorkOrdersPage() {
     }
   }
 
-  async function bindContext() {
-    if (!selected || !canCreate) return;
-    setContextBusy(true);
-    setError(null);
-    try {
-      await api.bindWorkOrderContext(selected.id);
-      await refreshContext(selected.id);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to bind context");
-    } finally {
-      setContextBusy(false);
-    }
-  }
-
   async function markContextStale() {
     if (!selected || !canCreate) return;
     setContextBusy(true);
@@ -549,7 +535,11 @@ export function WorkOrdersPage() {
     setContextBusy(true);
     setError(null);
     try {
-      await api.refreshWorkOrderContext(selected.id);
+      const { result } = await api.refreshWorkOrderContext(selected.id);
+      if (result.newStatus !== "FRESH") {
+        const msgs = result.scanFailures.length > 0 ? result.scanFailures : result.warnings;
+        setError(msgs.length > 0 ? msgs[0]! : `Context is ${result.newStatus ?? "unchanged"} after refresh — check project local docs.`);
+      }
       await refreshContext(selected.id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to refresh context");
