@@ -139,6 +139,36 @@ describe("KingdomOperationsPage", () => {
     });
   });
 
+  it("shows inline refresh-error banner without replacing page content", async () => {
+    apiMocks.getKingdomPresence
+      .mockResolvedValueOnce(mockPresence)
+      .mockRejectedValueOnce(new Error("Network error"));
+    apiMocks.getKingdomActivity
+      .mockResolvedValue(mockActivity);
+    apiMocks.getKingdomHealth
+      .mockResolvedValueOnce(mockHealth)
+      .mockRejectedValueOnce(new Error("Network error"));
+
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+    renderPage();
+
+    // Initial load succeeds — page content visible
+    await screen.findByText("Agent Presence");
+
+    // Fire the 30s interval — refresh fails
+    await act(async () => {
+      vi.advanceTimersByTime(31_000);
+      await Promise.resolve();
+    });
+
+    // Should show inline refresh error banner, NOT replace page with error overlay
+    expect(await screen.findByText(/Refresh failed:/)).toBeInTheDocument();
+    // Page content should still be visible
+    expect(screen.getByText("Agent Presence")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /try again/i })).not.toBeInTheDocument();
+  });
+
   it("auto-refreshes all three APIs after 30 seconds", async () => {
     // Only fake setInterval/clearInterval so waitFor/findByText (setTimeout) still work
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });

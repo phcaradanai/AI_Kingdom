@@ -350,13 +350,18 @@ export function KingdomOperationsPage() {
   const [health, setHealth] = useState<KingdomHealthDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
-    setError(null);
+    if (isRefresh) {
+      setRefreshing(true);
+      setRefreshError(null);
+    } else {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const [p, a, h] = await Promise.all([
         api.getKingdomPresence(),
@@ -367,8 +372,14 @@ export function KingdomOperationsPage() {
       setActivity(a);
       setHealth(h);
       setLastUpdated(new Date());
+      setRefreshError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load operations data");
+      const msg = err instanceof Error ? err.message : "Failed to load operations data";
+      if (isRefresh) {
+        setRefreshError(msg);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -379,7 +390,7 @@ export function KingdomOperationsPage() {
     void load();
   }, [load]);
 
-  // Auto-refresh every 30s while the page is mounted and healthy
+  // Auto-refresh every 30s while the page is mounted (refresh errors don't stop the interval)
   useEffect(() => {
     if (loading || error) return;
     const id = setInterval(() => void load(true), POLL_INTERVAL_MS);
@@ -410,6 +421,21 @@ export function KingdomOperationsPage() {
           </Button>
         }
       />
+
+      {/* Inline refresh error — keeps existing data visible */}
+      {refreshError && (
+        <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">Refresh failed: {refreshError}. Showing last-known data.</span>
+          <button
+            type="button"
+            onClick={() => void load(true)}
+            className="shrink-0 text-xs text-amber-300/80 hover:text-amber-300 underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
 
       {/* Kingdom Health strip */}
       {health && <HealthStrip health={health} />}
