@@ -1,7 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentPresenceDto, KingdomActivityItemDto, KingdomActivityStreamDto, KingdomHealthDto, KingdomPresenceDto } from "@/types/api";
 import { KingdomOperationsPage } from "./KingdomOperationsPage";
 
@@ -72,6 +72,7 @@ function renderPage() {
 
 afterEach(() => {
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 describe("KingdomOperationsPage", () => {
@@ -136,5 +137,29 @@ describe("KingdomOperationsPage", () => {
       expect(apiMocks.getKingdomActivity).toHaveBeenCalledTimes(2);
       expect(apiMocks.getKingdomHealth).toHaveBeenCalledTimes(2);
     });
+  });
+
+  it("auto-refreshes all three APIs after 30 seconds", async () => {
+    // Only fake setInterval/clearInterval so waitFor/findByText (setTimeout) still work
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+
+    apiMocks.getKingdomPresence.mockResolvedValue(mockPresence);
+    apiMocks.getKingdomActivity.mockResolvedValue(mockActivity);
+    apiMocks.getKingdomHealth.mockResolvedValue(mockHealth);
+
+    renderPage();
+
+    await screen.findByText("Agent Presence");
+    expect(apiMocks.getKingdomPresence).toHaveBeenCalledTimes(1);
+
+    // Fire the 30s interval
+    await act(async () => {
+      vi.advanceTimersByTime(31_000);
+      await Promise.resolve();
+    });
+
+    expect(apiMocks.getKingdomPresence).toHaveBeenCalledTimes(2);
+    expect(apiMocks.getKingdomActivity).toHaveBeenCalledTimes(2);
+    expect(apiMocks.getKingdomHealth).toHaveBeenCalledTimes(2);
   });
 });

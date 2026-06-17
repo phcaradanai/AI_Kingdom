@@ -340,6 +340,8 @@ function ActivityRow({ item }: { item: KingdomActivityItemDto }) {
   );
 }
 
+const POLL_INTERVAL_MS = 30_000;
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function KingdomOperationsPage() {
@@ -349,6 +351,7 @@ export function KingdomOperationsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const load = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -363,6 +366,7 @@ export function KingdomOperationsPage() {
       setPresence(p);
       setActivity(a);
       setHealth(h);
+      setLastUpdated(new Date());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load operations data");
     } finally {
@@ -374,6 +378,13 @@ export function KingdomOperationsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Auto-refresh every 30s while the page is mounted and healthy
+  useEffect(() => {
+    if (loading || error) return;
+    const id = setInterval(() => void load(true), POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [load, loading, error]);
 
   if (loading) return <LoadingState message="Loading operations..." />;
   if (error) return <ErrorState title="Unable to load Kingdom Operations." message={error} onRetry={() => void load()} />;
@@ -449,9 +460,11 @@ export function KingdomOperationsPage() {
         </SectionCard>
       </div>
 
-      {presence && (
+      {lastUpdated && (
         <p className="text-center text-[11px] text-muted-foreground">
-          Computed {formatDate(presence.computedAt)} · Data from AgentActivity, AutomationJobs, CouncilSessions
+          Updated {timeAgo(lastUpdated.toISOString())}
+          {refreshing ? " · Refreshing…" : " · Auto-refreshes every 30s"}
+          {" · "}Data from AgentActivity, AutomationJobs, CouncilSessions
         </p>
       )}
     </div>
