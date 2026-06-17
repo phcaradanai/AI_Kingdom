@@ -288,36 +288,9 @@ export function ThroneRoomPage() {
         </div>
         
         {tasks.length > 0 ? (
-          <div className="grid gap-5 xl:grid-cols-2">
+          <div className="grid auto-rows-fr gap-5 xl:grid-cols-2">
             {tasks.slice(0, 6).map((task) => (
-              <SectionCard key={task.id} className="transition-all hover:border-primary/30 hover:shadow-sm" contentClassName="p-5">
-                <div className="flex flex-wrap items-start justify-between gap-4 mb-3">
-                  <div className="max-w-[70%]">
-                    <h3 className="font-semibold text-lg leading-tight group-hover:text-primary transition-colors line-clamp-2">{task.title}</h3>
-                    <div className="mt-1.5 flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                      <span className="rounded bg-muted px-1.5 py-0.5 uppercase">{task.mode}</span>
-                      <span>·</span>
-                      <span>{formatDate(task.createdAt)}</span>
-                    </div>
-                  </div>
-                  <StatusBadge status={task.status} />
-                </div>
-                
-                <p className="line-clamp-2 text-sm leading-relaxed text-foreground/70 bg-muted/20 rounded-md p-3 border border-border/50">{task.command}</p>
-                
-                {task.sessions[0]?.finalSummary ? (
-                  <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 p-4 relative overflow-hidden">
-                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/40"></div>
-                    <p className="line-clamp-3 text-sm leading-relaxed text-foreground/90">
-                      {task.sessions[0].finalSummary}
-                    </p>
-                  </div>
-                ) : (
-                  <div className="mt-4 rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
-                    {task.status === "RUNNING" ? "Grand Vizier convening..." : "Awaiting council."}
-                  </div>
-                )}
-              </SectionCard>
+              <RecentDecreeCard key={task.id} task={task} />
             ))}
           </div>
         ) : (
@@ -330,6 +303,53 @@ export function ThroneRoomPage() {
         )}
       </section>
     </div>
+  );
+}
+
+function RecentDecreeCard({ task }: { task: TaskDto }) {
+  const latestSummary = task.sessions[0]?.finalSummary ?? null;
+  const contextWarning = extractContextWarning(latestSummary);
+  const cleanSummary = latestSummary ? stripContextWarning(latestSummary) : null;
+  const summaryPreview = cleanSummary
+    ? plainPreviewText(cleanSummary)
+    : contextWarning
+    ? "Council completed with an automation context gate. Run local docs scan before SANDBOX_PATCH."
+    : "";
+
+  return (
+    <SectionCard className="h-full transition-all hover:border-primary/30 hover:shadow-sm" contentClassName="flex h-full min-h-[300px] flex-col p-5">
+      <div className="mb-4 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-4">
+        <div className="min-w-0">
+          <h3 className="line-clamp-2 break-words text-lg font-semibold leading-snug transition-colors group-hover:text-primary">{task.title}</h3>
+          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs font-medium text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-0.5 uppercase">{task.mode}</span>
+            <span aria-hidden="true">·</span>
+            <span>{formatDate(task.createdAt)}</span>
+          </div>
+        </div>
+        <StatusBadge status={task.status} />
+      </div>
+
+      <div className="min-h-[76px] rounded-md border border-border/50 bg-muted/20 p-3">
+        <p className="line-clamp-2 break-words text-sm leading-relaxed text-foreground/70">{task.command}</p>
+      </div>
+
+      {latestSummary ? (
+        <div className="relative mt-4 flex min-h-[118px] flex-1 flex-col overflow-hidden rounded-md border border-primary/20 bg-primary/5 p-4 pl-5">
+          <div className="absolute bottom-0 left-0 top-0 w-1 bg-primary/40"></div>
+          {contextWarning && (
+            <div className="mb-2 inline-flex w-fit items-center rounded-full border border-amber-500/25 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-300">
+              Context warning: automation gate
+            </div>
+          )}
+          <p className="line-clamp-3 break-words text-sm leading-relaxed text-foreground/90">{summaryPreview}</p>
+        </div>
+      ) : (
+        <div className="mt-4 flex min-h-[84px] flex-1 items-center rounded-md border border-border/50 bg-muted/20 px-3 py-2 text-xs text-muted-foreground">
+          {task.status === "RUNNING" ? "Grand Vizier convening..." : "Awaiting council."}
+        </div>
+      )}
+    </SectionCard>
   );
 }
 
@@ -437,42 +457,42 @@ function RecommendedNextStepCard({
   const canAct = session.status === "COMPLETED";
 
   return (
-    <div className="rounded-xl border border-primary/30 bg-primary/10 p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="max-w-2xl">
+    <div className="rounded-xl border border-primary/30 bg-primary/10 p-5 sm:p-6">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,440px)] xl:items-start">
+        <div className="min-w-0">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
             <ArrowRight className="h-3 w-3" />
             Recommended Next Step
           </div>
-          <h3 className="font-display text-xl">{nextStep.title}</h3>
+          <h3 className="break-words font-display text-xl leading-snug">{nextStep.title}</h3>
           <p className="mt-2 text-sm leading-relaxed text-foreground/75">{nextStep.description}</p>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row lg:flex-col xl:flex-row">
-          <Button type="button" disabled={!canAct || isCreatingWorkOrder} onClick={onCreateWorkOrder}>
-            <Hammer className="h-4 w-4" />
-            {isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order"}
+        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2">
+          <Button type="button" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingWorkOrder} onClick={onCreateWorkOrder}>
+            <Hammer className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">{isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order"}</span>
           </Button>
-          <Button type="button" variant="secondary" disabled={!canAct || isCreatingHandoff} onClick={onCreateHandoff}>
-            <Handshake className="h-4 w-4" />
-            {isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}
+          <Button type="button" variant="secondary" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingHandoff} onClick={onCreateHandoff}>
+            <Handshake className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">{isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}</span>
           </Button>
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap gap-2 border-t border-primary/20 pt-4">
+      <div className="mt-5 grid gap-3 border-t border-primary/20 pt-4 sm:grid-cols-2 xl:grid-cols-3">
         {(createdWorkOrderIds.length > 0 || handoffWorkOrderId) && (
-          <Link to="/work-orders" className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-sm font-semibold text-primary hover:border-primary/50">
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open Created Work Order
+          <Link to="/work-orders" className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-words">Open Created Work Order</span>
           </Link>
         )}
-        <Link to={hasReport ? "/reports" : "/royal-brief"} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-sm font-semibold text-primary hover:border-primary/50">
-          <ExternalLink className="h-3.5 w-3.5" />
-          {hasReport ? "Open Source Brief / Report" : "Open Royal Brief"}
+        <Link to={hasReport ? "/reports" : "/royal-brief"} className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
+          <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 break-words">{hasReport ? "Open Source Brief / Report" : "Open Royal Brief"}</span>
         </Link>
         {task.projectId && (
-          <Link to={`/projects/${task.projectId}`} className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-sm font-semibold text-primary hover:border-primary/50">
-            <ExternalLink className="h-3.5 w-3.5" />
-            Open Project Context
+          <Link to={`/projects/${task.projectId}`} className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
+            <ExternalLink className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 break-words">Open Project Context</span>
           </Link>
         )}
       </div>
@@ -507,14 +527,14 @@ function CouncilSourceLinks({
         <Layers className="h-4 w-4 text-primary" />
         <h3 className="font-display text-lg text-primary">Source of Truth</h3>
       </div>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid auto-rows-fr gap-3 md:grid-cols-2 xl:grid-cols-3">
         {links.filter((link) => link.show).map((link) => (
-          <Link key={link.label} to={link.to} className="group rounded-lg border border-border bg-muted/15 p-3 transition-colors hover:border-primary/45 hover:bg-muted/30">
+          <Link key={link.label} to={link.to} className="group flex min-h-[96px] flex-col justify-between rounded-lg border border-border bg-muted/15 p-3 transition-colors hover:border-primary/45 hover:bg-muted/30">
             <div className="flex items-center justify-between gap-3">
-              <div className="text-sm font-semibold">{link.label}</div>
-              <ExternalLink className="h-3.5 w-3.5 text-primary opacity-70 group-hover:opacity-100" />
+              <div className="min-w-0 break-words text-sm font-semibold leading-snug">{link.label}</div>
+              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-primary opacity-70 group-hover:opacity-100" />
             </div>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{link.description}</p>
+            <p className="mt-2 line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">{link.description}</p>
           </Link>
         ))}
       </div>
@@ -689,6 +709,14 @@ function summarizeCouncilContent(content: string): string {
     .find((line) => line.length > 20);
   if (!cleaned) return "Role report is ready for review.";
   return cleaned.length > 220 ? `${cleaned.slice(0, 217).trim()}...` : cleaned;
+}
+
+function plainPreviewText(content: string): string {
+  return content
+    .split(/\n+/)
+    .map((line) => line.replace(/^[-*#\s]+/, "").trim())
+    .filter(Boolean)
+    .join(" ");
 }
 
 function findRoleResponse(responses: CouncilResponseDto[], role: string): CouncilResponseDto | undefined {
