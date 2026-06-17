@@ -418,3 +418,49 @@ export type LocalDocumentOverviewDto = {
   roots: LocalDocumentRootDto[];
   snapshot: LocalDocumentSnapshotDto | null;
 };
+
+// ── M18C: Kingdom Next Action Engine ─────────────────────────────────────────
+
+export type NextActionAbstractState =
+  | "AWAITING_INPUT"
+  | "AWAITING_DECISION"
+  | "AWAITING_ACTION"
+  | "BLOCKED";
+
+export type NextActionEntityType =
+  | "WorkOrder"
+  | "AutomationJob"
+  | "PatchArtifact"
+  | "AgentRunner"
+  | "HandoffBrief"
+  | "AgentKnowledgeCandidate";
+
+export type NextActionItem = {
+  id: string;
+  entityType: NextActionEntityType;
+  entityId: string;
+  title: string;
+  actionLabel: string;
+  why: string;
+  priority: number;
+  riskLevel: "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+  abstractState: NextActionAbstractState;
+  isEscalated: boolean;
+  isBlocking: number;
+  routeTo: string;
+  ageHours: number;
+  provenance: { source: string; id: string; observedAt: string };
+};
+
+export type NextActionQueueDto = {
+  computedAt: string;
+  topAction: NextActionItem | null;
+  queue: NextActionItem[];
+  summary: {
+    totalPending: number;
+    criticalCount: number;
+    highCount: number;
+    blockedCount: number;
+    escalatedCount: number;
+  };
+};

@@ -48,6 +48,7 @@ import patchArtifactsRouter from "./routes/patchArtifacts.js";
 import livingLoopRouter from "./routes/livingLoop.js";
 import automationCandidatesRouter from "./routes/automationCandidates.js";
 import royalBriefRouter from "./routes/royalBrief.js";
+import nextActionsRouter from "./routes/nextActions.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -140,6 +141,7 @@ export function createApp() {
   app.use("/api/living-loop", requireAuth, livingLoopRouter);
   app.use("/api/automation-candidates", requireAuth, automationCandidatesRouter);
   app.use("/api/royal-brief", requireAuth, royalBriefRouter);
+  app.use("/api/next-actions", requireAuth, nextActionsRouter);
   app.use("/api", requireAuth, charterRouter);
   app.use(errorHandler);
 
