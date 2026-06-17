@@ -13,6 +13,7 @@ import {
   generateWorkOrderFromTask,
   createWorkOrder
 } from "../services/externalAgentWorkOrderService.js";
+import { getWorkOrderRecommendations } from "../services/externalAgentRecommendationService.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
 import {
   bindFreshContextToWorkOrder,
@@ -274,6 +275,20 @@ router.post("/:id/build-prompt/:externalAgentId", requireRole("KING", "CROWN_PRI
     const { id, externalAgentId } = req.params as { id: string; externalAgentId: string };
     const prompt = await buildExternalAgentPrompt(id, externalAgentId);
     res.json({ prompt });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** GET /api/work-orders/:id/external-agent-recommendations — ranked agent suggestions (any authenticated role). */
+router.get("/:id/external-agent-recommendations", async (req, res, next) => {
+  try {
+    const recommendations = await getWorkOrderRecommendations(req.params.id);
+    res.json({ recommendations });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });

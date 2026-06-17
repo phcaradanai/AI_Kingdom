@@ -1170,6 +1170,17 @@ export type WorkOrderDto = {
   handoffBriefs?: HandoffBriefDto[];
 };
 
+export type ExternalAgentRecommendationDto = {
+  externalAgentId: string;
+  name: string;
+  type: string;
+  roleTitle: string;
+  score: number;
+  confidence: "HIGH" | "MEDIUM" | "LOW";
+  reasons: string[];
+  risks: string[];
+};
+
 export type WorkOrderPayload = {
   title: string;
   objective: string;

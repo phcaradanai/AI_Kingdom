@@ -112,7 +112,8 @@ const apiMocks = vi.hoisted(() => ({
   workOrderFromMatter: vi.fn(),
   buildWorkOrderPrompt: vi.fn(),
   createImplementationReport: vi.fn(),
-  createHandoffBrief: vi.fn()
+  createHandoffBrief: vi.fn(),
+  getWorkOrderRecommendations: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -133,6 +134,7 @@ function mockBaseApi(context: WorkOrderContextDto, patches: PatchArtifactDto[] =
   apiMocks.automationJobs.mockResolvedValue([]);
   apiMocks.patchArtifacts.mockResolvedValue(patches);
   apiMocks.getWorkOrderContext.mockResolvedValue({ context });
+  apiMocks.getWorkOrderRecommendations.mockResolvedValue({ recommendations: [] });
 }
 
 async function selectOrder() {

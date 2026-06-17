@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationJobDto, ExternalAgentDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -93,6 +93,7 @@ export function WorkOrdersPage() {
   const [patchActionId, setPatchActionId] = useState<string | null>(null);
   const [workOrderContext, setWorkOrderContext] = useState<WorkOrderContextDto | null>(null);
   const [contextBusy, setContextBusy] = useState(false);
+  const [agentRecommendations, setAgentRecommendations] = useState<ExternalAgentRecommendationDto[]>([]);
 
   const selected = useMemo(() => workOrders.find((order) => order.id === selectedId) ?? workOrders[0] ?? null, [selectedId, workOrders]);
 
@@ -137,10 +138,14 @@ export function WorkOrdersPage() {
       api.getWorkOrderContext(order.id)
         .then((response) => setWorkOrderContext(response.context))
         .catch(() => setWorkOrderContext(null));
+      api.getWorkOrderRecommendations(order.id)
+        .then((response) => setAgentRecommendations(response.recommendations))
+        .catch(() => setAgentRecommendations([]));
     } else {
       setAutomationJobs([]);
       setPatchArtifacts([]);
       setWorkOrderContext(null);
+      setAgentRecommendations([]);
     }
   }
 
@@ -295,11 +300,12 @@ export function WorkOrdersPage() {
   }
 
   async function buildPrompt() {
-    if (!selected?.assignedExternalAgentId) {
+    const agentId = draft.assignedExternalAgentId ?? selected?.assignedExternalAgentId;
+    if (!agentId || !selected) {
       setError("Select an external agent before generating a prompt.");
       return;
     }
-    const response = await api.buildWorkOrderPrompt(selected.id, selected.assignedExternalAgentId);
+    const response = await api.buildWorkOrderPrompt(selected.id, agentId);
     setGeneratedPrompt(response.prompt);
   }
 
@@ -684,6 +690,52 @@ export function WorkOrdersPage() {
                   </div>
                 ) : (
                   <p className="mt-3 text-xs text-muted-foreground">No context binding information available for this work order.</p>
+                )}
+              </Card>
+
+              <Card>
+                <div className="flex items-center gap-2 mb-3">
+                  <Bot className="h-4 w-4 text-muted-foreground" />
+                  <h2 className="font-display text-lg">Suggested External Agent</h2>
+                </div>
+                {agentRecommendations.length === 0 || !agentRecommendations[0] ? (
+                  <p className="text-xs text-muted-foreground">No active external agents available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    <AgentRecommendationCard
+                      rec={agentRecommendations[0]}
+                      onUse={canCreate ? (id) => setDraft((d) => ({ ...d, assignedExternalAgentId: id })) : undefined}
+                    />
+                    {agentRecommendations.length > 1 && (
+                      <details className="text-xs text-muted-foreground">
+                        <summary className="cursor-pointer hover:underline font-medium">
+                          Alternatives ({agentRecommendations.length - 1})
+                        </summary>
+                        <ul className="mt-2 space-y-1.5 pl-1">
+                          {agentRecommendations.slice(1).map((rec) => (
+                            <li key={rec.externalAgentId} className="flex items-center justify-between gap-2">
+                              <span>
+                                {rec.name}
+                                <span className={cn("ml-2 text-xs px-1 py-0 rounded", confidenceCls(rec.confidence))}>
+                                  {rec.confidence}
+                                </span>
+                                <span className="ml-1 text-muted-foreground">({rec.score}/100)</span>
+                              </span>
+                              {canCreate && (
+                                <button
+                                  type="button"
+                                  className="text-primary hover:underline text-xs"
+                                  onClick={() => setDraft((d) => ({ ...d, assignedExternalAgentId: rec.externalAgentId }))}
+                                >
+                                  Use
+                                </button>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
                 )}
               </Card>
 
@@ -1094,6 +1146,50 @@ function PatchArtifactCard({
           Reviewed by {artifact.reviewedByUser.displayName}
           {artifact.reviewNote && ` — "${artifact.reviewNote}"`}
         </p>
+      )}
+    </div>
+  );
+}
+
+function confidenceCls(confidence: "HIGH" | "MEDIUM" | "LOW"): string {
+  if (confidence === "HIGH") return "bg-green-500/15 text-green-700 border border-green-500/30";
+  if (confidence === "MEDIUM") return "bg-amber-500/15 text-amber-700 border border-amber-500/30";
+  return "bg-muted text-muted-foreground border border-border";
+}
+
+function AgentRecommendationCard({
+  rec,
+  onUse
+}: {
+  rec: ExternalAgentRecommendationDto;
+  onUse?: (id: string) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3 rounded-md border border-border bg-muted/20 p-3">
+      <div className="space-y-1.5 min-w-0">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-sm">{rec.name}</span>
+          <span className={cn("text-xs px-1.5 py-0.5 rounded", confidenceCls(rec.confidence))}>
+            {rec.confidence}
+          </span>
+          <span className="text-xs text-muted-foreground">{rec.score}/100</span>
+        </div>
+        <div className="text-xs text-muted-foreground">{rec.roleTitle}</div>
+        {rec.reasons.length > 0 && (
+          <ul className="text-xs text-muted-foreground list-disc pl-4 space-y-0.5">
+            {rec.reasons.map((r, i) => <li key={i}>{r}</li>)}
+          </ul>
+        )}
+        {rec.risks.length > 0 && (
+          <ul className="text-xs text-amber-700 list-none space-y-0.5">
+            {rec.risks.map((r, i) => <li key={i}>⚠ {r}</li>)}
+          </ul>
+        )}
+      </div>
+      {onUse && (
+        <Button variant="outline" onClick={() => onUse(rec.externalAgentId)}>
+          Use This Agent
+        </Button>
       )}
     </div>
   );

@@ -347,6 +347,8 @@ export const api = {
   markWorkOrderContextStale: (id: string, reason?: string) =>
     apiRequest<{ workOrder: WorkOrderDto }>(`/work-orders/${id}/mark-context-stale`, { method: "POST", body: JSON.stringify(reason ? { reason } : {}) }),
   getProjectContextHealth: (id: string) => apiRequest<ProjectContextHealthDto>(`/projects/${id}/context-health`),
+  getWorkOrderRecommendations: (id: string) =>
+    apiRequest<{ recommendations: import("@/types/api").ExternalAgentRecommendationDto[] }>(`/work-orders/${id}/external-agent-recommendations`),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>
     apiRequest<{ prompt: string }>(`/work-orders/${id}/build-prompt/${externalAgentId}`, { method: "POST" }),
   createHandoffBrief: (id: string) => apiRequest<{ handoffBrief: HandoffBriefDto }>(`/work-orders/${id}/handoff`, { method: "POST" }),
