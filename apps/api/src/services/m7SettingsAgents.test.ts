@@ -106,6 +106,36 @@ test("settings API never returns API keys and Grand Vizier cannot be deleted", a
   });
 });
 
+test("settings API accepts only valid council auto work order modes", async () => {
+  const setting = await prisma.setting.findUniqueOrThrow({ where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" } });
+
+  try {
+    await withTestServer(async (baseUrl, token) => {
+      for (const value of ["OFF", "DRAFT", "READY"]) {
+        const response = await fetch(`${baseUrl}/api/settings/COUNCIL_AUTO_WORK_ORDER_MODE`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ value })
+        });
+        const body = await response.json();
+        assert.equal(response.status, 200);
+        assert.equal(body.setting.value, value);
+      }
+
+      const invalid = await fetch(`${baseUrl}/api/settings/COUNCIL_AUTO_WORK_ORDER_MODE`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ value: "INVALID" })
+      });
+      const invalidBody = await invalid.json();
+      assert.equal(invalid.status, 400);
+      assert.equal(invalidBody.error, "COUNCIL_AUTO_WORK_ORDER_MODE must be OFF, DRAFT, or READY");
+    });
+  } finally {
+    await prisma.setting.update({ where: { key: setting.key }, data: { value: setting.value } });
+  }
+});
+
 test("deactivating a required agent prevents selection", async () => {
   const user = await prisma.user.create({
     data: {
