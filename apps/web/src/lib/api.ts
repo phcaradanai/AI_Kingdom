@@ -91,7 +91,8 @@ import type {
   ProjectContextBindingDto,
   ProjectContextHealthDto,
   WorkOrderContextDto,
-  PlannerResultDto
+  PlannerResultDto,
+  NextActionQueueDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -696,7 +697,17 @@ export const api = {
   royalBriefs: (limit = 20) => apiRequest<{ briefs: RoyalBriefDto[] }>(`/royal-brief?limit=${limit}`),
   royalBrief: (id: string) => apiRequest<{ brief: RoyalBriefDto }>(`/royal-brief/${id}`),
   generateRoyalBrief: () => apiRequest<{ brief: RoyalBriefDto }>("/royal-brief/generate", { method: "POST" }),
-  archiveRoyalBrief: (id: string) => apiRequest<{ brief: RoyalBriefDto }>(`/royal-brief/${id}/archive`, { method: "POST" })
+  archiveRoyalBrief: (id: string) => apiRequest<{ brief: RoyalBriefDto }>(`/royal-brief/${id}/archive`, { method: "POST" }),
+
+  // ── M18C: Kingdom Next Action Engine ─────────────────────────────────────────
+  getNextActions: (params?: { limit?: number; entityTypes?: string[]; minRisk?: string }) => {
+    const search = new URLSearchParams();
+    if (params?.limit !== undefined) search.set("limit", String(params.limit));
+    if (params?.entityTypes?.length) search.set("entityTypes", params.entityTypes.join(","));
+    if (params?.minRisk) search.set("minRisk", params.minRisk);
+    const suffix = search.toString() ? `?${search.toString()}` : "";
+    return apiRequest<NextActionQueueDto>(`/next-actions${suffix}`);
+  }
 };
 
 async function refreshAccessToken(): Promise<string | null> {
