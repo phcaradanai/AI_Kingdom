@@ -475,3 +475,76 @@ export type RefreshWorkOrderContextResult = {
   warnings: string[];
   skipReason?: string;
 };
+
+// ── STAR_OFFICE_UI: Kingdom Operations Center ─────────────────────────────────
+
+export type AgentPresenceState =
+  | "IDLE"
+  | "THINKING"
+  | "COUNCIL"
+  | "WORKING"
+  | "RUNNING"
+  | "WAITING_REVIEW"
+  | "BLOCKED"
+  | "ERROR";
+
+export type AgentPresenceDto = {
+  id: string;
+  name: string;
+  role: string;
+  displayName: string | null;
+  state: AgentPresenceState;
+  currentTask: string | null;
+  currentWorkOrder: { id: string; title: string } | null;
+  progress: string | null;
+  blockingReason: string | null;
+  lastActivityAt: string | null;
+};
+
+export type KingdomPresenceDto = {
+  computedAt: string;
+  agents: AgentPresenceDto[];
+};
+
+export type KingdomActivityType =
+  | "COUNCIL"
+  | "WORK_ORDER"
+  | "AUTOMATION_JOB"
+  | "RUNNER_EVENT"
+  | "REVIEW"
+  | "KNOWLEDGE";
+
+export type KingdomActivityItemDto = {
+  id: string;
+  timestamp: string;
+  actor: string;
+  type: KingdomActivityType;
+  summary: string;
+  sourceReference: {
+    entityType: string;
+    entityId: string;
+    routeTo: string;
+  };
+};
+
+export type KingdomActivityStreamDto = {
+  computedAt: string;
+  activities: KingdomActivityItemDto[];
+};
+
+export type KingdomHealthStatus = "HEALTHY" | "WARNING" | "CRITICAL";
+
+export type KingdomHealthItemDto = {
+  key: string;
+  label: string;
+  status: KingdomHealthStatus;
+  reason: string;
+  recommendedAction: string | null;
+  sourceReference: string | null;
+};
+
+export type KingdomHealthDto = {
+  computedAt: string;
+  overallStatus: KingdomHealthStatus;
+  items: KingdomHealthItemDto[];
+};

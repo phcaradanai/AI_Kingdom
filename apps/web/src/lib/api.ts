@@ -71,6 +71,7 @@ import type {
   WorkOrderPayload,
   WorkSessionDto,
   AgentRoutingPreviewDto,
+  ProviderModelValidationBatchDto,
   ProviderModelsDto,
   EffectiveRequestPreviewDto,
   RepositorySnapshotDto,
@@ -92,7 +93,10 @@ import type {
   ProjectContextHealthDto,
   WorkOrderContextDto,
   PlannerResultDto,
-  NextActionQueueDto
+  NextActionQueueDto,
+  KingdomPresenceDto,
+  KingdomActivityStreamDto,
+  KingdomHealthDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -204,6 +208,11 @@ export const api = {
   },
   validateModels: () => apiRequest<{ success: boolean }>("/providers/validate-models", { method: "POST" }),
   getProviderModels: (id: string) => apiRequest<ProviderModelsDto>(`/providers/${id}/models`),
+  validateProviderModels: (id: string, modelIds: string[]) =>
+    apiRequest<ProviderModelValidationBatchDto>(`/providers/${id}/models/validate-batch`, {
+      method: "POST",
+      body: JSON.stringify({ modelIds })
+    }),
   getAgentRoutingPreview: (id: string) => apiRequest<AgentRoutingPreviewDto>(`/agents/${id}/routing-preview`),
   getAgentEffectiveRequestPreview: (id: string) => apiRequest<EffectiveRequestPreviewDto>(`/agents/${id}/effective-request-preview`),
   externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
@@ -709,7 +718,12 @@ export const api = {
     if (params?.minRisk) search.set("minRisk", params.minRisk);
     const suffix = search.toString() ? `?${search.toString()}` : "";
     return apiRequest<NextActionQueueDto>(`/next-actions${suffix}`);
-  }
+  },
+
+  // ── STAR_OFFICE_UI: Kingdom Operations Center ─────────────────────────────────
+  getKingdomPresence: () => apiRequest<KingdomPresenceDto>("/kingdom/presence"),
+  getKingdomActivity: (limit = 50) => apiRequest<KingdomActivityStreamDto>(`/kingdom/activity?limit=${limit}`),
+  getKingdomHealth: () => apiRequest<KingdomHealthDto>("/kingdom/health")
 };
 
 async function refreshAccessToken(): Promise<string | null> {
