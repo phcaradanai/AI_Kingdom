@@ -220,6 +220,78 @@ test("reconcile: WO with no project and no evidence → SKIPPED", async () => {
   }
 });
 
+test("reconcile: NEEDS_REVIEW WO with completion handoff brief → ARCHIVED", async () => {
+  const wo = await prisma.workOrder.create({
+    data: {
+      title: `M99C Needs Review Complete ${randomUUID()}`,
+      objective: "Was in review when context went stale",
+      status: "NEEDS_REVIEW",
+      contextBindingStatus: "STALE"
+    }
+  });
+  await prisma.handoffBrief.create({
+    data: {
+      workOrderId: wo.id,
+      title: "Final review handoff",
+      currentStatus: "Work is finished and delivered to review",
+      nextSteps: [],
+      handoffPrompt: "Nothing remaining"
+    }
+  });
+  try {
+    const result = await reconcileContextWarnings({ projectStatusContent: "" });
+    const entry = result.results.find((r) => r.workOrderId === wo.id);
+    assert.ok(entry, "NEEDS_REVIEW WO should appear in results");
+    assert.equal(entry.action, "ARCHIVED");
+    assert.ok(entry.evidenceFound.some((e) => e.includes("HandoffBrief")));
+    assert.equal(entry.previousStatus, "NEEDS_REVIEW");
+    assert.equal(entry.newStatus, "ARCHIVED");
+
+    const updated = await prisma.workOrder.findUniqueOrThrow({ where: { id: wo.id } });
+    assert.equal(updated.status, "ARCHIVED");
+    assert.equal(updated.workQuality, "COMPLETED_ARCHIVE");
+    assert.ok(updated.archivedAt);
+  } finally {
+    await cleanup({ workOrderIds: [wo.id] });
+  }
+});
+
+test("reconcile: audit log is created when WO is archived", async () => {
+  const wo = await prisma.workOrder.create({
+    data: {
+      title: `M99D Audit Log Test ${randomUUID()}`,
+      objective: "Audit trail test",
+      status: "READY",
+      contextBindingStatus: "MISSING"
+    }
+  });
+  await prisma.implementationReport.create({
+    data: {
+      workOrderId: wo.id,
+      summary: "Feature delivered",
+      testResult: "PASSED",
+      remainingWork: []
+    }
+  });
+  try {
+    await reconcileContextWarnings({ projectStatusContent: "" });
+
+    const logs = await prisma.auditLog.findMany({
+      where: { action: "reconcile_archive_work_order", resourceId: wo.id }
+    });
+    assert.equal(logs.length, 1, "exactly one audit log entry for the archive");
+    const log = logs[0]!;
+    assert.equal(log.userId, null, "system-triggered reconcile has null userId");
+    assert.equal(log.resourceType, "work_order");
+    const meta = log.metadata as Record<string, unknown>;
+    assert.equal(meta.previousStatus, "READY");
+    assert.ok(Array.isArray(meta.evidence) && (meta.evidence as string[]).length > 0);
+  } finally {
+    await cleanup({ workOrderIds: [wo.id] });
+    await prisma.auditLog.deleteMany({ where: { action: "reconcile_archive_work_order", resourceId: wo.id } }).catch(() => undefined);
+  }
+});
+
 test("reconcile: FRESH WO and already-ARCHIVED WO are not inspected", async () => {
   const freshWo = await prisma.workOrder.create({
     data: {

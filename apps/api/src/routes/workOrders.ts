@@ -275,7 +275,7 @@ router.post("/from-matter/:matterId", requireRole("KING", "CROWN_PRINCE"), async
 /** POST /api/work-orders/reconcile-context-warnings — bulk-reconcile active WOs with stale/missing context (KING/CROWN_PRINCE). */
 router.post("/reconcile-context-warnings", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
   try {
-    const result = await reconcileContextWarnings();
+    const result = await reconcileContextWarnings({ userId: req.user?.id });
     res.json({ result });
   } catch (error) {
     next(error);

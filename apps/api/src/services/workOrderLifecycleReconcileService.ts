@@ -14,6 +14,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { prisma } from "../db/prisma.js";
+import { auditLog } from "./auditService.js";
 import { repairWorkOrderContext } from "./projectContextBindingService.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -85,15 +86,19 @@ export async function reconcileContextWarnings(options?: {
   projectStatusContent?: string;
   /** Override for testing — path to PROJECT_STATUS.md */
   projectStatusPath?: string;
+  /** Triggering user id — written to audit log entries */
+  userId?: string | null;
 }): Promise<ReconcileContextWarningsResult> {
   const statusContent =
     options?.projectStatusContent ??
     (await readProjectStatusContent(options?.projectStatusPath));
+  const userId = options?.userId ?? null;
 
-  // Only inspect READY/IN_PROGRESS WOs with MISSING/STALE context — same scope as context health warnings
+  // Inspect all active-work statuses (READY, IN_PROGRESS, NEEDS_REVIEW) with stale/missing context.
+  // NEEDS_REVIEW WOs can surface context warnings in the frontend context panel.
   const workOrders = await prisma.workOrder.findMany({
     where: {
-      status: { in: ["READY", "IN_PROGRESS"] },
+      status: { in: ["READY", "IN_PROGRESS", "NEEDS_REVIEW"] },
       contextBindingStatus: { in: ["MISSING", "STALE"] }
     },
     select: {
@@ -158,6 +163,13 @@ export async function reconcileContextWarnings(options?: {
           workQuality: "COMPLETED_ARCHIVE"
         }
       });
+      await auditLog({
+        userId,
+        action: "reconcile_archive_work_order",
+        resourceType: "work_order",
+        resourceId: wo.id,
+        metadata: { title: wo.title, previousStatus: wo.status, evidence, workQuality: "COMPLETED_ARCHIVE" }
+      });
       archived++;
       results.push({
         workOrderId: wo.id,
@@ -185,7 +197,14 @@ export async function reconcileContextWarnings(options?: {
       continue;
     }
 
-    // Try context repair as fallback
+    // Try context repair as fallback — log the attempt regardless of outcome
+    await auditLog({
+      userId,
+      action: "reconcile_context_repair_attempt",
+      resourceType: "work_order",
+      resourceId: wo.id,
+      metadata: { title: wo.title, previousContextStatus: wo.contextBindingStatus, projectId: wo.projectId }
+    });
     const repair = await repairWorkOrderContext(wo.id).catch(() => null);
     if (repair && repair.status === "BOUND") {
       contextRepaired++;
