@@ -8,6 +8,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 ## Implemented Milestones
 
+- M19 (complete): Autonomous Kingdom Loop — background scheduler. `kingdomSchedulerService.ts` is an in-process worker that drives the existing Living Loop on a timer, closing the long-standing "no background workers" gap that meant the loop only ran on a manual `POST /api/living-loop/run`. `startKingdomScheduler()` is invoked from `server.ts` on listen (never from `app.ts`, keeping the test app timer-free) with an unref'd `setInterval` at `LIVING_LOOP_INTERVAL_MS` (env, default 300000ms, floored at 15000ms). Each tick re-reads `LIVING_LOOP_ENABLED` from settings and only then calls `runLivingLoopOnce("SCHEDULED")`; an in-process flag guards against overlapping ticks and a tick never throws (errors captured into status). Heavy deps (settings + living loop, hence Prisma) are lazy-imported so unit tests inject their own deps with zero DB coupling. New endpoint `GET /api/living-loop/scheduler` (KING/CROWN_PRINCE) exposes `getSchedulerStatus()` (running, intervalMs, enabledSetting, tick/run/skip/error counters, last tick/run/error). Graceful shutdown clears the timer on SIGTERM/SIGINT. Operator tooling: `npm run autonomy:enable` / `autonomy:disable` (`src/scripts/enable-autonomy.ts`) flips `LIVING_LOOP_ENABLED`, `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`, `COUNCIL_AUTO_WORK_ORDER_MODE` (default READY, `--mode=DRAFT` option), and opt-in `LIVING_LOOP_AUTO_SANDBOX_PATCH` (`--with-sandbox-patch`). Safety boundary unchanged: the scheduler adds no new capability; all data-value, risk-policy, runner-refusal, and NEEDS_REVIEW gates remain; no auto branch push, PR, merge, or deploy. Also: `.env` `AI_PROVIDER` set to `openrouter` to make explicit that, with real keys present, the council already routes to a real LLM (OpenRouter primary → DeepSeek → sandbox fallback) rather than mock. 6 pure unit tests (no DB) for the tick logic: skip-disabled, run-enabled, overlap guard, error capture (no throw), in-progress flag cleared after error, interval flooring.
 - M1: Initial React/Vite web foundation and Express/Prisma API foundation.
 - M2: Throne Room task intake and task persistence.
 - M3: Grand Vizier orchestrator with deterministic council sessions and agent responses.
@@ -56,7 +57,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 - Royal Secretary: `GET /api/secretary/brief` (all authenticated).
 - Notices (read: all; create/delete: KING; update: KING+CROWN_PRINCE): `GET /api/notices`, `GET /api/notices/:id`, `POST /api/notices`, `PATCH /api/notices/:id`, `DELETE /api/notices/:id`.
 - Matters (same RBAC as notices): `GET /api/matters`, `GET /api/matters/:id`, `POST /api/matters`, `PATCH /api/matters/:id`, `DELETE /api/matters/:id`.
-- Living Loop (KING/CROWN_PRINCE read, KING write): `GET /api/living-loop/status`, `GET /api/living-loop/runs`, `POST /api/living-loop/run`.
+- Living Loop (KING/CROWN_PRINCE read, KING write): `GET /api/living-loop/status`, `GET /api/living-loop/scheduler` (M19 autonomy worker status), `GET /api/living-loop/runs`, `POST /api/living-loop/run`.
 - Automation Candidates (KING/CROWN_PRINCE read, KING write): `GET /api/automation-candidates`, `POST /api/automation-candidates/:id/approve`, `/reject`, `/archive`, `/apply`.
 - Automation Jobs (KING only): `GET /api/automation-jobs`, `GET /api/automation-jobs/:id`, `POST /api/automation-jobs`, `POST /api/automation-jobs/:id/approve`, `POST /api/automation-jobs/:id/cancel`, `GET /api/automation-jobs/:id/agent-review`, `POST /api/automation-jobs/:id/agent-review/regenerate`.
 - Patch Artifacts (read: authenticated; approve/reject/request-revision/create-pr: KING only): `GET /api/patch-artifacts`, `GET /api/patch-artifacts/:id`, `POST /api/patch-artifacts/:id/approve`, `/reject`, `/request-revision`, `/create-pr`.
@@ -90,7 +91,7 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
 
 - Audit log search is full-text across `action`, `resourceType`, `resourceId`, and user email only; metadata content is not searched.
 - Auth does not include SSO, OAuth, MFA, password reset, or email verification.
-- AI orchestration does not include tool calling, web search, background workers, or autonomous agents.
+- AI orchestration does not include tool calling or web search. Background autonomy now exists via the M19 scheduler (`kingdomSchedulerService.ts`) driving the gated Living Loop; there are still no fully autonomous tool-using agents.
 - Anthropic, Gemini, and local/Ollama are registry stubs only; runtime clients are not implemented yet.
 - Memory search is keyword/tag based; no vector database is implemented.
 - Project routing is deterministic keyword/alias/name/source-ancestry matching only; no vector database or autonomous background router is implemented.

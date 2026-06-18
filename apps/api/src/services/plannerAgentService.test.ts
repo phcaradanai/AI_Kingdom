@@ -21,13 +21,13 @@ async function ensurePlannerAgentInDb() {
   return prisma.agent.create({
     data: {
       slug: "planner",
-      name: "Declan",
+      name: "Melody",
       title: "Royal Planner",
       role: "Planning Agent",
       specialty: "Post-council work order drafting",
       description: "Reviews completed council sessions and generates draft work orders.",
-      systemPrompt: "You are Declan, the Royal Planner. Generate 0 to 3 draft work orders as a JSON array. Return only the JSON array.",
-      prompt: "You are Declan, the Royal Planner.",
+      systemPrompt: "You are Melody, the Royal Planner. Generate 0 to 3 draft work orders as a JSON array. Return only the JSON array.",
+      prompt: "You are Melody, the Royal Planner.",
       skills: ["planning", "work order drafting"],
       responseStyle: "structured JSON output only",
       priority: 50,

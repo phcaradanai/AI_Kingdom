@@ -38,7 +38,10 @@ const envSchema = z.object({
   LOCAL_AI_MODEL: z.string().default("llama3.1"),
   AI_TIMEOUT_MS: z.coerce.number().int().positive().default(20000),
   OPENROUTER_TIMEOUT_MS: z.coerce.number().int().positive().default(90000),
-  AI_MAX_TOKENS: z.coerce.number().int().positive().default(700)
+  AI_MAX_TOKENS: z.coerce.number().int().positive().default(700),
+  // Kingdom Autonomy Scheduler (M19): how often the background worker drives the
+  // Living Loop. Gated by the LIVING_LOOP_ENABLED setting; floored at 15s in code.
+  LIVING_LOOP_INTERVAL_MS: z.coerce.number().int().positive().default(300000)
 }).superRefine((value, ctx) => {
   if (value.NODE_ENV === "production" && (value.JWT_SECRET === "development-secret-change-me" || value.JWT_SECRET.length < 32)) {
     ctx.addIssue({

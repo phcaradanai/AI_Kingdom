@@ -6,6 +6,7 @@ import {
   getLivingLoopStatus,
   listLivingLoopRuns
 } from "../services/livingLoopService.js";
+import { getSchedulerStatus } from "../services/kingdomSchedulerService.js";
 
 const router = Router();
 
@@ -16,6 +17,15 @@ router.get("/status", requireAuth, requireRole("KING", "CROWN_PRINCE"), async (_
   try {
     const status = await getLivingLoopStatus();
     res.json({ status });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/** GET /api/living-loop/scheduler — autonomy worker status (creates NO candidates) */
+router.get("/scheduler", requireAuth, requireRole("KING", "CROWN_PRINCE"), (_req, res, next) => {
+  try {
+    res.json({ scheduler: getSchedulerStatus() });
   } catch (error) {
     next(error);
   }

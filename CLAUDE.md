@@ -27,6 +27,12 @@ npm run db:migrate   # apply migrations + generate Prisma client (dev only)
 npm run db:seed      # reset seeded King user, royal agents, providers, projects, settings
 npm run runner:bootstrap # create/update local AgentRunner runtime data
 
+# Autonomy (M19) — let the Kingdom act on its own after a decree
+npm run autonomy:enable                      # LIVING_LOOP_ENABLED + auto-validation + COUNCIL_AUTO_WORK_ORDER_MODE=READY
+npm run autonomy:enable -- --mode=DRAFT       # work orders land as drafts for King review instead
+npm run autonomy:enable -- --with-sandbox-patch  # also auto-create LOW-risk sandbox patches (still NEEDS_REVIEW)
+npm run autonomy:disable                     # turn all autonomy settings back off
+
 # Single workspace targets
 npm run dev --workspace @ai-kingdom/api
 npm run test --workspace @ai-kingdom/api
@@ -99,6 +105,8 @@ Entry: `src/server.ts` → `src/app.ts` (Express setup with cors, helmet, morgan
 **Living Loop** (`livingLoopService.ts`): observe → propose → act automation cycle, gated by `LIVING_LOOP_ENABLED`. Observes work orders, failed automation jobs, stale runners, provider failures, project inbox items, and matters awaiting decision. Proposes `AutomationCandidate` rows (kinds: `VALIDATION_JOB`, `SANDBOX_PATCH`, `WORK_ORDER_REVIEW`, etc.), each filtered by `dataValueGate()`. Two opt-in auto-act stages:
 - `autoCreateValidationJobs()` (`LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`): creates `VALIDATION_ONLY` automation jobs — read-only, never patches.
 - `autoCreateSandboxPatchJobs()` (`LIVING_LOOP_AUTO_SANDBOX_PATCH`): creates `SANDBOX_PATCH` jobs with `commandPolicy: "SANDBOX_PATCH_NO_PUSH"`. Eight-condition risk policy (`livingLoopRiskPolicyService.ts`) gates every auto-patch: confidence ≥85, riskLevel LOW, online runner present, project linked, no active job, cooldown not violated, no blocked-path file hints. Auto-created jobs end in `NEEDS_REVIEW` — no branch push, PR creation, merge, or deploy ever runs automatically.
+
+**Autonomy Scheduler** (`kingdomSchedulerService.ts`, M19): the in-process background worker that makes the Living Loop run on its own — without it, the loop only fires on a manual `POST /api/living-loop/run`. `startKingdomScheduler()` is called from `server.ts` on listen (never from `app.ts`, so tests stay timer-free) and sets a `setInterval` (unref'd) at `LIVING_LOOP_INTERVAL_MS` (env, default 300000, floored at 15000). Each tick re-reads `LIVING_LOOP_ENABLED` from settings; only when enabled does it call `runLivingLoopOnce("SCHEDULED")`. A single in-process flag guards against overlapping ticks, and a tick never throws (errors are captured into status). The scheduler adds **no new capability** — every downstream gate is unchanged. Status via `getSchedulerStatus()` / `GET /api/living-loop/scheduler` (KING/CROWN_PRINCE). `server.ts` clears the timer on SIGTERM/SIGINT. Enable the full autonomous chain with `npm run autonomy:enable` (see Commands).
 
 ### Runner (`apps/runner`)
 
