@@ -26,8 +26,10 @@ const portraitByKey = new Map<string, string>([
   ["marcellus", "/agents/marcellus.png"],
   ["royal-treasurer", "/agents/marcellus.png"],
   ["royaltreasurer", "/agents/marcellus.png"],
+  ["vaelion", "/agents/vaelion.png"],
   ["royal-promptsmith", "/agents/vaelion.png"],
   ["royalpromptsmith", "/agents/vaelion.png"],
+  ["thaleon", "/agents/thaleon.png"],
   ["royal-archivist", "/agents/thaleon.png"],
   ["royalarchivist", "/agents/thaleon.png"],
 ]);
