@@ -8,59 +8,62 @@ import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { UserRole } from "@/types/api";
 
+// Navigation is grouped by PURPOSE (what the King is trying to do), not by internal
+// data model. Every `to` path and `roles` array is preserved from the prior nav — only
+// the grouping and group names changed — so all existing routes keep working.
 const navCategories = [
-  {
-    name: "Command",
-    items: [
-      { to: "/dashboard", label: "Dashboard", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/inbox", label: "Kingdom Inbox", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
-      { to: "/kingdom/operations", label: "Operations Center", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
-      { to: "/throne-room", label: "Royal Command", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
-    ]
-  },
   {
     name: "Kingdom",
     items: [
+      { to: "/dashboard", label: "Dashboard", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/throne-room", label: "Royal Command", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
+      { to: "/kingdom/operations", label: "Operations Center", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
+      { to: "/inbox", label: "Kingdom Inbox", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
+    ]
+  },
+  {
+    name: "Work",
+    items: [
       { to: "/projects", label: "Projects", icon: FolderKanban, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/work-orders", label: "Work Orders", icon: ClipboardList, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/project-inbox", label: "Project Inbox", icon: Inbox, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/artifacts", label: "Artifacts", icon: Archive, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/reports", label: "Reports", icon: ScrollText, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+    ]
+  },
+  {
+    name: "Knowledge",
+    items: [
+      { to: "/memory", label: "Memory", icon: Vault, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
+      { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
+      { to: "/knowledge-lab", label: "Knowledge Lab", icon: Brain, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
       { to: "/charter", label: "Charter", icon: BookOpen, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/vision", label: "Vision", icon: Eye, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-    ]
-  },
-  {
-    name: "Intelligence",
-    items: [
-      { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
-      { to: "/reports", label: "Reports", icon: ScrollText, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/memory", label: "Memory", icon: Vault, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
       { to: "/living-agents", label: "Living Agents", icon: Activity, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/knowledge-lab", label: "Knowledge Lab", icon: Brain, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
     ]
   },
   {
-    name: "Administration",
+    name: "Agents",
     items: [
-      { to: "/notices", label: "Notices", icon: Bell, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/matters", label: "Matters", icon: Landmark, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/agents", label: "Agents", icon: Shield, roles: ["KING"] },
       { to: "/external-agents", label: "External Agents", icon: Bot, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/work-orders", label: "Work Orders", icon: ClipboardList, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/automation-jobs", label: "Automation Jobs", icon: Activity, roles: ["KING"] },
-      { to: "/living-loop", label: "Living Loop", icon: Activity, roles: ["KING"] },
+      { to: "/providers", label: "Providers", icon: Cpu, roles: ["KING"] },
+      { to: "/routing", label: "Routing", icon: Landmark, roles: ["KING"] },
     ]
   },
   {
     name: "System",
     items: [
+      { to: "/automation-jobs", label: "Automation Jobs", icon: Activity, roles: ["KING"] },
+      { to: "/living-loop", label: "Living Loop", icon: Activity, roles: ["KING"] },
       { to: "/treasury", label: "Treasury", icon: Coins, roles: ["KING"] },
-      { to: "/providers", label: "Providers", icon: Cpu, roles: ["KING"] },
-      { to: "/routing", label: "Routing", icon: Landmark, roles: ["KING"] },
       { to: "/audit", label: "Audit Log", icon: ClipboardList, roles: ["KING"] },
       { to: "/settings", label: "Settings", icon: Settings, roles: ["KING"] },
       { to: "/users", label: "Users", icon: Users, roles: ["KING"] },
+      { to: "/notices", label: "Notices", icon: Bell, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/matters", label: "Matters", icon: Landmark, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/security", label: "Security", icon: Shield, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/profile", label: "Profile", icon: UserCircle, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/security", label: "Security", icon: Shield, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] }
     ]
   }
 ];
