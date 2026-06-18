@@ -214,4 +214,63 @@ describe("AgentsPage fallback model validation", () => {
     expect(await screen.findByText("Invalid")).toBeInTheDocument();
     expect(screen.getByText("Model is not present.")).toBeInTheDocument();
   }, 10_000);
+
+  it("renders repeated OpenRouter fallback attempts without duplicate-key warnings", async () => {
+    setup();
+    apiMocks.validateProviderModels.mockResolvedValue({
+      results: [{ modelId: "openrouter/owl-alpha", status: "VALID", checkedAt: nowIso }]
+    });
+    apiMocks.getAgentRoutingPreview.mockResolvedValueOnce({
+      effectiveRoute: {
+        provider: {
+          id: "openrouter-free",
+          name: "OpenRouter Free Sandbox",
+          type: "openrouter",
+          environmentMode: "SANDBOX",
+          hasCredentials: true,
+          costTier: "FREE",
+          defaultModel: "openrouter/owl-alpha"
+        },
+        model: "openrouter/owl-alpha",
+        fallbackProviders: [
+          {
+            id: "openrouter-free",
+            name: "OpenRouter Free Sandbox",
+            type: "openrouter",
+            environmentMode: "SANDBOX",
+            hasCredentials: true,
+            costTier: "FREE",
+            defaultModel: "openai/gpt-4o-mini"
+          },
+          {
+            id: "openrouter-free",
+            name: "OpenRouter Free Sandbox",
+            type: "openrouter",
+            environmentMode: "SANDBOX",
+            hasCredentials: true,
+            costTier: "FREE",
+            defaultModel: "openrouter/cypher-alpha"
+          }
+        ]
+      },
+      attemptPlan: [],
+      fallbackProviderDetails: [],
+      blockedFallbackProviderDetails: [],
+      sandboxFallbackMode: false,
+      latestUsage: null
+    });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByText("Fallback chain:")).toBeInTheDocument();
+    });
+
+    const duplicateKeyWarning = consoleError.mock.calls.some((call) =>
+      call.some((arg) => String(arg).includes("Encountered two children with the same key"))
+    );
+    expect(duplicateKeyWarning).toBe(false);
+    consoleError.mockRestore();
+  }, 10_000);
 });
