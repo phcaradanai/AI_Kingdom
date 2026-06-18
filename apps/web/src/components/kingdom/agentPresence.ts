@@ -82,37 +82,25 @@ export const LOCATIONS: KingdomLocation[] = [
   { key: "treasury", label: "Treasury", icon: Coins, blurb: "Budget & cost" }
 ];
 
-// Map by the agent's seeded `role` (the reliable signal the presence DTO returns).
-const ROLE_TO_LOCATION: Record<string, LocationKey> = {
-  Orchestrator: "throne",
-  Analyst: "library",
-  "Systems Designer": "warRoom",
-  "Planning Agent": "warRoom",
-  "Execution Strategist": "workshop",
-  "Financial Advisor": "treasury"
-};
-
-// Fallback for agents without a mapped `role` (e.g. Royal Archivist / Prompt Agent),
-// matched on the name/displayName. Title is not in the DTO today — see plan limitations.
-const NAME_KEYWORD_TO_LOCATION: Array<{ test: RegExp; location: LocationKey }> = [
-  { test: /archivist/i, location: "archive" },
-  { test: /treasurer/i, location: "treasury" },
-  { test: /researcher/i, location: "library" },
-  { test: /architect/i, location: "warRoom" },
-  { test: /planner/i, location: "warRoom" },
-  { test: /general/i, location: "workshop" },
-  { test: /vizier/i, location: "throne" }
+// Ordered keyword rules matched against role + name + displayName (lowercased).
+// Real presence roles vary a lot ("Technical Architect", "Evidence Analyst",
+// "Execution Commander", "Memory Keeper", …) so we keyword-match rather than
+// exact-match on the seed role strings — otherwise everyone falls to the Throne.
+// First matching rule wins, so more specific halls come before broader ones.
+const LOCATION_RULES: Array<{ test: RegExp; location: LocationKey }> = [
+  { test: /vizier|orchestrat|chancellor|steward/, location: "throne" },
+  { test: /prompt/, location: "throne" },
+  { test: /archiv|memory|record|ledger|keeper|scribe|chronicl|librarian/, location: "archive" },
+  { test: /treasur|financ|coin|gold|budget|advisor|account/, location: "treasury" },
+  { test: /research|analyst|evidence|scholar|librar|study/, location: "library" },
+  { test: /architect|designer|systems|planner|planning|strategy|blueprint/, location: "warRoom" },
+  { test: /general|commander|execution|strategist|forge|engineer|builder|smith|operator|worker/, location: "workshop" }
 ];
 
 // Resolve an agent to a location. Nothing is ever dropped — unmatched agents
 // fall back to the Throne (the royal court).
 export function resolveLocation(agent: Pick<AgentPresenceDto, "role" | "name" | "displayName">): LocationKey {
-  const byRole = agent.role ? ROLE_TO_LOCATION[agent.role] : undefined;
-  if (byRole) return byRole;
-
-  const haystack = `${agent.displayName ?? ""} ${agent.name ?? ""}`;
-  const byName = NAME_KEYWORD_TO_LOCATION.find((entry) => entry.test.test(haystack));
-  if (byName) return byName.location;
-
-  return "throne";
+  const haystack = `${agent.role ?? ""} ${agent.displayName ?? ""} ${agent.name ?? ""}`.toLowerCase();
+  const match = LOCATION_RULES.find((rule) => rule.test.test(haystack));
+  return match ? match.location : "throne";
 }
