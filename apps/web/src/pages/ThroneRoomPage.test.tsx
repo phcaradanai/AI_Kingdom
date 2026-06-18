@@ -9,6 +9,7 @@ const nowIso = new Date().toISOString();
 
 const apiMocks = vi.hoisted(() => ({
   createCouncilHandoff: vi.fn(),
+  executeCouncilWithExternalAgent: vi.fn(),
   planCouncilWorkOrder: vi.fn()
 }));
 
@@ -108,6 +109,15 @@ function renderPage(task: TaskDto | null = makeTask()) {
     workOrder: { id: "wo-handoff", contextBindingStatus: "FRESH" },
     handoffBrief: { title: "Council handoff brief" }
   });
+  apiMocks.executeCouncilWithExternalAgent.mockResolvedValue({
+    workOrder: { id: "wo-1" },
+    job: { id: "job-1", status: "APPROVED" },
+    externalAgentRun: { id: "run-1" },
+    externalAgent: { id: "external-agent-1" },
+    plannerResult: { drafted: 1, skipped: 0, sessionId: "session-1", draftedWorkOrderIds: ["wo-1"], createdWorkOrder: { id: "wo-1" }, traceId: "trace-1" },
+    alreadyScheduled: false,
+    message: "External agent execution approved. Runner will claim the job and report back for King review."
+  });
 
   return render(
     <MemoryRouter>
@@ -137,7 +147,7 @@ describe("ThroneRoomPage", () => {
 
     expect(screen.getByText("Final Recommendation")).toBeInTheDocument();
     expect(screen.getByText("Next Action")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /^Create Work Order$/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Create Work Order and Run External Agent/i })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Create External Agent Handoff/i })).not.toBeInTheDocument();
     expect(screen.getByText("Final synthesis ready")).toBeInTheDocument();
   });
@@ -166,12 +176,13 @@ describe("ThroneRoomPage", () => {
     expect(screen.getByText("Run local docs scan before SANDBOX_PATCH")).toBeInTheDocument();
   });
 
-  it("creates a work order through the primary action", async () => {
+  it("creates a work order and starts external-agent execution through the primary action", async () => {
     renderPage();
 
-    await userEvent.click(screen.getByRole("button", { name: /Create Work Order/i }));
-    await waitFor(() => expect(apiMocks.planCouncilWorkOrder).toHaveBeenCalledWith("session-1"));
-    expect(await screen.findByText("1 work order created from the council recommendation.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Create Work Order and Run External Agent/i }));
+    await waitFor(() => expect(apiMocks.executeCouncilWithExternalAgent).toHaveBeenCalledWith("session-1"));
+    expect(apiMocks.planCouncilWorkOrder).not.toHaveBeenCalled();
+    expect(await screen.findByText("External agent execution approved. Runner will claim the job and report back for King review.")).toBeInTheDocument();
   });
 
   it("shows a disabled work-order action when planner mode is off", () => {

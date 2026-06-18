@@ -552,6 +552,16 @@ export type PlannerResultDto = {
   traceId?: string;
 };
 
+export type CouncilExternalAgentExecutionDto = {
+  workOrder: WorkOrderDto;
+  job: AutomationJobDto;
+  externalAgentRun: ExternalAgentRunDto | null;
+  externalAgent: ExternalAgentDto | null;
+  plannerResult: PlannerResultDto | null;
+  alreadyScheduled: boolean;
+  message: string;
+};
+
 export type CouncilNextExecutableAction =
   | "NONE"
   | "CREATE_WORK_ORDER"

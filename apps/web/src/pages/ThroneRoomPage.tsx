@@ -43,6 +43,7 @@ export function ThroneRoomPage() {
   const [workOrderMessage, setWorkOrderMessage] = useState<string | null>(null);
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
   const [isCreatingWorkOrder, setIsCreatingWorkOrder] = useState(false);
+  const [isExecutingExternalAgent, setIsExecutingExternalAgent] = useState(false);
   const submitCommand = useKingdomStore((state) => state.submitCommand);
   const isLoading = useKingdomStore((state) => state.isLoading);
   const isProcessing = useKingdomStore((state) => state.isProcessing);
@@ -122,6 +123,37 @@ export function ThroneRoomPage() {
       setWorkOrderError(reason.startsWith("Work Order creation failed:") ? reason : `Work Order creation failed: ${reason}`);
     } finally {
       setIsCreatingWorkOrder(false);
+    }
+  }
+
+  async function executeWithExternalAgent() {
+    if (!latestSession) return;
+    console.info("[CouncilExternalAgentTrace] Button Click", { action: "CREATE_WORK_ORDER_AND_RUN_EXTERNAL_AGENT", sessionId: latestSession.id });
+    setWorkOrderMessage(null);
+    setWorkOrderError(null);
+    setIsExecutingExternalAgent(true);
+    try {
+      console.info("[CouncilExternalAgentTrace] API Request", { route: `/api/council/${latestSession.id}/execute-external-agent` });
+      const result = await api.executeCouncilWithExternalAgent(latestSession.id);
+      console.info("[CouncilExternalAgentTrace] API Response", {
+        workOrderId: result.workOrder.id,
+        automationJobId: result.job.id,
+        automationJobStatus: result.job.status,
+        externalAgentRunId: result.externalAgentRun?.id ?? null,
+        externalAgentId: result.externalAgent?.id ?? null,
+        alreadyScheduled: result.alreadyScheduled
+      });
+      const ids = result.plannerResult?.draftedWorkOrderIds?.length
+        ? result.plannerResult.draftedWorkOrderIds
+        : [result.workOrder.id];
+      setCreatedWorkOrderIds(ids);
+      setWorkOrderMessage(result.message || "External agent execution approved. The Kingdom runner will report back for King review.");
+      navigate(`/work-orders?focus=${encodeURIComponent(result.workOrder.id)}`);
+    } catch (executionError) {
+      const reason = executionError instanceof Error ? executionError.message : "Unable to execute council work with an external agent";
+      setWorkOrderError(reason.startsWith("External Agent execution failed:") ? reason : `External Agent execution failed: ${reason}`);
+    } finally {
+      setIsExecutingExternalAgent(false);
     }
   }
 
@@ -247,8 +279,10 @@ export function ThroneRoomPage() {
                 plannerMode={settings.find((setting) => setting.key === "COUNCIL_AUTO_WORK_ORDER_MODE")?.value ?? null}
                 isCreatingWorkOrder={isCreatingWorkOrder}
                 isCreatingHandoff={isCreatingHandoff}
+                isExecutingExternalAgent={isExecutingExternalAgent}
                 onCreateWorkOrder={createWorkOrder}
                 onCreateHandoff={createHandoff}
+                onExecuteExternalAgent={executeWithExternalAgent}
               />
 
               <CouncilSourceLinks
@@ -464,8 +498,10 @@ function RecommendedNextStepCard({
   plannerMode,
   isCreatingWorkOrder,
   isCreatingHandoff,
+  isExecutingExternalAgent,
   onCreateWorkOrder,
-  onCreateHandoff
+  onCreateHandoff,
+  onExecuteExternalAgent
 }: {
   task: TaskDto;
   session: CouncilSessionDto;
@@ -474,15 +510,18 @@ function RecommendedNextStepCard({
   plannerMode: string | null;
   isCreatingWorkOrder: boolean;
   isCreatingHandoff: boolean;
+  isExecutingExternalAgent: boolean;
   onCreateWorkOrder: () => void;
   onCreateHandoff: () => void;
+  onExecuteExternalAgent: () => void;
 }) {
   const createdWorkOrderId = session.createdWorkOrderId ?? createdWorkOrderIds[0] ?? handoffWorkOrderId;
   const nextStep = getPrimaryNextAction(task, session, {
     plannerMode,
     createdWorkOrderId,
     isCreatingWorkOrder,
-    isCreatingHandoff
+    isCreatingHandoff,
+    isExecutingExternalAgent
   });
   const PrimaryIcon = nextStep.icon;
   const hasReport = (session.reports?.length ?? 0) > 0 || task.reports.length > 0;
@@ -510,7 +549,7 @@ function RecommendedNextStepCard({
               <span className="min-w-0 break-words">{nextStep.buttonLabel}</span>
             </Link>
           ) : (
-            <Button type="button" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={nextStep.disabled} onClick={nextStep.onClick === "handoff" ? onCreateHandoff : onCreateWorkOrder}>
+            <Button type="button" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={nextStep.disabled} onClick={nextStep.onClick === "handoff" ? onCreateHandoff : nextStep.onClick === "externalExecution" ? onExecuteExternalAgent : onCreateWorkOrder}>
               <PrimaryIcon className="h-4 w-4 shrink-0" />
               <span className="min-w-0 break-words">{nextStep.buttonLabel}</span>
             </Button>
@@ -711,6 +750,7 @@ function getPrimaryNextAction(
     createdWorkOrderId?: string;
     isCreatingWorkOrder: boolean;
     isCreatingHandoff: boolean;
+    isExecutingExternalAgent: boolean;
   }
 ): {
   title: string;
@@ -719,7 +759,7 @@ function getPrimaryNextAction(
   icon: LucideIcon;
   disabled: boolean;
   disabledReason?: string;
-  onClick: "workOrder" | "handoff";
+  onClick: "workOrder" | "handoff" | "externalExecution";
   to?: string;
 } {
   const warning = extractContextWarning(session.finalSummary);
@@ -793,6 +833,16 @@ function getPrimaryNextAction(
   }
 
   const disabledByPlanner = action === "CREATE_WORK_ORDER" && (opts.plannerMode === "OFF" || opts.plannerMode === "DRAFT" || reason === "This council recommendation does not generate executable work orders.");
+  if (!disabledByPlanner && opts.plannerMode === "READY") {
+    return {
+      title: "Create Work Order and Run External Agent",
+      description: reason || "Create one executable Work Order, approve the External Agent Bridge job, and wait for the runner report.",
+      buttonLabel: opts.isExecutingExternalAgent ? "Starting External Agent..." : "Create Work Order and Run External Agent",
+      icon: Cpu,
+      disabled: opts.isExecutingExternalAgent,
+      onClick: "externalExecution"
+    };
+  }
   return {
     title: "Create Work Order",
     description: reason || "Create one executable Work Order from the council recommendation.",

@@ -1,4 +1,4 @@
-import type { AutomationJobMode, AutomationJobStatus, Prisma } from "@prisma/client";
+import type { AutomationJob, AutomationJobMode, AutomationJobStatus, Prisma } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
@@ -16,6 +16,7 @@ import { auditLog } from "./auditService.js";
 import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localDocumentAccessService.js";
 import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
 import { createOrUpdateAgentReviewForJob } from "./runnerResultReviewService.js";
+import { createNotice } from "./royalSecretaryService.js";
 
 /** Statuses that count as "active" for duplicate prevention */
 export const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = [
@@ -365,9 +366,74 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
         blockedReason: report.errors.length ? report.errors[0] : null
       }
     }).catch(() => undefined);
+    await notifyKingExternalAgentReport({
+      job,
+      reportId: implReport.id,
+      summary: report.summary,
+      errors: report.errors,
+      testResult: report.testResult
+    }).catch((err) => {
+      console.warn("[AutomationJob] Failed to create external agent completion notice:", err instanceof Error ? err.message : String(err));
+    });
   }
 
   return implReport;
+}
+
+async function notifyKingExternalAgentReport(input: {
+  job: Pick<AutomationJob, "id" | "workOrderId" | "projectId"> & {
+    externalAgentRuns: Array<{ id: string; externalAgentId: string }>;
+  };
+  reportId: string;
+  summary: string;
+  errors: string[];
+  testResult: SubmitReportInput["testResult"];
+}) {
+  const workOrder = await prisma.workOrder.findUnique({
+    where: { id: input.job.workOrderId },
+    select: { title: true }
+  });
+  const run = input.job.externalAgentRuns[0] ?? null;
+  const severity = input.errors.length > 0 ? "WARNING" : "INFO";
+  const statusLine = input.errors.length > 0
+    ? "External agent execution finished with errors and needs King review."
+    : "External agent execution finished and is ready for King review.";
+
+  const notice = await createNotice({
+    title: input.errors.length > 0
+      ? `External agent needs review: ${workOrder?.title ?? input.job.workOrderId}`
+      : `External agent completed: ${workOrder?.title ?? input.job.workOrderId}`,
+    content: [
+      statusLine,
+      "",
+      `Work Order: ${workOrder?.title ?? input.job.workOrderId}`,
+      `Automation Job ID: ${input.job.id}`,
+      run ? `External Agent Run ID: ${run.id}` : null,
+      `Implementation Report ID: ${input.reportId}`,
+      `Test Result: ${input.testResult}`,
+      "",
+      input.summary,
+      input.errors.length ? `Errors: ${input.errors.slice(0, 3).join(" | ")}` : null
+    ].filter(Boolean).join("\n"),
+    severity,
+    sourceType: "AutomationJob",
+    sourceId: input.job.id,
+    projectId: input.job.projectId ?? undefined,
+    traceId: run?.id
+  });
+
+  await auditLog({
+    action: "external_agent_completion_notice_created",
+    resourceType: "Notice",
+    resourceId: notice?.id ?? null,
+    metadata: {
+      automationJobId: input.job.id,
+      workOrderId: input.job.workOrderId,
+      externalAgentRunId: run?.id ?? null,
+      implementationReportId: input.reportId,
+      severity
+    }
+  }).catch(() => undefined);
 }
 
 export async function heartbeat(runnerId: string, meta?: { version?: string; hostname?: string }) {

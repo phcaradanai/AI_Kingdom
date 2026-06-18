@@ -18,7 +18,7 @@ export async function createExternalAgentBridgeJob(input: {
   externalAgentId?: string | null;
   createdByUserId: string;
 }): Promise<ExternalAgentBridgeJobResult> {
-  await assertBridgeEnabled();
+  await assertExternalAgentBridgeEnabled();
 
   const workOrder = await prisma.workOrder.findUnique({
     where: { id: input.workOrderId },
@@ -173,7 +173,7 @@ async function updateExternalAgentRunForRunner(
   });
 }
 
-async function assertBridgeEnabled() {
+export async function assertExternalAgentBridgeEnabled() {
   const enabled = await getBooleanSetting("EXTERNAL_AGENT_BRIDGE_ENABLED", false);
   if (!enabled) throw namedError("BridgeDisabledError", "External Agent Bridge is disabled. Set EXTERNAL_AGENT_BRIDGE_ENABLED=true before creating bridge jobs.");
 }
