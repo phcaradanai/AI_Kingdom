@@ -69,6 +69,7 @@ function stepStatusIcon(status: string) {
     case "HEALTH_BLOCKED": return <XCircle className="h-4 w-4 text-orange-400" />;
     case "BUDGET_BLOCKED": return <XCircle className="h-4 w-4 text-yellow-400" />;
     case "CHAIN_SKIPPED": return <MinusCircle className="h-4 w-4 text-slate-400" />;
+    case "PROVIDER_SKIPPED": return <MinusCircle className="h-4 w-4 text-rose-400" />;
     default: return <Activity className="h-4 w-4 text-muted-foreground" />;
   }
 }
@@ -101,6 +102,7 @@ function stepTypeBgColor(stepType: string) {
     case "HEALTH_BLOCKED": return "bg-orange-500/15 text-orange-300 border-orange-500/30";
     case "BUDGET_BLOCKED": return "bg-yellow-500/15 text-yellow-300 border-yellow-500/30";
     case "CHAIN_SKIPPED": return "bg-slate-500/15 text-slate-400 border-slate-500/30";
+    case "PROVIDER_SKIPPED": return "bg-rose-500/15 text-rose-300 border-rose-500/30";
     default: return "bg-muted/20 text-muted-foreground border-border";
   }
 }
@@ -269,6 +271,9 @@ export function UsageTracePage() {
       : costSources.includes("FREE") && costSources.every((s) => s === "FREE") ? "FREE"
       : costSources.length > 0 ? "ESTIMATED"
       : null;
+    const providerCallSteps = details.steps.filter((s) => s.stepType === "PROVIDER_CALL_SUCCESS" || s.stepType === "PROVIDER_CALL_FAILED");
+    const finalIsSandbox = (lastSuccess?.providerType ?? "") === "sandbox";
+    const apiAttempted = providerCallSteps.some((s) => (s.providerType ?? "") !== "sandbox");
     return {
       finalProvider: lastSuccess?.providerName ? getProviderDisplayName(lastSuccess.providerId ?? lastSuccess.providerName) : (trace?.providerName ? getProviderDisplayName(trace.providerId ?? trace.providerName) : null),
       finalModel: lastSuccess?.model ? getModelDisplayName(lastSuccess.model) : (trace?.model ? getModelDisplayName(trace.model) : null),
@@ -277,7 +282,9 @@ export function UsageTracePage() {
       totalDurationMs,
       fallbackCount: details.totals.fallbackCount,
       attemptCount: successSteps.length + details.steps.filter((s) => s.stepType === "PROVIDER_CALL_FAILED").length,
-      costSource: dominantCostSource
+      costSource: dominantCostSource,
+      finalIsSandbox,
+      apiAttempted
     };
   })() : null;
 
@@ -404,6 +411,18 @@ export function UsageTracePage() {
                 <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
                   <RefreshCw className="h-3.5 w-3.5 shrink-0" />
                   {finalResolution.fallbackCount} fallback{finalResolution.fallbackCount > 1 ? "s" : ""} used across {finalResolution.attemptCount} attempt{finalResolution.attemptCount !== 1 ? "s" : ""}
+                </div>
+              )}
+              {finalResolution.finalIsSandbox && finalResolution.apiAttempted && (
+                <div className="mt-3 flex items-center gap-2 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                  <RefreshCw className="h-3.5 w-3.5 shrink-0" />
+                  Used Local Sandbox only after all configured API models failed.
+                </div>
+              )}
+              {finalResolution.finalIsSandbox && !finalResolution.apiAttempted && (
+                <div className="mt-3 flex items-center gap-2 rounded-md border border-red-500/40 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                  <XCircle className="h-3.5 w-3.5 shrink-0" />
+                  Local Sandbox was used without attempting configured API models. Check the agent's preferred provider and routing settings.
                 </div>
               )}
             </Card>

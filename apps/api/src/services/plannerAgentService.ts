@@ -1,8 +1,7 @@
 import { type TaskMode, type WorkOrderStatus } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
-import { createAIProviderFromConfig } from "../ai/providerFactory.js";
+import { buildAIProviderCallsFromRoute } from "../ai/providerCallPlanner.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
-import type { AIProviderConfig } from "./aiProviderRegistry.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import {
@@ -232,7 +231,9 @@ async function callPlannerLLM(opts: {
     route.provider.type,
     defaultMaxTokens
   );
-  const providerCalls = buildProviderCalls(route);
+  // plannerAgent uses a narrowed select without routing fields; the route already encodes
+  // the full ordered attempts (primary + fallbacks + sandbox), so no agent override is needed.
+  const providerCalls = buildAIProviderCallsFromRoute(route);
 
   const actorRole = (task.user?.role as string | undefined) ?? "KING";
   const trace = await createAIUsageTrace({
@@ -469,17 +470,4 @@ async function hasDuplicateWorkOrder(title: string, projectId: string | null): P
   });
 
   return existing.some((wo) => norm(wo.title) === titleNorm);
-}
-
-function buildProviderCalls(route: { provider: AIProviderConfig; model: string; fallbackAttempts: { provider: AIProviderConfig; model: string }[] }) {
-  const attempts = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts];
-  return attempts
-    .map(({ provider, model }) => {
-      try {
-        return { provider: createAIProviderFromConfig(provider), model };
-      } catch {
-        return null;
-      }
-    })
-    .filter((call): call is NonNullable<typeof call> => Boolean(call));
 }

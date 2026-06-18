@@ -198,3 +198,56 @@ test("GET /agents/:id/routing-preview returns effective route", async () => {
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
   }
 });
+
+test("GET /agents/:id/routing-preview surfaces ordered attemptPlan and preferred-provider skip reason", async () => {
+  const user = await createUser("KING");
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const agent = await prisma.agent.create({
+    data: {
+      slug: `routing-preview-skip-${suffix}`,
+      name: "Routing Preview Skip Agent",
+      title: "Test Agent",
+      role: "Tester",
+      specialty: "Routing",
+      prompt: "test",
+      systemPrompt: "test",
+      skills: [],
+      responseStyle: "concise",
+      preferredProviderId: "ghost-provider-xyz",
+      defaultModel: "ghost-model",
+      fallbackModels: [],
+      fallbackProviderIds: []
+    }
+  });
+  try {
+    await withServer(async (baseUrl) => {
+      const token = await login(baseUrl, user.email);
+      assert.ok(token);
+
+      const previewRes = await fetch(`${baseUrl}/api/agents/${agent.id}/routing-preview`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(previewRes.status, 200);
+      const data = await previewRes.json() as {
+        attemptPlan?: Array<{ providerId: string; source: string; status: string; skipReason?: string }>;
+        preferredProviderBlocked?: { providerId: string; reason: string } | null;
+      };
+
+      assert.ok(Array.isArray(data.attemptPlan), "attemptPlan should be an array");
+      // The unregistered preferred provider must appear as a SKIPPED/BLOCKED entry with a reason.
+      const blockedEntry = data.attemptPlan!.find((e) => e.providerId === "ghost-provider-xyz");
+      assert.ok(blockedEntry, "ghost provider should appear in attempt plan as skipped");
+      assert.equal(blockedEntry!.status, "BLOCKED");
+      assert.match(blockedEntry!.skipReason ?? "", /PREFERRED_PROVIDER_NOT_FOUND/);
+
+      assert.ok(data.preferredProviderBlocked, "preferredProviderBlocked should be populated");
+      assert.equal(data.preferredProviderBlocked!.providerId, "ghost-provider-xyz");
+
+      // A real, ready API/sandbox attempt must still be planned (route does not collapse to nothing).
+      assert.ok(data.attemptPlan!.some((e) => e.status === "READY"), "should still have at least one ready attempt");
+    });
+  } finally {
+    await prisma.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});

@@ -9,6 +9,7 @@ import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { describeFallbackProviderReadiness, isSandboxFallbackModeActive, selectAIProviderRoute } from "../services/aiProviderRouter.js";
 import { listAIProviders } from "../services/aiProviderRegistry.js";
+import { planProviderAttempts } from "../ai/providerCallPlanner.js";
 import { resolveEffectiveParameters, buildProviderRequestBody } from "../ai/modelParameterResolver.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -340,8 +341,22 @@ router.get("/:id/routing-preview", async (req, res, next) => {
     }
 
     type ProviderSummary = { id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string };
+    type AttemptPlanEntry = {
+      order: number;
+      providerId: string;
+      providerName: string;
+      providerType: string;
+      model: string;
+      source: "PRIMARY_MODEL" | "FALLBACK_MODEL" | "FALLBACK_PROVIDER" | "EMERGENCY_SANDBOX" | "SKIPPED";
+      status: "READY" | "BLOCKED" | "UNKNOWN";
+      skipReason?: string;
+      settingKey?: string;
+    };
     const allProviders = await listAIProviders({ activeOnly: false });
     let effectiveRoute: { provider: ProviderSummary; model: string; fallbackProviders: ProviderSummary[] } | null = null;
+    let attemptPlan: AttemptPlanEntry[] = [];
+    let preferredProviderBlocked: { providerId: string; reason: string; settingKey?: string } | null = null;
+    let sandboxBeforeApiModels = false;
 
     try {
       const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
@@ -366,6 +381,50 @@ router.get("/:id/routing-preview", async (req, res, next) => {
           defaultModel: fp.defaultModel
         }))
       };
+
+      // Ordered attempt plan: exactly what generateWithFallback will try, in order.
+      const planned = planProviderAttempts(route, agent);
+      attemptPlan = planned.map((attempt, index) => ({
+        order: index + 1,
+        providerId: attempt.provider.id,
+        providerName: attempt.provider.name,
+        providerType: attempt.provider.type,
+        model: attempt.model,
+        source: attempt.source,
+        status: "READY" as const
+      }));
+
+      // Append providers/models that were considered but skipped, with the reason + setting key.
+      for (const providerId of route.skippedProviderIds ?? []) {
+        const reason = route.skippedReasons?.[providerId] ?? "Provider skipped during routing.";
+        const settingKey = route.skippedSettingKeys?.[providerId];
+        const provider = allProviders.find((p) => p.id === providerId);
+        attemptPlan.push({
+          order: attemptPlan.length + 1,
+          providerId,
+          providerName: provider?.name ?? providerId,
+          providerType: provider?.type ?? "unknown",
+          model: provider?.defaultModel ?? "—",
+          source: "SKIPPED",
+          status: "BLOCKED",
+          skipReason: reason,
+          settingKey
+        });
+      }
+
+      // Warning: the agent pins a preferred provider, but it was skipped (not attempted at all).
+      if (agent.preferredProviderId && (route.skippedProviderIds ?? []).includes(agent.preferredProviderId)) {
+        preferredProviderBlocked = {
+          providerId: agent.preferredProviderId,
+          reason: route.skippedReasons?.[agent.preferredProviderId] ?? "Preferred provider was skipped.",
+          settingKey: route.skippedSettingKeys?.[agent.preferredProviderId]
+        };
+      }
+
+      // Warning: sandbox appears before any non-sandbox API model in the ready attempts.
+      const firstApiIndex = planned.findIndex((a) => a.source !== "EMERGENCY_SANDBOX");
+      const firstSandboxIndex = planned.findIndex((a) => a.source === "EMERGENCY_SANDBOX");
+      sandboxBeforeApiModels = firstSandboxIndex !== -1 && (firstApiIndex === -1 || firstSandboxIndex < firstApiIndex);
     } catch {
       // provider unavailable — still return agent config
     }
@@ -387,6 +446,9 @@ router.get("/:id/routing-preview", async (req, res, next) => {
 
     res.json({
       effectiveRoute,
+      attemptPlan,
+      preferredProviderBlocked,
+      sandboxBeforeApiModels,
       fallbackProviderDetails,
       blockedFallbackProviderDetails,
       sandboxFallbackMode,

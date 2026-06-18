@@ -105,12 +105,29 @@ export type AgentDto = {
 
 export type AgentRoutingPolicy = "GLOBAL_ROUTING" | "FIXED_PRIMARY" | "FIXED_PRIMARY_WITH_FALLBACK" | "SANDBOX_FREE_ONLY" | "LOWEST_COST" | "QUALITY_FIRST";
 
+export type RouteAttemptSource = "PRIMARY_MODEL" | "FALLBACK_MODEL" | "FALLBACK_PROVIDER" | "EMERGENCY_SANDBOX" | "SKIPPED";
+
+export type RouteAttemptPlanEntry = {
+  order: number;
+  providerId: string;
+  providerName: string;
+  providerType: string;
+  model: string;
+  source: RouteAttemptSource;
+  status: "READY" | "BLOCKED" | "UNKNOWN";
+  skipReason?: string;
+  settingKey?: string;
+};
+
 export type AgentRoutingPreviewDto = {
   effectiveRoute: {
     provider: { id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string };
     model: string;
     fallbackProviders: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; defaultModel: string }>;
   } | null;
+  attemptPlan?: RouteAttemptPlanEntry[];
+  preferredProviderBlocked?: { providerId: string; reason: string; settingKey?: string } | null;
+  sandboxBeforeApiModels?: boolean;
   fallbackProviderDetails: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; isActive: boolean; readiness?: ProviderReadinessDto } | null>;
   blockedFallbackProviderDetails?: Array<{ id: string; name: string; type: string; environmentMode: string; hasCredentials: boolean; costTier: string; isActive: boolean; readiness: ProviderReadinessDto }>;
   sandboxFallbackMode?: boolean;

@@ -1,6 +1,7 @@
 import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
-import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2, Image, RotateCcw, ExternalLink } from "lucide-react";
+import { Shield, AlertTriangle, CheckCircle, RefreshCw, ChevronUp, ChevronDown, X, Plus, Settings2, Image, RotateCcw, ExternalLink, HelpCircle } from "lucide-react";
 import { AgentPortrait } from "@/components/AgentPortrait";
+import { RoutingHelpModal } from "@/components/RoutingHelpModal";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,6 +15,14 @@ import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, DisplayProfilePayl
 import { api } from "@/lib/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
+
+const SOURCE_SHORT: Record<string, string> = {
+  PRIMARY_MODEL: "primary",
+  FALLBACK_MODEL: "fallback model",
+  FALLBACK_PROVIDER: "fallback provider",
+  EMERGENCY_SANDBOX: "sandbox",
+  SKIPPED: "skipped"
+};
 const FALLBACK_MODEL_VALIDATION_TTL_MS = 5 * 60 * 1000;
 const FALLBACK_MODEL_DEBOUNCE_MS = 800;
 
@@ -126,6 +135,7 @@ export function AgentsPage() {
   const [draft, setDraft] = useState<AgentPayload>(selected ? toPayload(selected) : blankAgent);
   const [error, setError] = useState<string | null>(null);
   const [routingPreview, setRoutingPreview] = useState<AgentRoutingPreviewDto | null>(null);
+  const [routingHelpOpen, setRoutingHelpOpen] = useState(false);
   const [providerModels, setProviderModels] = useState<ProviderModelsDto | null>(null);
   const [loadingPreview, setLoadingPreview] = useState(false);
   const [effectivePreview, setEffectivePreview] = useState<EffectiveRequestPreviewDto | null>(null);
@@ -1238,16 +1248,27 @@ export function AgentsPage() {
               <div className="rounded-lg border border-border/60 bg-muted/10 p-4 space-y-3">
                 <div className="flex items-center justify-between">
                   <h3 className="font-semibold text-sm text-foreground">Effective Routing Preview</h3>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="h-7 px-2 text-xs gap-1"
-                    onClick={() => loadRoutingPreview(selected.id)}
-                    disabled={loadingPreview}
-                  >
-                    <RefreshCw className={cn("h-3 w-3", loadingPreview && "animate-spin")} />
-                    Refresh
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => setRoutingHelpOpen(true)}
+                    >
+                      <HelpCircle className="h-3.5 w-3.5" />
+                      How models are chosen
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-7 px-2 text-xs gap-1"
+                      onClick={() => loadRoutingPreview(selected.id)}
+                      disabled={loadingPreview}
+                    >
+                      <RefreshCw className={cn("h-3 w-3", loadingPreview && "animate-spin")} />
+                      Refresh
+                    </Button>
+                  </div>
                 </div>
                 {loadingPreview ? (
                   <p className="text-xs text-muted-foreground">Loading…</p>
@@ -1268,6 +1289,45 @@ export function AgentsPage() {
                         <span className="text-muted-foreground">No active provider available</span>
                       )}
                     </div>
+
+                    {routingPreview.sandboxBeforeApiModels && (
+                      <div className="flex items-start gap-2 rounded border border-rose-500/40 bg-rose-500/10 p-2 text-rose-200">
+                        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>Sandbox is earlier than configured API models. This is usually wrong.</span>
+                      </div>
+                    )}
+                    {routingPreview.preferredProviderBlocked && (
+                      <div className="flex items-start gap-2 rounded border border-amber-500/40 bg-amber-500/10 p-2 text-amber-200">
+                        <AlertTriangle className="h-3.5 w-3.5 mt-0.5 shrink-0" />
+                        <span>
+                          Preferred provider is blocked by {routingPreview.preferredProviderBlocked.settingKey ?? "a provider/route setting"}. The agent will not use this API provider until fixed.
+                          <span className="block text-amber-300/80 mt-0.5">{routingPreview.preferredProviderBlocked.reason}</span>
+                        </span>
+                      </div>
+                    )}
+
+                    {routingPreview.attemptPlan && routingPreview.attemptPlan.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-muted-foreground">Attempt order: </span>
+                        <ol className="mt-1 space-y-0.5">
+                          {routingPreview.attemptPlan.map((entry, i) => (
+                            <li key={`${entry.providerId}-${entry.model}-${i}`} className="flex items-center gap-2">
+                              <span className="text-muted-foreground w-4 text-right">{i + 1}.</span>
+                              <span className="font-medium text-foreground">{entry.providerName}</span>
+                              <span className="text-muted-foreground">/</span>
+                              <span className="font-mono text-foreground truncate">{entry.model}</span>
+                              <span className="text-muted-foreground">({SOURCE_SHORT[entry.source] ?? entry.source})</span>
+                              <span className={cn(
+                                "ml-auto text-[10px] font-medium",
+                                entry.status === "READY" ? "text-emerald-300" : entry.status === "BLOCKED" ? "text-rose-300" : "text-muted-foreground"
+                              )}>
+                                {entry.status === "BLOCKED" ? "blocked" : entry.status === "READY" ? "ready" : "unknown"}
+                              </span>
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    )}
 
                     {routingPreview.effectiveRoute && routingPreview.effectiveRoute.fallbackProviders.length > 0 && (
                       <div>
@@ -1561,6 +1621,12 @@ export function AgentsPage() {
           )}
         </Card>
       </div>
+      <RoutingHelpModal
+        open={routingHelpOpen}
+        onClose={() => setRoutingHelpOpen(false)}
+        preview={routingPreview}
+        agentName={selected?.title ?? selected?.name}
+      />
     </>
   );
 }

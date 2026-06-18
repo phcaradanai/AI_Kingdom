@@ -1,10 +1,9 @@
 import type { Agent, AgentResponse, CouncilSession, Task, TaskMode } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
-import { createAIProviderFromConfig } from "../ai/providerFactory.js";
+import { buildAIProviderCallsFromRoute } from "../ai/providerCallPlanner.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
 import { prisma } from "../db/prisma.js";
 import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
-import type { AIProviderConfig } from "./aiProviderRegistry.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getKingdomContext } from "./kingdomComplianceService.js";
 import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./memoryService.js";
@@ -144,16 +143,17 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       try {
         const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
         const effectiveParams = resolveEffectiveParameters(agent, route.provider.type, defaultMaxTokens);
-        const providerCalls = buildProviderCalls(route);
+        const providerCalls = buildAIProviderCallsFromRoute(route, agent);
 
         // Emit preliminary trace for route chain health/budget/chain skips (before trace exists, buffer and emit after)
-        const pendingRouteEvents: Array<{ providerId: string; reason: string; kind: "HEALTH_BLOCKED" | "BUDGET_BLOCKED" | "CHAIN_SKIPPED" }> = [];
+        const pendingRouteEvents: Array<{ providerId: string; reason: string; kind: "HEALTH_BLOCKED" | "BUDGET_BLOCKED" | "CHAIN_SKIPPED" | "PROVIDER_SKIPPED" }> = [];
         if (route.skippedProviderIds?.length) {
           for (const pid of route.skippedProviderIds) {
             const reason = route.skippedReasons?.[pid] ?? "Provider skipped by route intelligence";
-            const kind = reason.includes("HEALTH_BLOCKED") ? "HEALTH_BLOCKED"
+            const kind = reason.includes("BUDGET_BLOCKED") ? "BUDGET_BLOCKED"
+              : reason.includes("HEALTH_BLOCKED") ? "HEALTH_BLOCKED"
               : reason.includes("CHAIN_SKIPPED") ? "CHAIN_SKIPPED"
-              : "BUDGET_BLOCKED";
+              : "PROVIDER_SKIPPED";
             pendingRouteEvents.push({ providerId: pid, reason, kind });
           }
         }
@@ -200,7 +200,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
 
         // Emit HEALTH_BLOCKED / BUDGET_BLOCKED / CHAIN_SKIPPED steps for skipped providers
         for (const evt of pendingRouteEvents) {
-          const titleMap = { HEALTH_BLOCKED: "Provider health-blocked", BUDGET_BLOCKED: "Provider budget-blocked", CHAIN_SKIPPED: "Chain step skipped" };
+          const titleMap = { HEALTH_BLOCKED: "Provider health-blocked", BUDGET_BLOCKED: "Provider budget-blocked", CHAIN_SKIPPED: "Chain step skipped", PROVIDER_SKIPPED: "Provider skipped" };
           await addTraceStep({
             traceId,
             stepType: evt.kind,
@@ -439,7 +439,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
     const summaryEffectiveParams = resolveEffectiveParameters(grandVizier, summaryRoute.provider.type, defaultMaxTokens);
-    const summaryProviderCalls = buildProviderCalls(summaryRoute);
+    const summaryProviderCalls = buildAIProviderCallsFromRoute(summaryRoute, grandVizier);
     const summaryTrace = await createAIUsageTrace({
       actorUserId: userId,
       actorRole: task.user.role,
@@ -898,19 +898,6 @@ function redactPublicOutput(value: string): string {
 function summarizeForCandidate(value: string, maxLength = 450): string {
   const normalized = value.replace(/\s+/g, " ").trim();
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized;
-}
-
-function buildProviderCalls(route: { provider: AIProviderConfig; model: string; fallbackAttempts: { provider: AIProviderConfig; model: string }[] }) {
-  const attempts = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts];
-  return attempts
-    .map(({ provider, model }) => {
-      try {
-        return { provider: createAIProviderFromConfig(provider), model };
-      } catch {
-        return null;
-      }
-    })
-    .filter((call): call is NonNullable<typeof call> => Boolean(call));
 }
 
 function orderSelectedAgents(mode: TaskMode, agents: Agent[]): Agent[] {

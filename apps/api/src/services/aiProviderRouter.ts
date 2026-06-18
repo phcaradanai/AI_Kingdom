@@ -34,7 +34,18 @@ export type AIProviderRouteSelection = {
   routeChainId?: string;
   skippedProviderIds?: string[];
   skippedReasons?: Record<string, string>;
+  /** Setting key responsible for each skip, so the UI can tell the user how to fix it. */
+  skippedSettingKeys?: Record<string, string>;
 };
+
+/** A provider/model that was considered but not attempted, with the reason + setting key to fix it. */
+export type ProviderSkipRecord = { providerId: string; reason: string; settingKey?: string };
+
+const SKIP_SETTING_KEYS = {
+  PRODUCTION_FALLBACK: "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX",
+  DAILY_BUDGET: "DAILY_BUDGET_LIMIT_USD",
+  MONTHLY_BUDGET: "MONTHLY_BUDGET_LIMIT_USD"
+} as const;
 
 const TASK_MODE_PROVIDER_ORDER: Record<TaskMode, string[]> = {
   ASK: [OPENROUTER_FREE_PROVIDER_ID, "deepseek", "openrouter", "openai", LOCAL_SANDBOX_PROVIDER_ID],
@@ -57,31 +68,43 @@ export async function selectAIProviderRoute(input: {
   const providers = await listAIProviders({ activeOnly: true });
   const capableProviders = providers.filter((provider) => supportsRequiredCapabilities(provider, input.requiredCapabilities));
 
-  // Phase 4+5: Try route chain first
+  const skipped: ProviderSkipRecord[] = [];
+
+  // 1) Agent-pinned preferred provider takes precedence over global route chains.
+  //    A configured, active, chat-capable preferred provider MUST be attempted first —
+  //    with its primary model and fallbackModels — before any chain or sandbox baseline.
+  //    Do not let a global chain (or a demoted provider) silently start at sandbox.
+  if (input.agent.preferredProviderId) {
+    const agentProvider = await getAIProvider(input.agent.preferredProviderId);
+    if (agentProvider?.isActive && supportsRequiredCapabilities(agentProvider, input.requiredCapabilities)) {
+      const fallbackIds = input.fallbackProviderIds?.length
+        ? input.fallbackProviderIds
+        : buildAgentFallbackIds(input.agent).length
+          ? buildAgentFallbackIds(input.agent)
+          : await getDefaultFallbackChain();
+      const { attempts: fallbackAttempts, skipped: fbSkipped } = await resolveFallbackAttempts(fallbackIds, agentProvider, capableProviders);
+      skipped.push(...fbSkipped);
+      return applyBudgetGuard(withSkips({
+        provider: agentProvider,
+        model: input.agent.defaultModel ?? agentProvider.defaultModel,
+        fallbackAttempts,
+        fallbackProviders: fallbackAttempts.map((a) => a.provider),
+        attemptedProviderIds: [agentProvider.id, ...fallbackAttempts.map((a) => a.provider.id)],
+        costMode
+      }, skipped), providers);
+    }
+    // Preferred provider is configured but unusable — record why so the UI can explain it
+    // instead of silently collapsing to the sandbox baseline.
+    skipped.push(describePreferredProviderSkip(input.agent.preferredProviderId, agentProvider, input.requiredCapabilities));
+  }
+
+  // 2) Route chain (global routing) — only when there is no usable pinned preferred provider.
   const chain = await findActiveChainForContext(input.taskMode, input.agent.id);
   if (chain && chain.entries.length > 0) {
     // For non-agent-specific chains, inject the agent's fallbackModels before chain-level fallbacks
     const agentFallbackModels = chain.agentId ? [] : input.agent.fallbackModels;
-    return buildSelectionFromChain(chain, capableProviders, providers, costMode, input.requiredCapabilities, agentFallbackModels);
-  }
-
-  // Legacy routing fallback below
-  const agentProvider = input.agent.preferredProviderId ? await getAIProvider(input.agent.preferredProviderId) : null;
-  if (agentProvider?.isActive && supportsRequiredCapabilities(agentProvider, input.requiredCapabilities)) {
-    const fallbackIds = input.fallbackProviderIds?.length
-      ? input.fallbackProviderIds
-      : buildAgentFallbackIds(input.agent).length
-        ? buildAgentFallbackIds(input.agent)
-        : await getDefaultFallbackChain();
-    const fallbackAttempts = await resolveFallbackAttempts(fallbackIds, agentProvider, capableProviders);
-    return applyBudgetGuard({
-      provider: agentProvider,
-      model: input.agent.defaultModel ?? agentProvider.defaultModel,
-      fallbackAttempts,
-      fallbackProviders: fallbackAttempts.map((a) => a.provider),
-      attemptedProviderIds: [agentProvider.id, ...fallbackAttempts.map((a) => a.provider.id)],
-      costMode
-    }, providers);
+    const selection = await buildSelectionFromChain(chain, capableProviders, providers, costMode, input.requiredCapabilities, agentFallbackModels);
+    return mergeSkips(selection, skipped);
   }
 
   const dbRoute = await prisma.aIProviderRoute.findFirst({
@@ -99,15 +122,16 @@ export async function selectAIProviderRoute(input: {
   if (dbRoute?.preferredProviderId) {
     const preferred = capableProviders.find((provider) => provider.id === dbRoute.preferredProviderId);
     if (preferred) {
-      const fallbackAttempts = await resolveFallbackAttempts(dbRoute.fallbackProviderIds, preferred, capableProviders);
-      return applyBudgetGuard({
+      const { attempts: fallbackAttempts, skipped: fbSkipped } = await resolveFallbackAttempts(dbRoute.fallbackProviderIds, preferred, capableProviders);
+      skipped.push(...fbSkipped);
+      return applyBudgetGuard(withSkips({
         provider: preferred,
         model: input.agent.defaultModel ?? dbRoute.preferredModel ?? preferred.defaultModel,
         fallbackAttempts,
         fallbackProviders: fallbackAttempts.map((a) => a.provider),
         attemptedProviderIds: [preferred.id, ...fallbackAttempts.map((a) => a.provider.id)],
         costMode
-      }, providers);
+      }, skipped), providers);
     }
   }
 
@@ -122,21 +146,72 @@ export async function selectAIProviderRoute(input: {
     : buildAgentFallbackIds(input.agent).length
       ? buildAgentFallbackIds(input.agent)
       : await getDefaultFallbackChain();
-  const fallbackAttempts = await resolveFallbackAttempts(fallbackIds, provider, capableProviders);
+  const { attempts: fallbackAttempts, skipped: fbSkipped } = await resolveFallbackAttempts(fallbackIds, provider, capableProviders);
+  skipped.push(...fbSkipped);
 
   if (!fallbackAttempts.some((a) => a.provider.id === LOCAL_SANDBOX_PROVIDER_ID)) {
     const sandbox = providers.find((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID) ?? providers.find((candidate) => candidate.id === LEGACY_MOCK_PROVIDER_ID);
     if (sandbox && sandbox.id !== provider.id) fallbackAttempts.push({ provider: sandbox, model: sandbox.defaultModel });
   }
 
-  return applyBudgetGuard({
+  return applyBudgetGuard(withSkips({
     provider,
     model: input.agent.defaultModel ?? provider.defaultModel,
     fallbackAttempts,
     fallbackProviders: fallbackAttempts.map((a) => a.provider),
     attemptedProviderIds: [provider.id, ...fallbackAttempts.map((a) => a.provider.id)],
     costMode
-  }, providers);
+  }, skipped), providers);
+}
+
+/** Merge skip records into a selection's skippedProviderIds / skippedReasons / skippedSettingKeys. */
+function withSkips(selection: AIProviderRouteSelection, skipped: ProviderSkipRecord[]): AIProviderRouteSelection {
+  if (skipped.length === 0) return selection;
+  const skippedProviderIds = [...(selection.skippedProviderIds ?? [])];
+  const skippedReasons = { ...(selection.skippedReasons ?? {}) };
+  const skippedSettingKeys = { ...(selection.skippedSettingKeys ?? {}) };
+  for (const record of skipped) {
+    if (!skippedProviderIds.includes(record.providerId)) skippedProviderIds.push(record.providerId);
+    skippedReasons[record.providerId] = record.reason;
+    if (record.settingKey) skippedSettingKeys[record.providerId] = record.settingKey;
+  }
+  return {
+    ...selection,
+    skippedProviderIds: skippedProviderIds.length > 0 ? skippedProviderIds : undefined,
+    skippedReasons: Object.keys(skippedReasons).length > 0 ? skippedReasons : undefined,
+    skippedSettingKeys: Object.keys(skippedSettingKeys).length > 0 ? skippedSettingKeys : undefined
+  };
+}
+
+/** Same as withSkips but applied after a selection (e.g. chain) is built, preserving its own skips. */
+function mergeSkips(selection: AIProviderRouteSelection, skipped: ProviderSkipRecord[]): AIProviderRouteSelection {
+  return withSkips(selection, skipped);
+}
+
+function describePreferredProviderSkip(
+  preferredProviderId: string,
+  provider: AIProviderConfig | null,
+  requiredCapabilities?: RequiredAICapabilities
+): ProviderSkipRecord {
+  if (!provider) {
+    return {
+      providerId: preferredProviderId,
+      reason: `PREFERRED_PROVIDER_NOT_FOUND: configured provider '${preferredProviderId}' is not registered. Check the agent's Preferred Provider setting.`
+    };
+  }
+  if (!provider.isActive) {
+    return {
+      providerId: preferredProviderId,
+      reason: `PREFERRED_PROVIDER_INACTIVE: provider '${provider.name}' is inactive or missing credentials. Activate it or fix its API key.`
+    };
+  }
+  if (!supportsRequiredCapabilities(provider, requiredCapabilities)) {
+    return {
+      providerId: preferredProviderId,
+      reason: `PREFERRED_PROVIDER_CAPABILITY: provider '${provider.name}' does not support a required capability (chat/json/tools).`
+    };
+  }
+  return { providerId: preferredProviderId, reason: "PREFERRED_PROVIDER_SKIPPED" };
 }
 
 async function buildSelectionFromChain(
@@ -244,10 +319,17 @@ async function applyBudgetGuard(
 
   logBudgetEvents(budgetStatus, blocked).catch(() => undefined);
 
+  const budgetSettingKey = budgetStatus.dailyExceeded ? SKIP_SETTING_KEYS.DAILY_BUDGET : SKIP_SETTING_KEYS.MONTHLY_BUDGET;
+  const budgetSkips: ProviderSkipRecord[] = blocked.map((p) => ({
+    providerId: p.id,
+    reason: `BUDGET_BLOCKED: ${budgetStatus.dailyExceeded ? "daily" : "monthly"} budget limit reached.`,
+    settingKey: budgetSettingKey
+  }));
+
   if (allowed.length === 0) {
     const sandbox = allProviders.find((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID);
     if (sandbox) {
-      return {
+      return withSkips({
         ...selection,
         provider: sandbox,
         model: sandbox.defaultModel,
@@ -256,7 +338,7 @@ async function applyBudgetGuard(
         attemptedProviderIds: [sandbox.id],
         budgetBlocked: true,
         blockedProviderIds: blocked.map((p) => p.id)
-      };
+      }, budgetSkips);
     }
     return selection;
   }
@@ -264,7 +346,7 @@ async function applyBudgetGuard(
   const newPrimary = allowed[0]!;
   const newFallbacks = allowed.slice(1);
   const newFallbackAttempts = newFallbacks.map((p) => ({ provider: p, model: p.defaultModel }));
-  return {
+  return withSkips({
     ...selection,
     provider: newPrimary,
     model: newPrimary.id === selection.provider.id ? selection.model : newPrimary.defaultModel,
@@ -273,7 +355,7 @@ async function applyBudgetGuard(
     attemptedProviderIds: [newPrimary.id, ...newFallbacks.map((p) => p.id)],
     budgetBlocked: blocked.length > 0,
     blockedProviderIds: blocked.length > 0 ? blocked.map((p) => p.id) : undefined
-  };
+  }, budgetSkips);
 }
 
 export function orderByPolicy(providers: AIProviderConfig[], taskMode: TaskMode, costMode: AICostMode): AIProviderConfig[] {
@@ -358,16 +440,31 @@ export async function describeFallbackProviderReadiness(provider: AIProviderConf
   return { state: "READY", label: "Ready", active: true };
 }
 
-async function resolveFallbackAttempts(fallbackIds: string[], primaryProvider: AIProviderConfig, capableProviders: AIProviderConfig[]): Promise<FallbackAttempt[]> {
+async function resolveFallbackAttempts(
+  fallbackIds: string[],
+  primaryProvider: AIProviderConfig,
+  capableProviders: AIProviderConfig[]
+): Promise<{ attempts: FallbackAttempt[]; skipped: ProviderSkipRecord[] }> {
   const resolved: FallbackAttempt[] = [];
+  const skipped: ProviderSkipRecord[] = [];
   const sandboxFallbackMode = await isSandboxFallbackModeActive();
   for (const id of fallbackIds) {
     const provider = capableProviders.find((candidate) => candidate.id === id || (id === LEGACY_MOCK_PROVIDER_ID && candidate.id === LOCAL_SANDBOX_PROVIDER_ID));
     if (provider) {
-      if (isProductionFallbackBlocked(provider, sandboxFallbackMode)) continue;
+      if (isProductionFallbackBlocked(provider, sandboxFallbackMode)) {
+        skipped.push({
+          providerId: provider.id,
+          reason: `PRODUCTION_BLOCKED_IN_SANDBOX: '${provider.name}' is a production API provider and production fallback is disabled outside production.`,
+          settingKey: SKIP_SETTING_KEYS.PRODUCTION_FALLBACK
+        });
+        continue;
+      }
       if (provider.id === "deepseek") {
         const readiness = await describeFallbackProviderReadiness(provider);
-        if (!readiness.active) continue;
+        if (!readiness.active) {
+          skipped.push({ providerId: provider.id, reason: `PROVIDER_NOT_READY: ${readiness.label}` });
+          continue;
+        }
       }
       if (provider.id !== primaryProvider.id) resolved.push({ provider, model: provider.defaultModel });
       continue;
@@ -378,7 +475,7 @@ async function resolveFallbackAttempts(fallbackIds: string[], primaryProvider: A
       resolved.push({ provider: clone, model: id });
     }
   }
-  return resolved;
+  return { attempts: resolved, skipped };
 }
 
 function isModelFallback(value: string): boolean {
