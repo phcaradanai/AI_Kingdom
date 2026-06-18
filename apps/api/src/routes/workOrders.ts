@@ -23,6 +23,7 @@ import {
 } from "../services/projectContextBindingService.js";
 import { reconcileContextWarnings } from "../services/workOrderLifecycleReconcileService.js";
 import { refreshWorkOrderContext } from "../services/refreshWorkOrderContextService.js";
+import { createExternalAgentBridgeJob } from "../services/externalAgentBridgeService.js";
 
 const router = Router();
 
@@ -43,6 +44,8 @@ const workOrderSchema = z.object({
   assignedAgentId: z.string().trim().max(120).optional().nullable(),
   assignedAgentReason: z.string().trim().max(500).optional().nullable(),
   assignedAgentConfidence: z.number().min(0).max(1).optional().nullable(),
+  executionTarget: z.enum(["AUTO", "INTERNAL_AGENT", "RUNNER_VALIDATION", "RUNNER_PATCH", "EXTERNAL_AGENT"]).default("AUTO"),
+  maxAutoRetries: z.number().int().min(0).max(5).optional(),
   status: z.enum(["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"]).default("DRAFT"),
   priority: z.enum(["LOW", "MEDIUM", "HIGH", "CRITICAL"]).default("MEDIUM"),
   dataQuality: z.string().trim().max(80).optional().nullable(),
@@ -56,7 +59,8 @@ const include = {
   assignedAgent: { select: { id: true, slug: true, name: true, title: true } },
   workSessions: { orderBy: { createdAt: "desc" } as const },
   implementationReports: { orderBy: { createdAt: "desc" } as const },
-  handoffBriefs: { orderBy: { createdAt: "desc" } as const }
+  handoffBriefs: { orderBy: { createdAt: "desc" } as const },
+  externalAgentRuns: { orderBy: { createdAt: "desc" } as const, take: 3 }
 };
 
 router.get("/", async (req, res, next) => {
@@ -399,7 +403,8 @@ router.post("/:id/mark-context-stale", requireRole("KING", "CROWN_PRINCE"), asyn
 
 const automationJobCreateSchema = z.object({
   agentId: z.string().trim().optional().nullable(),
-  mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY"]).default("SANDBOX_PATCH"),
+  externalAgentId: z.string().trim().optional().nullable(),
+  mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY", "EXTERNAL_AGENT"]).default("SANDBOX_PATCH"),
   commandPolicy: z.string().trim().max(1000).optional().nullable(),
   allowedCommands: z.array(z.string().trim().min(1).max(100)).max(50).default([])
 });
@@ -410,6 +415,15 @@ router.post("/:id/automation-job", requireRole("KING"), async (req, res, next) =
     const body = automationJobCreateSchema.safeParse(req.body);
     if (!body.success) {
       res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+    if (body.data.mode === "EXTERNAL_AGENT") {
+      const result = await createExternalAgentBridgeJob({
+        workOrderId: id,
+        externalAgentId: body.data.externalAgentId,
+        createdByUserId: req.user!.id
+      });
+      res.status(201).json(result);
       return;
     }
     const job = await createAutomationJob({
@@ -432,6 +446,10 @@ router.post("/:id/automation-job", requireRole("KING"), async (req, res, next) =
     }
     if (error instanceof Error && error.name === "ContextBindingError") {
       res.status(409).json({ error: error.message, code: "CONTEXT_BINDING" });
+      return;
+    }
+    if (error instanceof Error && error.name === "BridgeDisabledError") {
+      res.status(409).json({ error: error.message, code: "BRIDGE_DISABLED" });
       return;
     }
     next(error);

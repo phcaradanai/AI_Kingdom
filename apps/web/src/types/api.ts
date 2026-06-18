@@ -1073,9 +1073,11 @@ export type SecretaryBriefDto = {
   vision: { content: string } | null;
 };
 
-export type ExternalAgentType = "CLAUDE_CODE" | "CODEX" | "CLINE" | "KILO" | "ANTIGRAVITY" | "HERMES" | "OPENCODE" | "CUSTOM";
+export type ExternalAgentType = "CLAUDE_CODE" | "CODEX" | "CLINE" | "KILO" | "ANTIGRAVITY" | "HERMES" | "OPENCODE" | "GENERIC_CLI" | "MANUAL_ONLY" | "CUSTOM";
 export type ExternalAgentExecutionMode = "MANUAL_COPY_PASTE" | "CLI_MANUAL" | "API" | "FUTURE_AUTOMATED";
 export type ExternalAgentSafetyLevel = "LOW_RISK" | "MEDIUM_RISK" | "HIGH_RISK";
+export type WorkOrderExecutionTarget = "AUTO" | "INTERNAL_AGENT" | "RUNNER_VALIDATION" | "RUNNER_PATCH" | "EXTERNAL_AGENT";
+export type ExternalAgentRunStatus = "QUEUED" | "RUNNING" | "WAITING" | "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "CANCELLED" | "NEEDS_REVIEW";
 export type WorkOrderStatus = "DRAFT" | "READY" | "IN_PROGRESS" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED" | "ARCHIVED";
 export type WorkOrderPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 export type WorkSessionStatus = "STARTED" | "IN_PROGRESS" | "COMPLETED" | "FAILED" | "INTERRUPTED";
@@ -1089,13 +1091,49 @@ export type ExternalAgentDto = {
   description: string;
   capabilities: string[];
   executionMode: ExternalAgentExecutionMode;
+  command: string | null;
+  workingDirectory: string | null;
+  environmentProfile: string | null;
   isActive: boolean;
+  bridgeEnabled: boolean;
+  maxRuntimeSeconds: number;
+  requiresApproval: boolean;
   safetyLevel: ExternalAgentSafetyLevel;
   createdAt: string;
   updatedAt: string;
 };
 
 export type ExternalAgentPayload = Omit<ExternalAgentDto, "id" | "createdAt" | "updatedAt">;
+
+export type ExternalAgentTestResultDto = {
+  status: "READY" | "BLOCKED";
+  issues: string[];
+  prompt: string;
+  commandTemplate: string | null;
+  maxRuntimeSeconds: number;
+  captures: string[];
+};
+
+export type ExternalAgentRunDto = {
+  id: string;
+  externalAgentId: string;
+  workOrderId: string;
+  automationJobId: string | null;
+  status: ExternalAgentRunStatus;
+  inputPrompt: string;
+  outputText?: string | null;
+  artifactPaths?: unknown;
+  logPath?: string | null;
+  exitCode?: number | null;
+  startedAt?: string | null;
+  completedAt?: string | null;
+  errorMessage?: string | null;
+  retryOfRunId?: string | null;
+  attemptNumber: number;
+  metadata: unknown;
+  createdAt: string;
+  updatedAt: string;
+};
 
 export type WorkSessionDto = {
   id: string;
@@ -1170,6 +1208,11 @@ export type WorkOrderDto = {
   assignedAgentId: string | null;
   assignedAgentReason: string | null;
   assignedAgentConfidence: number | null;
+  executionTarget?: WorkOrderExecutionTarget;
+  autoRetryCount?: number;
+  maxAutoRetries?: number;
+  lastExternalAgentRunId?: string | null;
+  blockedReason?: string | null;
   assignedAgent?: { id: string; slug: string; name: string; title: string } | null;
   status: WorkOrderStatus;
   priority: WorkOrderPriority;
@@ -1198,6 +1241,7 @@ export type WorkOrderDto = {
   workSessions?: WorkSessionDto[];
   implementationReports?: ImplementationReportDto[];
   handoffBriefs?: HandoffBriefDto[];
+  externalAgentRuns?: ExternalAgentRunDto[];
 };
 
 export type ExternalAgentRecommendationDto = {
@@ -1228,6 +1272,8 @@ export type WorkOrderPayload = {
   assignedAgentId?: string | null;
   assignedAgentReason?: string | null;
   assignedAgentConfidence?: number | null;
+  executionTarget?: WorkOrderExecutionTarget;
+  maxAutoRetries?: number;
   status?: WorkOrderStatus;
   priority?: WorkOrderPriority;
   dataQuality?: string | null;
@@ -1517,7 +1563,7 @@ export type KnowledgeMemoryDto = {
 // ── M17B: Automation Jobs ──────────────────────────────────────────────────────
 
 export type AutomationJobStatus = "QUEUED" | "APPROVED" | "CLAIMED" | "RUNNING" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED" | "CANCELLED";
-export type AutomationJobMode = "OBSERVE" | "PLAN_ONLY" | "SANDBOX_PATCH" | "VALIDATION_ONLY";
+export type AutomationJobMode = "OBSERVE" | "PLAN_ONLY" | "SANDBOX_PATCH" | "VALIDATION_ONLY" | "EXTERNAL_AGENT";
 export type AgentRunnerStatus = "ONLINE" | "OFFLINE" | "ERROR";
 
 export const IMPORTED_PATCH_STATUSES = [
@@ -1588,7 +1634,14 @@ export type AutomationJobDto = {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
-  workOrder: { id: string; title: string; status: string; projectId: string | null };
+  workOrder: {
+    id: string;
+    title: string;
+    status: string;
+    projectId: string | null;
+    assignedExternalAgentId?: string | null;
+    assignedExternalAgent?: ExternalAgentDto | null;
+  };
   project: { id: string; name: string } | null;
   agent: { id: string; slug: string; name: string; title: string } | null;
   runner: { id: string; name: string; status: AgentRunnerStatus } | null;
@@ -1596,11 +1649,13 @@ export type AutomationJobDto = {
   approvedByUser: { id: string; displayName: string } | null;
   steps?: AgentRunStepDto[];
   implementationReports?: ImplementationReportDto[];
+  externalAgentRuns?: ExternalAgentRunDto[];
 };
 
 export type AutomationJobPayload = {
   workOrderId?: string;
   agentId?: string | null;
+  externalAgentId?: string | null;
   mode?: AutomationJobMode;
   commandPolicy?: string | null;
   allowedCommands?: string[];

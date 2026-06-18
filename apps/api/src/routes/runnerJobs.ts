@@ -7,9 +7,10 @@ import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { validateCommand } from "../services/commandValidatorService.js";
 import { createPatchArtifact, markBranchPushed, getPatchArtifact } from "../services/patchArtifactService.js";
-import { getBooleanSetting } from "../services/settingsService.js";
+import { getBooleanSetting, getNumberSetting } from "../services/settingsService.js";
 import { IMPORTED_PATCH_STATUSES } from "../services/importedPatchService.js";
 import type { AutomationJobStatus } from "@prisma/client";
+import { completeExternalAgentRunForRunner, markExternalAgentRunRunning } from "../services/externalAgentBridgeService.js";
 
 const router = Router();
 
@@ -219,6 +220,76 @@ router.post("/jobs/:id/step", async (req, res, next) => {
   }
 });
 
+const externalAgentRunRunningSchema = z.object({
+  workspacePath: z.string().trim().min(1).max(1000),
+  commandTemplate: z.string().trim().min(1).max(2000)
+});
+
+router.post("/jobs/:id/external-agent-run/running", async (req, res, next) => {
+  try {
+    const runner = req.runner!;
+    const body = externalAgentRunRunningSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+
+    const run = await markExternalAgentRunRunning({
+      automationJobId: req.params.id,
+      runnerId: runner.id,
+      workspacePath: body.data.workspacePath,
+      commandTemplate: body.data.commandTemplate
+    });
+    res.json({ externalAgentRun: run });
+  } catch (err) {
+    if (err instanceof Error && err.name === "NotFoundError") {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+const externalAgentRunCompleteSchema = z.object({
+  status: z.enum(["SUCCEEDED", "FAILED", "TIMED_OUT", "NEEDS_REVIEW"]),
+  outputText: z.string().max(50000).optional().nullable(),
+  artifactPaths: z.array(z.string().trim().min(1).max(1000)).max(200).default([]),
+  logPath: z.string().trim().max(1000).optional().nullable(),
+  exitCode: z.number().int().optional().nullable(),
+  errorMessage: z.string().trim().max(2000).optional().nullable(),
+  metadata: z.record(z.unknown()).optional().nullable()
+});
+
+router.post("/jobs/:id/external-agent-run/complete", async (req, res, next) => {
+  try {
+    const runner = req.runner!;
+    const body = externalAgentRunCompleteSchema.safeParse(req.body);
+    if (!body.success) {
+      res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+
+    const run = await completeExternalAgentRunForRunner({
+      automationJobId: req.params.id,
+      runnerId: runner.id,
+      status: body.data.status,
+      outputText: body.data.outputText ? sanitizeLogOutput(body.data.outputText) : null,
+      artifactPaths: body.data.artifactPaths,
+      logPath: body.data.logPath,
+      exitCode: body.data.exitCode,
+      errorMessage: body.data.errorMessage ? sanitizeLogOutput(body.data.errorMessage) : null,
+      metadata: body.data.metadata ?? undefined
+    });
+    res.json({ externalAgentRun: run });
+  } catch (err) {
+    if (err instanceof Error && err.name === "NotFoundError") {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
 const validationResultSchema = z.object({
   command: z.string().trim().min(1).max(200),
   exitCode: z.number().int().nullable(),
@@ -305,12 +376,44 @@ router.post("/jobs/:jobId/patch-artifacts/:artifactId/branch-pushed", async (req
 /** GET /api/runner/settings — runner fetches server-side settings */
 router.get("/settings", async (_req, res, next) => {
   try {
-    const [allowBranchPush, allowPrCreate, requireFreshLocalContext] = await Promise.all([
+    const [
+      allowBranchPush,
+      allowPrCreate,
+      requireFreshLocalContext,
+      externalAgentBridgeEnabled,
+      allowExternalAgentWrite,
+      allowExternalAgentNetwork,
+      allowExternalAgentBranchPush,
+      allowExternalAgentPrCreate,
+      allowExternalAgentDeploy,
+      maxExternalAgentRuntimeSeconds,
+      maxExternalAgentAutoRetries
+    ] = await Promise.all([
       getBooleanSetting("ALLOW_RUNNER_BRANCH_PUSH", false),
       getBooleanSetting("ALLOW_RUNNER_PR_CREATE", false),
-      getBooleanSetting("LIVING_LOOP_REQUIRE_FRESH_LOCAL_CONTEXT", false)
+      getBooleanSetting("LIVING_LOOP_REQUIRE_FRESH_LOCAL_CONTEXT", false),
+      getBooleanSetting("EXTERNAL_AGENT_BRIDGE_ENABLED", false),
+      getBooleanSetting("ALLOW_EXTERNAL_AGENT_WRITE", false),
+      getBooleanSetting("ALLOW_EXTERNAL_AGENT_NETWORK", false),
+      getBooleanSetting("ALLOW_EXTERNAL_AGENT_BRANCH_PUSH", false),
+      getBooleanSetting("ALLOW_EXTERNAL_AGENT_PR_CREATE", false),
+      getBooleanSetting("ALLOW_EXTERNAL_AGENT_DEPLOY", false),
+      getNumberSetting("MAX_EXTERNAL_AGENT_RUNTIME_SECONDS", 900),
+      getNumberSetting("MAX_EXTERNAL_AGENT_AUTO_RETRIES", 2)
     ]);
-    res.json({ allowBranchPush, allowPrCreate, requireFreshLocalContext });
+    res.json({
+      allowBranchPush,
+      allowPrCreate,
+      requireFreshLocalContext,
+      externalAgentBridgeEnabled,
+      allowExternalAgentWrite,
+      allowExternalAgentNetwork,
+      allowExternalAgentBranchPush,
+      allowExternalAgentPrCreate,
+      allowExternalAgentDeploy,
+      maxExternalAgentRuntimeSeconds,
+      maxExternalAgentAutoRetries
+    });
   } catch (err) {
     next(err);
   }

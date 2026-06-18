@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationJobDto, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, AutomationJobMode, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderExecutionTarget, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -31,6 +31,7 @@ const blankWorkOrder: WorkOrderPayload = {
   ],
   targetProject: "",
   targetRepository: "",
+  executionTarget: "AUTO",
   status: "DRAFT",
   priority: "MEDIUM"
 };
@@ -49,6 +50,7 @@ const blankReport: Omit<ImplementationReportPayload, "workOrderId"> = {
 
 const statuses: WorkOrderStatus[] = ["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"];
 const priorities: WorkOrderPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const executionTargets: WorkOrderExecutionTarget[] = ["AUTO", "INTERNAL_AGENT", "RUNNER_VALIDATION", "RUNNER_PATCH", "EXTERNAL_AGENT"];
 
 function getStatusLabel(status: string) {
   const labels: Record<string, string> = {
@@ -62,6 +64,12 @@ function getStatusLabel(status: string) {
     ARCHIVED: "Archived"
   };
   return labels[status] ?? `Unknown (${status})`;
+}
+
+function getCreateJobLabel(target: WorkOrderExecutionTarget) {
+  if (target === "RUNNER_VALIDATION") return "Validation Job";
+  if (target === "EXTERNAL_AGENT") return "External Agent Job";
+  return "Automation Job";
 }
 
 function getContextStatus(order: WorkOrderDto | null, context: WorkOrderContextDto | null) {
@@ -609,10 +617,23 @@ export function WorkOrdersPage() {
 
   async function createJob() {
     if (!selected || !canCreate) return;
+    const target = draft.executionTarget ?? selected.executionTarget ?? "RUNNER_PATCH";
+    if (target === "INTERNAL_AGENT") {
+      setError("Internal Agent is a planning target, not a runner job. Select Runner Validation, Runner Patch, or External Agent.");
+      return;
+    }
+    const mode: AutomationJobMode = target === "RUNNER_VALIDATION"
+      ? "VALIDATION_ONLY"
+      : target === "EXTERNAL_AGENT"
+        ? "EXTERNAL_AGENT"
+        : "SANDBOX_PATCH";
     setCreatingJob(true);
     setError(null);
     try {
-      await api.createAutomationJobForWorkOrder(selected.id, { mode: "SANDBOX_PATCH" });
+      await api.createAutomationJobForWorkOrder(selected.id, {
+        mode,
+        externalAgentId: mode === "EXTERNAL_AGENT" ? (draft.assignedExternalAgentId ?? selected.assignedExternalAgentId ?? null) : null
+      });
       const jobs = await api.automationJobs({ workOrderId: selected.id });
       setAutomationJobs(jobs);
     } catch (err) {
@@ -1084,6 +1105,11 @@ export function WorkOrdersPage() {
                     {externalAgents.filter((agent) => agent.isActive).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                   </select>
                 </FormField>
+                <FormField id="wo-execution-target" label="Execution Target" className="sm:col-span-2">
+                  <select id="wo-execution-target" disabled={!canCreate} className={selectCls} value={draft.executionTarget ?? "AUTO"} onChange={(e) => setDraft({ ...draft, executionTarget: e.target.value as WorkOrderExecutionTarget })}>
+                    {executionTargets.map((target) => <option key={target} value={target}>{target.replaceAll("_", " ")}</option>)}
+                  </select>
+                </FormField>
                 <FormField id="wo-project" label="Target Project" className="sm:col-span-2">
                   <select id="wo-project" disabled={!canCreate} className={selectCls} value={draft.projectId ?? ""} onChange={(e) => setDraft({ ...draft, projectId: e.target.value || null })}>
                     <option value="">Auto-route (no override)</option>
@@ -1370,7 +1396,7 @@ export function WorkOrdersPage() {
                       disabled={creatingJob || Boolean(automationBlockedReason)}
                     >
                       <Play className="h-4 w-4" />
-                      {creatingJob ? "Creating…" : "Create Automation Job"}
+                      {creatingJob ? "Creating…" : `Create ${getCreateJobLabel(draft.executionTarget ?? selected.executionTarget ?? "RUNNER_PATCH")}`}
                     </Button>
                   </div>
                   {automationBlockedReason ? (
@@ -1379,7 +1405,7 @@ export function WorkOrdersPage() {
                     </div>
                   ) : (
                     <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
-                      Context is FRESH and no active automation job is blocking a new SANDBOX_PATCH request.
+                      Context is FRESH and no active automation job is blocking a runner request.
                     </div>
                   )}
                   <div className="mt-3 space-y-2">
@@ -1398,6 +1424,7 @@ export function WorkOrdersPage() {
                               "bg-muted text-muted-foreground border-border"
                             )}>{job.status}</span>
                             <span className="text-xs text-muted-foreground">{job.mode} · {formatDate(job.createdAt)}</span>
+                            {job.externalAgentRuns?.[0] ? <span className="ml-2 text-xs text-muted-foreground">run {job.externalAgentRuns[0].status}</span> : null}
                             {job.agent && <span className="ml-2 text-xs text-muted-foreground">via {job.agent.name}</span>}
                           </div>
                           {job.status === "QUEUED" && (

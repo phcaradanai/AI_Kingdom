@@ -220,6 +220,8 @@ export const api = {
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),
   updateExternalAgent: (id: string, payload: Partial<ExternalAgentPayload>) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  testExternalAgent: (id: string) =>
+    apiRequest<{ test: import("@/types/api").ExternalAgentTestResultDto }>(`/external-agents/${id}/test`, { method: "POST" }),
   deleteExternalAgent: (id: string) => apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "DELETE" }),
   projects: (params?: { q?: string; status?: string; priority?: string }) => {
     const search = new URLSearchParams();

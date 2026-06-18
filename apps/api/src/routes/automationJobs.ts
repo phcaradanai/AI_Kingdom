@@ -11,6 +11,7 @@ import {
 import { importPatch } from "../services/importedPatchService.js";
 import { getAgentReviewForJob, regenerateAgentReviewForJob } from "../services/runnerResultReviewService.js";
 import type { AutomationJobStatus } from "@prisma/client";
+import { createExternalAgentBridgeJob } from "../services/externalAgentBridgeService.js";
 
 const router = Router();
 
@@ -60,7 +61,8 @@ router.get("/:id/agent-review", requireRole("KING"), async (req, res, next) => {
 
 const createJobSchema = z.object({
   agentId: z.string().trim().optional().nullable(),
-  mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY"]).default("SANDBOX_PATCH"),
+  externalAgentId: z.string().trim().optional().nullable(),
+  mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY", "EXTERNAL_AGENT"]).default("SANDBOX_PATCH"),
   commandPolicy: z.string().trim().max(1000).optional().nullable(),
   allowedCommands: z.array(z.string().trim().min(1).max(100)).max(50).default([])
 });
@@ -78,6 +80,15 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
     const body = createJobSchema.safeParse(req.body);
     if (!body.success) {
       res.status(400).json({ error: "Invalid request", details: body.error.flatten() });
+      return;
+    }
+    if (body.data.mode === "EXTERNAL_AGENT") {
+      const result = await createExternalAgentBridgeJob({
+        workOrderId,
+        externalAgentId: body.data.externalAgentId,
+        createdByUserId: req.user!.id
+      });
+      res.status(201).json(result.job);
       return;
     }
     const job = await createAutomationJob({
@@ -100,6 +111,10 @@ router.post("/", requireRole("KING"), async (req, res, next) => {
     }
     if (err instanceof Error && err.name === "ContextBindingError") {
       res.status(409).json({ error: err.message, code: "CONTEXT_BINDING" });
+      return;
+    }
+    if (err instanceof Error && err.name === "BridgeDisabledError") {
+      res.status(409).json({ error: err.message, code: "BRIDGE_DISABLED" });
       return;
     }
     next(err);

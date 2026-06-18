@@ -37,6 +37,7 @@ enum AutomationJobMode {
   PLAN_ONLY
   SANDBOX_PATCH
   VALIDATION_ONLY
+  EXTERNAL_AGENT
 }
 
 enum ContextBindingStatus {
@@ -194,7 +195,28 @@ enum ExternalAgentType {
   ANTIGRAVITY
   HERMES
   OPENCODE
+  GENERIC_CLI
+  MANUAL_ONLY
   CUSTOM
+}
+
+enum ExternalAgentRunStatus {
+  QUEUED
+  RUNNING
+  WAITING
+  SUCCEEDED
+  FAILED
+  TIMED_OUT
+  CANCELLED
+  NEEDS_REVIEW
+}
+
+enum WorkOrderExecutionTarget {
+  AUTO
+  INTERNAL_AGENT
+  RUNNER_VALIDATION
+  RUNNER_PATCH
+  EXTERNAL_AGENT
 }
 
 enum ExternalAgentExecutionMode {
@@ -480,13 +502,20 @@ model ExternalAgent {
   description           String                     @default("")
   capabilities          String[]                   @default([])
   executionMode         ExternalAgentExecutionMode @default(MANUAL_COPY_PASTE)
+  command               String?
+  workingDirectory      String?
+  environmentProfile    String?
   isActive              Boolean                    @default(true)
+  bridgeEnabled         Boolean                    @default(false)
+  maxRuntimeSeconds     Int                        @default(900)
+  requiresApproval      Boolean                    @default(true)
   safetyLevel           ExternalAgentSafetyLevel   @default(MEDIUM_RISK)
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
   workOrders            WorkOrder[]
   workSessions          WorkSession[]
   implementationReports ImplementationReport[]
+  externalAgentRuns     ExternalAgentRun[]
 }
 
 model Project {
@@ -635,6 +664,11 @@ model WorkOrder {
   assignedAgentId         String?
   assignedAgentReason     String?
   assignedAgentConfidence Float?
+  executionTarget         WorkOrderExecutionTarget @default(AUTO)
+  autoRetryCount          Int                      @default(0)
+  maxAutoRetries          Int                      @default(2)
+  lastExternalAgentRunId  String?
+  blockedReason           String?
   status                  WorkOrderStatus        @default(DRAFT)
   priority                WorkOrderPriority      @default(MEDIUM)
   createdByUserId         String?
@@ -659,12 +693,48 @@ model WorkOrder {
   assignedExternalAgent   ExternalAgent?         @relation(fields: [assignedExternalAgentId], references: [id], onDelete: SetNull)
   assignedAgent           Agent?                 @relation(fields: [assignedAgentId], references: [id], onDelete: SetNull)
   createdByUser           User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  lastExternalAgentRun    ExternalAgentRun?      @relation("WorkOrderLastExternalAgentRun", fields: [lastExternalAgentRunId], references: [id], onDelete: SetNull)
+  externalAgentRuns       ExternalAgentRun[]     @relation("ExternalAgentRunWorkOrder")
   workSessions            WorkSession[]
   implementationReports   ImplementationReport[]
   handoffBriefs           HandoffBrief[]
   automationJobs          AutomationJob[]
   patchArtifacts          PatchArtifact[]
   reviewSummaries         AgentReviewSummary[]
+}
+
+model ExternalAgentRun {
+  id              String                 @id @default(cuid())
+  externalAgentId String
+  workOrderId     String
+  automationJobId String?
+  status          ExternalAgentRunStatus @default(QUEUED)
+  inputPrompt     String
+  outputText      String?
+  artifactPaths   Json                   @default("[]")
+  logPath         String?
+  exitCode        Int?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  errorMessage    String?
+  retryOfRunId    String?
+  attemptNumber   Int                    @default(1)
+  metadata        Json                   @default("{}")
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+
+  externalAgent   ExternalAgent          @relation(fields: [externalAgentId], references: [id], onDelete: Cascade)
+  workOrder       WorkOrder              @relation("ExternalAgentRunWorkOrder", fields: [workOrderId], references: [id], onDelete: Cascade)
+  automationJob   AutomationJob?         @relation(fields: [automationJobId], references: [id], onDelete: SetNull)
+  retryOfRun      ExternalAgentRun?      @relation("ExternalAgentRunRetry", fields: [retryOfRunId], references: [id], onDelete: SetNull)
+  retryRuns       ExternalAgentRun[]     @relation("ExternalAgentRunRetry")
+  lastForWorkOrders WorkOrder[]          @relation("WorkOrderLastExternalAgentRun")
+
+  @@index([externalAgentId])
+  @@index([workOrderId])
+  @@index([automationJobId])
+  @@index([status])
+  @@index([retryOfRunId])
 }
 
 model WorkSession {
@@ -1390,6 +1460,7 @@ model AutomationJob {
   implementationReports ImplementationReport[]
   patchArtifacts   PatchArtifact[]
   reviewSummary    AgentReviewSummary?
+  externalAgentRuns ExternalAgentRun[]
 
   @@index([workOrderId])
   @@index([projectId])
