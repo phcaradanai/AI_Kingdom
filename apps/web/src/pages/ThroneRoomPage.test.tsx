@@ -9,7 +9,10 @@ const nowIso = new Date().toISOString();
 
 const apiMocks = vi.hoisted(() => ({
   createCouncilHandoff: vi.fn(),
-  planCouncilWorkOrder: vi.fn()
+  planCouncilWorkOrder: vi.fn(),
+  // The default "Live Kingdom" view mounts LivingKingdomView, which loads presence + activity.
+  getKingdomPresence: vi.fn(),
+  getKingdomActivity: vi.fn()
 }));
 
 const storeState = vi.hoisted(() => ({
@@ -106,6 +109,8 @@ function renderPage(task: TaskDto | null = makeTask()) {
     workOrder: { id: "wo-handoff", contextBindingStatus: "FRESH" },
     handoffBrief: { title: "Council handoff brief" }
   });
+  apiMocks.getKingdomPresence.mockResolvedValue({ computedAt: nowIso, agents: [] });
+  apiMocks.getKingdomActivity.mockResolvedValue({ computedAt: nowIso, activities: [] });
 
   return render(
     <MemoryRouter>
@@ -114,14 +119,21 @@ function renderPage(task: TaskDto | null = makeTask()) {
   );
 }
 
+// Throne Room opens on the visual Live Kingdom view; the decree/council terminal
+// lives under the "Command" toggle. Reveal it before asserting command content.
+async function switchToCommand() {
+  await userEvent.click(screen.getByRole("button", { name: /^Command$/i }));
+}
+
 afterEach(() => {
   vi.clearAllMocks();
   storeState.tasks = [];
 });
 
 describe("ThroneRoomPage", () => {
-  it("renders mode helper text", () => {
+  it("renders mode helper text", async () => {
     renderPage(null);
+    await switchToCommand();
 
     expect(screen.getByRole("button", { name: /ASK/i })).toBeInTheDocument();
     expect(screen.getByText("Best when the King needs counsel, not a project plan.")).toBeInTheDocument();
@@ -129,8 +141,9 @@ describe("ThroneRoomPage", () => {
     expect(screen.getByRole("button", { name: /Issue Decree/i })).toBeInTheDocument();
   });
 
-  it("shows the final recommendation and Recommended Next Step first for completed councils", () => {
+  it("shows the final recommendation and Recommended Next Step first for completed councils", async () => {
     renderPage();
+    await switchToCommand();
 
     expect(screen.getByText("Final Recommendation")).toBeInTheDocument();
     expect(screen.getByText("Recommended Next Step")).toBeInTheDocument();
@@ -140,6 +153,7 @@ describe("ThroneRoomPage", () => {
 
   it("collapses and expands role reports", async () => {
     renderPage();
+    await switchToCommand();
 
     expect(screen.getByText("Short archive summary for scanning.")).toBeInTheDocument();
     expect(screen.queryByText(/Detailed archive packet/)).not.toBeInTheDocument();
@@ -150,11 +164,12 @@ describe("ThroneRoomPage", () => {
     expect(screen.getByRole("button", { name: /Hide Royal Archivist details/i })).toBeInTheDocument();
   });
 
-  it("shows context warning as automation-blocking guidance", () => {
+  it("shows context warning as automation-blocking guidance", async () => {
     const session = makeSession({
       finalSummary: "[CONTEXT WARNING]\nProject context is stale.\n\nFinal recommendation: Proceed manually after review."
     });
     renderPage(makeTask(session));
+    await switchToCommand();
 
     expect(screen.getByText("Context Warning - Automation Gate")).toBeInTheDocument();
     expect(screen.getByText(/This warning blocks automation only/)).toBeInTheDocument();
@@ -164,6 +179,7 @@ describe("ThroneRoomPage", () => {
 
   it("keeps create handoff and create work order buttons working", async () => {
     renderPage();
+    await switchToCommand();
 
     await userEvent.click(screen.getByRole("button", { name: /Create Work Order/i }));
     await waitFor(() => expect(apiMocks.planCouncilWorkOrder).toHaveBeenCalledWith("session-1"));
@@ -175,8 +191,9 @@ describe("ThroneRoomPage", () => {
     expect(screen.getByRole("link", { name: /Open Created Work Order/i })).toHaveAttribute("href", "/work-orders");
   });
 
-  it("renders source links when source data exists", () => {
+  it("renders source links when source data exists", async () => {
     renderPage();
+    await switchToCommand();
 
     expect(screen.getByRole("link", { name: /Council Record/i })).toHaveAttribute("href", "/council");
     expect(screen.getByRole("link", { name: /Royal Brief/i })).toHaveAttribute("href", "/royal-brief");

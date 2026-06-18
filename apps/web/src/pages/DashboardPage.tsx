@@ -270,7 +270,7 @@ export function DashboardPage() {
         title="The Kingdom at a Glance"
         description="What needs your attention, the health of the kingdom, what's in flight, and what just happened."
         action={canCommand ? (
-          <Link to="/throne-room">
+          <Link to="/throne-room?view=command">
             <Button variant="outline" className="gap-2">
               <Scroll className="h-4 w-4" />
               Issue Royal Decree

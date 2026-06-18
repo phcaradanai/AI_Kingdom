@@ -11,6 +11,7 @@ import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
 import { KingdomActivityFeed } from "@/components/kingdom/KingdomActivityFeed";
 import { KingdomHealthStrip } from "@/components/kingdom/KingdomHealthStrip";
+import { initials, STATE_COLORS, STATE_DOT } from "@/components/kingdom/agentPresence";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -20,43 +21,10 @@ import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 import type {
   AgentPresenceDto,
-  AgentPresenceState,
   KingdomActivityStreamDto,
   KingdomHealthDto,
   KingdomPresenceDto
 } from "@/types/api";
-
-// ── State colors ──────────────────────────────────────────────────────────────
-
-const STATE_COLORS: Record<AgentPresenceState, string> = {
-  IDLE: "border-border bg-muted/30 text-muted-foreground",
-  THINKING: "border-blue-500/40 bg-blue-500/10 text-blue-400",
-  COUNCIL: "border-violet-500/40 bg-violet-500/10 text-violet-400",
-  WORKING: "border-indigo-500/40 bg-indigo-500/10 text-indigo-400",
-  RUNNING: "border-emerald-500/40 bg-emerald-500/10 text-emerald-400",
-  WAITING_REVIEW: "border-amber-500/40 bg-amber-500/10 text-amber-400",
-  BLOCKED: "border-orange-500/40 bg-orange-500/10 text-orange-400",
-  ERROR: "border-destructive/50 bg-destructive/10 text-destructive"
-};
-
-const STATE_DOT: Record<AgentPresenceState, string> = {
-  IDLE: "bg-muted-foreground/50",
-  THINKING: "bg-blue-400",
-  COUNCIL: "bg-violet-400",
-  WORKING: "bg-indigo-400",
-  RUNNING: "bg-emerald-400",
-  WAITING_REVIEW: "bg-amber-400",
-  BLOCKED: "bg-orange-400",
-  ERROR: "bg-destructive"
-};
-
-function initials(name: string): string {
-  return name
-    .split(" ")
-    .slice(0, 2)
-    .map(w => w[0]?.toUpperCase() ?? "")
-    .join("");
-}
 
 // ── Agent Presence Card ───────────────────────────────────────────────────────
 

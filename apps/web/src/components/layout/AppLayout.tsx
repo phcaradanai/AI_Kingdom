@@ -16,7 +16,7 @@ const navCategories = [
     name: "Kingdom",
     items: [
       { to: "/dashboard", label: "Dashboard", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/throne-room", label: "Royal Command", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
+      { to: "/throne-room", label: "Throne Room", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
       { to: "/kingdom/operations", label: "Operations Center", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
       { to: "/inbox", label: "Kingdom Inbox", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
     ]

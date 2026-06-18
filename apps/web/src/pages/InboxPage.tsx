@@ -50,7 +50,7 @@ const STATE_COLORS: Record<string, string> = {
 const SOURCE_LINKS = [
   { type: "WorkOrder", label: "Work Orders", to: "/work-orders", description: "Implementation queue, handoffs, reports, and review state." },
   { type: "AutomationJob", label: "Automation Jobs", to: "/automation-jobs", description: "Runner jobs, patch validation, approval, and execution state." },
-  { type: "CouncilSession", label: "Royal Command", to: "/throne-room", description: "Council progress, synthesis, and created work orders." },
+  { type: "CouncilSession", label: "Royal Command", to: "/throne-room?view=command", description: "Council progress, synthesis, and created work orders." },
   { type: "ProjectContext", label: "Projects", to: "/projects", description: "Project context, source documents, and local docs bindings." },
   { type: "RoyalBrief", label: "Royal Brief", to: "/royal-brief", description: "Generated daily summary and decisions needing review." },
   { type: "Report", label: "Reports", to: "/reports", description: "Generated reports, artifacts, and supporting analysis." }
@@ -114,7 +114,7 @@ function isContextRefreshItem(item: NextActionItem): boolean {
 function routeForSource(type: string): string {
   if (type === "WorkOrder" || type === "HandoffBrief") return "/work-orders";
   if (type === "AutomationJob" || type === "PatchArtifact" || type === "AgentRunner") return "/automation-jobs";
-  if (type === "CouncilSession") return "/throne-room";
+  if (type === "CouncilSession") return "/throne-room?view=command";
   if (type === "ProjectContext" || type === "Project") return "/projects";
   if (type === "Report") return "/reports";
   if (type === "RoyalBrief") return "/royal-brief";

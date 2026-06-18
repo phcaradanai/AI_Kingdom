@@ -162,6 +162,21 @@ textarea {
   box-shadow: 0 0 24px rgba(239, 68, 68, 0.08), 0 20px 55px rgba(0, 0, 0, 0.2);
 }
 
+/* Living Kingdom avatar motion — neutral scale/opacity keyframe at intensities
+   keyed to real agent state. Distinct speeds read as ambient vs. attention vs.
+   active without inventing color. Disabled under prefers-reduced-motion below. */
+.living-pulse-breathe {
+  animation: agent-amber-pulse 2.8s ease-in-out infinite;
+}
+
+.living-pulse-amber {
+  animation: agent-amber-pulse 1.8s ease-in-out infinite;
+}
+
+.living-shimmer {
+  animation: agent-amber-pulse 1.3s ease-in-out infinite;
+}
+
 @keyframes agent-dot-breathe {
   0%, 100% {
     opacity: 0.55;
@@ -249,7 +264,10 @@ textarea {
   .agent-operation-card,
   .agent-operation-card::after,
   .agent-operation-card svg,
-  .agent-op-dot {
+  .agent-op-dot,
+  .living-pulse-breathe,
+  .living-pulse-amber,
+  .living-shimmer {
     animation: none !important;
     transition: none !important;
   }

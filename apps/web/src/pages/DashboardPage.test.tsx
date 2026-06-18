@@ -125,7 +125,7 @@ describe("DashboardPage", () => {
     setUser("MINISTER");
     resetApiMocks();
     const { unmount } = renderPage();
-    expect(await screen.findByRole("link", { name: /Issue Royal Decree/i })).toHaveAttribute("href", "/throne-room");
+    expect(await screen.findByRole("link", { name: /Issue Royal Decree/i })).toHaveAttribute("href", "/throne-room?view=command");
     unmount();
 
     setUser("SCRIBE");

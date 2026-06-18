@@ -1,7 +1,8 @@
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, ChevronDown, ClipboardCheck, Cpu, ExternalLink, FileText, Handshake, Hammer, Layers, ScrollText, Search, Send, Server, ShieldCheck, Sparkles, Clock3, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { LivingKingdomView } from "@/components/kingdom/LivingKingdomView";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -30,7 +31,53 @@ const councilRoles = [
   { role: "Grand Vizier", label: "Grand Vizier Final Decision", icon: FileText }
 ] as const;
 
+type ThroneView = "live" | "command";
+
+// Throne Room is now visual-first: the Living Kingdom is the default view, with the
+// full decree/council terminal preserved one click away under "Command".
 export function ThroneRoomPage() {
+  // Plain navigation lands on the visual Live Kingdom; action-intent links that mean
+  // "issue/inspect a decree" deep-link with ?view=command so that flow is unchanged.
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<ThroneView>(searchParams.get("view") === "command" ? "command" : "live");
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      <div className="inline-flex rounded-lg border border-border bg-muted/20 p-1">
+        <button
+          type="button"
+          aria-pressed={view === "live"}
+          onClick={() => setView("live")}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
+            view === "live" ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <Sparkles className="h-4 w-4" />
+          Live Kingdom
+        </button>
+        <button
+          type="button"
+          aria-pressed={view === "command"}
+          onClick={() => setView("command")}
+          className={cn(
+            "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
+            view === "command" ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          <ScrollText className="h-4 w-4" />
+          Command
+        </button>
+      </div>
+
+      {view === "live" ? <LivingKingdomView /> : <ThroneRoomCommand />}
+    </div>
+  );
+}
+
+// The decree/council terminal — preserved verbatim as the "Command" view of the
+// Throne Room. The page below makes the Living Kingdom the default visual view.
+function ThroneRoomCommand() {
   const [command, setCommand] = useState("");
   const [mode, setMode] = useState<TaskMode>("ASK");
   const [error, setError] = useState<string | null>(null);

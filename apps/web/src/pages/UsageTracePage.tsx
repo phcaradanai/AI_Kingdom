@@ -189,7 +189,7 @@ function StepCard({ step, isLast }: { step: AIUsageTraceStepDto; isLast: boolean
         {/* Step links */}
         <div className="mt-2 flex flex-wrap gap-2">
           {step.taskId && (
-            <Link to="/throne-room" className="text-[10px] text-primary/70 hover:text-primary underline">View Task</Link>
+            <Link to="/throne-room?view=command" className="text-[10px] text-primary/70 hover:text-primary underline">View Task</Link>
           )}
           {step.councilSessionId && (
             <Link to="/council" className="text-[10px] text-primary/70 hover:text-primary underline">View Council</Link>
@@ -433,7 +433,7 @@ export function UsageTracePage() {
             <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">Related Records</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-3">
               {details.links.project && <Link className="rounded-lg border border-border bg-muted/10 p-3 text-sm hover:border-primary/40" to={`/projects/${details.links.project.id}`}>Project: {details.links.project.name}</Link>}
-              {details.links.task && <Link className="rounded-lg border border-border bg-muted/10 p-3 text-sm hover:border-primary/40" to="/throne-room">Task: {details.links.task.title}</Link>}
+              {details.links.task && <Link className="rounded-lg border border-border bg-muted/10 p-3 text-sm hover:border-primary/40" to="/throne-room?view=command">Task: {details.links.task.title}</Link>}
               {details.links.councilSession && <Link className="rounded-lg border border-border bg-muted/10 p-3 text-sm hover:border-primary/40" to="/council">Council: {details.links.councilSession.id.slice(0, 8)}</Link>}
               {details.links.agent && (
                 <div className="rounded-lg border border-border bg-muted/10 p-3 text-sm">
