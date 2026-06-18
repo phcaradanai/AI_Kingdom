@@ -267,13 +267,14 @@ export async function deleteMatter(id: string) {
 // ── Kingdom Inspection ──────────────────────────────────────────────────────────
 
 export async function inspectKingdomStatus() {
-  const [unreadCount, criticalCount, openMattersCount, criticalMattersCount, awaitingDecisionCount, failedTasksCount, budgetStatus] = await Promise.all([
+  const [unreadCount, criticalCount, openMattersCount, criticalMattersCount, awaitingDecisionCount, failedTasksCount, workOrdersAwaitingReviewCount, budgetStatus] = await Promise.all([
     prisma.notice.count({ where: { isTestData: false, status: "UNREAD" } }),
     prisma.notice.count({ where: { isTestData: false, status: "UNREAD", severity: "CRITICAL" } }),
     prisma.matter.count({ where: { isTestData: false, status: { notIn: TERMINAL_MATTER_STATUSES } } }),
     prisma.matter.count({ where: { isTestData: false, priority: "CRITICAL", status: { notIn: TERMINAL_MATTER_STATUSES } } }),
     prisma.matter.count({ where: { isTestData: false, status: "AWAITING_ROYAL_DECISION" } }),
     prisma.task.count({ where: { status: "FAILED" } }),
+    prisma.workOrder.count({ where: { isTestData: false, status: "NEEDS_REVIEW" } }),
     getTreasuryOverview().then((o) => o.budgetStatus).catch(() => null)
   ]);
 
@@ -284,6 +285,7 @@ export async function inspectKingdomStatus() {
     criticalMatters: criticalMattersCount,
     awaitingRoyalDecision: awaitingDecisionCount,
     failedTasks: failedTasksCount,
+    workOrdersAwaitingReview: workOrdersAwaitingReviewCount,
     budgetWarning: budgetStatus ? (budgetStatus.dailyWarning || budgetStatus.monthlyWarning) : false
   };
 }
@@ -324,6 +326,9 @@ function buildRecommendedActions(status: Awaited<ReturnType<typeof inspectKingdo
   if (status.failedTasks > 0) {
     actions.push({ action: `Investigate ${status.failedTasks} failed decree${status.failedTasks !== 1 ? "s" : ""}`, severity: "warning", href: "/throne-room" });
   }
+  if (status.workOrdersAwaitingReview > 0) {
+    actions.push({ action: `${status.workOrdersAwaitingReview} work order${status.workOrdersAwaitingReview !== 1 ? "s" : ""} reported back — review and approve`, severity: "warning", href: "/work-orders" });
+  }
   if (status.unreadNotices > 0 && status.criticalNotices === 0) {
     actions.push({ action: `${status.unreadNotices} unread notice${status.unreadNotices !== 1 ? "s" : ""}`, severity: "info", href: "/notices" });
   }
@@ -340,7 +345,7 @@ export async function generateDailyBrief() {
     getVision().catch(() => null)
   ]);
 
-  const [urgentNotices, mattersList, awaitingList] = await Promise.all([
+  const [urgentNotices, mattersList, awaitingList, recentAgentReports] = await Promise.all([
     prisma.notice.findMany({
       where: { isTestData: false, status: "UNREAD", severity: { in: ["CRITICAL", "WARNING"] } },
       orderBy: [{ severity: "desc" }, { createdAt: "desc" }],
@@ -355,6 +360,12 @@ export async function generateDailyBrief() {
       where: { isTestData: false, status: "AWAITING_ROYAL_DECISION" },
       orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
       take: 10
+    }),
+    // What external agents just delivered back into the Kingdom (dispatch + completion notices).
+    prisma.notice.findMany({
+      where: { isTestData: false, sourceType: { in: ["work-order-report", "work-order-dispatch"] } },
+      orderBy: { createdAt: "desc" },
+      take: 5
     })
   ]);
 
@@ -363,6 +374,7 @@ export async function generateDailyBrief() {
     urgentNotices,
     openMatters: mattersList,
     awaitingRoyalDecision: awaitingList,
+    recentAgentReports,
     recommendedActions: buildRecommendedActions(kingdomStatus),
     charter: charter ? { mission: charter.mission } : null,
     vision: vision ? { content: vision.content } : null

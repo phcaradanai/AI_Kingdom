@@ -161,6 +161,7 @@ test("inspectKingdomStatus returns numeric counts", async () => {
   assert.ok(typeof status.criticalMatters === "number");
   assert.ok(typeof status.awaitingRoyalDecision === "number");
   assert.ok(typeof status.failedTasks === "number");
+  assert.ok(typeof status.workOrdersAwaitingReview === "number");
   assert.ok(typeof status.budgetWarning === "boolean");
 });
 
@@ -170,6 +171,7 @@ test("generateDailyBrief returns full structure", async () => {
   assert.ok(Array.isArray(brief.urgentNotices));
   assert.ok(Array.isArray(brief.openMatters));
   assert.ok(Array.isArray(brief.awaitingRoyalDecision));
+  assert.ok(Array.isArray(brief.recentAgentReports));
   assert.ok(Array.isArray(brief.recommendedActions));
   assert.ok(brief.recommendedActions.length >= 1);
   assert.ok(brief.recommendedActions.every((a) => ["info", "warning", "critical"].includes(a.severity)));

@@ -79,7 +79,7 @@ export function ThroneRoomPage() {
 // Throne Room. The page below makes the Living Kingdom the default visual view.
 function ThroneRoomCommand() {
   const [command, setCommand] = useState("");
-  const [mode, setMode] = useState<TaskMode>("ASK");
+  const [mode, setMode] = useState<TaskMode>("BUILD");
   const [error, setError] = useState<string | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -154,59 +154,64 @@ function ThroneRoomCommand() {
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
         eyebrow="Royal Command Terminal"
-        title="Issue a royal decree"
-        description="Capture your command and issue a decree. The Grand Vizier will automatically convene the council."
+        title="Tell the Kingdom what outcome you want"
+        description="One command is enough. The Grand Vizier convenes the council, coordinates the work plan, saves the report, and brings back only the decisions that need the King."
       />
 
       <SectionCard contentClassName="p-6">
         <form onSubmit={onSubmit}>
           <div className="mb-5 flex flex-col gap-2 border-b border-border/60 pb-5 sm:flex-row sm:items-end sm:justify-between">
             <div>
-              <h2 className="font-display text-2xl">Royal Decree</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Choose how the council should treat this command before issuing it.</p>
+              <h2 className="font-display text-2xl">Give one clear command</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Write the desired outcome. The Kingdom will choose the working path and archive the result.</p>
             </div>
-            <div className="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-primary">
-              Issue Decree stays the primary action
+            <div className="rounded-md border border-emerald-500/25 bg-emerald-500/10 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-emerald-300">
+              Kingdom Auto: {mode}
             </div>
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {modes.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setMode(item.value)}
-                className={cn(
-                  "flex flex-col items-start rounded-xl border p-5 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
-                  mode === item.value
-                    ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_rgba(214,170,87,0.1)]"
-                    : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
-                )}
-              >
-                <div className="flex w-full items-center justify-between gap-2">
-                  <div className="font-display tracking-wide text-base">{item.label}</div>
-                  {mode === item.value && <CheckCircle2 className="h-4 w-4" />}
-                </div>
-                <div className="mt-2 text-sm opacity-90 leading-relaxed">{item.description}</div>
-                <div className="mt-3 rounded-md border border-current/10 bg-background/30 px-2.5 py-2 text-xs opacity-80 leading-relaxed">{item.useWhen}</div>
-              </button>
-            ))}
-          </div>
-          
           <div className="mt-6 relative">
-            <label htmlFor="royal-command" className="mb-2 block text-sm font-semibold uppercase tracking-widest text-primary">Royal Decree</label>
+            <label htmlFor="royal-command" className="mb-2 block text-sm font-semibold uppercase tracking-widest text-primary">King's Command</label>
             <Textarea
               id="royal-command"
               className="min-h-[200px] resize-y rounded-xl border-primary/20 bg-background/50 p-5 text-base shadow-inner focus:border-primary/50 focus:ring-primary/20"
               value={command}
               onChange={(event) => setCommand(event.target.value)}
-              placeholder="State the royal decree. Example: Plan a six-week launch roadmap for the AI Kingdom MVP..."
+              placeholder="State the outcome. Example: Prepare the next implementation plan, assign the right agent path, and bring me the final report."
             />
-            <p className="mt-2 text-xs text-muted-foreground">The decree will be evaluated by the Grand Vizier and the appropriate council members.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Default: BUILD mode, so the Kingdom returns an implementation-ready report. Use Advanced only when you want counsel or research instead.</p>
             <div className="absolute right-4 bottom-10 opacity-10 pointer-events-none">
                <ScrollText className="h-20 w-20" />
             </div>
           </div>
+
+          <details className="mt-5 rounded-xl border border-border/70 bg-muted/15 p-4">
+            <summary className="cursor-pointer text-sm font-semibold text-muted-foreground hover:text-foreground">
+              Advanced: change how the council treats this command
+            </summary>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+              {modes.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setMode(item.value)}
+                  className={cn(
+                    "flex flex-col items-start rounded-xl border p-5 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
+                    mode === item.value
+                      ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_rgba(214,170,87,0.1)]"
+                      : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
+                  )}
+                >
+                  <div className="flex w-full items-center justify-between gap-2">
+                    <div className="font-display tracking-wide text-base">{item.label}</div>
+                    {mode === item.value && <CheckCircle2 className="h-4 w-4" />}
+                  </div>
+                  <div className="mt-2 text-sm opacity-90 leading-relaxed">{item.description}</div>
+                  <div className="mt-3 rounded-md border border-current/10 bg-background/30 px-2.5 py-2 text-xs opacity-80 leading-relaxed">{item.useWhen}</div>
+                </button>
+              ))}
+            </div>
+          </details>
 
           {error && (
             <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive font-medium flex items-center gap-3">
@@ -221,7 +226,7 @@ function ThroneRoomCommand() {
             </div>
             <Button className="w-full sm:w-auto h-12 px-8 text-sm tracking-wide" disabled={isLoading || isProcessing || !command.trim()}>
               <Send className="mr-2 h-4 w-4" />
-              {isProcessing ? "Convening Council..." : isLoading ? "Recording decree..." : "Issue Decree"}
+              {isProcessing ? "Kingdom is working..." : isLoading ? "Recording command..." : "Let the Kingdom handle it"}
             </Button>
           </div>
         </form>
@@ -263,6 +268,8 @@ function ThroneRoomCommand() {
               {latestSession.finalSummary && (
                 <FinalRecommendationPanel session={latestSession} />
               )}
+
+              <KingdomDeliveryPanel task={latestTask} session={latestSession} />
 
               <RecommendedNextStepCard
                 task={latestTask}
@@ -480,6 +487,44 @@ function FinalRecommendationPanel({ session }: { session: CouncilSessionDto }) {
   );
 }
 
+function KingdomDeliveryPanel({ task, session }: { task: TaskDto; session: CouncilSessionDto }) {
+  const reportCount = new Set([...(session.reports ?? []), ...task.reports].map((report) => report.id)).size;
+  const completedRoles = councilRoles.filter((role) => getRoleStatus(session, role.role) === "completed").length;
+  const reportLabel = reportCount > 0 ? `${reportCount} report${reportCount === 1 ? "" : "s"} archived` : "Royal brief ready";
+  return (
+    <div className="rounded-xl border border-emerald-500/25 bg-emerald-500/10 p-5 sm:p-6">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-background/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Kingdom Delivery
+          </div>
+          <h3 className="mt-3 font-display text-xl">The command has been handled</h3>
+          <p className="mt-1 text-sm leading-relaxed text-foreground/75">
+            The King gave the outcome once. The Kingdom coordinated the council, saved the evidence, and prepared the report trail.
+          </p>
+        </div>
+        <StatusBadge status={session.status} />
+      </div>
+      <div className="grid gap-3 md:grid-cols-3">
+        <DeliveryStep label="Command owner" value="King" description={task.title} />
+        <DeliveryStep label="Work coordinated by" value="Grand Vizier" description={`${completedRoles}/${councilRoles.length} council roles completed`} />
+        <DeliveryStep label="Report trail" value={reportLabel} description="Open source links stay below for audit." />
+      </div>
+    </div>
+  );
+}
+
+function DeliveryStep({ label, value, description }: { label: string; value: string; description: string }) {
+  return (
+    <div className="rounded-lg border border-emerald-500/20 bg-background/45 p-3">
+      <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-300/80">{label}</div>
+      <div className="mt-1 break-words font-semibold text-foreground">{value}</div>
+      <div className="mt-1 line-clamp-2 break-words text-xs leading-relaxed text-muted-foreground">{description}</div>
+    </div>
+  );
+}
+
 function RecommendedNextStepCard({
   task,
   session,
@@ -502,6 +547,7 @@ function RecommendedNextStepCard({
   const nextStep = getRecommendedNextStep(task, session, createdWorkOrderIds.length > 0 || Boolean(handoffWorkOrderId));
   const hasReport = (session.reports?.length ?? 0) > 0 || task.reports.length > 0;
   const canAct = session.status === "COMPLETED";
+  const reportHref = hasReport ? "/reports" : "/royal-brief";
 
   return (
     <div className="rounded-xl border border-primary/30 bg-primary/10 p-5 sm:p-6">
@@ -514,15 +560,26 @@ function RecommendedNextStepCard({
           <h3 className="break-words font-display text-xl leading-snug">{nextStep.title}</h3>
           <p className="mt-2 text-sm leading-relaxed text-foreground/75">{nextStep.description}</p>
         </div>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2">
-          <Button type="button" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingWorkOrder} onClick={onCreateWorkOrder}>
-            <Hammer className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">{isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order"}</span>
-          </Button>
-          <Button type="button" variant="secondary" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingHandoff} onClick={onCreateHandoff}>
-            <Handshake className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">{isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}</span>
-          </Button>
+        <div className="grid w-full grid-cols-1 gap-3">
+          <Link to={reportHref} className="inline-flex min-h-14 items-center justify-center gap-2 rounded-md border border-primary/35 bg-background/70 px-4 py-3 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/60 hover:bg-background">
+            <ExternalLink className="h-4 w-4 shrink-0" />
+            <span className="min-w-0 break-words">{hasReport ? "Open saved report" : "Open Royal Brief"}</span>
+          </Link>
+          <details className="rounded-md border border-border bg-background/45 p-3">
+            <summary className="cursor-pointer text-center text-xs font-bold uppercase tracking-wider text-muted-foreground hover:text-foreground">
+              Optional implementation follow-up
+            </summary>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Button type="button" variant="outline" className="h-auto min-h-12 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingWorkOrder} onClick={onCreateWorkOrder}>
+                <Hammer className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 break-words">{isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order"}</span>
+              </Button>
+              <Button type="button" variant="outline" className="h-auto min-h-12 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingHandoff} onClick={onCreateHandoff}>
+                <Handshake className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 break-words">{isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}</span>
+              </Button>
+            </div>
+          </details>
         </div>
       </div>
       <div className="mt-5 grid gap-3 border-t border-primary/20 pt-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -532,7 +589,7 @@ function RecommendedNextStepCard({
             <span className="min-w-0 break-words">Open Created Work Order</span>
           </Link>
         )}
-        <Link to={hasReport ? "/reports" : "/royal-brief"} className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
+        <Link to={reportHref} className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
           <ExternalLink className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 break-words">{hasReport ? "Open Source Brief / Report" : "Open Royal Brief"}</span>
         </Link>
@@ -738,13 +795,13 @@ function getRecommendedNextStep(task: TaskDto, session: CouncilSessionDto, hasCr
   }
   if (task.mode === "BUILD") {
     return {
-      title: "Create an implementation handoff",
-      description: "This decree was issued in BUILD mode. Create a Work Order or External Agent Handoff so execution stays in the implementation queue."
+      title: "Review the saved report",
+      description: "The Kingdom has produced an implementation-ready brief. Open the saved report first; create a tracked Work Order only if the next execution step needs assignment."
     };
   }
   return {
-    title: "Choose the follow-up path",
-    description: "Use Create Work Order for implementation tracking, or create an External Agent Handoff when another coding agent should receive the council brief."
+    title: "Review the counsel",
+    description: "The report is saved. If this counsel should become implementation work, use the optional follow-up controls to create a Work Order or external-agent handoff."
   };
 }
 

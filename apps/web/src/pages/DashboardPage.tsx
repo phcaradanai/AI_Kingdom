@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, FolderKanban, Scroll, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ClipboardList, FolderKanban, Scroll, Zap } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ import type {
   NextActionItem,
   NextActionQueueDto,
   ProjectDto,
+  SecretaryBriefDto,
   WorkOrderDto
 } from "@/types/api";
 
@@ -160,6 +161,26 @@ function InitiativeCard({ icon: Icon, title, status, sourceLabel, owner, blocker
   );
 }
 
+function WorkDeskCard({ icon: Icon, label, title, description, actor, to, actionLabel }: { icon: typeof ClipboardList; label: string; title: string; description: string; actor: string; to: string; actionLabel: string }) {
+  return (
+    <Link to={to} className="group flex min-h-[150px] flex-col rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm transition-colors hover:border-primary/45 hover:bg-card/80">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
+          <Icon className="h-3.5 w-3.5" />
+          {label}
+        </div>
+        <ArrowRight className="h-4 w-4 text-primary opacity-60 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+      </div>
+      <div className="font-display text-lg leading-snug text-foreground">{title}</div>
+      <p className="mt-2 flex-1 text-sm leading-relaxed text-muted-foreground">{description}</p>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs">
+        <span className="text-muted-foreground">Handled by <span className="font-semibold text-foreground">{actor}</span></span>
+        <span className="font-bold uppercase tracking-wider text-primary">{actionLabel}</span>
+      </div>
+    </Link>
+  );
+}
+
 // ── Living Loop card (kept: imported by LivingLoopDashboardCard.test) ───────────
 
 export function RunLivingLoopButton() {
@@ -226,6 +247,7 @@ export function DashboardPage() {
   const [activity, setActivity] = useState<KingdomActivityStreamDto | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -237,15 +259,17 @@ export function DashboardPage() {
       api.getKingdomHealth().catch(() => null),
       api.getKingdomActivity(8).catch(() => null),
       api.workOrders().catch(() => ({ workOrders: [] as WorkOrderDto[], hiddenCount: 0 })),
-      api.projects().catch(() => ({ projects: [] as ProjectDto[] }))
+      api.projects().catch(() => ({ projects: [] as ProjectDto[] })),
+      api.secretaryBrief().catch(() => null)
     ])
-      .then(([nextRes, healthRes, activityRes, ordersRes, projectsRes]) => {
+      .then(([nextRes, healthRes, activityRes, ordersRes, projectsRes, briefRes]) => {
         if (cancelled) return;
         setNextActions(nextRes);
         setHealth(healthRes);
         setActivity(activityRes);
         setWorkOrders(ordersRes.workOrders);
         setProjects(projectsRes.projects);
+        setBrief(briefRes);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -258,6 +282,8 @@ export function DashboardPage() {
   const activeOrders = workOrders.filter((order) => ACTIVE_WORK_ORDER_STATUSES.includes(order.status));
   const activeProjects = projects.filter((project) => project.status === "ACTIVE");
   const hasInitiatives = activeOrders.length > 0 || activeProjects.length > 0;
+  const reportsReady = brief?.recentAgentReports.length ?? 0;
+  const awaitingReview = brief?.kingdomStatus.workOrdersAwaitingReview ?? 0;
 
   if (isLoading) {
     return <LoadingState message="Summoning royal briefings..." className="min-h-[60vh]" />;
@@ -266,18 +292,54 @@ export function DashboardPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
-        eyebrow="Command Center"
+        eyebrow="King's Desk"
         title="The Kingdom at a Glance"
-        description="What needs your attention, the health of the kingdom, what's in flight, and what just happened."
+        description="Give one command, let the Kingdom coordinate the work, then return here for the saved report and only the decisions that need you."
         action={canCommand ? (
           <Link to="/throne-room?view=command">
             <Button variant="outline" className="gap-2">
               <Scroll className="h-4 w-4" />
-              Issue Royal Decree
+              Give One Command
             </Button>
           </Link>
         ) : undefined}
       />
+
+      <SectionCard
+        title="King's Work Desk"
+        icon={ClipboardList}
+        action={<Link to="/throne-room?view=command" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Give command</Link>}
+      >
+        <div className="grid gap-4 lg:grid-cols-3">
+          <WorkDeskCard
+            icon={Scroll}
+            label="Command"
+            title="Say the outcome once"
+            description="Use plain language. The Grand Vizier turns it into council work, source links, and a saved report trail."
+            actor="King -> Grand Vizier"
+            to="/throne-room?view=command"
+            actionLabel="Start"
+          />
+          <WorkDeskCard
+            icon={Zap}
+            label="Working"
+            title={`${activeOrders.length} item${activeOrders.length === 1 ? "" : "s"} in motion`}
+            description="Open work stays in Work Orders with status, owner, context freshness, and safe/blocked action clearly visible."
+            actor="Assigned agents"
+            to="/work-orders"
+            actionLabel="Track"
+          />
+          <WorkDeskCard
+            icon={CheckCircle2}
+            label="Reports"
+            title={reportsReady > 0 ? `${reportsReady} recent report${reportsReady === 1 ? "" : "s"} ready` : awaitingReview > 0 ? `${awaitingReview} work order${awaitingReview === 1 ? "" : "s"} awaiting review` : "No report waiting"}
+            description="Completed agent work appears as report cards with the source of truth linked back to Work Orders and Reports."
+            actor="Royal Secretary"
+            to={reportsReady > 0 ? "/reports" : "/work-orders"}
+            actionLabel={reportsReady > 0 || awaitingReview > 0 ? "Review" : "Open"}
+          />
+        </div>
+      </SectionCard>
 
       {/* 1. Top Actions (max 3) */}
       <SectionCard
@@ -337,6 +399,39 @@ export function DashboardPage() {
           </div>
         ) : (
           <EmptyState icon={FolderKanban} title="No active initiatives" description="No active projects or open work orders right now." />
+        )}
+      </SectionCard>
+
+      {/* 3b. Agent Reports — what external agents delivered back into the Kingdom */}
+      <SectionCard
+        title="Agent Reports"
+        icon={Bot}
+        action={
+          <Link to="/work-orders" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+            {brief && brief.kingdomStatus.workOrdersAwaitingReview > 0
+              ? `${brief.kingdomStatus.workOrdersAwaitingReview} awaiting review`
+              : "All Work Orders"}
+          </Link>
+        }
+      >
+        {brief && brief.recentAgentReports.length > 0 ? (
+          <div className="space-y-3">
+            {brief.recentAgentReports.map((report) => (
+              <Link
+                key={report.id}
+                to="/work-orders"
+                className="block rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm transition-colors hover:border-primary/45 hover:bg-card/80"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-semibold text-foreground">{report.title}</span>
+                  <StatusBadge status={report.severity} />
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{report.content}</p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={Bot} title="No agent reports yet" description="Dispatch a work order to an external agent — its report will appear here when it returns." />
         )}
       </SectionCard>
 

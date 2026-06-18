@@ -131,23 +131,32 @@ afterEach(() => {
 });
 
 describe("ThroneRoomPage", () => {
-  it("renders mode helper text", async () => {
+  it("renders one-step command intake with advanced mode options collapsed", async () => {
     renderPage(null);
     await switchToCommand();
+
+    expect(screen.getByText("Tell the Kingdom what outcome you want")).toBeInTheDocument();
+    expect(screen.getByText("Kingdom Auto: BUILD")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Let the Kingdom handle it/i })).toBeInTheDocument();
+    expect(screen.getByText("Best when the King needs counsel, not a project plan.")).not.toBeVisible();
+
+    await userEvent.click(screen.getByText("Advanced: change how the council treats this command"));
 
     expect(screen.getByRole("button", { name: /ASK/i })).toBeInTheDocument();
     expect(screen.getByText("Best when the King needs counsel, not a project plan.")).toBeInTheDocument();
     expect(screen.getByText("Best before a manual external-agent handoff.")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Issue Decree/i })).toBeInTheDocument();
   });
 
-  it("shows the final recommendation and Recommended Next Step first for completed councils", async () => {
+  it("shows the final recommendation, delivery summary, and saved-report next step for completed councils", async () => {
     renderPage();
     await switchToCommand();
 
     expect(screen.getByText("Final Recommendation")).toBeInTheDocument();
+    expect(screen.getByText("Kingdom Delivery")).toBeInTheDocument();
+    expect(screen.getByText("Work coordinated by")).toBeInTheDocument();
     expect(screen.getByText("Recommended Next Step")).toBeInTheDocument();
-    expect(screen.getByText("Create an implementation handoff")).toBeInTheDocument();
+    expect(screen.getByText("Review the saved report")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Open saved report/i })).toHaveAttribute("href", "/reports");
     expect(screen.getByText("Final synthesis ready")).toBeInTheDocument();
   });
 
@@ -181,6 +190,7 @@ describe("ThroneRoomPage", () => {
     renderPage();
     await switchToCommand();
 
+    await userEvent.click(screen.getByText("Optional implementation follow-up"));
     await userEvent.click(screen.getByRole("button", { name: /Create Work Order/i }));
     await waitFor(() => expect(apiMocks.planCouncilWorkOrder).toHaveBeenCalledWith("session-1"));
     expect(await screen.findByText("1 work order drafted from the council recommendation.")).toBeInTheDocument();
