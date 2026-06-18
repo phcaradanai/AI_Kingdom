@@ -41,10 +41,20 @@ in the box the figures stand.
 
 ## Characters
 
-Today each agent is shown as its existing portrait token (`/agents/*.png` via
-`getAgentPortrait`) with a state ring + name plate. If you later add per-agent
-**pixel sprites**, that's a follow-up: swap the token render in
-`KingdomScene.tsx → SceneCharacter`.
+Each agent stands in the scene as a **pixel-art sprite** in `sprites/<name>.png` —
+a palette-reduced, cropped version of its portrait (`/agents/<name>.png`) rendered with
+`image-rendering: pixelated` so it matches the pixel map. A state ring + name plate sit
+on top; active agents bob, idle agents are static.
+
+Regenerate the sprites after adding or replacing a portrait:
+
+```bash
+python3 scripts/generate-agent-sprites.py   # requires Pillow
+```
+
+Tune `SPRITE` (pixel resolution) / `COLORS` (palette size) in that script for a chunkier
+or finer look. Agents without a bundled `/agents/` portrait fall back to the raw avatar
+or initials.
 
 ## Licensing note
 
