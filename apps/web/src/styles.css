@@ -177,6 +177,33 @@ textarea {
   animation: agent-amber-pulse 1.3s ease-in-out infinite;
 }
 
+/* Living Kingdom — cozy "world" surface + character motion. The warm floor is
+   static scenery; only agents with a real active state bob. Idle never moves. */
+.kingdom-floor {
+  background-color: #efe4cd;
+  background-image:
+    linear-gradient(rgba(120, 90, 45, 0.06) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 90, 45, 0.06) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+.kingdom-bob {
+  animation: kingdom-bob 2.6s ease-in-out infinite;
+}
+
+.kingdom-bob-fast {
+  animation: kingdom-bob 1.4s ease-in-out infinite;
+}
+
+@keyframes kingdom-bob {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
 @keyframes agent-dot-breathe {
   0%, 100% {
     opacity: 0.55;
@@ -267,7 +294,9 @@ textarea {
   .agent-op-dot,
   .living-pulse-breathe,
   .living-pulse-amber,
-  .living-shimmer {
+  .living-shimmer,
+  .kingdom-bob,
+  .kingdom-bob-fast {
     animation: none !important;
     transition: none !important;
   }
