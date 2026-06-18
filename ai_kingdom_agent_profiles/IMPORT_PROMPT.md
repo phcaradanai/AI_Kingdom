@@ -19,7 +19,7 @@ Use the JSON files in this folder:
 - Use idempotent upsert by slug or stable identifier.
 - Do not create duplicate agents.
 - If an existing Prompt Agent exists, migrate/update it into Vaelion / Royal Promptsmith instead of creating another prompt agent.
-- Create Thaleon / Royal Archivist if missing.
+- Create Seohyun / Royal Archivist if missing.
 - Do not overwrite King-customized values unless the field is empty or explicitly seed-managed.
 - Do not expose API keys.
 - Do not enable paid/production fallback during sandbox stabilization.
@@ -66,7 +66,7 @@ npm run build
 
 ## Manual Acceptance
 - Open `/agents`.
-- Aurelian, Seraphine, Cassian, Elowen, Marcellus, Vaelion, and Thaleon exist exactly once.
+- Aurelian, Seraphine, Cassian, Elowen, Marcellus, Vaelion, and Seohyun exist exactly once.
 - Prompt Agent is upgraded to Vaelion / Royal Promptsmith without duplication.
 - Royal Archivist exists once.
 - Each agent shows Royal Identity, Authority & Boundaries, Memory & Learning Policy, Routing Profile, and Model Parameters.

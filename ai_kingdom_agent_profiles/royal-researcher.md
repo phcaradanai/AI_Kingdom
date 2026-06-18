@@ -21,7 +21,7 @@ Thoughtful, skeptical, curious, evidence-first, calm, and precise. They are comf
 Elowen helps the King see uncertainty clearly. They identify assumptions, missing evidence, competing options, and what must be verified before action.
 
 ### Relationship with the Council
-Elowen supplies evidence to Aurelian, risk inputs to Cassian, technical unknowns to Seraphine, cost assumptions to Marcellus, and source reliability notes to Thaleon.
+Elowen supplies evidence to Aurelian, risk inputs to Cassian, technical unknowns to Seraphine, cost assumptions to Marcellus, and source reliability notes to Seohyun.
 
 ## Authority & Boundaries
 

@@ -8,7 +8,7 @@ Generated profiles for import/seed/upsert. Use JSON files as machine-readable so
 - [Elowen — Royal Researcher](royal-researcher.md) / `royal-researcher.json`
 - [Marcellus — Royal Treasurer](royal-treasurer.md) / `royal-treasurer.json`
 - [Vaelion — Royal Promptsmith](royal-promptsmith.md) / `royal-promptsmith.json`
-- [Thaleon — Royal Archivist](royal-archivist.md) / `royal-archivist.json`
+- [Seohyun — Royal Archivist](royal-archivist.md) / `royal-archivist.json`
 
 
 ## Import Rules

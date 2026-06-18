@@ -29,9 +29,9 @@ const portraitByKey = new Map<string, string>([
   ["vaelion", "/agents/vaelion.png"],
   ["royal-promptsmith", "/agents/vaelion.png"],
   ["royalpromptsmith", "/agents/vaelion.png"],
-  ["thaleon", "/agents/thaleon.png"],
-  ["royal-archivist", "/agents/thaleon.png"],
-  ["royalarchivist", "/agents/thaleon.png"],
+  ["seohyun", "/agents/seohyun.png"],
+  ["royal-archivist", "/agents/seohyun.png"],
+  ["royalarchivist", "/agents/seohyun.png"],
 ]);
 
 export function resolveAvatarUrl(avatarUrl: string | null | undefined, avatarVersion?: number | null): string | null {
