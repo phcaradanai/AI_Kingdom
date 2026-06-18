@@ -1,0 +1,197 @@
+import { ImageOff } from "lucide-react";
+import { useMemo, useState } from "react";
+import { initials, LOCATIONS, resolveLocation, STATE_DOT, STATE_LABEL, type LocationKey } from "@/components/kingdom/agentPresence";
+import { SCENE_ASPECT, SCENE_BACKGROUND, SCENE_ZONES, ZONE_FLOOR_Y } from "@/components/kingdom/sceneConfig";
+import { getAgentPortrait } from "@/lib/agentPortraits";
+import { cn } from "@/lib/utils";
+import type { AgentPresenceDto } from "@/types/api";
+
+// Ring color per state, sized to read over arbitrary pixel art (a bright ring + dot,
+// not a tinted card). Active agents bob; idle agents are dimmed and static.
+const STATE_RING: Record<string, string> = {
+  IDLE: "ring-stone-400/70",
+  THINKING: "ring-blue-400",
+  COUNCIL: "ring-violet-400",
+  WORKING: "ring-indigo-400",
+  RUNNING: "ring-emerald-400",
+  WAITING_REVIEW: "ring-amber-400",
+  BLOCKED: "ring-orange-400",
+  ERROR: "ring-red-500"
+};
+
+function isActive(state: string) {
+  return state !== "IDLE";
+}
+
+// ── A resident standing in the scene (real DOM button — keeps a11y + tests) ──────
+
+function SceneCharacter({
+  agent,
+  left,
+  top,
+  selected,
+  onSelect
+}: {
+  agent: AgentPresenceDto;
+  left: number;
+  top: number;
+  selected: boolean;
+  onSelect: (id: string) => void;
+}) {
+  const displayName = agent.displayName ?? agent.name;
+  const portrait = getAgentPortrait({ name: displayName, title: agent.role });
+  const active = isActive(agent.state);
+
+  return (
+    <button
+      type="button"
+      data-state={agent.state}
+      aria-pressed={selected}
+      aria-label={`${displayName} — ${STATE_LABEL[agent.state]}`}
+      title={agent.currentTask ?? STATE_LABEL[agent.state]}
+      onClick={() => onSelect(agent.id)}
+      style={{ left: `${left}%`, top: `${top}%` }}
+      className="group absolute z-10 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center focus:outline-none"
+    >
+      <span className={cn("relative", active && "kingdom-bob", !active && "opacity-80")}>
+        {/* Ground shadow */}
+        <span className="absolute -bottom-1 left-1/2 h-1.5 w-8 -translate-x-1/2 rounded-[50%] bg-black/30 blur-[1px]" />
+        <span
+          className={cn(
+            "flex h-[clamp(2.25rem,6.5vw,3.25rem)] w-[clamp(2.25rem,6.5vw,3.25rem)] items-center justify-center overflow-hidden rounded-full bg-stone-800 text-xs font-bold text-stone-100 shadow-lg ring-2",
+            STATE_RING[agent.state] ?? "ring-stone-400",
+            selected && "ring-4 ring-amber-300"
+          )}
+        >
+          {portrait ? (
+            <img src={portrait} alt="" className="h-full w-full object-cover" />
+          ) : (
+            <span>{initials(displayName)}</span>
+          )}
+        </span>
+        {/* Status dot */}
+        <span className={cn("absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-white shadow", STATE_DOT[agent.state])} />
+      </span>
+      {/* Name + state plate (readable over any art) */}
+      <span className="mt-1 flex flex-col items-center gap-0.5">
+        <span className="max-w-[5.5rem] truncate rounded bg-black/65 px-1.5 py-px text-[10px] font-semibold leading-tight text-white">
+          {displayName}
+        </span>
+        <span className="rounded bg-black/55 px-1.5 py-px text-[8px] font-medium uppercase tracking-wide text-white/85">
+          {STATE_LABEL[agent.state]}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// ── Hall nameplate (also guarantees the location name is in the DOM) ─────────────
+
+function HallPlate({ locationKey, zone, hasBackground }: { locationKey: LocationKey; zone: { x: number; y: number }; hasBackground: boolean }) {
+  const location = LOCATIONS.find((l) => l.key === locationKey)!;
+  const Icon = location.icon;
+  return (
+    <span
+      style={{ left: `${zone.x}%`, top: `${zone.y}%` }}
+      className={cn(
+        "absolute z-[5] inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold",
+        hasBackground ? "bg-black/55 text-amber-100" : "bg-amber-900 text-amber-50"
+      )}
+    >
+      <Icon className="h-3 w-3" />
+      {location.label}
+    </span>
+  );
+}
+
+// ── The scene ────────────────────────────────────────────────────────────────────
+
+export function KingdomScene({
+  agents,
+  selectedId,
+  onSelect
+}: {
+  agents: AgentPresenceDto[];
+  selectedId: string | null;
+  onSelect: (id: string) => void;
+}) {
+  // "idle" until the browser resolves the background; tests/jsdom stay in setup mode,
+  // which still renders every plate + character, so behaviour is asset-independent.
+  const [bgStatus, setBgStatus] = useState<"loading" | "ok" | "fail">("loading");
+  const hasBackground = bgStatus === "ok";
+
+  const placed = useMemo(() => {
+    const byZone = new Map<LocationKey, AgentPresenceDto[]>();
+    for (const l of LOCATIONS) byZone.set(l.key, []);
+    for (const a of agents) byZone.get(resolveLocation(a))!.push(a);
+
+    const out: Array<{ agent: AgentPresenceDto; left: number; top: number }> = [];
+    for (const [key, residents] of byZone) {
+      const zone = SCENE_ZONES[key];
+      residents.forEach((agent, i) => {
+        const left = zone.x + (zone.w * (i + 1)) / (residents.length + 1);
+        const top = zone.y + zone.h * ZONE_FLOOR_Y;
+        out.push({ agent, left, top });
+      });
+    }
+    return out;
+  }, [agents]);
+
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-xl border-2 border-amber-900/30 bg-stone-900"
+      style={{ aspectRatio: SCENE_ASPECT }}
+    >
+      {/* Background image (configurable). Hidden until it loads; falls back to setup. */}
+      <img
+        src={SCENE_BACKGROUND}
+        alt="Kingdom map"
+        onLoad={() => setBgStatus("ok")}
+        onError={() => setBgStatus("fail")}
+        className={cn(
+          "absolute inset-0 h-full w-full object-cover transition-opacity duration-500 [image-rendering:pixelated]",
+          hasBackground ? "opacity-100" : "opacity-0"
+        )}
+      />
+
+      {/* Setup state — honest "place your scene here", with labelled zone outlines */}
+      {!hasBackground && (
+        <div className="kingdom-floor absolute inset-0">
+          {LOCATIONS.map((l) => {
+            const z = SCENE_ZONES[l.key];
+            return (
+              <div
+                key={l.key}
+                style={{ left: `${z.x}%`, top: `${z.y}%`, width: `${z.w}%`, height: `${z.h}%` }}
+                className="absolute rounded-lg border-2 border-dashed border-amber-900/30 bg-white/20"
+              />
+            );
+          })}
+          <div className="absolute inset-x-0 bottom-3 mx-auto flex w-fit items-center gap-2 rounded-lg border border-amber-900/30 bg-white/80 px-3 py-2 text-xs text-stone-700 shadow-sm">
+            <ImageOff className="h-4 w-4 shrink-0" />
+            <span>
+              วางภาพฉาก pixel-art ที่ <code className="rounded bg-stone-200 px-1">apps/web/public{SCENE_BACKGROUND}</code> (≈16:10) แล้วฉากจะขึ้นทันที
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Hall nameplates */}
+      {LOCATIONS.map((l) => (
+        <HallPlate key={l.key} locationKey={l.key} zone={SCENE_ZONES[l.key]} hasBackground={hasBackground} />
+      ))}
+
+      {/* Residents */}
+      {placed.map(({ agent, left, top }) => (
+        <SceneCharacter
+          key={agent.id}
+          agent={agent}
+          left={left}
+          top={top}
+          selected={agent.id === selectedId}
+          onSelect={onSelect}
+        />
+      ))}
+    </div>
+  );
+}
