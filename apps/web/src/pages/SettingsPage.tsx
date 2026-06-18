@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { normalizeLanguage, useI18n } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { getModelDisplayName, getProviderDisplayName, getProviderModeBadge } from "@/lib/providerDisplay";
 import { useKingdomStore } from "@/stores/kingdomStore";
@@ -46,6 +47,13 @@ const SETTING_METADATA: Record<string, SettingMetadata> = {
       { value: "quality", label: "Quality", description: "Prefer stronger models when available." }
     ]
   },
+  UI_LANGUAGE: {
+    type: "enum",
+    options: [
+      { value: "en", label: "English", description: "Use the default English interface." },
+      { value: "th", label: "ภาษาไทย", description: "Use the Thai language patch across the web app." }
+    ]
+  },
   AI_MAX_TOKENS: { type: "number", min: 64, max: 8000, integer: true, step: "64" },
   AUTO_PLAN_WORK_ORDERS: { type: "boolean" },
   ROUTING_DEBUG_MODE: { type: "boolean" },
@@ -73,6 +81,7 @@ export function SettingsPage() {
   const settings = useKingdomStore((state) => state.settings);
   const providers = useKingdomStore((state) => state.providers);
   const updateSetting = useKingdomStore((state) => state.updateSetting);
+  const { setLanguage } = useI18n();
   const groups = {
     AI: settings.filter((setting) => setting.category === "AI"),
     SYSTEM: settings.filter((setting) => setting.category === "SYSTEM"),
@@ -82,6 +91,7 @@ export function SettingsPage() {
 
   async function update(key: string, value: string) {
     await updateSetting(key, value);
+    if (key === "UI_LANGUAGE") setLanguage(normalizeLanguage(value));
   }
 
   return (
@@ -123,6 +133,7 @@ export function SettingsPage() {
             </div>
           </Card>
         </div>
+        <SettingsCard icon={<SlidersHorizontal className="h-5 w-5 text-primary" />} title="UI Settings" settings={groups.UI} onUpdate={update} />
         <SettingsCard icon={<SlidersHorizontal className="h-5 w-5 text-primary" />} title="System Behavior" settings={groups.SYSTEM} onUpdate={update} />
         <Card>
           <ServerCog className="h-5 w-5 text-primary" />

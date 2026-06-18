@@ -1,8 +1,9 @@
-import { Activity, Archive, Bell, BookOpen, Bot, Brain, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LogOut, MonitorPlay, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault, Zap } from "lucide-react";
+import { Activity, Archive, Bell, BookOpen, Bot, Brain, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, Languages, LogOut, MonitorPlay, Scroll, ScrollText, Settings, Shield, UserCircle, Users, UsersRound, Vault, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { SUPPORTED_LANGUAGES, hasStoredLanguagePreference, normalizeLanguage, useI18n, type LanguageCode } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import { useKingdomStore } from "@/stores/kingdomStore";
@@ -73,14 +74,22 @@ export function AppLayout() {
   const logout = useAuthStore((state) => state.logout);
   const clearSession = useAuthStore((state) => state.clearSession);
   const refresh = useKingdomStore((state) => state.refresh);
+  const settings = useKingdomStore((state) => state.settings ?? []);
   const navigate = useNavigate();
   const [inboxPriorityCount, setInboxPriorityCount] = useState(0);
+  const { language, setLanguage, t } = useI18n();
 
   const allVisibleNavItems = navCategories.flatMap(c => c.items).filter(item => user && item.roles.includes(user.role as UserRole));
 
   useEffect(() => {
     void refresh();
   }, [refresh, user?.role]);
+
+  useEffect(() => {
+    const configuredLanguage = settings.find((setting) => setting.key === "UI_LANGUAGE")?.value;
+    if (!configuredLanguage || hasStoredLanguagePreference()) return;
+    setLanguage(normalizeLanguage(configuredLanguage), { persist: false });
+  }, [setLanguage, settings]);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,8 +129,8 @@ export function AppLayout() {
             <Crown className="h-6 w-6 text-primary" />
           </div>
           <div>
-            <div className="font-display text-xl font-bold tracking-wide text-primary">AI Kingdom</div>
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">Royal Command</div>
+            <div className="font-display text-xl font-bold tracking-wide text-primary">{t("AI Kingdom")}</div>
+            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">{t("Royal Command")}</div>
           </div>
         </div>
 
@@ -134,7 +143,7 @@ export function AppLayout() {
             return (
               <div key={category.name}>
                 <h4 className="mb-2 px-2 text-[10px] font-bold uppercase tracking-[0.2em] text-muted-foreground/70">
-                  {category.name}
+                  {t(category.name)}
                 </h4>
                 <div className="space-y-0.5">
                   {visibleItems.map((item) => (
@@ -151,7 +160,7 @@ export function AppLayout() {
                       }
                     >
                       <item.icon className={cn("h-4 w-4 shrink-0", "opacity-80")} />
-                      <span className="min-w-0 flex-1 truncate">{item.label}</span>
+                      <span className="min-w-0 flex-1 truncate">{t(item.label)}</span>
                       {item.to === "/inbox" && inboxPriorityCount > 0 && (
                         <span className="ml-auto rounded-full border border-amber-500/40 bg-amber-500/15 px-2 py-0.5 text-[10px] font-bold leading-none text-amber-300">
                           {inboxPriorityCount}
@@ -172,8 +181,9 @@ export function AppLayout() {
             <div className="mt-0.5 truncate text-xs text-muted-foreground">{user?.email}</div>
             <div className="mt-3 inline-flex items-center rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-primary">
               <Crown className="mr-1.5 h-3 w-3" />
-              {formatRole(user?.role)}
+              {t(formatRole(user?.role))}
             </div>
+            <LanguageSelect value={language} label={t("Display language")} onChange={(value) => setLanguage(value)} />
             <Button
               className="mt-4 w-full h-8 text-xs bg-muted/40 hover:bg-destructive/10 hover:text-destructive hover:border-destructive/30"
               variant="outline"
@@ -183,7 +193,7 @@ export function AppLayout() {
               }}
             >
               <LogOut className="h-3.5 w-3.5" />
-              Sign out
+              {t("Sign out")}
             </Button>
           </div>
         </div>
@@ -194,9 +204,9 @@ export function AppLayout() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-display text-lg font-bold text-primary">
               <Crown className="h-5 w-5" />
-              AI Kingdom
+              {t("AI Kingdom")}
             </div>
-            <Sparkles className="h-5 w-5 text-primary/70" />
+            <LanguageSelect value={language} label={t("Display language")} compact onChange={(value) => setLanguage(value)} />
           </div>
           <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-none">
             {allVisibleNavItems.map((item) => (
@@ -211,7 +221,7 @@ export function AppLayout() {
                 }
               >
                 <item.icon className="h-3.5 w-3.5" />
-                <span>{item.label}</span>
+                <span>{t(item.label)}</span>
                 {item.to === "/inbox" && inboxPriorityCount > 0 && (
                   <span className="rounded-full bg-amber-500 px-1.5 py-0.5 text-[10px] leading-none text-background">
                     {inboxPriorityCount}
@@ -231,4 +241,25 @@ export function AppLayout() {
 
 function formatRole(role?: string) {
   return role ? role.replace("_", " ") : "Unknown";
+}
+
+function LanguageSelect({ value, label, compact = false, onChange }: { value: LanguageCode; label: string; compact?: boolean; onChange: (value: LanguageCode) => void }) {
+  return (
+    <label className={cn("flex items-center gap-2 rounded-md border border-border/70 bg-background/40 px-2 py-1.5 text-xs text-muted-foreground", compact ? "max-w-36" : "mt-4 w-full")}>
+      <Languages className="h-3.5 w-3.5 shrink-0 text-primary" />
+      <span className="sr-only">{label}</span>
+      {!compact ? <span className="shrink-0 font-semibold">{label}</span> : null}
+      <select
+        className="min-w-0 flex-1 bg-transparent text-xs font-semibold text-foreground outline-none"
+        value={value}
+        onChange={(event) => onChange(normalizeLanguage(event.target.value))}
+      >
+        {SUPPORTED_LANGUAGES.map((language) => (
+          <option key={language.code} value={language.code}>
+            {language.nativeLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
 }

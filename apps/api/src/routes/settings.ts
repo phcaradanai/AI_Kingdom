@@ -72,6 +72,7 @@ const BOOLEAN_SETTING_KEYS = ["AUTO_SAVE_MEMORY", "AUTO_GENERATE_REPORTS", "AUTO
 function validateSettingValue(key: string, value: string): string | null {
   if (key === "AI_COST_MODE" && !["low", "balanced", "quality"].includes(value)) return "AI_COST_MODE must be low, balanced, or quality";
   if (key === "COUNCIL_AUTO_WORK_ORDER_MODE" && !["OFF", "DRAFT", "READY"].includes(value)) return "COUNCIL_AUTO_WORK_ORDER_MODE must be OFF, DRAFT, or READY";
+  if (key === "UI_LANGUAGE" && !["en", "th"].includes(value)) return "UI_LANGUAGE must be en or th";
   if (BOOLEAN_SETTING_KEYS.includes(key) && !["true", "false"].includes(value)) return `${key} must be true or false`;
   if (key === "AI_TIMEOUT_MS" && (!Number.isFinite(Number(value)) || Number(value) < 1000 || Number(value) > 120000)) return "AI_TIMEOUT_MS must be between 1000 and 120000";
   if (key === "AI_MAX_TOKENS" && (!Number.isFinite(Number(value)) || Number(value) < 64 || Number(value) > 8000)) return "AI_MAX_TOKENS must be between 64 and 8000";

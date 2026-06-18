@@ -6,6 +6,7 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "AI_COST_MODE", value: env.AI_COST_MODE, category: "AI", description: "Provider routing cost preference: low, balanced, or quality." },
   { key: "AI_TIMEOUT_MS", value: String(env.AI_TIMEOUT_MS), category: "AI", description: "Request timeout for AI calls in milliseconds." },
   { key: "AI_MAX_TOKENS", value: String(env.AI_MAX_TOKENS), category: "AI", description: "Default maximum output tokens for AI calls." },
+  { key: "UI_LANGUAGE", value: "en", category: "UI", description: "Default interface language for the web app. Use en for English or th for Thai." },
   { key: "AUTO_SAVE_MEMORY", value: "true", category: "SYSTEM", description: "Automatically save concise memories after council completion." },
   { key: "AUTO_GENERATE_REPORTS", value: "true", category: "SYSTEM", description: "Automatically generate Royal Reports after council completion." },
   { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF", category: "SYSTEM", description: "Controls whether the Planner Agent auto-creates work orders after council completion. OFF = disabled; DRAFT = create draft work orders for King review; READY = create work orders ready for agent assignment." },

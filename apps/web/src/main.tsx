@@ -39,58 +39,61 @@ import { LivingLoopPage } from "@/pages/LivingLoopPage";
 import { RoyalBriefPage } from "@/pages/RoyalBriefPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { KingdomOperationsPage } from "@/pages/KingdomOperationsPage";
+import { I18nProvider } from "@/lib/i18n";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<LoginPage />} />
-        <Route
-          element={
-            <ProtectedRoute>
-              <AppLayout />
-            </ProtectedRoute>
-          }
-        >
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/throne-room" element={<ThroneRoomPage />} />
-          <Route path="/council" element={<CouncilPage />} />
-          <Route path="/agents" element={<AgentsPage />} />
-          <Route path="/external-agents" element={<ExternalAgentsPage />} />
-          <Route path="/work-orders" element={<WorkOrdersPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
-          <Route path="/projects/:id" element={<ProjectDetailPage />} />
-          <Route path="/project-inbox" element={<ProjectInboxPage />} />
-          <Route path="/artifacts" element={<ArtifactsPage />} />
-          <Route path="/reports" element={<ReportsPage />} />
-          <Route path="/memory" element={<MemoryPage />} />
-          <Route path="/users" element={<UsersPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/providers" element={<ProvidersPage />} />
-          <Route path="/routing" element={<RoutingPage />} />
-          <Route path="/treasury" element={<TreasuryPage />} />
-          <Route path="/usage-traces/:traceId" element={<UsageTracePage />} />
-          <Route path="/living-agents" element={<LivingAgentsPage />} />
-          <Route path="/living-agents/:agentId" element={<LivingAgentProfilePage />} />
-          <Route path="/knowledge-lab" element={<KnowledgeLabPage />} />
-          <Route path="/knowledge-lab/candidates" element={<KnowledgeCandidatesPage />} />
-          <Route path="/knowledge-lab/memories" element={<KnowledgeMemoriesPage />} />
-          <Route path="/audit" element={<AuditPage />} />
-          <Route path="/charter" element={<CharterPage />} />
-          <Route path="/vision" element={<VisionPage />} />
-          <Route path="/notices" element={<NoticesPage />} />
-          <Route path="/matters" element={<MattersPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
-          <Route path="/security" element={<SecurityPage />} />
-          <Route path="/automation-jobs" element={<AutomationJobsPage />} />
-          <Route path="/living-loop" element={<LivingLoopPage />} />
-          <Route path="/royal-brief" element={<RoyalBriefPage />} />
-          <Route path="/inbox" element={<InboxPage />} />
-          <Route path="/kingdom/operations" element={<KingdomOperationsPage />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <I18nProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route
+            element={
+              <ProtectedRoute>
+                <AppLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/throne-room" element={<ThroneRoomPage />} />
+            <Route path="/council" element={<CouncilPage />} />
+            <Route path="/agents" element={<AgentsPage />} />
+            <Route path="/external-agents" element={<ExternalAgentsPage />} />
+            <Route path="/work-orders" element={<WorkOrdersPage />} />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:id" element={<ProjectDetailPage />} />
+            <Route path="/project-inbox" element={<ProjectInboxPage />} />
+            <Route path="/artifacts" element={<ArtifactsPage />} />
+            <Route path="/reports" element={<ReportsPage />} />
+            <Route path="/memory" element={<MemoryPage />} />
+            <Route path="/users" element={<UsersPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/providers" element={<ProvidersPage />} />
+            <Route path="/routing" element={<RoutingPage />} />
+            <Route path="/treasury" element={<TreasuryPage />} />
+            <Route path="/usage-traces/:traceId" element={<UsageTracePage />} />
+            <Route path="/living-agents" element={<LivingAgentsPage />} />
+            <Route path="/living-agents/:agentId" element={<LivingAgentProfilePage />} />
+            <Route path="/knowledge-lab" element={<KnowledgeLabPage />} />
+            <Route path="/knowledge-lab/candidates" element={<KnowledgeCandidatesPage />} />
+            <Route path="/knowledge-lab/memories" element={<KnowledgeMemoriesPage />} />
+            <Route path="/audit" element={<AuditPage />} />
+            <Route path="/charter" element={<CharterPage />} />
+            <Route path="/vision" element={<VisionPage />} />
+            <Route path="/notices" element={<NoticesPage />} />
+            <Route path="/matters" element={<MattersPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/security" element={<SecurityPage />} />
+            <Route path="/automation-jobs" element={<AutomationJobsPage />} />
+            <Route path="/living-loop" element={<LivingLoopPage />} />
+            <Route path="/royal-brief" element={<RoyalBriefPage />} />
+            <Route path="/inbox" element={<InboxPage />} />
+            <Route path="/kingdom/operations" element={<KingdomOperationsPage />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </I18nProvider>
   </React.StrictMode>
 );
