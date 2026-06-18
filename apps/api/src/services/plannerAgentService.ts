@@ -1,4 +1,4 @@
-import { type TaskMode, type WorkOrderStatus } from "@prisma/client";
+import { type Prisma, type TaskMode, type WorkOrder, type WorkOrderStatus } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { buildAIProviderCallsFromRoute } from "../ai/providerCallPlanner.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
@@ -17,6 +17,9 @@ import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryS
 import { getNumberSetting, getSettingValue } from "./settingsService.js";
 import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
 import { createWorkOrder } from "./externalAgentWorkOrderService.js";
+import { getWorkOrderRecommendations } from "./externalAgentRecommendationService.js";
+import { auditLog } from "./auditService.js";
+import { buildNextActionUpdate, computeCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 
 export interface PlannerDraft {
   title: string;
@@ -29,7 +32,9 @@ export interface PlannerResult {
   skipped: number;
   sessionId: string;
   draftedWorkOrderIds: string[];
+  createdWorkOrder: WorkOrder | null;
   skipReason?: string;
+  traceId?: string;
 }
 
 type SessionInput = {
@@ -56,7 +61,7 @@ export async function runPlannerAgent(
 ): Promise<PlannerResult> {
   const mode = await getSettingValue("COUNCIL_AUTO_WORK_ORDER_MODE", "OFF");
   if (mode === "OFF") {
-    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [], skipReason: "COUNCIL_AUTO_WORK_ORDER_MODE is OFF" };
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [], createdWorkOrder: null, skipReason: "COUNCIL_AUTO_WORK_ORDER_MODE is OFF" };
   }
   const targetStatus: "DRAFT" | "READY" = mode === "READY" ? "READY" : "DRAFT";
 
@@ -64,7 +69,7 @@ export async function runPlannerAgent(
     return await executePlanner(session, task, userId, targetStatus, true, "SYSTEM_ACTION: grandVizierOrchestrator (auto-planner)");
   } catch (error) {
     console.warn("[PlannerAgent] Failed to run planner agent:", error instanceof Error ? error.message : String(error));
-    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [], createdWorkOrder: null, skipReason: error instanceof Error ? error.message : "Planner agent failed" };
   }
 }
 
@@ -85,8 +90,14 @@ export async function planFromSession(
   if (session.status !== "COMPLETED") {
     throw new Error("Council session must be COMPLETED before planning");
   }
+  const plannerMode = await getSettingValue("COUNCIL_AUTO_WORK_ORDER_MODE", "OFF");
+  if (plannerMode !== "READY") {
+    const error = new Error("This council recommendation does not generate executable work orders.");
+    error.name = "PlannerModeDisabledError";
+    throw error;
+  }
 
-  return executePlanner(session, session.task, userId, "DRAFT", true, triggerRoute);
+  return executePlanner(session, session.task, userId, "READY", true, triggerRoute);
 }
 
 async function executePlanner(
@@ -97,10 +108,12 @@ async function executePlanner(
   explicitUserAction = true,
   triggerRoute = "POST /api/council/:sessionId/plan-work-orders"
 ): Promise<PlannerResult> {
+  const traceId = `council-work-order:${session.id}:${Date.now()}`;
+  traceCouncilWorkOrderStep(traceId, "API Request", { triggerRoute, sessionId: session.id, taskId: task.id, userId, targetStatus });
   const plannerAgent = await prisma.agent.findUnique({ where: { slug: "planner" } });
   if (!plannerAgent) {
     console.warn("[PlannerAgent] No 'planner' agent found in database. Run npm run db:seed to create it.");
-    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [], createdWorkOrder: null, skipReason: "Planner agent is not seeded.", traceId };
   }
 
   const defaultMaxTokens = await getNumberSetting("AI_MAX_TOKENS", 700);
@@ -162,10 +175,29 @@ async function executePlanner(
 
   const drafts = parsePlannerResponse(rawResponse);
   if (drafts.length === 0) {
-    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [] };
+    traceCouncilWorkOrderStep(traceId, "API Response", { sessionId: session.id, drafted: 0, skipped: 0, reason: "Planner produced no valid drafts." });
+    return { drafted: 0, skipped: 0, sessionId: session.id, draftedWorkOrderIds: [], createdWorkOrder: null, skipReason: "Planner produced no valid drafts.", traceId };
   }
 
-  return createDraftWorkOrders(drafts, session, task, userId, targetStatus, explicitUserAction);
+  const result = await createDraftWorkOrders(
+    drafts,
+    session,
+    task,
+    userId,
+    targetStatus,
+    explicitUserAction,
+    traceId,
+    triggerRoute.includes("/:sessionId/work-order")
+  );
+  traceCouncilWorkOrderStep(traceId, "API Response", {
+    sessionId: session.id,
+    drafted: result.drafted,
+    skipped: result.skipped,
+    draftedWorkOrderIds: result.draftedWorkOrderIds,
+    createdWorkOrderId: result.createdWorkOrder?.id ?? null,
+    skipReason: result.skipReason ?? null
+  });
+  return { ...result, traceId };
 }
 
 function buildPlanningContext(opts: {
@@ -387,17 +419,23 @@ export async function createDraftWorkOrders(
   task: TaskInput,
   userId: string,
   targetStatus: "DRAFT" | "READY" = "DRAFT",
-  explicitUserAction = true
+  explicitUserAction = true,
+  traceId = `council-work-order:${session.id}:${Date.now()}`,
+  limitToOne = false
 ): Promise<PlannerResult> {
   let drafted = 0;
   let skipped = 0;
   const draftedWorkOrderIds: string[] = [];
+  let createdWorkOrder: WorkOrder | null = null;
+  let skipReason: string | undefined;
 
   for (const draft of drafts) {
     // Cross-session dedup: skip if open work order with same normalized title exists
     const isDuplicate = await hasDuplicateWorkOrder(draft.title, task.projectId);
     if (isDuplicate) {
       skipped++;
+      skipReason = "A matching open work order already exists.";
+      traceCouncilWorkOrderStep(traceId, "DB Insert", { sessionId: session.id, title: draft.title, status: "SKIPPED_DUPLICATE" });
       continue;
     }
 
@@ -437,22 +475,71 @@ export async function createDraftWorkOrders(
       sourceId: session.id,
       status: targetStatus,
       priority: "MEDIUM",
-      createdByUserId: userId
+      createdByUserId: userId,
+      provenance: buildCouncilWorkOrderProvenance(session, task, draft)
     }, explicitUserAction);
 
     if (result.status === "CREATED" && result.workOrder) {
       draftedWorkOrderIds.push(result.workOrder.id);
+      traceCouncilWorkOrderStep(traceId, "DB Insert", { sessionId: session.id, workOrderId: result.workOrder.id, status: result.workOrder.status });
       // Auto-assign an internal agent; failure never blocks draft creation
       await assignWorkOrderAgent(result.workOrder.id).catch((err) => {
         console.warn(`[PlannerAgent] Auto-assignment failed for work order ${result.workOrder!.id}:`, err instanceof Error ? err.message : String(err));
       });
+      createdWorkOrder = await applyExecutableRoutes(result.workOrder.id, session, task, draft, userId).catch((err) => {
+        console.warn(`[PlannerAgent] Route generation failed for work order ${result.workOrder!.id}:`, err instanceof Error ? err.message : String(err));
+        return result.workOrder!;
+      });
+      const queried = await prisma.workOrder.findUnique({ where: { id: result.workOrder.id } });
+      traceCouncilWorkOrderStep(traceId, "WorkOrder Query Result", {
+        sessionId: session.id,
+        workOrderId: result.workOrder.id,
+        found: Boolean(queried),
+        status: queried?.status ?? null,
+        projectId: queried?.projectId ?? null
+      });
+      const decision = await computeCouncilNextExecutableAction({
+        sessionId: session.id,
+        sessionStatus: "COMPLETED",
+        finalSummary: session.finalSummary,
+        taskMode: task.mode,
+        projectId: task.projectId,
+        createdWorkOrderId: result.workOrder.id
+      });
+      await prisma.councilSession.update({
+        where: { id: session.id },
+        data: {
+          ...buildNextActionUpdate(decision),
+          createdWorkOrderId: result.workOrder.id,
+          createdWorkOrderAt: new Date(),
+          createdWorkOrderBy: userId
+        }
+      });
+      await auditLog({
+        userId,
+        action: "create_work_order_from_council",
+        resourceType: "work_order",
+        resourceId: result.workOrder.id,
+        metadata: {
+          councilSessionId: session.id,
+          taskId: task.id,
+          projectId: task.projectId,
+          createdWorkOrderId: result.workOrder.id,
+          createdAt: new Date().toISOString(),
+          creator: userId,
+          traceId
+        }
+      }).catch(() => undefined);
       drafted++;
+      if (limitToOne) break;
     } else {
       skipped++;
+      skipReason = result.reason ?? `Work order creation returned ${result.status}.`;
+      traceCouncilWorkOrderStep(traceId, "DB Insert", { sessionId: session.id, title: draft.title, status: result.status, reason: result.reason ?? null });
     }
   }
 
-  return { drafted, skipped, sessionId: session.id, draftedWorkOrderIds };
+  return { drafted, skipped, sessionId: session.id, draftedWorkOrderIds, createdWorkOrder, skipReason };
 }
 
 async function hasDuplicateWorkOrder(title: string, projectId: string | null): Promise<boolean> {
@@ -470,4 +557,77 @@ async function hasDuplicateWorkOrder(title: string, projectId: string | null): P
   });
 
   return existing.some((wo) => norm(wo.title) === titleNorm);
+}
+
+function buildCouncilWorkOrderProvenance(session: SessionInput, task: TaskInput, draft: PlannerDraft): Prisma.InputJsonObject {
+  return {
+    source: "COUNCIL_SESSION",
+    councilSessionId: session.id,
+    taskId: task.id,
+    projectId: task.projectId,
+    executionPlan: [
+      "Confirm the work order scope and context binding.",
+      "Implement the objective in the linked project.",
+      "Run the listed validation commands.",
+      "Submit an implementation report for King review."
+    ],
+    externalAgentAssignment: {
+      status: "PENDING_RECOMMENDATION",
+      reason: "Generated during council work-order creation."
+    },
+    reviewRoute: {
+      reviewer: "KING",
+      requiredState: "NEEDS_REVIEW",
+      instructions: "King reviews implementation report, validation output, and patch artifacts before completion."
+    },
+    knowledgeCaptureRoute: {
+      source: "IMPLEMENTATION_REPORT",
+      categories: ["ARCHITECTURE_DECISION", "BUG_LEARNING", "WORKFLOW_RULE"],
+      requiresReview: true
+    },
+    plannerRationale: draft.rationale
+  };
+}
+
+async function applyExecutableRoutes(workOrderId: string, session: SessionInput, task: TaskInput, draft: PlannerDraft, userId: string): Promise<WorkOrder> {
+  const recommendations = await getWorkOrderRecommendations(workOrderId).catch(() => []);
+  const recommendation = recommendations[0] ?? null;
+  const existing = await prisma.workOrder.findUniqueOrThrow({ where: { id: workOrderId } });
+  const baseProvenance = (typeof existing.provenance === "object" && existing.provenance !== null && !Array.isArray(existing.provenance))
+    ? existing.provenance as Prisma.JsonObject
+    : {};
+
+  const updated = await prisma.workOrder.update({
+    where: { id: workOrderId },
+    data: {
+      assignedExternalAgentId: recommendation?.externalAgentId ?? existing.assignedExternalAgentId,
+      provenance: {
+        ...baseProvenance,
+        ...buildCouncilWorkOrderProvenance(session, task, draft),
+        externalAgentAssignment: recommendation
+          ? {
+              status: "RECOMMENDED",
+              externalAgentId: recommendation.externalAgentId,
+              name: recommendation.name,
+              type: recommendation.type,
+              confidence: recommendation.confidence,
+              score: recommendation.score,
+              reasons: recommendation.reasons,
+              risks: recommendation.risks
+            }
+          : {
+              status: "UNASSIGNED",
+              reason: "No active external agent recommendation was available."
+            },
+        generatedAt: new Date().toISOString(),
+        generatedBy: userId
+      } satisfies Prisma.InputJsonObject
+    }
+  });
+
+  return updated;
+}
+
+function traceCouncilWorkOrderStep(traceId: string, step: string, details: Record<string, unknown>) {
+  console.info(`[CouncilWorkOrderTrace] ${step}`, { traceId, ...details });
 }

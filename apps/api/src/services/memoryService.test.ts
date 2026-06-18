@@ -73,6 +73,12 @@ test("extract memory candidates limits concise meaningful memories", () => {
     fallbackNotice: null,
     consultedMemoryIds: [],
     autoSavedMemoryIds: [],
+    nextExecutableAction: null,
+    nextExecutableActionReason: null,
+    nextExecutableActionComputedAt: null,
+    createdWorkOrderId: null,
+    createdWorkOrderAt: null,
+    createdWorkOrderBy: null,
     createdAt: now,
     updatedAt: now
   };

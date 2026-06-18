@@ -219,6 +219,16 @@ enum WorkOrderExecutionTarget {
   EXTERNAL_AGENT
 }
 
+enum KingdomNextExecutableAction {
+  NONE
+  CREATE_WORK_ORDER
+  CREATE_EXTERNAL_HANDOFF
+  RUN_VALIDATION
+  SCAN_LOCAL_DOCS
+  BIND_CONTEXT
+  REVIEW_PATCH
+}
+
 enum ExternalAgentExecutionMode {
   MANUAL_COPY_PASTE
   CLI_MANUAL
@@ -889,6 +899,12 @@ model CouncilSession {
   fallbackNotice     String?
   consultedMemoryIds String[]             @default([])
   autoSavedMemoryIds String[]             @default([])
+  nextExecutableAction KingdomNextExecutableAction?
+  nextExecutableActionReason String?
+  nextExecutableActionComputedAt DateTime?
+  createdWorkOrderId String?
+  createdWorkOrderAt DateTime?
+  createdWorkOrderBy String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)

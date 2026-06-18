@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye, ArrowRight, ExternalLink, Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
@@ -408,6 +408,8 @@ function StatusQuickFilters({
 }
 
 export function WorkOrdersPage() {
+  const [searchParams] = useSearchParams();
+  const focusedWorkOrderId = searchParams.get("focus");
   const user = useAuthStore((state) => state.user);
   const canCreate = user?.role === "KING" || user?.role === "CROWN_PRINCE";
   const canReport = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
@@ -467,7 +469,11 @@ export function WorkOrdersPage() {
       setWorkOrders(orders.workOrders);
       setExternalAgents(agents.externalAgents);
       setProjects(projectResponse.projects);
-      if (selectedId && !orders.workOrders.some((order) => order.id === selectedId)) {
+      const focused = focusedWorkOrderId ? orders.workOrders.find((order) => order.id === focusedWorkOrderId) : null;
+      if (focused) {
+        setSelectedId(focused.id);
+        setDraft(toPayload(focused));
+      } else if (selectedId && !orders.workOrders.some((order) => order.id === selectedId)) {
         setSelectedId(null);
       }
     } catch (err) {
@@ -482,7 +488,7 @@ export function WorkOrdersPage() {
 
   useEffect(() => {
     void load();
-  }, [statusFilter, priorityFilter, agentFilter, includeArchived, includeLegacy, includeTestData]);
+  }, [statusFilter, priorityFilter, agentFilter, includeArchived, includeLegacy, includeTestData, focusedWorkOrderId]);
 
   function select(order: WorkOrderDto | null) {
     setSelectedId(order?.id ?? null);
@@ -1002,7 +1008,11 @@ export function WorkOrdersPage() {
 
           <div className="space-y-3">
             {workOrders.map((order) => (
-              <Card key={order.id} className={cn("relative p-4 transition", selected?.id === order.id && "border-primary/60 bg-primary/10")}>
+              <Card key={order.id} className={cn(
+                "relative p-4 transition",
+                selected?.id === order.id && "border-primary/60 bg-primary/10",
+                focusedWorkOrderId === order.id && "ring-2 ring-primary/60"
+              )}>
                 {canCreate && (
                   <button
                     type="button"

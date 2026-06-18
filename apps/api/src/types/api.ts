@@ -1,4 +1,4 @@
-import type { Agent, AgentResponse, KnowledgeCategory, KnowledgeCandidateStatus, Memory, ProviderBalanceSnapshot, Report, Task, TaskMode, TaskStatus } from "@prisma/client";
+import type { Agent, AgentResponse, KingdomNextExecutableAction, KnowledgeCategory, KnowledgeCandidateStatus, Memory, ProviderBalanceSnapshot, Report, Task, TaskMode, TaskStatus } from "@prisma/client";
 
 export type PublicUser = {
   id: string;
@@ -40,6 +40,8 @@ export type AgentDto = Pick<Agent, "id" | "slug" | "name" | "title" | "role" | "
 export type CouncilResponseDto = AgentResponse & {
   agent: AgentDto;
 };
+
+export type CouncilNextExecutableActionDto = KingdomNextExecutableAction;
 
 export type TaskDto = Pick<Task, "id" | "title" | "command" | "mode" | "status" | "createdBy" | "createdAt" | "updatedAt"> & {
   reports: Report[];

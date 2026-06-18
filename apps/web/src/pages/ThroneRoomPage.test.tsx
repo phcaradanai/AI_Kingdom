@@ -14,6 +14,7 @@ const apiMocks = vi.hoisted(() => ({
 
 const storeState = vi.hoisted(() => ({
   tasks: [] as TaskDto[],
+  settings: [{ key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "READY" }],
   isLoading: false,
   isProcessing: false,
   submitCommand: vi.fn()
@@ -98,10 +99,11 @@ function makeTask(session = makeSession()): TaskDto {
 
 function renderPage(task: TaskDto | null = makeTask()) {
   storeState.tasks = task ? [task] : [];
+  storeState.settings = [{ key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "READY" }];
   storeState.isLoading = false;
   storeState.isProcessing = false;
   storeState.submitCommand.mockResolvedValue(task);
-  apiMocks.planCouncilWorkOrder.mockResolvedValue({ drafted: 1, skipped: 0, sessionId: "session-1", draftedWorkOrderIds: ["wo-1"] });
+  apiMocks.planCouncilWorkOrder.mockResolvedValue({ drafted: 1, skipped: 0, sessionId: "session-1", draftedWorkOrderIds: ["wo-1"], createdWorkOrder: { id: "wo-1" }, traceId: "trace-1" });
   apiMocks.createCouncilHandoff.mockResolvedValue({
     workOrder: { id: "wo-handoff", contextBindingStatus: "FRESH" },
     handoffBrief: { title: "Council handoff brief" }
@@ -117,6 +119,7 @@ function renderPage(task: TaskDto | null = makeTask()) {
 afterEach(() => {
   vi.clearAllMocks();
   storeState.tasks = [];
+  storeState.settings = [];
 });
 
 describe("ThroneRoomPage", () => {
@@ -129,12 +132,13 @@ describe("ThroneRoomPage", () => {
     expect(screen.getByRole("button", { name: /Issue Decree/i })).toBeInTheDocument();
   });
 
-  it("shows the final recommendation and Recommended Next Step first for completed councils", () => {
+  it("shows the final recommendation and one Next Action first for completed councils", () => {
     renderPage();
 
     expect(screen.getByText("Final Recommendation")).toBeInTheDocument();
-    expect(screen.getByText("Recommended Next Step")).toBeInTheDocument();
-    expect(screen.getByText("Create an implementation handoff")).toBeInTheDocument();
+    expect(screen.getByText("Next Action")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Create Work Order$/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Create External Agent Handoff/i })).not.toBeInTheDocument();
     expect(screen.getByText("Final synthesis ready")).toBeInTheDocument();
   });
 
@@ -162,17 +166,36 @@ describe("ThroneRoomPage", () => {
     expect(screen.getByText("Run local docs scan before SANDBOX_PATCH")).toBeInTheDocument();
   });
 
-  it("keeps create handoff and create work order buttons working", async () => {
+  it("creates a work order through the primary action", async () => {
     renderPage();
 
     await userEvent.click(screen.getByRole("button", { name: /Create Work Order/i }));
     await waitFor(() => expect(apiMocks.planCouncilWorkOrder).toHaveBeenCalledWith("session-1"));
-    expect(await screen.findByText("1 work order drafted from the council recommendation.")).toBeInTheDocument();
+    expect(await screen.findByText("1 work order created from the council recommendation.")).toBeInTheDocument();
+  });
+
+  it("shows a disabled work-order action when planner mode is off", () => {
+    storeState.settings = [{ key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF" }];
+    const session = makeSession({
+      nextExecutableAction: "CREATE_WORK_ORDER",
+      nextExecutableActionReason: "This council recommendation does not generate executable work orders."
+    });
+    renderPage(makeTask(session));
+
+    expect(screen.getByRole("button", { name: /Create Work Order/i })).toBeDisabled();
+    expect(screen.getAllByText("This council recommendation does not generate executable work orders.").length).toBeGreaterThan(0);
+  });
+
+  it("runs the handoff primary action when the stored next action asks for it", async () => {
+    const session = makeSession({
+      nextExecutableAction: "CREATE_EXTERNAL_HANDOFF",
+      nextExecutableActionReason: "Package this as a manual handoff."
+    });
+    renderPage(makeTask(session));
 
     await userEvent.click(screen.getByRole("button", { name: /Create External Agent Handoff/i }));
     await waitFor(() => expect(apiMocks.createCouncilHandoff).toHaveBeenCalledWith("task-1", "session-1"));
-    expect(await screen.findByText("External handoff ready: Council handoff brief")).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Open Created Work Order/i })).toHaveAttribute("href", "/work-orders");
+    expect(apiMocks.planCouncilWorkOrder).not.toHaveBeenCalled();
   });
 
   it("renders source links when source data exists", () => {

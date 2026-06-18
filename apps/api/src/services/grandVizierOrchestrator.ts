@@ -11,6 +11,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { runPlannerAgent } from "./plannerAgentService.js";
+import { refreshCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
 import { proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
@@ -782,6 +783,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       agentId: grandVizier.id,
       tokensUsed: generatedSummary.usage.totalTokens,
       estimatedCostUSD: summaryCost.costUSD
+    });
+
+    await refreshCouncilNextExecutableAction(sessionWithMemories.id).catch((err) => {
+      console.warn("[GrandVizier] Next action computation failed:", err instanceof Error ? err.message : String(err));
     });
 
     // Fire-and-forget: planner runs after council completes, gated by COUNCIL_AUTO_WORK_ORDER_MODE setting

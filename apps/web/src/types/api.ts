@@ -547,7 +547,19 @@ export type PlannerResultDto = {
   skipped: number;
   sessionId: string;
   draftedWorkOrderIds: string[];
+  createdWorkOrder?: WorkOrderDto | null;
+  skipReason?: string;
+  traceId?: string;
 };
+
+export type CouncilNextExecutableAction =
+  | "NONE"
+  | "CREATE_WORK_ORDER"
+  | "CREATE_EXTERNAL_HANDOFF"
+  | "RUN_VALIDATION"
+  | "SCAN_LOCAL_DOCS"
+  | "BIND_CONTEXT"
+  | "REVIEW_PATCH";
 
 export type CouncilSessionDto = {
   id: string;
@@ -562,6 +574,12 @@ export type CouncilSessionDto = {
   fallbackNotice: string | null;
   consultedMemoryIds: string[];
   autoSavedMemoryIds: string[];
+  nextExecutableAction?: CouncilNextExecutableAction | null;
+  nextExecutableActionReason?: string | null;
+  nextExecutableActionComputedAt?: string | null;
+  createdWorkOrderId?: string | null;
+  createdWorkOrderAt?: string | null;
+  createdWorkOrderBy?: string | null;
   createdAt: string;
   updatedAt: string;
   reports?: ReportDto[];

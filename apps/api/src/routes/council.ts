@@ -82,10 +82,14 @@ router.post("/:sessionId/plan-work-orders", requireRole("KING", "CROWN_PRINCE"),
     }
     const { sessionId } = req.params as { sessionId: string };
     const result = await planFromSession(sessionId, userId, "POST /api/council/:sessionId/plan-work-orders");
-    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds, skipReason: result.skipReason });
+    res.json(formatPlannerResult(result));
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.name === "PlannerModeDisabledError") {
+      res.status(409).json({ error: error.message });
       return;
     }
     next(error);
@@ -101,10 +105,18 @@ router.post("/:sessionId/work-order", requireRole("KING", "CROWN_PRINCE"), async
     }
     const { sessionId } = req.params as { sessionId: string };
     const result = await planFromSession(sessionId, userId, "POST /api/council/:sessionId/work-order");
-    res.json({ drafted: result.drafted, skipped: result.skipped, sessionId: result.sessionId, draftedWorkOrderIds: result.draftedWorkOrderIds, skipReason: result.skipReason });
+    if (!result.createdWorkOrder) {
+      res.status(409).json({ error: result.skipReason ?? "Work order creation failed: no Work Order was created", ...formatPlannerResult(result) });
+      return;
+    }
+    res.status(201).json(formatPlannerResult(result));
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });
+      return;
+    }
+    if (error instanceof Error && error.name === "PlannerModeDisabledError") {
+      res.status(409).json({ error: error.message });
       return;
     }
     next(error);
@@ -151,4 +163,16 @@ async function attachCouncilTraceLinks<T extends CouncilSessionWithResponses>(se
       traceId: traceByResponse.get(response.id) ?? null
     }))
   }));
+}
+
+function formatPlannerResult(result: Awaited<ReturnType<typeof planFromSession>>) {
+  return {
+    drafted: result.drafted,
+    skipped: result.skipped,
+    sessionId: result.sessionId,
+    draftedWorkOrderIds: result.draftedWorkOrderIds,
+    createdWorkOrder: result.createdWorkOrder,
+    skipReason: result.skipReason,
+    traceId: result.traceId
+  };
 }
