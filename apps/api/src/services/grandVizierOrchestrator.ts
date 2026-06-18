@@ -144,7 +144,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       try {
         const route = await selectAIProviderRoute({ agent, taskMode: task.mode, requiredCapabilities: { chat: true } });
         const effectiveParams = resolveEffectiveParameters(agent, route.provider.type, defaultMaxTokens);
-        const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders);
+        const providerCalls = buildProviderCalls(route);
 
         // Emit preliminary trace for route chain health/budget/chain skips (before trace exists, buffer and emit after)
         const pendingRouteEvents: Array<{ providerId: string; reason: string; kind: "HEALTH_BLOCKED" | "BUDGET_BLOCKED" | "CHAIN_SKIPPED" }> = [];
@@ -439,7 +439,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
     const summaryEffectiveParams = resolveEffectiveParameters(grandVizier, summaryRoute.provider.type, defaultMaxTokens);
-    const summaryProviderCalls = buildProviderCalls(summaryRoute.provider, summaryRoute.model, summaryRoute.fallbackProviders);
+    const summaryProviderCalls = buildProviderCalls(summaryRoute);
     const summaryTrace = await createAIUsageTrace({
       actorUserId: userId,
       actorRole: task.user.role,
@@ -900,15 +900,12 @@ function summarizeForCandidate(value: string, maxLength = 450): string {
   return normalized.length > maxLength ? `${normalized.slice(0, maxLength - 3)}...` : normalized;
 }
 
-function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fallbackProviders: AIProviderConfig[]) {
-  const configs = [primary, ...fallbackProviders];
-  return configs
-    .map((provider, index) => {
+function buildProviderCalls(route: { provider: AIProviderConfig; model: string; fallbackAttempts: { provider: AIProviderConfig; model: string }[] }) {
+  const attempts = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts];
+  return attempts
+    .map(({ provider, model }) => {
       try {
-        return {
-          provider: createAIProviderFromConfig(provider),
-          model: index === 0 ? primaryModel : provider.defaultModel
-        };
+        return { provider: createAIProviderFromConfig(provider), model };
       } catch {
         return null;
       }

@@ -17,9 +17,14 @@ export type RequiredAICapabilities = {
   jsonMode?: boolean;
 };
 
+export type FallbackAttempt = { provider: AIProviderConfig; model: string };
+
 export type AIProviderRouteSelection = {
   provider: AIProviderConfig;
   model: string;
+  /** Explicit ordered list of (provider, model) pairs to try after primary. */
+  fallbackAttempts: FallbackAttempt[];
+  /** Derived from fallbackAttempts for backward compatibility. */
   fallbackProviders: AIProviderConfig[];
   attemptedProviderIds: string[];
   costMode: AICostMode;
@@ -55,7 +60,9 @@ export async function selectAIProviderRoute(input: {
   // Phase 4+5: Try route chain first
   const chain = await findActiveChainForContext(input.taskMode, input.agent.id);
   if (chain && chain.entries.length > 0) {
-    return buildSelectionFromChain(chain, capableProviders, providers, costMode, input.requiredCapabilities);
+    // For non-agent-specific chains, inject the agent's fallbackModels before chain-level fallbacks
+    const agentFallbackModels = chain.agentId ? [] : input.agent.fallbackModels;
+    return buildSelectionFromChain(chain, capableProviders, providers, costMode, input.requiredCapabilities, agentFallbackModels);
   }
 
   // Legacy routing fallback below
@@ -66,12 +73,13 @@ export async function selectAIProviderRoute(input: {
       : buildAgentFallbackIds(input.agent).length
         ? buildAgentFallbackIds(input.agent)
         : await getDefaultFallbackChain();
-    const fallbackProviders = await resolveFallbackProviders(fallbackIds, agentProvider, capableProviders);
+    const fallbackAttempts = await resolveFallbackAttempts(fallbackIds, agentProvider, capableProviders);
     return applyBudgetGuard({
       provider: agentProvider,
       model: input.agent.defaultModel ?? agentProvider.defaultModel,
-      fallbackProviders,
-      attemptedProviderIds: [agentProvider.id, ...fallbackProviders.map((provider) => provider.id)],
+      fallbackAttempts,
+      fallbackProviders: fallbackAttempts.map((a) => a.provider),
+      attemptedProviderIds: [agentProvider.id, ...fallbackAttempts.map((a) => a.provider.id)],
       costMode
     }, providers);
   }
@@ -91,12 +99,13 @@ export async function selectAIProviderRoute(input: {
   if (dbRoute?.preferredProviderId) {
     const preferred = capableProviders.find((provider) => provider.id === dbRoute.preferredProviderId);
     if (preferred) {
-      const fallbackProviders = await resolveFallbackProviders(dbRoute.fallbackProviderIds, preferred, capableProviders);
+      const fallbackAttempts = await resolveFallbackAttempts(dbRoute.fallbackProviderIds, preferred, capableProviders);
       return applyBudgetGuard({
         provider: preferred,
         model: input.agent.defaultModel ?? dbRoute.preferredModel ?? preferred.defaultModel,
-        fallbackProviders,
-        attemptedProviderIds: [preferred.id, ...fallbackProviders.map((provider) => provider.id)],
+        fallbackAttempts,
+        fallbackProviders: fallbackAttempts.map((a) => a.provider),
+        attemptedProviderIds: [preferred.id, ...fallbackAttempts.map((a) => a.provider.id)],
         costMode
       }, providers);
     }
@@ -113,18 +122,19 @@ export async function selectAIProviderRoute(input: {
     : buildAgentFallbackIds(input.agent).length
       ? buildAgentFallbackIds(input.agent)
       : await getDefaultFallbackChain();
-  const fallbackProviders = await resolveFallbackProviders(fallbackIds, provider, capableProviders);
+  const fallbackAttempts = await resolveFallbackAttempts(fallbackIds, provider, capableProviders);
 
-  if (!fallbackProviders.some((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID)) {
+  if (!fallbackAttempts.some((a) => a.provider.id === LOCAL_SANDBOX_PROVIDER_ID)) {
     const sandbox = providers.find((candidate) => candidate.id === LOCAL_SANDBOX_PROVIDER_ID) ?? providers.find((candidate) => candidate.id === LEGACY_MOCK_PROVIDER_ID);
-    if (sandbox && sandbox.id !== provider.id) fallbackProviders.push(sandbox);
+    if (sandbox && sandbox.id !== provider.id) fallbackAttempts.push({ provider: sandbox, model: sandbox.defaultModel });
   }
 
   return applyBudgetGuard({
     provider,
     model: input.agent.defaultModel ?? provider.defaultModel,
-    fallbackProviders,
-    attemptedProviderIds: [provider.id, ...fallbackProviders.map((candidate) => candidate.id)],
+    fallbackAttempts,
+    fallbackProviders: fallbackAttempts.map((a) => a.provider),
+    attemptedProviderIds: [provider.id, ...fallbackAttempts.map((a) => a.provider.id)],
     costMode
   }, providers);
 }
@@ -134,7 +144,8 @@ async function buildSelectionFromChain(
   capableProviders: AIProviderConfig[],
   allProviders: AIProviderConfig[],
   costMode: AICostMode,
-  requiredCapabilities?: RequiredAICapabilities
+  requiredCapabilities?: RequiredAICapabilities,
+  agentFallbackModels: string[] = []
 ): Promise<AIProviderRouteSelection> {
   const healthSnapshots = await getCachedProviderHealth().catch(() => []);
   const healthMap = new Map(healthSnapshots.map((h) => [h.providerType, h.healthStatus]));
@@ -185,11 +196,31 @@ async function buildSelectionFromChain(
     primaryModel = sandbox.defaultModel;
   }
 
+  // For non-agent-specific chains: inject the agent's fallbackModels as model-level
+  // sub-attempts on the primary provider, before the chain's provider-level fallbacks.
+  // This ensures model fallbacks are exhausted before jumping to a different provider.
+  const modelFallbackAttempts: FallbackAttempt[] = [];
+  if (agentFallbackModels.length > 0 && primary.type === "openrouter" && primary.id !== LOCAL_SANDBOX_PROVIDER_ID) {
+    for (const model of agentFallbackModels) {
+      modelFallbackAttempts.push({ provider: { ...primary, defaultModel: model }, model });
+    }
+  }
+
+  // Chain-defined provider fallbacks — sandbox goes last
+  const sandboxChainFallbacks = fallbackCalls.filter((c) => c.provider.id === LOCAL_SANDBOX_PROVIDER_ID);
+  const nonSandboxChainFallbacks = fallbackCalls.filter((c) => c.provider.id !== LOCAL_SANDBOX_PROVIDER_ID);
+  const allFallbackAttempts: FallbackAttempt[] = [
+    ...modelFallbackAttempts,
+    ...nonSandboxChainFallbacks.map((c) => ({ provider: c.provider, model: c.model })),
+    ...sandboxChainFallbacks.map((c) => ({ provider: c.provider, model: c.model }))
+  ];
+
   const selection: AIProviderRouteSelection = {
     provider: primary,
     model: primaryModel,
-    fallbackProviders: fallbackCalls.map((c) => c.provider),
-    attemptedProviderIds: [primary.id, ...fallbackCalls.map((c) => c.provider.id)],
+    fallbackAttempts: allFallbackAttempts,
+    fallbackProviders: allFallbackAttempts.map((a) => a.provider),
+    attemptedProviderIds: [primary.id, ...allFallbackAttempts.map((a) => a.provider.id)],
     costMode,
     routeChainId: chain!.id,
     skippedProviderIds: skippedProviderIds.length > 0 ? skippedProviderIds : undefined,
@@ -220,6 +251,7 @@ async function applyBudgetGuard(
         ...selection,
         provider: sandbox,
         model: sandbox.defaultModel,
+        fallbackAttempts: [],
         fallbackProviders: [],
         attemptedProviderIds: [sandbox.id],
         budgetBlocked: true,
@@ -231,10 +263,12 @@ async function applyBudgetGuard(
 
   const newPrimary = allowed[0]!;
   const newFallbacks = allowed.slice(1);
+  const newFallbackAttempts = newFallbacks.map((p) => ({ provider: p, model: p.defaultModel }));
   return {
     ...selection,
     provider: newPrimary,
     model: newPrimary.id === selection.provider.id ? selection.model : newPrimary.defaultModel,
+    fallbackAttempts: newFallbackAttempts,
     fallbackProviders: newFallbacks,
     attemptedProviderIds: [newPrimary.id, ...newFallbacks.map((p) => p.id)],
     budgetBlocked: blocked.length > 0,
@@ -324,8 +358,8 @@ export async function describeFallbackProviderReadiness(provider: AIProviderConf
   return { state: "READY", label: "Ready", active: true };
 }
 
-async function resolveFallbackProviders(fallbackIds: string[], primaryProvider: AIProviderConfig, capableProviders: AIProviderConfig[]): Promise<AIProviderConfig[]> {
-  const resolved: AIProviderConfig[] = [];
+async function resolveFallbackAttempts(fallbackIds: string[], primaryProvider: AIProviderConfig, capableProviders: AIProviderConfig[]): Promise<FallbackAttempt[]> {
+  const resolved: FallbackAttempt[] = [];
   const sandboxFallbackMode = await isSandboxFallbackModeActive();
   for (const id of fallbackIds) {
     const provider = capableProviders.find((candidate) => candidate.id === id || (id === LEGACY_MOCK_PROVIDER_ID && candidate.id === LOCAL_SANDBOX_PROVIDER_ID));
@@ -335,12 +369,13 @@ async function resolveFallbackProviders(fallbackIds: string[], primaryProvider: 
         const readiness = await describeFallbackProviderReadiness(provider);
         if (!readiness.active) continue;
       }
-      if (provider.id !== primaryProvider.id) resolved.push(provider);
+      if (provider.id !== primaryProvider.id) resolved.push({ provider, model: provider.defaultModel });
       continue;
     }
 
     if (isModelFallback(id) && primaryProvider.type === "openrouter") {
-      resolved.push({ ...primaryProvider, defaultModel: id });
+      const clone = { ...primaryProvider, defaultModel: id };
+      resolved.push({ provider: clone, model: id });
     }
   }
   return resolved;

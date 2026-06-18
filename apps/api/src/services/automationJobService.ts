@@ -444,10 +444,10 @@ async function generateExecutionPlan(opts: {
     defaultMaxTokens
   );
 
-  const providerCalls = [route.provider, ...route.fallbackProviders]
-    .map((p, i) => {
+  const providerCalls = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts]
+    .map(({ provider, model }) => {
       try {
-        return { provider: createAIProviderFromConfig(p), model: i === 0 ? route.model : p.defaultModel };
+        return { provider: createAIProviderFromConfig(provider), model };
       } catch {
         return null;
       }

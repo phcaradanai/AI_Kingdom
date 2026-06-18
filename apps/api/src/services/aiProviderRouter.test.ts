@@ -163,6 +163,61 @@ test("routing includes fallbackModels as model fallbacks before provider fallbac
   }
 });
 
+test("routing with fallbackModels and fallbackProviderIds: models before sandbox", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const agent = await prisma.agent.create({
+    data: {
+      slug: `fallback-combined-${suffix}`,
+      name: "Combined Fallback Test Agent",
+      title: "Test Agent",
+      role: "Tester",
+      specialty: "Routing",
+      prompt: "test",
+      systemPrompt: "test",
+      skills: [],
+      responseStyle: "concise",
+      preferredProviderId: OPENROUTER_FREE_PROVIDER_ID,
+      defaultModel: "nvidia/nemotron-3-super-120b-a12b:free",
+      fallbackModels: ["openai/gpt-oss-120b:free", "openrouter/owl-alpha", "deepseek/deepseek-v4-flash"],
+      fallbackProviderIds: [LOCAL_SANDBOX_PROVIDER_ID]
+    }
+  });
+
+  try {
+    const route = await selectAIProviderRoute({ agent, taskMode: "ASK" });
+    assert.equal(route.provider.id, OPENROUTER_FREE_PROVIDER_ID);
+    assert.equal(route.model, "nvidia/nemotron-3-super-120b-a12b:free");
+
+    // Build full ordered attempt list: primary model, then fallback models, then sandbox
+    const attemptModels = [
+      route.model,
+      ...route.fallbackProviders.map((p) =>
+        p.id === LOCAL_SANDBOX_PROVIDER_ID ? LOCAL_SANDBOX_PROVIDER_ID : p.defaultModel
+      )
+    ];
+
+    assert.deepEqual(
+      attemptModels,
+      [
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "openai/gpt-oss-120b:free",
+        "openrouter/owl-alpha",
+        "deepseek/deepseek-v4-flash",
+        LOCAL_SANDBOX_PROVIDER_ID
+      ],
+      `Expected ordered attempt list, got: ${JSON.stringify(attemptModels)}`
+    );
+
+    // Sandbox must be strictly last
+    const sandboxIndex = route.fallbackProviders.findIndex((p) => p.id === LOCAL_SANDBOX_PROVIDER_ID);
+    const modelFallbackCount = route.fallbackProviders.filter((p) => p.id !== LOCAL_SANDBOX_PROVIDER_ID).length;
+    assert.equal(modelFallbackCount, 3, "Expected 3 model fallbacks");
+    assert.equal(sandboxIndex, 3, "Sandbox must be last (index 3 of fallbackProviders)");
+  } finally {
+    await prisma.agent.delete({ where: { id: agent.id } });
+  }
+});
+
 test("routing uses default fallback chain when agent has no fallbackModels or fallbackProviderIds", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const agent = await prisma.agent.create({

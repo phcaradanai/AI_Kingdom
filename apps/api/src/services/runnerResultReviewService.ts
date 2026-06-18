@@ -320,10 +320,10 @@ async function generateAiReviewText(input: ReviewInput, prompt: string): Promise
     route.provider.type,
     defaultMaxTokens
   );
-  const providerCalls = [route.provider, ...route.fallbackProviders]
-    .map((provider, index) => {
+  const providerCalls = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts]
+    .map(({ provider, model }) => {
       try {
-        return { provider: createAIProviderFromConfig(provider), model: index === 0 ? route.model : provider.defaultModel };
+        return { provider: createAIProviderFromConfig(provider), model };
       } catch {
         return null;
       }

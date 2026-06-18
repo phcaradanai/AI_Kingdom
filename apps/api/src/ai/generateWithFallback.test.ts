@@ -327,6 +327,114 @@ test("local sandbox is final fallback when all providers fail", async () => {
   assert.ok(stepTypes.includes("PROVIDER_CALL_SUCCESS"), "trace must show final success");
 });
 
+test("Grand Vizier synthesis: primary fails, first fallback fails, second fallback succeeds, sandbox not called", async () => {
+  const called: string[] = [];
+
+  function trackingProvider(name: string, model: string, fail: boolean): AIProvider {
+    return {
+      name,
+      model,
+      async generateAgentResponse(input) {
+        called.push(`${name}/${model}`);
+        if (fail) throw new Error(`${name}/${model} unavailable`);
+        return {
+          response: `Response from ${model}`,
+          usage: { promptTokens: 8, completionTokens: 4, totalTokens: 12 }
+        };
+      }
+    };
+  }
+
+  const traceContext = await createTestTrace(`synthesis-second-fallback-${Date.now()}`);
+  const result = await generateWithFallback(
+    [
+      trackingProvider("openrouter-free", "nvidia/nemotron-3-super-120b-a12b:free", true),
+      trackingProvider("openrouter-free", "openai/gpt-oss-120b:free", true),
+      trackingProvider("openrouter-free", "openrouter/owl-alpha", false)
+    ],
+    {
+      command: "Synthesize council output",
+      mode: "ASK",
+      agentName: "Aurelian",
+      agentRole: "Grand Vizier",
+      agentSkills: ["synthesis"],
+      systemPrompt: "You are the Grand Vizier.",
+      responseStyle: "concise"
+    },
+    traceContext
+  );
+
+  assert.equal(result.finalModel, "openrouter/owl-alpha", "Second fallback model must be used");
+  assert.equal(result.fallbackUsed, true);
+  assert.ok(!called.includes(`${LOCAL_SANDBOX_PROVIDER_ID}/${LOCAL_SANDBOX_MODEL}`), "Local sandbox must not be called when an API model succeeds");
+  assert.ok(result.finalProviderId !== LOCAL_SANDBOX_PROVIDER_ID, "Result must not come from sandbox");
+
+  const successStep = await prisma.aIUsageTraceStep.findFirst({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_CALL_SUCCESS" }
+  });
+  assert.ok(successStep, "Trace must record a successful provider call");
+  assert.equal(successStep.model, "openrouter/owl-alpha", "Success step must record the correct fallback model");
+
+  const failedSteps = await prisma.aIUsageTraceStep.findMany({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_CALL_FAILED" }
+  });
+  assert.equal(failedSteps.length, 2, "Trace must record exactly two failures (primary and first fallback)");
+});
+
+test("all OpenRouter fallbackModels fail: local sandbox called exactly once as final fallback", async () => {
+  const traceContext = await createTestTrace(`all-models-fail-${Date.now()}`);
+  const result = await generateWithFallback(
+    [
+      {
+        name: "openrouter-free",
+        model: "nvidia/nemotron-3-super-120b-a12b:free",
+        async generateAgentResponse() { throw new Error("model 1 unavailable"); }
+      },
+      {
+        name: "openrouter-free",
+        model: "openai/gpt-oss-120b:free",
+        async generateAgentResponse() { throw new Error("model 2 unavailable"); }
+      },
+      {
+        name: "openrouter-free",
+        model: "openrouter/owl-alpha",
+        async generateAgentResponse() { throw new Error("model 3 unavailable"); }
+      },
+      {
+        name: "openrouter-free",
+        model: "deepseek/deepseek-v4-flash",
+        async generateAgentResponse() { throw new Error("model 4 unavailable"); }
+      }
+    ],
+    {
+      command: "Advise on kingdom growth",
+      mode: "ASK",
+      agentName: "Aurelian",
+      agentRole: "Grand Vizier",
+      agentSkills: ["counsel"],
+      systemPrompt: "You are the Grand Vizier.",
+      responseStyle: "concise"
+    },
+    traceContext
+  );
+
+  assert.equal(result.providerName, LOCAL_SANDBOX_PROVIDER_NAME, "Sandbox must be the final result provider");
+  assert.equal(result.providerId, LOCAL_SANDBOX_PROVIDER_ID);
+  assert.equal(result.modelUsed, LOCAL_SANDBOX_MODEL);
+  assert.equal(result.fallbackUsed, true);
+
+  const successSteps = await prisma.aIUsageTraceStep.findMany({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_CALL_SUCCESS" }
+  });
+  assert.equal(successSteps.length, 1, "Sandbox must be called exactly once as final fallback");
+  assert.equal(successSteps[0]!.providerType, "sandbox", "The single successful call must be the sandbox");
+
+  const failedSteps = await prisma.aIUsageTraceStep.findMany({
+    where: { traceId: traceContext.traceId, stepType: "PROVIDER_CALL_FAILED" }
+  });
+  assert.equal(failedSteps.length, 4, "All 4 configured API models must be recorded as failures before sandbox");
+});
+
 test.after(async () => {
   await prisma.aIUsageTrace.deleteMany({ where: { operation: "generate_with_fallback_test" } });
 });

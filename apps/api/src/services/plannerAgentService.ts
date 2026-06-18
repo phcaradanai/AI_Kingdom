@@ -232,7 +232,7 @@ async function callPlannerLLM(opts: {
     route.provider.type,
     defaultMaxTokens
   );
-  const providerCalls = buildProviderCalls(route.provider, route.model, route.fallbackProviders);
+  const providerCalls = buildProviderCalls(route);
 
   const actorRole = (task.user?.role as string | undefined) ?? "KING";
   const trace = await createAIUsageTrace({
@@ -471,15 +471,12 @@ async function hasDuplicateWorkOrder(title: string, projectId: string | null): P
   return existing.some((wo) => norm(wo.title) === titleNorm);
 }
 
-function buildProviderCalls(primary: AIProviderConfig, primaryModel: string, fallbackProviders: AIProviderConfig[]) {
-  const configs = [primary, ...fallbackProviders];
-  return configs
-    .map((provider, index) => {
+function buildProviderCalls(route: { provider: AIProviderConfig; model: string; fallbackAttempts: { provider: AIProviderConfig; model: string }[] }) {
+  const attempts = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts];
+  return attempts
+    .map(({ provider, model }) => {
       try {
-        return {
-          provider: createAIProviderFromConfig(provider),
-          model: index === 0 ? primaryModel : provider.defaultModel
-        };
+        return { provider: createAIProviderFromConfig(provider), model };
       } catch {
         return null;
       }
