@@ -2216,3 +2216,186 @@ export type KingdomHealthDto = {
   overallStatus: KingdomHealthStatus;
   items: KingdomHealthItemDto[];
 };
+
+// ── M20: Kingdom Strategy Ledger ──────────────────────────────────────────────
+
+export type KingdomObjectiveStatus = "ACTIVE" | "PAUSED" | "ACHIEVED" | "ARCHIVED";
+export type SuccessMetricDirection = "INCREASE" | "DECREASE" | "MAINTAIN";
+export type SuccessMetricStatus = "UNKNOWN" | "ON_TRACK" | "AT_RISK" | "OFF_TRACK" | "ACHIEVED";
+export type KingdomAssetType = "PRODUCT" | "TEMPLATE" | "SERVICE" | "KNOWLEDGE" | "AUTOMATION" | "CONTENT" | "COMMUNITY" | "OTHER";
+export type KingdomAssetStatus = "IDEA" | "BUILDING" | "ACTIVE" | "MONETIZING" | "PAUSED" | "ARCHIVED";
+export type RevenueModel = "SUBSCRIPTION" | "ONE_TIME" | "SERVICE" | "AFFILIATE" | "ADS" | "LICENSING" | "OTHER";
+export type RevenueStreamStatus = "PLANNED" | "TESTING" | "ACTIVE" | "PAUSED" | "ENDED";
+export type OpportunityStatus = "INBOX" | "REVIEWING" | "VALIDATING" | "APPROVED" | "REJECTED" | "ARCHIVED";
+export type OpportunityExperimentStatus = "PLANNED" | "RUNNING" | "COMPLETED" | "FAILED" | "CANCELLED";
+
+export type StrategyProjectRefDto = { id: string; name: string; codename: string | null };
+export type StrategyUserRefDto = { id: string; displayName: string; email: string };
+
+export type KingdomObjectiveDto = {
+  id: string;
+  projectId: string | null;
+  title: string;
+  description: string;
+  status: KingdomObjectiveStatus;
+  priority: MatterPriority;
+  targetDate: string | null;
+  sourceType: string | null;
+  sourceId: string | null;
+  tags: string[];
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: StrategyProjectRefDto | null;
+  createdBy?: StrategyUserRefDto | null;
+  successMetrics?: SuccessMetricDto[];
+};
+
+export type SuccessMetricDto = {
+  id: string;
+  objectiveId: string | null;
+  projectId: string | null;
+  name: string;
+  description: string;
+  unit: string;
+  direction: SuccessMetricDirection;
+  baselineValue: number | null;
+  currentValue: number;
+  targetValue: number | null;
+  status: SuccessMetricStatus;
+  sourceType: string | null;
+  sourceId: string | null;
+  lastMeasuredAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  objective?: Pick<KingdomObjectiveDto, "id" | "title" | "status"> | null;
+  project?: StrategyProjectRefDto | null;
+};
+
+export type KingdomAssetDto = {
+  id: string;
+  projectId: string | null;
+  name: string;
+  type: KingdomAssetType;
+  status: KingdomAssetStatus;
+  description: string;
+  valueHypothesis: string;
+  targetCustomer: string;
+  monthlyRevenueEstimate: number;
+  monthlyCostEstimate: number;
+  sourceType: string | null;
+  sourceId: string | null;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  project?: StrategyProjectRefDto | null;
+  revenueStreams?: RevenueStreamDto[];
+};
+
+export type RevenueStreamDto = {
+  id: string;
+  projectId: string | null;
+  assetId: string | null;
+  name: string;
+  model: RevenueModel;
+  status: RevenueStreamStatus;
+  currency: string;
+  monthlyRevenue: number;
+  monthlyCost: number;
+  confidence: number | null;
+  notes: string;
+  sourceType: string | null;
+  sourceId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: StrategyProjectRefDto | null;
+  asset?: Pick<KingdomAssetDto, "id" | "name" | "status" | "type"> | null;
+};
+
+export type KingdomOpportunityDto = {
+  id: string;
+  projectId: string | null;
+  objectiveId: string | null;
+  assetId: string | null;
+  title: string;
+  problem: string;
+  proposedValue: string;
+  targetCustomer: string;
+  status: OpportunityStatus;
+  priority: MatterPriority;
+  confidence: number | null;
+  score: number;
+  estimatedMonthlyRevenue: number;
+  estimatedEffort: string;
+  riskLevel: MatterPriority;
+  nextAction: string;
+  sourceType: string | null;
+  sourceId: string | null;
+  traceId: string | null;
+  tags: string[];
+  createdByUserId: string | null;
+  reviewedByUserId: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  project?: StrategyProjectRefDto | null;
+  objective?: Pick<KingdomObjectiveDto, "id" | "title" | "status"> | null;
+  asset?: Pick<KingdomAssetDto, "id" | "name" | "status" | "type"> | null;
+  createdBy?: StrategyUserRefDto | null;
+  experiments?: OpportunityExperimentDto[];
+};
+
+export type OpportunityExperimentDto = {
+  id: string;
+  opportunityId: string;
+  title: string;
+  hypothesis: string;
+  validationMethod: string;
+  successCriteria: string;
+  status: OpportunityExperimentStatus;
+  resultSummary: string | null;
+  resultMetric: number | null;
+  startedAt: string | null;
+  completedAt: string | null;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  opportunity?: Pick<KingdomOpportunityDto, "id" | "title" | "status" | "score"> | null;
+  createdBy?: StrategyUserRefDto | null;
+};
+
+export type StrategyOverviewDto = {
+  computedAt: string;
+  objectives: { active: number; atRiskMetrics: number; achieved: number; archived: number };
+  assets: { active: number; monetizing: number; ideas: number; totalEstimatedMonthlyRevenue: number; totalEstimatedMonthlyCost: number };
+  revenue: { activeStreams: number; testingStreams: number; monthlyRevenue: number; monthlyCost: number; monthlyNet: number };
+  opportunities: { inbox: number; reviewing: number; validating: number; approved: number; rejected: number; top: KingdomOpportunityDto[] };
+  activeObjectives: KingdomObjectiveDto[];
+  atRiskMetrics: SuccessMetricDto[];
+  activeRevenueStreams: RevenueStreamDto[];
+};
+
+export type StrategyObjectivePayload = Partial<Pick<KingdomObjectiveDto, "projectId" | "description" | "status" | "priority" | "targetDate" | "sourceType" | "sourceId" | "tags">> & {
+  title: string;
+};
+
+export type StrategyMetricPayload = Partial<Omit<SuccessMetricDto, "id" | "createdAt" | "updatedAt" | "objective" | "project">> & {
+  name: string;
+};
+
+export type StrategyAssetPayload = Partial<Omit<KingdomAssetDto, "id" | "createdAt" | "updatedAt" | "project" | "revenueStreams">> & {
+  name: string;
+};
+
+export type StrategyRevenueStreamPayload = Partial<Omit<RevenueStreamDto, "id" | "createdAt" | "updatedAt" | "project" | "asset">> & {
+  name: string;
+};
+
+export type StrategyOpportunityPayload = Partial<Omit<KingdomOpportunityDto, "id" | "createdAt" | "updatedAt" | "createdBy" | "reviewedAt" | "reviewedByUserId" | "createdByUserId" | "project" | "objective" | "asset" | "experiments">> & {
+  title: string;
+};
+
+export type StrategyExperimentPayload = Partial<Omit<OpportunityExperimentDto, "id" | "createdAt" | "updatedAt" | "createdBy" | "opportunity" | "createdByUserId">> & {
+  opportunityId: string;
+  title: string;
+};

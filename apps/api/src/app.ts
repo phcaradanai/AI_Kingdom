@@ -51,6 +51,7 @@ import automationCandidatesRouter from "./routes/automationCandidates.js";
 import royalBriefRouter from "./routes/royalBrief.js";
 import nextActionsRouter from "./routes/nextActions.js";
 import kingdomRouter from "./routes/kingdom.js";
+import strategyRouter from "./routes/strategy.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -146,6 +147,7 @@ export function createApp() {
   app.use("/api/royal-brief", requireAuth, royalBriefRouter);
   app.use("/api/next-actions", requireAuth, nextActionsRouter);
   app.use("/api/kingdom", requireAuth, kingdomRouter);
+  app.use("/api/strategy", requireAuth, strategyRouter);
   app.use("/api", requireAuth, charterRouter);
   app.use(errorHandler);
 

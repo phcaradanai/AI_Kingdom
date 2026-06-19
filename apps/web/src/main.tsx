@@ -40,6 +40,7 @@ import { LivingLoopPage } from "@/pages/LivingLoopPage";
 import { RoyalBriefPage } from "@/pages/RoyalBriefPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { KingdomOperationsPage } from "@/pages/KingdomOperationsPage";
+import { StrategyPage } from "@/pages/StrategyPage";
 import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
@@ -90,6 +91,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/royal-brief" element={<RoyalBriefPage />} />
           <Route path="/inbox" element={<InboxPage />} />
           <Route path="/kingdom/operations" element={<KingdomOperationsPage />} />
+          <Route path="/strategy" element={<StrategyPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Routes>

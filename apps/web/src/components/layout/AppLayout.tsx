@@ -1,4 +1,4 @@
-import { Activity, Archive, Bell, BookOpen, Bot, Brain, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LogOut, MessageSquare, MonitorPlay, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault, Zap } from "lucide-react";
+import { Activity, Archive, Bell, BookOpen, Bot, Brain, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, LineChart, LogOut, MessageSquare, MonitorPlay, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ const navCategories = [
       { to: "/dashboard", label: "Dashboard", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/throne-room", label: "Throne Room", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
       { to: "/kingdom/operations", label: "Operations Center", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
+      { to: "/strategy", label: "Strategy Ledger", icon: LineChart, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/inbox", label: "Kingdom Inbox", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
     ]
   },

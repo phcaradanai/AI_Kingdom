@@ -100,7 +100,20 @@ import type {
   NextActionQueueDto,
   KingdomPresenceDto,
   KingdomActivityStreamDto,
-  KingdomHealthDto
+  KingdomAssetDto,
+  KingdomHealthDto,
+  KingdomObjectiveDto,
+  KingdomOpportunityDto,
+  OpportunityExperimentDto,
+  RevenueStreamDto,
+  StrategyAssetPayload,
+  StrategyExperimentPayload,
+  StrategyMetricPayload,
+  StrategyObjectivePayload,
+  StrategyOpportunityPayload,
+  StrategyOverviewDto,
+  StrategyRevenueStreamPayload,
+  SuccessMetricDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -744,7 +757,42 @@ export const api = {
   // ── STAR_OFFICE_UI: Kingdom Operations Center ─────────────────────────────────
   getKingdomPresence: () => apiRequest<KingdomPresenceDto>("/kingdom/presence"),
   getKingdomActivity: (limit = 50) => apiRequest<KingdomActivityStreamDto>(`/kingdom/activity?limit=${limit}`),
-  getKingdomHealth: () => apiRequest<KingdomHealthDto>("/kingdom/health")
+  getKingdomHealth: () => apiRequest<KingdomHealthDto>("/kingdom/health"),
+
+  // ── M20: Kingdom Strategy Ledger ─────────────────────────────────────────────
+  getStrategyOverview: () => apiRequest<{ overview: StrategyOverviewDto }>("/strategy/overview"),
+  strategyObjectives: () => apiRequest<{ objectives: KingdomObjectiveDto[] }>("/strategy/objectives"),
+  createStrategyObjective: (payload: StrategyObjectivePayload) =>
+    apiRequest<{ objective: KingdomObjectiveDto }>("/strategy/objectives", { method: "POST", body: JSON.stringify(payload) }),
+  updateStrategyObjective: (id: string, payload: Partial<StrategyObjectivePayload>) =>
+    apiRequest<{ objective: KingdomObjectiveDto }>(`/strategy/objectives/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  strategyMetrics: () => apiRequest<{ metrics: SuccessMetricDto[] }>("/strategy/metrics"),
+  createStrategyMetric: (payload: StrategyMetricPayload) =>
+    apiRequest<{ metric: SuccessMetricDto }>("/strategy/metrics", { method: "POST", body: JSON.stringify(payload) }),
+  updateStrategyMetric: (id: string, payload: Partial<StrategyMetricPayload>) =>
+    apiRequest<{ metric: SuccessMetricDto }>(`/strategy/metrics/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  strategyAssets: () => apiRequest<{ assets: KingdomAssetDto[] }>("/strategy/assets"),
+  createStrategyAsset: (payload: StrategyAssetPayload) =>
+    apiRequest<{ asset: KingdomAssetDto }>("/strategy/assets", { method: "POST", body: JSON.stringify(payload) }),
+  updateStrategyAsset: (id: string, payload: Partial<StrategyAssetPayload>) =>
+    apiRequest<{ asset: KingdomAssetDto }>(`/strategy/assets/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  strategyRevenueStreams: () => apiRequest<{ revenueStreams: RevenueStreamDto[] }>("/strategy/revenue-streams"),
+  createStrategyRevenueStream: (payload: StrategyRevenueStreamPayload) =>
+    apiRequest<{ revenueStream: RevenueStreamDto }>("/strategy/revenue-streams", { method: "POST", body: JSON.stringify(payload) }),
+  updateStrategyRevenueStream: (id: string, payload: Partial<StrategyRevenueStreamPayload>) =>
+    apiRequest<{ revenueStream: RevenueStreamDto }>(`/strategy/revenue-streams/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  strategyOpportunities: () => apiRequest<{ opportunities: KingdomOpportunityDto[] }>("/strategy/opportunities"),
+  createStrategyOpportunity: (payload: StrategyOpportunityPayload) =>
+    apiRequest<{ opportunity: KingdomOpportunityDto }>("/strategy/opportunities", { method: "POST", body: JSON.stringify(payload) }),
+  updateStrategyOpportunity: (id: string, payload: Partial<StrategyOpportunityPayload>) =>
+    apiRequest<{ opportunity: KingdomOpportunityDto }>(`/strategy/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  createStrategyOpportunityWorkOrder: (id: string) =>
+    apiRequest<{ workOrder: WorkOrderDto }>(`/strategy/opportunities/${id}/work-order`, { method: "POST" }),
+  strategyExperiments: () => apiRequest<{ experiments: OpportunityExperimentDto[] }>("/strategy/experiments"),
+  createStrategyExperiment: (payload: StrategyExperimentPayload) =>
+    apiRequest<{ experiment: OpportunityExperimentDto }>("/strategy/experiments", { method: "POST", body: JSON.stringify(payload) }),
+  updateStrategyExperiment: (id: string, payload: Partial<StrategyExperimentPayload>) =>
+    apiRequest<{ experiment: OpportunityExperimentDto }>(`/strategy/experiments/${id}`, { method: "PATCH", body: JSON.stringify(payload) })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

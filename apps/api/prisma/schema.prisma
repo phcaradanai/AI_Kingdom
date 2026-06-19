@@ -361,6 +361,82 @@ enum DirectAgentRequestType {
   PERSONAL_TASK
 }
 
+enum KingdomObjectiveStatus {
+  ACTIVE
+  PAUSED
+  ACHIEVED
+  ARCHIVED
+}
+
+enum SuccessMetricDirection {
+  INCREASE
+  DECREASE
+  MAINTAIN
+}
+
+enum SuccessMetricStatus {
+  UNKNOWN
+  ON_TRACK
+  AT_RISK
+  OFF_TRACK
+  ACHIEVED
+}
+
+enum KingdomAssetType {
+  PRODUCT
+  TEMPLATE
+  SERVICE
+  KNOWLEDGE
+  AUTOMATION
+  CONTENT
+  COMMUNITY
+  OTHER
+}
+
+enum KingdomAssetStatus {
+  IDEA
+  BUILDING
+  ACTIVE
+  MONETIZING
+  PAUSED
+  ARCHIVED
+}
+
+enum RevenueStreamStatus {
+  PLANNED
+  TESTING
+  ACTIVE
+  PAUSED
+  ENDED
+}
+
+enum RevenueModel {
+  SUBSCRIPTION
+  ONE_TIME
+  SERVICE
+  AFFILIATE
+  ADS
+  LICENSING
+  OTHER
+}
+
+enum OpportunityStatus {
+  INBOX
+  REVIEWING
+  VALIDATING
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+enum OpportunityExperimentStatus {
+  PLANNED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
 model Notice {
   id               String         @id @default(cuid())
   projectId        String?
@@ -431,6 +507,9 @@ model User {
   reviewedPatchArtifacts PatchArtifact[] @relation("PatchArtifactReviewedBy")
   royalBriefs            RoyalBrief[]    @relation("RoyalBriefGeneratedByUser")
   directAgentSessions    DirectAgentSession[]
+  strategyObjectives     KingdomObjective[]
+  opportunities          KingdomOpportunity[]
+  opportunityExperiments OpportunityExperiment[]
 }
 
 model RefreshToken {
@@ -552,6 +631,11 @@ model Project {
   localDocumentInsights  LocalDocumentInsight[]
   reviewSummaries        AgentReviewSummary[]
   directAgentSessions    DirectAgentSession[]
+  strategyObjectives     KingdomObjective[]
+  successMetrics         SuccessMetric[]
+  kingdomAssets          KingdomAsset[]
+  revenueStreams         RevenueStream[]
+  opportunities          KingdomOpportunity[]
 }
 
 model DirectAgentSession {
@@ -604,6 +688,174 @@ model DirectAgentMessage {
   @@index([role])
   @@index([traceId])
   @@index([createdAt])
+}
+
+model KingdomObjective {
+  id              String                 @id @default(cuid())
+  projectId       String?
+  createdByUserId String?
+  title           String
+  description     String                 @default("")
+  status          KingdomObjectiveStatus @default(ACTIVE)
+  priority        ProjectPriority        @default(MEDIUM)
+  targetDate      DateTime?
+  sourceType      String?
+  sourceId        String?
+  tags            String[]               @default([])
+  createdAt       DateTime               @default(now())
+  updatedAt       DateTime               @updatedAt
+  project         Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdByUser   User?                  @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  metrics         SuccessMetric[]
+  opportunities   KingdomOpportunity[]
+
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([priority])
+  @@index([targetDate])
+}
+
+model SuccessMetric {
+  id            String                 @id @default(cuid())
+  objectiveId   String?
+  projectId     String?
+  name          String
+  description   String                 @default("")
+  unit          String                 @default("")
+  direction     SuccessMetricDirection @default(INCREASE)
+  baselineValue Float?
+  currentValue  Float                  @default(0)
+  targetValue   Float?
+  status        SuccessMetricStatus    @default(UNKNOWN)
+  sourceType    String?
+  sourceId      String?
+  lastMeasuredAt DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  objective     KingdomObjective?      @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  project       Project?               @relation(fields: [projectId], references: [id], onDelete: SetNull)
+
+  @@index([objectiveId])
+  @@index([projectId])
+  @@index([status])
+  @@index([lastMeasuredAt])
+}
+
+model KingdomAsset {
+  id                     String             @id @default(cuid())
+  projectId              String?
+  name                   String
+  type                   KingdomAssetType   @default(OTHER)
+  status                 KingdomAssetStatus @default(IDEA)
+  description            String             @default("")
+  valueHypothesis        String             @default("")
+  targetCustomer         String             @default("")
+  monthlyRevenueEstimate Float              @default(0)
+  monthlyCostEstimate    Float              @default(0)
+  sourceType             String?
+  sourceId               String?
+  tags                   String[]           @default([])
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  project                Project?           @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  revenueStreams         RevenueStream[]
+  opportunities          KingdomOpportunity[]
+
+  @@index([projectId])
+  @@index([type])
+  @@index([status])
+  @@index([monthlyRevenueEstimate])
+}
+
+model RevenueStream {
+  id             String              @id @default(cuid())
+  projectId      String?
+  assetId        String?
+  name           String
+  model          RevenueModel        @default(OTHER)
+  status         RevenueStreamStatus @default(PLANNED)
+  currency       String              @default("USD")
+  monthlyRevenue Float               @default(0)
+  monthlyCost    Float               @default(0)
+  confidence     Float?
+  notes          String              @default("")
+  sourceType     String?
+  sourceId       String?
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  project        Project?            @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  asset          KingdomAsset?       @relation(fields: [assetId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([assetId])
+  @@index([status])
+  @@index([model])
+}
+
+model KingdomOpportunity {
+  id                       String            @id @default(cuid())
+  projectId                String?
+  objectiveId              String?
+  assetId                  String?
+  createdByUserId          String?
+  title                    String
+  problem                  String            @default("")
+  proposedValue            String            @default("")
+  targetCustomer           String            @default("")
+  status                   OpportunityStatus @default(INBOX)
+  priority                 ProjectPriority   @default(MEDIUM)
+  confidence               Float?
+  score                    Int               @default(0)
+  estimatedMonthlyRevenue  Float             @default(0)
+  estimatedEffort          String            @default("")
+  riskLevel                MatterPriority    @default(MEDIUM)
+  nextAction               String            @default("")
+  sourceType               String?
+  sourceId                 String?
+  traceId                  String?
+  tags                     String[]          @default([])
+  createdAt                DateTime          @default(now())
+  updatedAt                DateTime          @updatedAt
+  reviewedAt               DateTime?
+  project                  Project?          @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  objective                KingdomObjective? @relation(fields: [objectiveId], references: [id], onDelete: SetNull)
+  asset                    KingdomAsset?     @relation(fields: [assetId], references: [id], onDelete: SetNull)
+  createdByUser            User?             @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+  experiments              OpportunityExperiment[]
+
+  @@index([projectId])
+  @@index([objectiveId])
+  @@index([assetId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([priority])
+  @@index([score])
+  @@index([traceId])
+}
+
+model OpportunityExperiment {
+  id               String                      @id @default(cuid())
+  opportunityId    String
+  createdByUserId  String?
+  title            String
+  hypothesis       String                      @default("")
+  validationMethod String                      @default("")
+  successCriteria  String                      @default("")
+  status           OpportunityExperimentStatus @default(PLANNED)
+  resultSummary    String?
+  resultMetric     Float?
+  startedAt        DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime                    @default(now())
+  updatedAt        DateTime                    @updatedAt
+  opportunity      KingdomOpportunity          @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+  createdByUser    User?                       @relation(fields: [createdByUserId], references: [id], onDelete: SetNull)
+
+  @@index([opportunityId])
+  @@index([createdByUserId])
+  @@index([status])
+  @@index([completedAt])
 }
 
 model RepositorySnapshot {
