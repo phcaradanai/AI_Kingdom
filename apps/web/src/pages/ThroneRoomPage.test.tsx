@@ -201,13 +201,14 @@ describe("ThroneRoomPage", () => {
     expect(await screen.findByText("External agent execution approved. Runner will claim the job and report back for King review.")).toBeInTheDocument();
   });
 
-  it("shows a disabled work-order action when planner mode is off", () => {
+  it("shows a disabled work-order action when planner mode is off", async () => {
     storeState.settings = [{ key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF" }];
     const session = makeSession({
       nextExecutableAction: "CREATE_WORK_ORDER",
       nextExecutableActionReason: "This council recommendation does not generate executable work orders."
     });
     renderPage(makeTask(session));
+    await switchToCommand();
 
     expect(screen.getByRole("button", { name: /Create Work Order/i })).toBeDisabled();
     expect(screen.getAllByText("This council recommendation does not generate executable work orders.").length).toBeGreaterThan(0);
@@ -219,6 +220,7 @@ describe("ThroneRoomPage", () => {
       nextExecutableActionReason: "Package this as a manual handoff."
     });
     renderPage(makeTask(session));
+    await switchToCommand();
 
     await userEvent.click(screen.getByRole("button", { name: /Create External Agent Handoff/i }));
     await waitFor(() => expect(apiMocks.createCouncilHandoff).toHaveBeenCalledWith("task-1", "session-1"));
