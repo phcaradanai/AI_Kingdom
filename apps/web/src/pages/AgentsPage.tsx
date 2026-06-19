@@ -1334,7 +1334,7 @@ export function AgentsPage() {
                         <span className="text-muted-foreground">Fallback chain: </span>
                         <span className="text-foreground">
                           {routingPreview.effectiveRoute.fallbackProviders.map((fp, i) => (
-                            <span key={fp.id}>
+                            <span key={`${fp.id}-${fp.defaultModel}-${i}`}>
                               {i > 0 && <span className="text-muted-foreground"> → </span>}
                               <span className="font-medium">{fp.name}</span>
                               <span className="text-muted-foreground"> ({fp.environmentMode})</span>
@@ -1358,7 +1358,7 @@ export function AgentsPage() {
                           {routingPreview.blockedFallbackProviderDetails
                             .filter((item) => item.readiness.state !== "READY")
                             .map((item, i) => (
-                              <span key={item.id}>
+                              <span key={`${item.id}-${item.readiness.state}-${i}`}>
                                 {i > 0 && <span className="text-muted-foreground">, </span>}
                                 <span className="font-medium">{item.name}</span>
                                 <span className="text-muted-foreground"> ({item.readiness.label})</span>
