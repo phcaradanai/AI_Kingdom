@@ -2300,6 +2300,154 @@ export type KingdomHealthDto = {
   items: KingdomHealthItemDto[];
 };
 
+export type MissionControlLifecycleState =
+  | "DRAFTED"
+  | "APPROVED"
+  | "DISPATCH_READY"
+  | "DISPATCHED"
+  | "RUNNING"
+  | "NEEDS_REVIEW"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "BLOCKED"
+  | "LEARNED";
+
+export type MissionControlDisplayState =
+  | "Idle"
+  | "Thinking"
+  | "Drafting"
+  | "Ready"
+  | "Running"
+  | "Waiting for Review"
+  | "Blocked"
+  | "Failed"
+  | "Completed";
+
+export type MissionControlSeverity = "INFO" | "WARNING" | "CRITICAL";
+
+export type MissionControlSourceReferenceDto = {
+  sourceType: string;
+  sourceId: string | null;
+  routeTo: string;
+  workOrderId?: string | null;
+  taskId?: string | null;
+  councilSessionId?: string | null;
+  automationJobId?: string | null;
+  agentId?: string | null;
+  reviewSummaryId?: string | null;
+};
+
+export type MissionControlTopActionDto = {
+  id: string;
+  priority: number;
+  priorityKey:
+    | "CRITICAL_BLOCKED_RUNNER_JOB"
+    | "FAILED_OR_REJECTED_REVIEW"
+    | "STALE_CONTEXT_BLOCKING_PATCH"
+    | "WORK_ORDER_READY_TO_DISPATCH"
+    | "WORK_ORDER_NEEDS_REVIEW"
+    | "PROVIDER_ROUTING_WARNING"
+    | "NO_URGENT_ACTION";
+  severity: MissionControlSeverity;
+  title: string;
+  detail: string;
+  nextAction: string;
+  routeTo: string;
+  sourceReference: MissionControlSourceReferenceDto;
+};
+
+export type MissionControlWorkOrderDto = {
+  id: string;
+  title: string;
+  priority: string;
+  status: string;
+  lifecycleState: MissionControlLifecycleState;
+  displayState: MissionControlDisplayState;
+  assignedAgent: { id: string; name: string; title: string } | null;
+  assignedExternalAgent: { id: string; name: string; roleTitle: string; type: string } | null;
+  relatedAutomationJobId: string | null;
+  relatedReviewSummaryId: string | null;
+  blockedReason: string | null;
+  contextBindingStatus: string | null;
+  lastUpdated: string;
+  nextAction: string;
+  sourceReference: MissionControlSourceReferenceDto;
+};
+
+export type MissionControlJobDto = {
+  id: string;
+  workOrderId: string;
+  title: string;
+  mode: string;
+  status: string;
+  lifecycleState: MissionControlLifecycleState;
+  displayState: MissionControlDisplayState;
+  runner: { id: string; name: string; status: string } | null;
+  agent: { id: string; name: string; title: string } | null;
+  reviewSummaryId: string | null;
+  lastUpdated: string;
+  nextAction: string;
+  sourceReference: MissionControlSourceReferenceDto;
+};
+
+export type MissionControlReviewItemDto = {
+  id: string;
+  automationJobId: string;
+  workOrderId: string;
+  title: string;
+  verdict: string;
+  kingRecommendation: string;
+  summary: string;
+  severity: MissionControlSeverity;
+  lastUpdated: string;
+  nextAction: string;
+  sourceReference: MissionControlSourceReferenceDto;
+};
+
+export type MissionControlAgentActivityDto = {
+  id: string;
+  agentId: string | null;
+  agentName: string;
+  role: string | null;
+  currentState: MissionControlDisplayState;
+  relatedWorkOrderId: string | null;
+  relatedAutomationJobId: string | null;
+  relatedReviewSummaryId: string | null;
+  title: string;
+  detail: string | null;
+  lastUpdated: string;
+  nextAction: string;
+  sourceReference: MissionControlSourceReferenceDto;
+};
+
+export type MissionControlWarningDto = {
+  id: string;
+  severity: MissionControlSeverity;
+  title: string;
+  detail: string;
+  nextAction: string;
+  lastUpdated: string | null;
+  sourceReference: MissionControlSourceReferenceDto;
+};
+
+export type MissionControlDto = {
+  computedAt: string;
+  milestoneCodename: "KINGDOM_MISSION_CONTROL_FOUNDATION";
+  topAction: MissionControlTopActionDto;
+  activeWorkOrders: MissionControlWorkOrderDto[];
+  blockedWorkOrders: MissionControlWorkOrderDto[];
+  needsReviewItems: MissionControlReviewItemDto[];
+  runningJobs: MissionControlJobDto[];
+  recentAgentActivity: MissionControlAgentActivityDto[];
+  staleContextWarnings: MissionControlWarningDto[];
+  providerRoutingWarnings: MissionControlWarningDto[];
+  nextRecommendedAction: string;
+  migration: {
+    required: false;
+    reason: string;
+  };
+};
+
 // ── M20: Kingdom Strategy Ledger ──────────────────────────────────────────────
 
 export type KingdomObjectiveStatus = "ACTIVE" | "PAUSED" | "ACHIEVED" | "ARCHIVED";

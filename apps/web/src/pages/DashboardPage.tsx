@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ClipboardList, FolderKanban, Scroll, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ClipboardList, FolderKanban, Gauge, Scroll, Zap } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -17,6 +17,8 @@ import { useAuthStore } from "@/stores/authStore";
 import type {
   KingdomActivityStreamDto,
   KingdomHealthDto,
+  MissionControlDto,
+  MissionControlSeverity,
   NextActionItem,
   NextActionQueueDto,
   ProjectDto,
@@ -31,10 +33,169 @@ const RISK_STYLES: Record<NextActionItem["riskLevel"], string> = {
   LOW: "border-border bg-muted/30 text-muted-foreground"
 };
 
+const MISSION_SEVERITY_STYLES: Record<MissionControlSeverity, string> = {
+  CRITICAL: "border-destructive/40 bg-destructive/10 text-destructive",
+  WARNING: "border-amber-500/40 bg-amber-500/10 text-amber-400",
+  INFO: "border-blue-500/40 bg-blue-500/10 text-blue-400"
+};
+
 function formatAge(hours: number): string {
   if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m old`;
   if (hours < 24) return `${Math.round(hours)}h old`;
   return `${Math.round(hours / 24)}d old`;
+}
+
+function formatUpdatedAt(value: string | null): string {
+  if (!value) return "No timestamp";
+  return new Date(value).toLocaleString();
+}
+
+function MissionControlPanel({ missionControl }: { missionControl: MissionControlDto | null }) {
+  if (!missionControl) {
+    return (
+      <SectionCard title="Mission Control" icon={Gauge}>
+        <EmptyState icon={Gauge} title="Mission Control unavailable" description="Open Work Orders, Automation Jobs, and Providers directly while this control plane loads." />
+      </SectionCard>
+    );
+  }
+
+  const action = missionControl.topAction;
+  const visibleActivity = [
+    ...missionControl.activeWorkOrders.slice(0, 4).map((item) => ({
+      id: `wo-${item.id}`,
+      agent: item.assignedAgent?.name ?? item.assignedExternalAgent?.name ?? "Unassigned",
+      role: item.assignedAgent?.title ?? item.assignedExternalAgent?.roleTitle ?? "Work Order",
+      state: item.displayState,
+      title: item.title,
+      related: item.relatedAutomationJobId ? `Job ${item.relatedAutomationJobId.slice(0, 8)}` : `Work Order ${item.id.slice(0, 8)}`,
+      updatedAt: item.lastUpdated,
+      nextAction: item.nextAction,
+      to: item.sourceReference.routeTo
+    })),
+    ...missionControl.runningJobs.slice(0, 4).map((item) => ({
+      id: `job-${item.id}`,
+      agent: item.agent?.name ?? item.runner?.name ?? "Runner",
+      role: item.mode,
+      state: item.displayState,
+      title: item.title,
+      related: `Job ${item.id.slice(0, 8)}`,
+      updatedAt: item.lastUpdated,
+      nextAction: item.nextAction,
+      to: item.sourceReference.routeTo
+    })),
+    ...missionControl.recentAgentActivity.slice(0, 4).map((item) => ({
+      id: `activity-${item.id}`,
+      agent: item.agentName,
+      role: item.role ?? "Agent",
+      state: item.currentState,
+      title: item.title,
+      related: item.relatedAutomationJobId ? `Job ${item.relatedAutomationJobId.slice(0, 8)}` : item.relatedWorkOrderId ? `Work Order ${item.relatedWorkOrderId.slice(0, 8)}` : item.sourceReference.sourceType,
+      updatedAt: item.lastUpdated,
+      nextAction: item.nextAction,
+      to: item.sourceReference.routeTo
+    }))
+  ].slice(0, 8);
+
+  return (
+    <SectionCard
+      title="Mission Control"
+      icon={Gauge}
+      action={<Link to="/work-orders" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Source Work Orders</Link>}
+    >
+      <div className="grid gap-4 xl:grid-cols-[1.05fr_1.4fr]">
+        <div className="rounded-xl border border-border bg-card/70 p-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What should the King do next?</span>
+            <span className={cn("ml-auto rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
+              {action.severity}
+            </span>
+          </div>
+          <h3 className="mt-3 font-display text-xl text-foreground">{action.title}</h3>
+          <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{action.detail}</p>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <Link to={action.routeTo}>
+              <Button className="h-8 gap-1.5 text-xs">
+                <ArrowRight className="h-3.5 w-3.5" />
+                {action.nextAction}
+              </Button>
+            </Link>
+            <Link to={action.sourceReference.routeTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+              Open source
+            </Link>
+          </div>
+          <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+              <div className="font-semibold text-foreground">{missionControl.activeWorkOrders.length}</div>
+              Active work orders
+            </div>
+            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+              <div className="font-semibold text-foreground">{missionControl.blockedWorkOrders.length}</div>
+              Blocked
+            </div>
+            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+              <div className="font-semibold text-foreground">{missionControl.needsReviewItems.length}</div>
+              Needs review
+            </div>
+            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
+              <div className="font-semibold text-foreground">{missionControl.providerRoutingWarnings.length}</div>
+              Provider warnings
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          {visibleActivity.length > 0 ? (
+            visibleActivity.map((item) => (
+              <Link
+                key={item.id}
+                to={item.to}
+                className="grid gap-3 rounded-xl border border-border bg-card/70 p-3 transition-colors hover:border-primary/45 sm:grid-cols-[minmax(0,1fr)_auto]"
+              >
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-semibold text-foreground">{item.agent}</span>
+                    <span className="text-xs text-muted-foreground">{item.role}</span>
+                    <StatusBadge status={item.state} />
+                  </div>
+                  <div className="mt-1 truncate text-sm text-foreground/90">{item.title}</div>
+                  <div className="mt-1 text-xs text-muted-foreground">{item.nextAction}</div>
+                </div>
+                <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
+                  <span>{item.related}</span>
+                  <span>{formatUpdatedAt(item.updatedAt)}</span>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <EmptyState icon={CheckCircle2} title="No active mission records" description="Mission Control will populate from real Work Orders, jobs, reviews, and agent activity." />
+          )}
+        </div>
+      </div>
+
+      {(missionControl.staleContextWarnings.length > 0 || missionControl.providerRoutingWarnings.length > 0) && (
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {missionControl.staleContextWarnings.slice(0, 3).map((warning) => (
+            <Link key={warning.id} to={warning.sourceReference.routeTo} className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm hover:border-amber-500/60">
+              <div className="flex items-center gap-2 font-semibold text-amber-400">
+                <AlertTriangle className="h-4 w-4" />
+                {warning.title}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{warning.nextAction}</p>
+            </Link>
+          ))}
+          {missionControl.providerRoutingWarnings.slice(0, 3).map((warning) => (
+            <Link key={warning.id} to={warning.sourceReference.routeTo} className="rounded-xl border border-border bg-muted/20 p-3 text-sm hover:border-primary/45">
+              <div className="flex items-center gap-2 font-semibold text-foreground">
+                <AlertTriangle className="h-4 w-4 text-amber-400" />
+                {warning.title}
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">{warning.detail}</p>
+            </Link>
+          ))}
+        </div>
+      )}
+    </SectionCard>
+  );
 }
 
 // ── Metric card (kept: reused by LivingLoopDashboardCard) ──────────────────────
@@ -223,6 +384,7 @@ export function DashboardPage() {
   const canRunLoop = user?.role === "KING";
 
   const [nextActions, setNextActions] = useState<NextActionQueueDto | null>(null);
+  const [missionControl, setMissionControl] = useState<MissionControlDto | null>(null);
   const [health, setHealth] = useState<KingdomHealthDto | null>(null);
   const [activity, setActivity] = useState<KingdomActivityStreamDto | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
@@ -235,6 +397,7 @@ export function DashboardPage() {
     let cancelled = false;
     setIsLoading(true);
     Promise.all([
+      api.getMissionControl().catch(() => null),
       api.getNextActions({ limit: 3 }).catch(() => null),
       api.getKingdomHealth().catch(() => null),
       api.getKingdomActivity(8).catch(() => null),
@@ -242,8 +405,9 @@ export function DashboardPage() {
       api.projects().catch(() => ({ projects: [] as ProjectDto[] })),
       api.secretaryBrief().catch(() => null)
     ])
-      .then(([nextRes, healthRes, activityRes, ordersRes, projectsRes, briefRes]) => {
+      .then(([missionRes, nextRes, healthRes, activityRes, ordersRes, projectsRes, briefRes]) => {
         if (cancelled) return;
+        setMissionControl(missionRes);
         setNextActions(nextRes);
         setHealth(healthRes);
         setActivity(activityRes);
@@ -282,6 +446,8 @@ export function DashboardPage() {
           </Link>
         ) : undefined}
       />
+
+      <MissionControlPanel missionControl={missionControl} />
 
       {/* 1. Top Actions (max 3) */}
       <SectionCard

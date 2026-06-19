@@ -23,6 +23,7 @@ import externalAgentsRouter from "./routes/externalAgents.js";
 import handoffBriefsRouter from "./routes/handoffBriefs.js";
 import implementationReportsRouter from "./routes/implementationReports.js";
 import mattersRouter from "./routes/matters.js";
+import missionControlRouter from "./routes/missionControl.js";
 import modelPricingRouter from "./routes/modelPricing.js";
 import noticesRouter from "./routes/notices.js";
 import providerBalancesRouter from "./routes/providerBalances.js";
@@ -146,6 +147,7 @@ export function createApp() {
   app.use("/api/automation-candidates", requireAuth, automationCandidatesRouter);
   app.use("/api/royal-brief", requireAuth, royalBriefRouter);
   app.use("/api/next-actions", requireAuth, nextActionsRouter);
+  app.use("/api/mission-control", requireAuth, missionControlRouter);
   app.use("/api/kingdom", requireAuth, kingdomRouter);
   app.use("/api/strategy", requireAuth, strategyRouter);
   app.use("/api", requireAuth, charterRouter);

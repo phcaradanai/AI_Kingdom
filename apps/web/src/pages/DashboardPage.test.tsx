@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { KingdomActivityStreamDto, KingdomHealthDto, NextActionItem, NextActionQueueDto, PublicUser, WorkOrderDto } from "@/types/api";
+import type { KingdomActivityStreamDto, KingdomHealthDto, MissionControlDto, NextActionItem, NextActionQueueDto, PublicUser, WorkOrderDto } from "@/types/api";
 import { DashboardPage } from "./DashboardPage";
 
 const observedAt = new Date().toISOString();
@@ -53,7 +53,70 @@ const activity: KingdomActivityStreamDto = {
   ]
 };
 
+const missionControl: MissionControlDto = {
+  computedAt: observedAt,
+  milestoneCodename: "KINGDOM_MISSION_CONTROL_FOUNDATION",
+  topAction: {
+    id: "ready-work-order:wo-2",
+    priority: 4,
+    priorityKey: "WORK_ORDER_READY_TO_DISPATCH",
+    severity: "WARNING",
+    title: "Work Order ready to dispatch: Prepare source links",
+    detail: "Create or send the handoff brief.",
+    nextAction: "Create or send the handoff brief.",
+    routeTo: "/work-orders",
+    sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", routeTo: "/work-orders", workOrderId: "wo-2" }
+  },
+  activeWorkOrders: [
+    {
+      id: "wo-2",
+      title: "Prepare source links",
+      priority: "HIGH",
+      status: "READY",
+      lifecycleState: "DISPATCH_READY",
+      displayState: "Ready",
+      assignedAgent: { id: "agent-1", name: "Royal Planner", title: "Planner" },
+      assignedExternalAgent: null,
+      relatedAutomationJobId: null,
+      relatedReviewSummaryId: null,
+      blockedReason: null,
+      contextBindingStatus: "FRESH",
+      lastUpdated: observedAt,
+      nextAction: "Create or send the handoff brief.",
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", routeTo: "/work-orders", workOrderId: "wo-2" }
+    }
+  ],
+  blockedWorkOrders: [],
+  needsReviewItems: [],
+  runningJobs: [],
+  recentAgentActivity: [
+    {
+      id: "activity-1",
+      agentId: "agent-1",
+      agentName: "Royal Planner",
+      role: "Planner",
+      currentState: "Thinking",
+      relatedWorkOrderId: "wo-2",
+      relatedAutomationJobId: null,
+      relatedReviewSummaryId: null,
+      title: "Planning Work Order",
+      detail: null,
+      lastUpdated: observedAt,
+      nextAction: "Monitor activity from its source page.",
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", routeTo: "/work-orders", workOrderId: "wo-2", agentId: "agent-1" }
+    }
+  ],
+  staleContextWarnings: [],
+  providerRoutingWarnings: [],
+  nextRecommendedAction: "Create or send the handoff brief.",
+  migration: {
+    required: false,
+    reason: "No Prisma migration was added."
+  }
+};
+
 const apiMocks = vi.hoisted(() => ({
+  getMissionControl: vi.fn(),
   getNextActions: vi.fn(),
   getKingdomHealth: vi.fn(),
   getKingdomActivity: vi.fn(),
@@ -76,6 +139,7 @@ function setUser(role: PublicUser["role"] = "MINISTER") {
 }
 
 function resetApiMocks() {
+  apiMocks.getMissionControl.mockResolvedValue(missionControl);
   apiMocks.getNextActions.mockResolvedValue(nextActions);
   apiMocks.getKingdomHealth.mockResolvedValue(health);
   apiMocks.getKingdomActivity.mockResolvedValue(activity);
@@ -113,6 +177,19 @@ afterEach(() => {
 });
 
 describe("DashboardPage", () => {
+  it("renders Mission Control top recommended action", async () => {
+    setUser();
+    resetApiMocks();
+
+    renderPage();
+
+    expect(await screen.findByText("Mission Control")).toBeInTheDocument();
+    expect(screen.getByText("What should the King do next?")).toBeInTheDocument();
+    expect(screen.getByText("Work Order ready to dispatch: Prepare source links")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Open source" }).some((link) => link.getAttribute("href") === "/work-orders")).toBe(true);
+    expect(screen.getAllByText("Royal Planner").length).toBeGreaterThan(0);
+  });
+
   it("renders Top Actions with the action and its provenance source", async () => {
     setUser();
     resetApiMocks();
@@ -163,7 +240,7 @@ describe("DashboardPage", () => {
 
     expect(await screen.findByText("Active Initiatives")).toBeInTheDocument();
     expect(screen.getByText("Review dashboard command center")).toBeInTheDocument();
-    expect(screen.getByText("Prepare source links")).toBeInTheDocument();
+    expect(screen.getAllByText("Prepare source links").length).toBeGreaterThan(0);
     // Blocker derived from status, not a dedicated field
     expect(screen.getByText("Awaiting your review")).toBeInTheDocument();
   });
