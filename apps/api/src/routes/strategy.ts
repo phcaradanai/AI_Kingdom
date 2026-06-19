@@ -7,6 +7,7 @@ import {
   createMetric,
   createObjective,
   createOpportunity,
+  createOpportunityFromArtifact,
   createOpportunityWorkOrder,
   createRevenueStream,
   getStrategyOverview,
@@ -254,6 +255,20 @@ router.post("/opportunities", requireRole("KING", "CROWN_PRINCE"), async (req, r
   try {
     res.status(201).json({ opportunity: await createOpportunity(opportunitySchema.parse(req.body), { userId: req.user?.id }) });
   } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/intake/artifacts/:id/opportunity", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const { id } = idParams.parse(req.params);
+    const result = await createOpportunityFromArtifact(id, { userId: req.user?.id });
+    res.status(result.status === "CREATED" ? 201 : 200).json(result);
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
     next(error);
   }
 });

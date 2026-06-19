@@ -108,6 +108,7 @@ import type {
   RevenueStreamDto,
   StrategyAssetPayload,
   StrategyExperimentPayload,
+  StrategyIntakeResultDto,
   StrategyMetricPayload,
   StrategyObjectivePayload,
   StrategyOpportunityPayload,
@@ -786,6 +787,8 @@ export const api = {
     apiRequest<{ opportunity: KingdomOpportunityDto }>("/strategy/opportunities", { method: "POST", body: JSON.stringify(payload) }),
   updateStrategyOpportunity: (id: string, payload: Partial<StrategyOpportunityPayload>) =>
     apiRequest<{ opportunity: KingdomOpportunityDto }>(`/strategy/opportunities/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  createStrategyOpportunityFromArtifact: (id: string) =>
+    apiRequest<StrategyIntakeResultDto>(`/strategy/intake/artifacts/${id}/opportunity`, { method: "POST" }),
   createStrategyOpportunityWorkOrder: (id: string) =>
     apiRequest<{ workOrder: WorkOrderDto }>(`/strategy/opportunities/${id}/work-order`, { method: "POST" }),
   strategyExperiments: () => apiRequest<{ experiments: OpportunityExperimentDto[] }>("/strategy/experiments"),

@@ -757,3 +757,8 @@ export type StrategyOverviewDto = {
   atRiskMetrics: SuccessMetricDto[];
   activeRevenueStreams: RevenueStreamDto[];
 };
+
+export type StrategyIntakeResultDto = {
+  status: "CREATED" | "EXISTING";
+  opportunity: KingdomOpportunityDto;
+};

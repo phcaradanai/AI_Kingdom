@@ -2375,6 +2375,11 @@ export type StrategyOverviewDto = {
   activeRevenueStreams: RevenueStreamDto[];
 };
 
+export type StrategyIntakeResultDto = {
+  status: "CREATED" | "EXISTING";
+  opportunity: KingdomOpportunityDto;
+};
+
 export type StrategyObjectivePayload = Partial<Pick<KingdomObjectiveDto, "projectId" | "description" | "status" | "priority" | "targetDate" | "sourceType" | "sourceId" | "tags">> & {
   title: string;
 };

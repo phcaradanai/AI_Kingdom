@@ -14,6 +14,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type {
+  ArtifactDto,
   KingdomAssetDto,
   KingdomAssetStatus,
   KingdomAssetType,
@@ -95,6 +96,7 @@ export function StrategyPage() {
   const [opportunities, setOpportunities] = useState<KingdomOpportunityDto[]>([]);
   const [assets, setAssets] = useState<KingdomAssetDto[]>([]);
   const [revenueStreams, setRevenueStreams] = useState<RevenueStreamDto[]>([]);
+  const [researchArtifacts, setResearchArtifacts] = useState<ArtifactDto[]>([]);
   const [objectiveDraft, setObjectiveDraft] = useState<StrategyObjectivePayload>(blankObjective);
   const [opportunityDraft, setOpportunityDraft] = useState<StrategyOpportunityPayload>(blankOpportunity);
   const [assetDraft, setAssetDraft] = useState<StrategyAssetPayload>(blankAsset);
@@ -110,18 +112,20 @@ export function StrategyPage() {
     else setLoading(true);
     setError(null);
     try {
-      const [overviewResult, objectiveResult, opportunityResult, assetResult, revenueResult] = await Promise.all([
+      const [overviewResult, objectiveResult, opportunityResult, assetResult, revenueResult, artifactResult] = await Promise.all([
         api.getStrategyOverview(),
         api.strategyObjectives(),
         api.strategyOpportunities(),
         api.strategyAssets(),
-        api.strategyRevenueStreams()
+        api.strategyRevenueStreams(),
+        api.artifacts({ type: "MARKET_RESEARCH" })
       ]);
       setOverview(overviewResult.overview);
       setObjectives(objectiveResult.objectives);
       setOpportunities(opportunityResult.opportunities);
       setAssets(assetResult.assets);
       setRevenueStreams(revenueResult.revenueStreams);
+      setResearchArtifacts(artifactResult.artifacts.slice(0, 8));
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "Unable to load strategy ledger");
     } finally {
@@ -217,6 +221,14 @@ export function StrategyPage() {
     });
   }
 
+  async function promoteArtifact(artifact: ArtifactDto) {
+    if (!canEdit) return;
+    await submit(`artifact-${artifact.id}`, async () => {
+      const result = await api.createStrategyOpportunityFromArtifact(artifact.id);
+      setNotice(result.status === "EXISTING" ? `Existing opportunity opened: ${result.opportunity.title}` : `Opportunity created from artifact: ${result.opportunity.title}`);
+    });
+  }
+
   if (loading) return <LoadingState message="Loading strategy ledger..." />;
   if (error && !overview) return <ErrorState message={error} onRetry={() => void load()} />;
 
@@ -276,6 +288,41 @@ export function StrategyPage() {
               <Input disabled={!canEdit} value={opportunityDraft.nextAction ?? ""} onChange={(e) => setOpportunityDraft({ ...opportunityDraft, nextAction: e.target.value })} placeholder="Next action" />
               {canEdit ? <Button disabled={submitting === "opportunity"}><Plus className="h-4 w-4" />Save Opportunity</Button> : null}
             </form>
+          </Card>
+
+          <Card>
+            <SectionTitle icon={FlaskConical} title="Research Intake" />
+            <div className="mt-4 space-y-3">
+              {researchArtifacts.length === 0 ? (
+                <EmptyState title="No market research artifacts" description="Research saved by agents will appear here when stored as MARKET_RESEARCH artifacts." />
+              ) : null}
+              {researchArtifacts.map((artifact) => (
+                <div key={artifact.id} className="rounded-lg border border-border/60 bg-muted/10 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h3 className="truncate font-semibold">{artifact.title}</h3>
+                      <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{artifact.content}</p>
+                    </div>
+                    {canEdit ? (
+                      <Button
+                        variant="outline"
+                        className="h-8 shrink-0 px-3 text-xs"
+                        disabled={submitting === `artifact-${artifact.id}`}
+                        onClick={() => void promoteArtifact(artifact)}
+                      >
+                        <ArrowRight className="h-3.5 w-3.5" />
+                        Promote
+                      </Button>
+                    ) : null}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+                    <span>{artifact.type}</span>
+                    {artifact.project ? <Link className="text-primary hover:underline" to={`/projects/${artifact.project.id}`}>{artifact.project.name}</Link> : null}
+                    {artifact.sourceType ? <span>Source: {artifact.sourceType}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
           </Card>
 
           <Card>

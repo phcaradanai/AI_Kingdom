@@ -127,6 +127,36 @@ test("KING can manage strategy ledger records and create a manual opportunity wo
       const opportunityBody = (await opportunityRes.json()) as { opportunity: { id: string; score: number } };
       assert.equal(opportunityBody.opportunity.score, 82);
 
+      const artifact = await prisma.artifact.create({
+        data: {
+          title: "AI orchestration market research",
+          type: "MARKET_RESEARCH",
+          content: "Builders need a repeatable way to evaluate orchestration platforms, agent routing, and handoff governance.",
+          sourceType: "TEST",
+          sourceId,
+          tags: ["orchestration", "research"]
+        }
+      });
+
+      const intakeRes = await fetch(`${baseUrl}/api/strategy/intake/artifacts/${artifact.id}/opportunity`, {
+        method: "POST",
+        headers
+      });
+      assert.equal(intakeRes.status, 201);
+      const intakeBody = (await intakeRes.json()) as { status: string; opportunity: { id: string; sourceType: string; sourceId: string } };
+      assert.equal(intakeBody.status, "CREATED");
+      assert.equal(intakeBody.opportunity.sourceType, "ARTIFACT");
+      assert.equal(intakeBody.opportunity.sourceId, artifact.id);
+
+      const duplicateIntakeRes = await fetch(`${baseUrl}/api/strategy/intake/artifacts/${artifact.id}/opportunity`, {
+        method: "POST",
+        headers
+      });
+      assert.equal(duplicateIntakeRes.status, 200);
+      const duplicateIntakeBody = (await duplicateIntakeRes.json()) as { status: string; opportunity: { id: string } };
+      assert.equal(duplicateIntakeBody.status, "EXISTING");
+      assert.equal(duplicateIntakeBody.opportunity.id, intakeBody.opportunity.id);
+
       const overviewRes = await fetch(`${baseUrl}/api/strategy/overview`, { headers });
       assert.equal(overviewRes.status, 200);
       const overviewBody = (await overviewRes.json()) as { overview: { revenue: { monthlyNet: number }; opportunities: { top: Array<{ id: string }> } } };
@@ -151,6 +181,7 @@ test("KING can manage strategy ledger records and create a manual opportunity wo
     await prisma.kingdomAsset.deleteMany({ where: { sourceId } }).catch(() => undefined);
     await prisma.successMetric.deleteMany({ where: { sourceId } }).catch(() => undefined);
     await prisma.kingdomObjective.deleteMany({ where: { sourceId } }).catch(() => undefined);
+    await prisma.artifact.deleteMany({ where: { sourceId } }).catch(() => undefined);
     await prisma.auditLog.deleteMany({ where: { userId: king.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: king.id } }).catch(() => undefined);
   }

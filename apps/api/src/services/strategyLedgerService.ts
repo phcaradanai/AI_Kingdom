@@ -205,6 +205,56 @@ export async function createOpportunity(input: Prisma.KingdomOpportunityUnchecke
   return opportunity;
 }
 
+export async function createOpportunityFromArtifact(artifactId: string, actor: Actor) {
+  const artifact = await prisma.artifact.findUnique({
+    where: { id: artifactId },
+    include: { project: { select: { id: true, name: true, codename: true } } }
+  });
+  if (!artifact) throw notFound("Artifact not found");
+
+  const existing = await prisma.kingdomOpportunity.findFirst({
+    where: { sourceType: "ARTIFACT", sourceId: artifact.id },
+    include: {
+      project: { select: { id: true, name: true, codename: true } },
+      objective: { select: { id: true, title: true, status: true } },
+      asset: { select: { id: true, name: true, status: true, type: true } },
+      experiments: { orderBy: { updatedAt: "desc" }, take: 3 }
+    }
+  });
+  if (existing) return { status: "EXISTING" as const, opportunity: existing };
+
+  const opportunity = await prisma.kingdomOpportunity.create({
+    data: normalizeOpportunity({
+      projectId: artifact.projectId,
+      title: trimText(`Review research: ${artifact.title}`, 180),
+      problem: trimText(artifact.content, 4000),
+      proposedValue: trimText(`Turn this ${artifact.type.toLowerCase().replace(/_/g, " ")} into a validated kingdom opportunity: ${artifact.title}`, 4000),
+      targetCustomer: "",
+      status: "INBOX",
+      priority: artifact.type === "MARKET_RESEARCH" ? "HIGH" : "MEDIUM",
+      confidence: 0.5,
+      score: artifact.type === "MARKET_RESEARCH" ? 60 : 45,
+      estimatedMonthlyRevenue: 0,
+      estimatedEffort: "Needs validation",
+      riskLevel: "MEDIUM",
+      nextAction: "Review the source artifact, identify the target customer, and define the first validation experiment.",
+      sourceType: "ARTIFACT",
+      sourceId: artifact.id,
+      traceId: artifact.traceId,
+      tags: [...new Set(["strategy-intake", "artifact", artifact.type.toLowerCase(), ...artifact.tags])]
+    }, actor.userId)
+  });
+
+  await auditLog({
+    userId: actor.userId ?? undefined,
+    action: "create_opportunity_from_artifact",
+    resourceType: "kingdom_opportunity",
+    resourceId: opportunity.id,
+    metadata: { artifactId: artifact.id, artifactType: artifact.type, title: opportunity.title }
+  });
+  return { status: "CREATED" as const, opportunity };
+}
+
 export async function updateOpportunity(id: string, input: Prisma.KingdomOpportunityUncheckedUpdateInput, actor: Actor) {
   const opportunity = await prisma.kingdomOpportunity.update({
     where: { id },
@@ -405,6 +455,12 @@ function cleanUpdate<T extends Record<string, unknown>>(input: T, textFields: st
 
 function cleanText(value: string): string {
   return redactSecrets(value).trim();
+}
+
+function trimText(value: string, maxLength: number): string {
+  const cleaned = cleanText(value);
+  if (cleaned.length <= maxLength) return cleaned;
+  return `${cleaned.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 function normalizeTags(value: unknown): string[] {
