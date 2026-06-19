@@ -33,11 +33,17 @@ function toIso(date: Date | null | undefined): string {
   return (date ?? new Date(0)).toISOString();
 }
 
-function sourceReference(input: Omit<MissionControlSourceReferenceDto, "routeTo"> & { routeTo?: string }): MissionControlSourceReferenceDto {
+function sourceReference(input: Omit<MissionControlSourceReferenceDto, "routeTo" | "sourceRoute"> & { routeTo?: string; sourceRoute?: string }): MissionControlSourceReferenceDto {
+  const routeTo = input.routeTo ?? routeForSource(input.sourceType);
   return {
-    routeTo: input.routeTo ?? routeForSource(input.sourceType),
+    routeTo,
+    sourceRoute: input.sourceRoute ?? routeTo,
     sourceType: input.sourceType,
     sourceId: input.sourceId,
+    sourceTitle: input.sourceTitle ?? null,
+    updatedAt: input.updatedAt ?? null,
+    recommendedAction: input.recommendedAction ?? null,
+    why: input.why ?? null,
     workOrderId: input.workOrderId ?? null,
     taskId: input.taskId ?? null,
     councilSessionId: input.councilSessionId ?? null,
@@ -55,18 +61,27 @@ function routeForSource(sourceType: string): string {
   return "/work-orders";
 }
 
-export function selectMissionControlTopAction(candidates: TopActionCandidate[], computedAt = new Date()): MissionControlTopActionDto {
-  const sorted = [...candidates].sort((a, b) => {
+function sortTopActionCandidates(candidates: TopActionCandidate[]): TopActionCandidate[] {
+  return [...candidates].sort((a, b) => {
     const priorityDelta = TOP_ACTION_PRIORITY[a.priorityKey] - TOP_ACTION_PRIORITY[b.priorityKey];
     if (priorityDelta !== 0) return priorityDelta;
     return b.observedAt.getTime() - a.observedAt.getTime();
   });
+}
+
+function topActionFromCandidate(candidate: TopActionCandidate): MissionControlTopActionDto {
+  const { observedAt: _observedAt, ...action } = candidate;
+  return {
+    ...action,
+    priority: TOP_ACTION_PRIORITY[action.priorityKey]
+  };
+}
+
+export function selectMissionControlTopAction(candidates: TopActionCandidate[], computedAt = new Date()): MissionControlTopActionDto {
+  const sorted = sortTopActionCandidates(candidates);
   const selected = sorted[0];
   if (selected) {
-    return {
-      ...selected,
-      priority: TOP_ACTION_PRIORITY[selected.priorityKey]
-    };
+    return topActionFromCandidate(selected);
   }
 
   return {
@@ -78,7 +93,15 @@ export function selectMissionControlTopAction(candidates: TopActionCandidate[], 
     detail: "No blocked runners, review failures, stale context blockers, dispatch-ready work orders, or provider routing warnings were found.",
     nextAction: "Review the dashboard or issue a new royal decree when ready.",
     routeTo: "/dashboard",
-    sourceReference: sourceReference({ sourceType: "MissionControl", sourceId: null, routeTo: "/dashboard" })
+    sourceReference: sourceReference({
+      sourceType: "MissionControl",
+      sourceId: null,
+      sourceTitle: "Mission Control",
+      routeTo: "/dashboard",
+      updatedAt: computedAt.toISOString(),
+      recommendedAction: "Review the dashboard or issue a new royal decree when ready.",
+      why: "No urgent source-of-truth records currently need a King decision."
+    })
   };
 }
 
@@ -358,9 +381,13 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         lastUpdated: workOrder.updatedAt.toISOString(),
         nextAction: nextActionForWorkOrder(workOrder.status, workOrder.contextBindingStatus, Boolean(workOrder.assignedAgent || workOrder.assignedExternalAgent), workOrder.handoffBriefs.length > 0, Boolean(workOrder.blockedReason)),
         sourceReference: sourceReference({
-          sourceType: workOrder.sourceType ?? "WorkOrder",
-          sourceId: workOrder.sourceId ?? workOrder.id,
-          workOrderId: workOrder.id
+          sourceType: "WorkOrder",
+          sourceId: workOrder.id,
+          sourceTitle: workOrder.title,
+          workOrderId: workOrder.id,
+          updatedAt: workOrder.updatedAt.toISOString(),
+          recommendedAction: nextActionForWorkOrder(workOrder.status, workOrder.contextBindingStatus, Boolean(workOrder.assignedAgent || workOrder.assignedExternalAgent), workOrder.handoffBriefs.length > 0, Boolean(workOrder.blockedReason)),
+          why: workOrder.blockedReason ?? `Work Order is ${workOrder.status}${workOrder.contextBindingStatus ? ` with context ${workOrder.contextBindingStatus}` : ""}.`
         })
       };
     });
@@ -395,8 +422,12 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         sourceReference: sourceReference({
           sourceType: "AutomationJob",
           sourceId: job.id,
+          sourceTitle: job.workOrder.title,
           automationJobId: job.id,
-          workOrderId: job.workOrderId
+          workOrderId: job.workOrderId,
+          updatedAt: job.updatedAt.toISOString(),
+          recommendedAction: nextActionForJob(job.status),
+          why: `Automation job is ${job.status} for Work Order "${job.workOrder.title}".`
         })
       };
     });
@@ -419,9 +450,13 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         sourceReference: sourceReference({
           sourceType: "AgentReviewSummary",
           sourceId: review.id,
+          sourceTitle: review.workOrder.title,
           automationJobId: review.automationJobId,
           workOrderId: review.workOrderId,
-          reviewSummaryId: review.id
+          reviewSummaryId: review.id,
+          updatedAt: review.updatedAt.toISOString(),
+          recommendedAction: severity === "INFO" ? "Approve or archive after review." : "King decision required before this work can be accepted.",
+          why: `${review.verdict} / ${review.kingRecommendation}: ${review.summary}`
         })
       };
     });
@@ -445,9 +480,13 @@ export async function getMissionControl(): Promise<MissionControlDto> {
       sourceReference: sourceReference({
         sourceType,
         sourceId,
+        sourceTitle: activity.title,
         taskId: activity.taskId,
         councilSessionId: activity.councilSessionId,
-        agentId: activity.agentId
+        agentId: activity.agentId,
+        updatedAt: (activity.heartbeatAt ?? activity.updatedAt).toISOString(),
+        recommendedAction: activity.endedAt ? "Review completed activity if needed." : "Monitor activity from its source page.",
+        why: activity.detail ?? `Agent activity status is ${activity.status}.`
       })
     };
   });
@@ -461,7 +500,15 @@ export async function getMissionControl(): Promise<MissionControlDto> {
       detail: "Sandbox patch automation requires fresh project context before dispatch.",
       nextAction: "Open Work Orders and bind or refresh context.",
       lastUpdated: workOrder.lastUpdated,
-      sourceReference: sourceReference({ sourceType: "WorkOrder", sourceId: workOrder.id, workOrderId: workOrder.id })
+      sourceReference: sourceReference({
+        sourceType: "WorkOrder",
+        sourceId: workOrder.id,
+        sourceTitle: workOrder.title,
+        workOrderId: workOrder.id,
+        updatedAt: workOrder.lastUpdated,
+        recommendedAction: "Open Work Orders and bind or refresh context.",
+        why: "Sandbox patch automation requires fresh project context before dispatch."
+      })
     }));
 
   const providerRoutingWarnings: MissionControlWarningDto[] = [];
@@ -476,7 +523,16 @@ export async function getMissionControl(): Promise<MissionControlDto> {
           detail: warning,
           nextAction: "Open Agents and fix the manual model parameter configuration.",
           lastUpdated: agent.updatedAt.toISOString(),
-          sourceReference: sourceReference({ sourceType: "Agent", sourceId: agent.id, agentId: agent.id, routeTo: "/agents" })
+          sourceReference: sourceReference({
+            sourceType: "Agent",
+            sourceId: agent.id,
+            sourceTitle: agent.name,
+            agentId: agent.id,
+            routeTo: "/agents",
+            updatedAt: agent.updatedAt.toISOString(),
+            recommendedAction: "Open Agents and fix the manual model parameter configuration.",
+            why: warning
+          })
         });
       }
     }
@@ -490,7 +546,16 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         detail: `Duplicate provider ids: ${duplicatedFallbackProviders.join(", ")}.`,
         nextAction: "Open Agents and remove duplicate fallback providers.",
         lastUpdated: agent.updatedAt.toISOString(),
-        sourceReference: sourceReference({ sourceType: "Agent", sourceId: agent.id, agentId: agent.id, routeTo: "/agents" })
+        sourceReference: sourceReference({
+          sourceType: "Agent",
+          sourceId: agent.id,
+          sourceTitle: agent.name,
+          agentId: agent.id,
+          routeTo: "/agents",
+          updatedAt: agent.updatedAt.toISOString(),
+          recommendedAction: "Open Agents and remove duplicate fallback providers.",
+          why: `Duplicate provider ids: ${duplicatedFallbackProviders.join(", ")}.`
+        })
       });
     }
 
@@ -503,7 +568,16 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         detail: `Fallback providers are missing or inactive: ${missingFallbackProviders.join(", ")}.`,
         nextAction: "Open Agents and replace missing or inactive fallback providers.",
         lastUpdated: agent.updatedAt.toISOString(),
-        sourceReference: sourceReference({ sourceType: "Agent", sourceId: agent.id, agentId: agent.id, routeTo: "/agents" })
+        sourceReference: sourceReference({
+          sourceType: "Agent",
+          sourceId: agent.id,
+          sourceTitle: agent.name,
+          agentId: agent.id,
+          routeTo: "/agents",
+          updatedAt: agent.updatedAt.toISOString(),
+          recommendedAction: "Open Agents and replace missing or inactive fallback providers.",
+          why: `Fallback providers are missing or inactive: ${missingFallbackProviders.join(", ")}.`
+        })
       });
     }
 
@@ -516,7 +590,16 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         detail: `Duplicate model ids: ${duplicatedFallbackModels.join(", ")}.`,
         nextAction: "Open Agents and remove duplicate fallback models.",
         lastUpdated: agent.updatedAt.toISOString(),
-        sourceReference: sourceReference({ sourceType: "Agent", sourceId: agent.id, agentId: agent.id, routeTo: "/agents" })
+        sourceReference: sourceReference({
+          sourceType: "Agent",
+          sourceId: agent.id,
+          sourceTitle: agent.name,
+          agentId: agent.id,
+          routeTo: "/agents",
+          updatedAt: agent.updatedAt.toISOString(),
+          recommendedAction: "Open Agents and remove duplicate fallback models.",
+          why: `Duplicate model ids: ${duplicatedFallbackModels.join(", ")}.`
+        })
       });
     }
   }
@@ -536,7 +619,18 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         ].filter(Boolean).join("; "),
         nextAction: "Review provider route fallback order.",
         lastUpdated: route.updatedAt.toISOString(),
-        sourceReference: sourceReference({ sourceType: "AIProviderRoute", sourceId: route.id, routeTo: "/providers" })
+        sourceReference: sourceReference({
+          sourceType: "AIProviderRoute",
+          sourceId: route.id,
+          sourceTitle: route.name,
+          routeTo: "/providers",
+          updatedAt: route.updatedAt.toISOString(),
+          recommendedAction: "Review provider route fallback order.",
+          why: [
+            duplicates.length > 0 ? `duplicate providers: ${duplicates.join(", ")}` : null,
+            missing.length > 0 ? `missing or inactive providers: ${missing.join(", ")}` : null
+          ].filter(Boolean).join("; ")
+        })
       });
     }
   }
@@ -557,7 +651,19 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         ].filter(Boolean).join("; "),
         nextAction: "Open Provider Routing and repair the chain entries.",
         lastUpdated: chain.updatedAt.toISOString(),
-        sourceReference: sourceReference({ sourceType: "AIRouteChain", sourceId: chain.id, routeTo: "/routing" })
+        sourceReference: sourceReference({
+          sourceType: "AIRouteChain",
+          sourceId: chain.id,
+          sourceTitle: chain.name,
+          routeTo: "/routing",
+          updatedAt: chain.updatedAt.toISOString(),
+          recommendedAction: "Open Provider Routing and repair the chain entries.",
+          why: [
+            enabledEntries.length === 0 ? "no enabled fallback entries" : null,
+            missing.length > 0 ? `missing or inactive providers: ${[...new Set(missing)].join(", ")}` : null,
+            duplicateKeys.length > 0 ? `duplicate provider/model entries: ${duplicateKeys.join(", ")}` : null
+          ].filter(Boolean).join("; ")
+        })
       });
     }
   }
@@ -649,18 +755,26 @@ export async function getMissionControl(): Promise<MissionControlDto> {
   }
 
   const topAction = selectMissionControlTopAction(topCandidates, computedAt);
+  const actionQueue = sortTopActionCandidates(topCandidates).slice(0, 20).map(topActionFromCandidate);
+  const providerWarnings = providerRoutingWarnings.slice(0, 30);
 
   return {
     computedAt: computedAt.toISOString(),
     milestoneCodename: MILESTONE_CODENAME,
     topAction,
+    actionQueue,
     activeWorkOrders,
+    activeWork: activeWorkOrders,
     blockedWorkOrders,
+    blockedItems: blockedWorkOrders,
     needsReviewItems,
     runningJobs,
     recentAgentActivity,
+    recentActivity: recentAgentActivity,
     staleContextWarnings,
-    providerRoutingWarnings: providerRoutingWarnings.slice(0, 30),
+    contextWarnings: staleContextWarnings,
+    providerRoutingWarnings: providerWarnings,
+    providerWarnings,
     nextRecommendedAction: topAction.nextAction,
     migration: {
       required: false,

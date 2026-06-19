@@ -67,6 +67,19 @@ const missionControl: MissionControlDto = {
     routeTo: "/work-orders",
     sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", routeTo: "/work-orders", workOrderId: "wo-2" }
   },
+  actionQueue: [
+    {
+      id: "ready-work-order:wo-2",
+      priority: 4,
+      priorityKey: "WORK_ORDER_READY_TO_DISPATCH",
+      severity: "WARNING",
+      title: "Work Order ready to dispatch: Prepare source links",
+      detail: "Create or send the handoff brief.",
+      nextAction: "Create or send the handoff brief.",
+      routeTo: "/work-orders",
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", sourceTitle: "Prepare source links", sourceRoute: "/work-orders", routeTo: "/work-orders", updatedAt: observedAt, recommendedAction: "Create or send the handoff brief.", why: "Work Order is READY.", workOrderId: "wo-2" }
+    }
+  ],
   activeWorkOrders: [
     {
       id: "wo-2",
@@ -83,10 +96,30 @@ const missionControl: MissionControlDto = {
       contextBindingStatus: "FRESH",
       lastUpdated: observedAt,
       nextAction: "Create or send the handoff brief.",
-      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", routeTo: "/work-orders", workOrderId: "wo-2" }
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", sourceTitle: "Prepare source links", sourceRoute: "/work-orders", routeTo: "/work-orders", updatedAt: observedAt, recommendedAction: "Create or send the handoff brief.", why: "Work Order is READY.", workOrderId: "wo-2" }
+    }
+  ],
+  activeWork: [
+    {
+      id: "wo-2",
+      title: "Prepare source links",
+      priority: "HIGH",
+      status: "READY",
+      lifecycleState: "DISPATCH_READY",
+      displayState: "Ready",
+      assignedAgent: { id: "agent-1", name: "Royal Planner", title: "Planner" },
+      assignedExternalAgent: null,
+      relatedAutomationJobId: null,
+      relatedReviewSummaryId: null,
+      blockedReason: null,
+      contextBindingStatus: "FRESH",
+      lastUpdated: observedAt,
+      nextAction: "Create or send the handoff brief.",
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", sourceTitle: "Prepare source links", sourceRoute: "/work-orders", routeTo: "/work-orders", updatedAt: observedAt, recommendedAction: "Create or send the handoff brief.", why: "Work Order is READY.", workOrderId: "wo-2" }
     }
   ],
   blockedWorkOrders: [],
+  blockedItems: [],
   needsReviewItems: [],
   runningJobs: [],
   recentAgentActivity: [
@@ -103,11 +136,30 @@ const missionControl: MissionControlDto = {
       detail: null,
       lastUpdated: observedAt,
       nextAction: "Monitor activity from its source page.",
-      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", routeTo: "/work-orders", workOrderId: "wo-2", agentId: "agent-1" }
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", sourceTitle: "Prepare source links", sourceRoute: "/work-orders", routeTo: "/work-orders", updatedAt: observedAt, recommendedAction: "Monitor activity from its source page.", why: "Agent activity status is IN_PROGRESS.", workOrderId: "wo-2", agentId: "agent-1" }
+    }
+  ],
+  recentActivity: [
+    {
+      id: "activity-1",
+      agentId: "agent-1",
+      agentName: "Royal Planner",
+      role: "Planner",
+      currentState: "Thinking",
+      relatedWorkOrderId: "wo-2",
+      relatedAutomationJobId: null,
+      relatedReviewSummaryId: null,
+      title: "Planning Work Order",
+      detail: null,
+      lastUpdated: observedAt,
+      nextAction: "Monitor activity from its source page.",
+      sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", sourceTitle: "Prepare source links", sourceRoute: "/work-orders", routeTo: "/work-orders", updatedAt: observedAt, recommendedAction: "Monitor activity from its source page.", why: "Agent activity status is IN_PROGRESS.", workOrderId: "wo-2", agentId: "agent-1" }
     }
   ],
   staleContextWarnings: [],
+  contextWarnings: [],
   providerRoutingWarnings: [],
+  providerWarnings: [],
   nextRecommendedAction: "Create or send the handoff brief.",
   migration: {
     required: false,
@@ -183,27 +235,28 @@ describe("DashboardPage", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Mission Control")).toBeInTheDocument();
+    expect((await screen.findAllByText("Mission Control")).length).toBeGreaterThan(0);
     expect(screen.getByText("What should the King do next?")).toBeInTheDocument();
-    expect(screen.getByText("Work Order ready to dispatch: Prepare source links")).toBeInTheDocument();
+    expect(screen.getAllByText("Work Order ready to dispatch: Prepare source links").length).toBeGreaterThan(0);
     expect(screen.getAllByRole("link", { name: "Open source" }).some((link) => link.getAttribute("href") === "/work-orders")).toBe(true);
     expect(screen.getAllByText("Royal Planner").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Action Queue").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Active Work").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Needs Review").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Blocked / Warnings").length).toBeGreaterThan(0);
+    expect(screen.getByText("Recent Activity")).toBeInTheDocument();
   });
 
-  it("renders Top Actions with the action and its provenance source", async () => {
+  it("renders the Action Queue with source links", async () => {
     setUser();
     resetApiMocks();
 
     renderPage();
 
-    expect(await screen.findByText("The Kingdom at a Glance")).toBeInTheDocument();
-    expect(screen.getByText("Top Actions")).toBeInTheDocument();
-    expect(screen.getByText(topAction.title)).toBeInTheDocument();
-    expect(screen.getByText(topAction.why)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Review Work Order/i })).toBeInTheDocument();
+    expect((await screen.findAllByText("Mission Control")).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Create or send the handoff brief.").length).toBeGreaterThan(0);
 
-    // Provenance: every Top Action card answers "where did this come from?"
-    const provenanceLink = screen.getByRole("link", { name: /WorkOrder #wo-1/i });
+    const provenanceLink = screen.getAllByRole("link", { name: /WorkOrder #wo-2/i })[0];
     expect(provenanceLink).toHaveAttribute("href", "/work-orders");
   });
 
@@ -217,7 +270,7 @@ describe("DashboardPage", () => {
     setUser("SCRIBE");
     resetApiMocks();
     renderPage();
-    await screen.findByText("Top Actions");
+    await screen.findAllByText("Action Queue");
     expect(screen.queryByRole("link", { name: /Issue Royal Decree/i })).toBeNull();
   });
 
@@ -232,17 +285,15 @@ describe("DashboardPage", () => {
     expect(providerPill).toHaveAttribute("href", "/providers");
   });
 
-  it("renders Active Initiatives from open work orders", async () => {
+  it("renders Active Work from mission control work orders", async () => {
     setUser();
     resetApiMocks();
 
     renderPage();
 
-    expect(await screen.findByText("Active Initiatives")).toBeInTheDocument();
-    expect(screen.getByText("Review dashboard command center")).toBeInTheDocument();
+    expect((await screen.findAllByText("Active Work")).length).toBeGreaterThan(0);
     expect(screen.getAllByText("Prepare source links").length).toBeGreaterThan(0);
-    // Blocker derived from status, not a dedicated field
-    expect(screen.getByText("Awaiting your review")).toBeInTheDocument();
+    expect(screen.getAllByText("Source: WorkOrder").length).toBeGreaterThan(0);
   });
 
   it("renders Recent Activity linking each row to its source", async () => {
@@ -252,16 +303,17 @@ describe("DashboardPage", () => {
     renderPage();
 
     expect(await screen.findByText("Recent Activity")).toBeInTheDocument();
+    expect(screen.getByText("Planning Work Order")).toBeInTheDocument();
     expect(screen.getByText("Work order created from project inbox")).toBeInTheDocument();
   });
 
-  it("shows an empty Top Actions state without crashing", async () => {
+  it("shows an empty Action Queue state without crashing", async () => {
     setUser();
     resetApiMocks();
-    apiMocks.getNextActions.mockResolvedValue({ ...nextActions, topAction: null, queue: [] });
+    apiMocks.getMissionControl.mockResolvedValue({ ...missionControl, actionQueue: [] });
 
     renderPage();
 
-    expect(await screen.findByText("No urgent command pending")).toBeInTheDocument();
+    expect(await screen.findByText("No queued actions")).toBeInTheDocument();
   });
 });

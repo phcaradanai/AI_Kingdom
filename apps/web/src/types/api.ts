@@ -2328,7 +2328,12 @@ export type MissionControlSeverity = "INFO" | "WARNING" | "CRITICAL";
 export type MissionControlSourceReferenceDto = {
   sourceType: string;
   sourceId: string | null;
+  sourceTitle?: string | null;
+  sourceRoute?: string;
   routeTo: string;
+  updatedAt?: string | null;
+  recommendedAction?: string | null;
+  why?: string | null;
   workOrderId?: string | null;
   taskId?: string | null;
   councilSessionId?: string | null;
@@ -2434,13 +2439,19 @@ export type MissionControlDto = {
   computedAt: string;
   milestoneCodename: "KINGDOM_MISSION_CONTROL_FOUNDATION";
   topAction: MissionControlTopActionDto;
+  actionQueue: MissionControlTopActionDto[];
   activeWorkOrders: MissionControlWorkOrderDto[];
+  activeWork: MissionControlWorkOrderDto[];
   blockedWorkOrders: MissionControlWorkOrderDto[];
+  blockedItems: MissionControlWorkOrderDto[];
   needsReviewItems: MissionControlReviewItemDto[];
   runningJobs: MissionControlJobDto[];
   recentAgentActivity: MissionControlAgentActivityDto[];
+  recentActivity: MissionControlAgentActivityDto[];
   staleContextWarnings: MissionControlWarningDto[];
+  contextWarnings: MissionControlWarningDto[];
   providerRoutingWarnings: MissionControlWarningDto[];
+  providerWarnings: MissionControlWarningDto[];
   nextRecommendedAction: string;
   migration: {
     required: false;

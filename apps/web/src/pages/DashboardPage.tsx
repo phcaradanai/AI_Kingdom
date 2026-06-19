@@ -1,9 +1,9 @@
-import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ClipboardList, FolderKanban, Gauge, Scroll, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ClipboardList, Gauge, Scroll, Zap } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
-import { ProvenanceLinks, provenanceFromNextAction } from "@/components/ProvenanceLinks";
+import { ProvenanceLinks } from "@/components/ProvenanceLinks";
 import { KingdomActivityFeed } from "@/components/kingdom/KingdomActivityFeed";
 import { KingdomHealthStrip } from "@/components/kingdom/KingdomHealthStrip";
 import { Button } from "@/components/ui/button";
@@ -18,20 +18,12 @@ import type {
   KingdomActivityStreamDto,
   KingdomHealthDto,
   MissionControlDto,
+  MissionControlAgentActivityDto,
+  MissionControlJobDto,
+  MissionControlReviewItemDto,
   MissionControlSeverity,
-  NextActionItem,
-  NextActionQueueDto,
-  ProjectDto,
-  SecretaryBriefDto,
-  WorkOrderDto
+  MissionControlSourceReferenceDto
 } from "@/types/api";
-
-const RISK_STYLES: Record<NextActionItem["riskLevel"], string> = {
-  CRITICAL: "border-destructive/40 bg-destructive/10 text-destructive",
-  HIGH: "border-amber-500/40 bg-amber-500/10 text-amber-400",
-  MEDIUM: "border-blue-500/40 bg-blue-500/10 text-blue-400",
-  LOW: "border-border bg-muted/30 text-muted-foreground"
-};
 
 const MISSION_SEVERITY_STYLES: Record<MissionControlSeverity, string> = {
   CRITICAL: "border-destructive/40 bg-destructive/10 text-destructive",
@@ -39,15 +31,34 @@ const MISSION_SEVERITY_STYLES: Record<MissionControlSeverity, string> = {
   INFO: "border-blue-500/40 bg-blue-500/10 text-blue-400"
 };
 
-function formatAge(hours: number): string {
-  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m old`;
-  if (hours < 24) return `${Math.round(hours)}h old`;
-  return `${Math.round(hours / 24)}d old`;
+function shortSourceId(id: string | null | undefined): string {
+  if (!id) return "";
+  return id.length > 10 ? `${id.slice(0, 8)}...` : id;
 }
 
-function formatUpdatedAt(value: string | null): string {
-  if (!value) return "No timestamp";
-  return new Date(value).toLocaleString();
+function sourceLabel(ref: MissionControlSourceReferenceDto): string {
+  const id = shortSourceId(ref.sourceId);
+  return id ? `${ref.sourceType} #${id}` : ref.sourceType;
+}
+
+function sourceTitle(ref: MissionControlSourceReferenceDto): string {
+  return ref.sourceTitle ? `${sourceLabel(ref)}: ${ref.sourceTitle}` : sourceLabel(ref);
+}
+
+function missionProvenance(ref: MissionControlSourceReferenceDto) {
+  return {
+    source: { label: sourceTitle(ref), to: ref.sourceRoute ?? ref.routeTo },
+    updatedAt: ref.updatedAt ?? undefined
+  };
+}
+
+function humanizeStatus(value: string | null | undefined): string | null {
+  if (!value) return null;
+  return value
+    .toLowerCase()
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 function MissionControlPanel({ missionControl }: { missionControl: MissionControlDto | null }) {
@@ -60,53 +71,25 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
   }
 
   const action = missionControl.topAction;
-  const visibleActivity = [
-    ...missionControl.activeWorkOrders.slice(0, 4).map((item) => ({
-      id: `wo-${item.id}`,
-      agent: item.assignedAgent?.name ?? item.assignedExternalAgent?.name ?? "Unassigned",
-      role: item.assignedAgent?.title ?? item.assignedExternalAgent?.roleTitle ?? "Work Order",
-      state: item.displayState,
-      title: item.title,
-      related: item.relatedAutomationJobId ? `Job ${item.relatedAutomationJobId.slice(0, 8)}` : `Work Order ${item.id.slice(0, 8)}`,
-      updatedAt: item.lastUpdated,
-      nextAction: item.nextAction,
-      to: item.sourceReference.routeTo
-    })),
-    ...missionControl.runningJobs.slice(0, 4).map((item) => ({
-      id: `job-${item.id}`,
-      agent: item.agent?.name ?? item.runner?.name ?? "Runner",
-      role: item.mode,
-      state: item.displayState,
-      title: item.title,
-      related: `Job ${item.id.slice(0, 8)}`,
-      updatedAt: item.lastUpdated,
-      nextAction: item.nextAction,
-      to: item.sourceReference.routeTo
-    })),
-    ...missionControl.recentAgentActivity.slice(0, 4).map((item) => ({
-      id: `activity-${item.id}`,
-      agent: item.agentName,
-      role: item.role ?? "Agent",
-      state: item.currentState,
-      title: item.title,
-      related: item.relatedAutomationJobId ? `Job ${item.relatedAutomationJobId.slice(0, 8)}` : item.relatedWorkOrderId ? `Work Order ${item.relatedWorkOrderId.slice(0, 8)}` : item.sourceReference.sourceType,
-      updatedAt: item.lastUpdated,
-      nextAction: item.nextAction,
-      to: item.sourceReference.routeTo
-    }))
-  ].slice(0, 8);
+  const actionQueue = missionControl.actionQueue.length > 0 ? missionControl.actionQueue : [];
+  const activeWork = missionControl.activeWork.slice(0, 6);
+  const runningJobs = missionControl.runningJobs.slice(0, 4);
+  const needsReview = missionControl.needsReviewItems.slice(0, 4);
+  const blockedItems = missionControl.blockedItems.slice(0, 4);
+  const warnings = [...missionControl.contextWarnings, ...missionControl.providerWarnings].slice(0, 6);
+  const recentActivity = missionControl.recentActivity.slice(0, 6);
 
   return (
     <SectionCard
       title="Mission Control"
       icon={Gauge}
-      action={<Link to="/work-orders" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Source Work Orders</Link>}
+      action={<Link to="/inbox" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Action Inbox</Link>}
     >
-      <div className="grid gap-4 xl:grid-cols-[1.05fr_1.4fr]">
+      <div className="space-y-6">
         <div className="rounded-xl border border-border bg-card/70 p-4">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What should the King do next?</span>
-            <span className={cn("ml-auto rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
+            <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
               {action.severity}
             </span>
           </div>
@@ -114,87 +97,230 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{action.detail}</p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link to={action.routeTo}>
-              <Button className="h-8 gap-1.5 text-xs">
-                <ArrowRight className="h-3.5 w-3.5" />
-                {action.nextAction}
+              <Button className="h-auto min-h-8 gap-1.5 whitespace-normal text-xs leading-snug">
+                <ArrowRight className="h-3.5 w-3.5 shrink-0" />
+                Open action
               </Button>
             </Link>
-            <Link to={action.sourceReference.routeTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+            <Link to={action.sourceReference.sourceRoute ?? action.sourceReference.routeTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
               Open source
             </Link>
           </div>
-          <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
-              <div className="font-semibold text-foreground">{missionControl.activeWorkOrders.length}</div>
-              Active work orders
-            </div>
-            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
-              <div className="font-semibold text-foreground">{missionControl.blockedWorkOrders.length}</div>
-              Blocked
-            </div>
-            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
-              <div className="font-semibold text-foreground">{missionControl.needsReviewItems.length}</div>
-              Needs review
-            </div>
-            <div className="rounded-md border border-border bg-muted/20 px-3 py-2">
-              <div className="font-semibold text-foreground">{missionControl.providerRoutingWarnings.length}</div>
-              Provider warnings
-            </div>
-          </div>
+          <ProvenanceLinks className="mt-4" {...missionProvenance(action.sourceReference)} />
         </div>
 
-        <div className="space-y-3">
-          {visibleActivity.length > 0 ? (
-            visibleActivity.map((item) => (
-              <Link
-                key={item.id}
-                to={item.to}
-                className="grid gap-3 rounded-xl border border-border bg-card/70 p-3 transition-colors hover:border-primary/45 sm:grid-cols-[minmax(0,1fr)_auto]"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold text-foreground">{item.agent}</span>
-                    <span className="text-xs text-muted-foreground">{item.role}</span>
-                    <StatusBadge status={item.state} />
-                  </div>
-                  <div className="mt-1 truncate text-sm text-foreground/90">{item.title}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{item.nextAction}</div>
-                </div>
-                <div className="flex flex-col items-start gap-1 text-xs text-muted-foreground sm:items-end">
-                  <span>{item.related}</span>
-                  <span>{formatUpdatedAt(item.updatedAt)}</span>
-                </div>
-              </Link>
-            ))
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MissionMetric label="Action Queue" value={missionControl.actionQueue.length} to="/inbox" source="NextActionQueue" />
+          <MissionMetric label="Active Work" value={missionControl.activeWork.length + missionControl.runningJobs.length} to="/work-orders" source="WorkOrder" />
+          <MissionMetric label="Needs Review" value={missionControl.needsReviewItems.length} to="/automation-jobs" source="AgentReviewSummary" />
+          <MissionMetric label="Blocked / Warnings" value={missionControl.blockedItems.length + missionControl.contextWarnings.length + missionControl.providerWarnings.length} to="/work-orders" source="WorkOrder" />
+        </div>
+
+        <MissionSection title="Action Queue" icon={Zap} sourceTo="/inbox" sourceLabel="NextActionQueue">
+          {actionQueue.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {actionQueue.slice(0, 4).map((item) => (
+                <MissionActionQueueCard key={item.id} item={item} />
+              ))}
+            </div>
           ) : (
-            <EmptyState icon={CheckCircle2} title="No active mission records" description="Mission Control will populate from real Work Orders, jobs, reviews, and agent activity." />
+            <EmptyState icon={CheckCircle2} title="No queued actions" description="No source records currently need a King decision." />
           )}
-        </div>
-      </div>
+        </MissionSection>
 
-      {(missionControl.staleContextWarnings.length > 0 || missionControl.providerRoutingWarnings.length > 0) && (
-        <div className="mt-4 grid gap-3 lg:grid-cols-2">
-          {missionControl.staleContextWarnings.slice(0, 3).map((warning) => (
-            <Link key={warning.id} to={warning.sourceReference.routeTo} className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-sm hover:border-amber-500/60">
-              <div className="flex items-center gap-2 font-semibold text-amber-400">
-                <AlertTriangle className="h-4 w-4" />
-                {warning.title}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{warning.nextAction}</p>
-            </Link>
-          ))}
-          {missionControl.providerRoutingWarnings.slice(0, 3).map((warning) => (
-            <Link key={warning.id} to={warning.sourceReference.routeTo} className="rounded-xl border border-border bg-muted/20 p-3 text-sm hover:border-primary/45">
-              <div className="flex items-center gap-2 font-semibold text-foreground">
-                <AlertTriangle className="h-4 w-4 text-amber-400" />
-                {warning.title}
-              </div>
-              <p className="mt-1 text-xs text-muted-foreground">{warning.detail}</p>
-            </Link>
-          ))}
-        </div>
-      )}
+        <MissionSection title="Active Work" icon={ClipboardList} sourceTo="/work-orders" sourceLabel="WorkOrder">
+          {activeWork.length > 0 || runningJobs.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {activeWork.map((item) => (
+                <MissionWorkCard key={`work-${item.id}`} item={item} />
+              ))}
+              {runningJobs.map((item) => (
+                <MissionJobCard key={`job-${item.id}`} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={ClipboardList} title="No active work" description="Mission Control will show active Work Orders and running Automation Jobs here." />
+          )}
+        </MissionSection>
+
+        <MissionSection title="Needs Review" icon={Bot} sourceTo="/automation-jobs" sourceLabel="AgentReviewSummary">
+          {needsReview.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {needsReview.map((item) => (
+                <MissionReviewCard key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={CheckCircle2} title="No results need review" description="Agent review summaries and runner results will appear here when they need a decision." />
+          )}
+        </MissionSection>
+
+        <MissionSection title="Blocked / Warnings" icon={AlertTriangle} sourceTo="/work-orders" sourceLabel="WorkOrder">
+          {blockedItems.length > 0 || warnings.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {blockedItems.map((item) => (
+                <MissionWorkCard key={`blocked-${item.id}`} item={item} />
+              ))}
+              {warnings.map((item) => (
+                <MissionWarningCard key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={CheckCircle2} title="No blockers or warnings" description="Context, provider, and execution warnings will appear here from their owning source records." />
+          )}
+        </MissionSection>
+
+        <MissionSection title="Recent Activity" icon={Activity} sourceTo="/kingdom/operations" sourceLabel="AgentActivity">
+          {recentActivity.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {recentActivity.map((item) => (
+                <MissionActivityCard key={item.id} item={item} />
+              ))}
+            </div>
+          ) : (
+            <EmptyState icon={Activity} title="No recent activity" description="Recent agent and execution activity will appear here from source records." />
+          )}
+        </MissionSection>
+      </div>
     </SectionCard>
+  );
+}
+
+function MissionMetric({ label, value, to, source }: { label: string; value: number; to: string; source: string }) {
+  return (
+    <Link to={to} className="rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:border-primary/45">
+      <div className="font-display text-2xl font-semibold text-foreground">{value}</div>
+      <div className="mt-1 text-sm font-semibold text-foreground">{label}</div>
+      <div className="mt-2 text-xs text-muted-foreground">Source: {source}</div>
+    </Link>
+  );
+}
+
+function MissionSection({ title, icon: Icon, sourceTo, sourceLabel, children }: { title: string; icon: typeof Activity; sourceTo: string; sourceLabel: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-primary" />
+          <h3 className="font-display text-lg text-foreground">{title}</h3>
+        </div>
+        <Link to={sourceTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+          Source: {sourceLabel}
+        </Link>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function MissionCardShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-border bg-card/70 p-4">
+      {children}
+    </div>
+  );
+}
+
+function MissionActionQueueCard({ item }: { item: MissionControlDto["actionQueue"][number] }) {
+  return (
+    <MissionCardShell>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
+          {item.severity}
+        </span>
+        <span className="text-xs text-muted-foreground">{humanizeStatus(item.priorityKey)}</span>
+      </div>
+      <div className="mt-2 font-semibold text-foreground">{item.title}</div>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.detail}</p>
+      <div className="mt-3 text-xs font-semibold text-primary">{item.nextAction}</div>
+      <ProvenanceLinks className="mt-3" {...missionProvenance(item.sourceReference)} />
+    </MissionCardShell>
+  );
+}
+
+function MissionWorkCard({ item }: { item: MissionControlDto["activeWork"][number] }) {
+  return (
+    <MissionCardShell>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={item.displayState} />
+        {item.contextBindingStatus && <span className="text-xs text-muted-foreground">Context: {humanizeStatus(item.contextBindingStatus)}</span>}
+      </div>
+      <div className="mt-2 font-semibold text-foreground">{item.title}</div>
+      {item.blockedReason && <p className="mt-1 text-sm text-amber-400">{item.blockedReason}</p>}
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.nextAction}</p>
+      <ProvenanceLinks
+        className="mt-3"
+        {...missionProvenance(item.sourceReference)}
+        generatedBy={item.assignedAgent?.name ?? item.assignedExternalAgent?.name ?? undefined}
+      />
+    </MissionCardShell>
+  );
+}
+
+function MissionJobCard({ item }: { item: MissionControlJobDto }) {
+  return (
+    <MissionCardShell>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={item.displayState} />
+        <span className="text-xs text-muted-foreground">{humanizeStatus(item.status)}</span>
+      </div>
+      <div className="mt-2 font-semibold text-foreground">{item.title}</div>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.nextAction}</p>
+      <ProvenanceLinks
+        className="mt-3"
+        {...missionProvenance(item.sourceReference)}
+        generatedBy={item.agent?.name ?? item.runner?.name ?? undefined}
+      />
+    </MissionCardShell>
+  );
+}
+
+function MissionReviewCard({ item }: { item: MissionControlReviewItemDto }) {
+  return (
+    <MissionCardShell>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
+          {item.severity}
+        </span>
+        <span className="text-xs text-muted-foreground">{humanizeStatus(item.kingRecommendation)}</span>
+      </div>
+      <div className="mt-2 font-semibold text-foreground">{item.title}</div>
+      <p className="mt-1 line-clamp-3 text-sm leading-relaxed text-muted-foreground">{item.summary}</p>
+      <div className="mt-3 text-xs font-semibold text-primary">{item.nextAction}</div>
+      <ProvenanceLinks className="mt-3" {...missionProvenance(item.sourceReference)} />
+    </MissionCardShell>
+  );
+}
+
+function MissionWarningCard({ item }: { item: MissionControlDto["providerWarnings"][number] }) {
+  return (
+    <MissionCardShell>
+      <div className="flex flex-wrap items-center gap-2">
+        <AlertTriangle className="h-4 w-4 text-amber-400" />
+        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
+          {item.severity}
+        </span>
+      </div>
+      <div className="mt-2 font-semibold text-foreground">{item.title}</div>
+      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.detail}</p>
+      <div className="mt-3 text-xs font-semibold text-primary">{item.nextAction}</div>
+      <ProvenanceLinks className="mt-3" {...missionProvenance(item.sourceReference)} />
+    </MissionCardShell>
+  );
+}
+
+function MissionActivityCard({ item }: { item: MissionControlAgentActivityDto }) {
+  return (
+    <MissionCardShell>
+      <div className="flex flex-wrap items-center gap-2">
+        <StatusBadge status={item.currentState} />
+        <span className="text-xs text-muted-foreground">{item.agentName}</span>
+      </div>
+      <div className="mt-2 font-semibold text-foreground">{item.title}</div>
+      {item.detail && <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.detail}</p>}
+      <div className="mt-3 text-xs font-semibold text-primary">{item.nextAction}</div>
+      <ProvenanceLinks className="mt-3" {...missionProvenance(item.sourceReference)} generatedBy={item.role ?? undefined} />
+    </MissionCardShell>
   );
 }
 
@@ -223,102 +349,6 @@ function MetricReviewCard({ title, value, to, reviewLabel = "Open source", descr
         <ArrowRight className="h-3.5 w-3.5" />
       </div>
     </Link>
-  );
-}
-
-// ── Top Actions (max 3) ────────────────────────────────────────────────────────
-
-function TopActionCard({ item, canRunLoop, onActed }: { item: NextActionItem; canRunLoop: boolean; onActed: () => void }) {
-  const navigate = useNavigate();
-  const [running, setRunning] = useState(false);
-  const isLoopAction = item.routeTo.startsWith("/living-loop") && canRunLoop;
-
-  async function runLoop() {
-    setRunning(true);
-    try {
-      await api.runLivingLoopOnce();
-      onActed();
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setRunning(false);
-    }
-  }
-
-  return (
-    <div className="rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm transition-colors hover:border-primary/40">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", RISK_STYLES[item.riskLevel])}>
-          {item.riskLevel}
-        </span>
-        <span className="rounded-full border border-border bg-muted/30 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-          {item.abstractState.replace(/_/g, " ")}
-        </span>
-        <span className="ml-auto text-[11px] text-muted-foreground">{formatAge(item.ageHours)}</span>
-      </div>
-      <div className="mt-2.5 font-display text-base font-semibold text-foreground">{item.title}</div>
-      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{item.why}</p>
-
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button className="h-8 gap-1.5 text-xs" onClick={() => navigate(item.routeTo)}>
-          <Zap className="h-3.5 w-3.5" />
-          {item.actionLabel}
-        </Button>
-        {isLoopAction && (
-          <Button variant="outline" className="h-8 text-xs" onClick={runLoop} disabled={running}>
-            {running ? "Running…" : "Run Once"}
-          </Button>
-        )}
-      </div>
-
-      <ProvenanceLinks className="mt-3" {...provenanceFromNextAction(item)} />
-    </div>
-  );
-}
-
-// ── Active Initiatives ──────────────────────────────────────────────────────────
-
-const ACTIVE_WORK_ORDER_STATUSES: WorkOrderDto["status"][] = ["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW"];
-
-function workOrderBlocker(order: WorkOrderDto): string | null {
-  if (order.status === "NEEDS_REVIEW") return "Awaiting your review";
-  if (order.status === "FAILED") return "Last run failed";
-  if (order.contextBindingStatus && order.contextBindingStatus !== "FRESH") return "Context needs refresh";
-  return null;
-}
-
-function workOrderActionLabel(status: WorkOrderDto["status"]): string {
-  if (status === "NEEDS_REVIEW") return "Review";
-  if (status === "IN_PROGRESS") return "View progress";
-  return "Open";
-}
-
-function InitiativeCard({ icon: Icon, title, status, sourceLabel, owner, blocker, actionLabel, to, updatedAt }: { icon: typeof FolderKanban; title: string; status: string; sourceLabel: string; owner?: string | null; blocker?: string | null; actionLabel: string; to: string; updatedAt?: string | null }) {
-  return (
-    <div className="flex flex-col gap-2 rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm">
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
-          <Icon className="h-4 w-4 shrink-0 text-primary/70" />
-          <span className="truncate font-semibold text-foreground">{title}</span>
-        </div>
-        <StatusBadge status={status} />
-      </div>
-      {blocker && (
-        <div className="flex items-center gap-1.5 text-xs text-amber-400">
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {blocker}
-        </div>
-      )}
-      <Link to={to} className="mt-1 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary hover:underline">
-        {actionLabel}
-        <ArrowRight className="h-3.5 w-3.5" />
-      </Link>
-      <ProvenanceLinks
-        source={{ label: sourceLabel, to }}
-        generatedBy={owner ?? undefined}
-        updatedAt={updatedAt ?? undefined}
-      />
-    </div>
   );
 }
 
@@ -381,51 +411,31 @@ export function LivingLoopDashboardCard() {
 export function DashboardPage() {
   const user = useAuthStore((state) => state.user);
   const canCommand = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
-  const canRunLoop = user?.role === "KING";
 
-  const [nextActions, setNextActions] = useState<NextActionQueueDto | null>(null);
   const [missionControl, setMissionControl] = useState<MissionControlDto | null>(null);
   const [health, setHealth] = useState<KingdomHealthDto | null>(null);
   const [activity, setActivity] = useState<KingdomActivityStreamDto | null>(null);
-  const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
-  const [projects, setProjects] = useState<ProjectDto[]>([]);
-  const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     Promise.all([
       api.getMissionControl().catch(() => null),
-      api.getNextActions({ limit: 3 }).catch(() => null),
       api.getKingdomHealth().catch(() => null),
-      api.getKingdomActivity(8).catch(() => null),
-      api.workOrders().catch(() => ({ workOrders: [] as WorkOrderDto[], hiddenCount: 0 })),
-      api.projects().catch(() => ({ projects: [] as ProjectDto[] })),
-      api.secretaryBrief().catch(() => null)
+      api.getKingdomActivity(8).catch(() => null)
     ])
-      .then(([missionRes, nextRes, healthRes, activityRes, ordersRes, projectsRes, briefRes]) => {
+      .then(([missionRes, healthRes, activityRes]) => {
         if (cancelled) return;
         setMissionControl(missionRes);
-        setNextActions(nextRes);
         setHealth(healthRes);
         setActivity(activityRes);
-        setWorkOrders(ordersRes.workOrders);
-        setProjects(projectsRes.projects);
-        setBrief(briefRes);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
       });
     return () => { cancelled = true; };
-  }, [reloadKey]);
-
-  const topActions = (nextActions?.queue ?? []).slice(0, 3);
-
-  const activeOrders = workOrders.filter((order) => ACTIVE_WORK_ORDER_STATUSES.includes(order.status));
-  const activeProjects = projects.filter((project) => project.status === "ACTIVE");
-  const hasInitiatives = activeOrders.length > 0 || activeProjects.length > 0;
+  }, []);
 
   if (isLoading) {
     return <LoadingState message="Summoning royal briefings..." className="min-h-[60vh]" />;
@@ -435,8 +445,8 @@ export function DashboardPage() {
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
         eyebrow="Command Center"
-        title="The Kingdom at a Glance"
-        description="What needs your attention, the health of the kingdom, what's in flight, and what just happened."
+        title="Mission Control"
+        description="What the King should do next, why it matters, which source record caused it, and where to inspect or act."
         action={canCommand ? (
           <Link to="/throne-room?view=command">
             <Button variant="outline" className="gap-2">
@@ -449,103 +459,10 @@ export function DashboardPage() {
 
       <MissionControlPanel missionControl={missionControl} />
 
-      {/* 1. Top Actions (max 3) */}
-      <SectionCard
-        title="Top Actions"
-        icon={Zap}
-        action={<Link to="/inbox" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Kingdom Inbox</Link>}
-      >
-        {topActions.length > 0 ? (
-          <div className="grid gap-4 lg:grid-cols-3">
-            {topActions.map((item) => (
-              <TopActionCard key={item.id} item={item} canRunLoop={canRunLoop} onActed={() => setReloadKey((k) => k + 1)} />
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={CheckCircle2} title="No urgent command pending" description="Nothing needs the King's attention right now." />
-        )}
-      </SectionCard>
-
-      {/* 2. Kingdom Health */}
       {health && <KingdomHealthStrip health={health} />}
 
-      {/* 3. Active Initiatives */}
       <SectionCard
-        title="Active Initiatives"
-        icon={FolderKanban}
-        action={<Link to="/projects" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">All Projects</Link>}
-      >
-        {hasInitiatives ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-            {activeProjects.slice(0, 3).map((project) => (
-              <InitiativeCard
-                key={`project-${project.id}`}
-                icon={FolderKanban}
-                title={project.name}
-                status={project.status}
-                sourceLabel="Project"
-                blocker={null}
-                actionLabel="Open project"
-                to={`/projects/${project.id}`}
-                updatedAt={project.updatedAt}
-              />
-            ))}
-            {activeOrders.slice(0, 6).map((order) => (
-              <InitiativeCard
-                key={`wo-${order.id}`}
-                icon={ClipboardList}
-                title={order.title}
-                status={order.status}
-                sourceLabel="Work Order"
-                owner={order.assignedAgent?.name ?? null}
-                blocker={workOrderBlocker(order)}
-                actionLabel={workOrderActionLabel(order.status)}
-                to="/work-orders"
-                updatedAt={order.updatedAt}
-              />
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={FolderKanban} title="No active initiatives" description="No active projects or open work orders right now." />
-        )}
-      </SectionCard>
-
-      {/* 3b. Agent Reports — what external agents delivered back into the Kingdom */}
-      <SectionCard
-        title="Agent Reports"
-        icon={Bot}
-        action={
-          <Link to="/work-orders" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
-            {brief && brief.kingdomStatus.workOrdersAwaitingReview > 0
-              ? `${brief.kingdomStatus.workOrdersAwaitingReview} awaiting review`
-              : "All Work Orders"}
-          </Link>
-        }
-      >
-        {brief && brief.recentAgentReports.length > 0 ? (
-          <div className="space-y-3">
-            {brief.recentAgentReports.map((report) => (
-              <Link
-                key={report.id}
-                to="/work-orders"
-                className="block rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm transition-colors hover:border-primary/45 hover:bg-card/80"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="font-semibold text-foreground">{report.title}</span>
-                  <StatusBadge status={report.severity} />
-                </div>
-                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{report.content}</p>
-              </Link>
-            ))}
-          </div>
-        ) : (
-          <EmptyState icon={Bot} title="No agent reports yet" description="Dispatch a work order to an external agent — its report will appear here when it returns." />
-        )}
-      </SectionCard>
-
-      {/* 4. Recent Activity */}
-      <SectionCard
-        title="Recent Activity"
+        title="Operations Activity Stream"
         icon={Activity}
         action={<Link to="/kingdom/operations" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Operations Center</Link>}
       >
