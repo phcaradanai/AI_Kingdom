@@ -1,5 +1,5 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye, ArrowRight, ExternalLink, Clock, Layers } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationJobDto, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, AutomationJobMode, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderExecutionTarget, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -31,6 +31,7 @@ const blankWorkOrder: WorkOrderPayload = {
   ],
   targetProject: "",
   targetRepository: "",
+  executionTarget: "AUTO",
   status: "DRAFT",
   priority: "MEDIUM"
 };
@@ -49,6 +50,7 @@ const blankReport: Omit<ImplementationReportPayload, "workOrderId"> = {
 
 const statuses: WorkOrderStatus[] = ["DRAFT", "READY", "IN_PROGRESS", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED", "ARCHIVED"];
 const priorities: WorkOrderPriority[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
+const executionTargets: WorkOrderExecutionTarget[] = ["AUTO", "INTERNAL_AGENT", "RUNNER_VALIDATION", "RUNNER_PATCH", "EXTERNAL_AGENT"];
 
 function getStatusLabel(status: string) {
   const labels: Record<string, string> = {
@@ -62,6 +64,12 @@ function getStatusLabel(status: string) {
     ARCHIVED: "Archived"
   };
   return labels[status] ?? `Unknown (${status})`;
+}
+
+function getCreateJobLabel(target: WorkOrderExecutionTarget) {
+  if (target === "RUNNER_VALIDATION") return "Validation Job";
+  if (target === "EXTERNAL_AGENT") return "External Agent Job";
+  return "Automation Job";
 }
 
 function getContextStatus(order: WorkOrderDto | null, context: WorkOrderContextDto | null) {
@@ -400,6 +408,8 @@ function StatusQuickFilters({
 }
 
 export function WorkOrdersPage() {
+  const [searchParams] = useSearchParams();
+  const focusedWorkOrderId = searchParams.get("focus");
   const user = useAuthStore((state) => state.user);
   const canCreate = user?.role === "KING" || user?.role === "CROWN_PRINCE";
   const canReport = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
@@ -462,7 +472,11 @@ export function WorkOrdersPage() {
       setWorkOrders(orders.workOrders);
       setExternalAgents(agents.externalAgents);
       setProjects(projectResponse.projects);
-      if (selectedId && !orders.workOrders.some((order) => order.id === selectedId)) {
+      const focused = focusedWorkOrderId ? orders.workOrders.find((order) => order.id === focusedWorkOrderId) : null;
+      if (focused) {
+        setSelectedId(focused.id);
+        setDraft(toPayload(focused));
+      } else if (selectedId && !orders.workOrders.some((order) => order.id === selectedId)) {
         setSelectedId(null);
       }
     } catch (err) {
@@ -477,7 +491,7 @@ export function WorkOrdersPage() {
 
   useEffect(() => {
     void load();
-  }, [statusFilter, priorityFilter, agentFilter, includeArchived, includeLegacy, includeTestData]);
+  }, [statusFilter, priorityFilter, agentFilter, includeArchived, includeLegacy, includeTestData, focusedWorkOrderId]);
 
   function select(order: WorkOrderDto | null) {
     setSelectedId(order?.id ?? null);
@@ -612,10 +626,24 @@ export function WorkOrdersPage() {
 
   async function createJob(useAssignedAgentCli = false) {
     if (!selected || !canCreate) return;
+    const target = draft.executionTarget ?? selected.executionTarget ?? "RUNNER_PATCH";
+    if (target === "INTERNAL_AGENT") {
+      setError("Internal Agent is a planning target, not a runner job. Select Runner Validation, Runner Patch, or External Agent.");
+      return;
+    }
+    const mode: AutomationJobMode = target === "RUNNER_VALIDATION"
+      ? "VALIDATION_ONLY"
+      : target === "EXTERNAL_AGENT"
+        ? "EXTERNAL_AGENT"
+        : "SANDBOX_PATCH";
     setCreatingJob(true);
     setError(null);
     try {
-      await api.createAutomationJobForWorkOrder(selected.id, { mode: "SANDBOX_PATCH", useAssignedAgentCli });
+      await api.createAutomationJobForWorkOrder(selected.id, {
+        mode,
+        externalAgentId: mode === "EXTERNAL_AGENT" ? (draft.assignedExternalAgentId ?? selected.assignedExternalAgentId ?? null) : null,
+        useAssignedAgentCli: mode === "SANDBOX_PATCH" ? useAssignedAgentCli : false
+      });
       const jobs = await api.automationJobs({ workOrderId: selected.id });
       setAutomationJobs(jobs);
     } catch (err) {
@@ -1012,7 +1040,11 @@ export function WorkOrdersPage() {
 
           <div className="space-y-3">
             {workOrders.map((order) => (
-              <Card key={order.id} className={cn("relative p-4 transition", selected?.id === order.id && "border-primary/60 bg-primary/10")}>
+              <Card key={order.id} className={cn(
+                "relative p-4 transition",
+                selected?.id === order.id && "border-primary/60 bg-primary/10",
+                focusedWorkOrderId === order.id && "ring-2 ring-primary/60"
+              )}>
                 {canCreate && (
                   <button
                     type="button"
@@ -1113,6 +1145,11 @@ export function WorkOrdersPage() {
                   <select id="wo-agent" disabled={!canCreate} className={selectCls} value={draft.assignedExternalAgentId ?? ""} onChange={(e) => setDraft({ ...draft, assignedExternalAgentId: e.target.value || null })}>
                     <option value="">Unassigned</option>
                     {externalAgents.filter((agent) => agent.isActive).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+                  </select>
+                </FormField>
+                <FormField id="wo-execution-target" label="Execution Target" className="sm:col-span-2">
+                  <select id="wo-execution-target" disabled={!canCreate} className={selectCls} value={draft.executionTarget ?? "AUTO"} onChange={(e) => setDraft({ ...draft, executionTarget: e.target.value as WorkOrderExecutionTarget })}>
+                    {executionTargets.map((target) => <option key={target} value={target}>{target.replaceAll("_", " ")}</option>)}
                   </select>
                 </FormField>
                 <FormField id="wo-project" label="Target Project" className="sm:col-span-2">
@@ -1406,7 +1443,7 @@ export function WorkOrdersPage() {
                         disabled={creatingJob || Boolean(automationBlockedReason)}
                       >
                         <Play className="h-4 w-4" />
-                        {creatingJob ? "Creating…" : "Create Automation Job"}
+                        {creatingJob ? "Creating…" : `Create ${getCreateJobLabel(draft.executionTarget ?? selected.executionTarget ?? "RUNNER_PATCH")}`}
                       </Button>
                       {selected?.assignedExternalAgentId ? (
                         <Button
@@ -1426,7 +1463,7 @@ export function WorkOrdersPage() {
                     </div>
                   ) : (
                     <div className="mt-3 rounded-md border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs text-emerald-100">
-                      Context is FRESH and no active automation job is blocking a new SANDBOX_PATCH request.
+                      Context is FRESH and no active automation job is blocking a runner request.
                     </div>
                   )}
                   <div className="mt-3 space-y-2">
@@ -1445,6 +1482,7 @@ export function WorkOrdersPage() {
                               "bg-muted text-muted-foreground border-border"
                             )}>{job.status}</span>
                             <span className="text-xs text-muted-foreground">{job.mode} · {formatDate(job.createdAt)}</span>
+                            {job.externalAgentRuns?.[0] ? <span className="ml-2 text-xs text-muted-foreground">run {job.externalAgentRuns[0].status}</span> : null}
                             {job.agent && <span className="ml-2 text-xs text-muted-foreground">via {job.agent.name}</span>}
                           </div>
                           {job.status === "QUEUED" && (

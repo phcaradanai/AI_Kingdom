@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Bot, Power, Save } from "lucide-react";
+import { Bot, Play, Power, Save } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
-import type { ExternalAgentDto, ExternalAgentPayload, ExternalAgentType } from "@/types/api";
+import type { ExternalAgentDto, ExternalAgentPayload, ExternalAgentTestResultDto, ExternalAgentType } from "@/types/api";
 
 const blankAgent: ExternalAgentPayload = {
   name: "",
@@ -16,11 +16,17 @@ const blankAgent: ExternalAgentPayload = {
   description: "",
   capabilities: [],
   executionMode: "MANUAL_COPY_PASTE",
+  command: "",
+  workingDirectory: "",
+  environmentProfile: "",
   isActive: true,
+  bridgeEnabled: false,
+  maxRuntimeSeconds: 900,
+  requiresApproval: true,
   safetyLevel: "MEDIUM_RISK"
 };
 
-const types: ExternalAgentType[] = ["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "CUSTOM"];
+const types: ExternalAgentType[] = ["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "GENERIC_CLI", "MANUAL_ONLY", "CUSTOM"];
 
 export function ExternalAgentsPage() {
   const user = useAuthStore((state) => state.user);
@@ -29,6 +35,8 @@ export function ExternalAgentsPage() {
   const [selected, setSelected] = useState<ExternalAgentDto | null>(null);
   const [draft, setDraft] = useState<ExternalAgentPayload>(blankAgent);
   const [error, setError] = useState<string | null>(null);
+  const [testResult, setTestResult] = useState<ExternalAgentTestResultDto | null>(null);
+  const [testingAgent, setTestingAgent] = useState(false);
 
   async function load() {
     const response = await api.externalAgents();
@@ -43,6 +51,7 @@ export function ExternalAgentsPage() {
     setSelected(agent);
     setDraft(agent ? toPayload(agent) : blankAgent);
     setError(null);
+    setTestResult(null);
   }
 
   async function submit(event: FormEvent) {
@@ -69,6 +78,21 @@ export function ExternalAgentsPage() {
     await load();
   }
 
+  async function testAgent() {
+    if (!selected || !isKing) return;
+    setTestingAgent(true);
+    setError(null);
+    setTestResult(null);
+    try {
+      const response = await api.testExternalAgent(selected.id);
+      setTestResult(response.test);
+    } catch (testError) {
+      setError(testError instanceof Error ? testError.message : "Unable to test external agent");
+    } finally {
+      setTestingAgent(false);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -93,6 +117,7 @@ export function ExternalAgentsPage() {
                   <span className="rounded-full border border-border px-2 py-1">{agent.type}</span>
                   <span className="rounded-full border border-border px-2 py-1">{agent.executionMode}</span>
                   <span className="rounded-full border border-border px-2 py-1">{agent.safetyLevel}</span>
+                  <span className="rounded-full border border-border px-2 py-1">{agent.bridgeEnabled ? "Bridge enabled" : "Manual"}</span>
                 </div>
               </button>
               {isKing ? (
@@ -119,19 +144,48 @@ export function ExternalAgentsPage() {
               </select>
             </div>
             <Textarea disabled={!isKing} value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Description" />
-            <Input disabled={!isKing} value={draft.capabilities.join(", ")} onChange={(e) => setDraft({ ...draft, capabilities: csv(e.target.value) })} placeholder="Capabilities, comma separated" />
-            <select disabled={!isKing} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.executionMode} onChange={(e) => setDraft({ ...draft, executionMode: e.target.value as ExternalAgentPayload["executionMode"] })}>
-              {["MANUAL_COPY_PASTE", "CLI_MANUAL", "API", "FUTURE_AUTOMATED"].map((mode) => <option key={mode} value={mode}>{mode}</option>)}
-            </select>
+              <Input disabled={!isKing} value={draft.capabilities.join(", ")} onChange={(e) => setDraft({ ...draft, capabilities: csv(e.target.value) })} placeholder="Capabilities, comma separated" />
+              <select disabled={!isKing} className="h-10 rounded-md border border-border bg-input px-3 text-sm" value={draft.executionMode} onChange={(e) => setDraft({ ...draft, executionMode: e.target.value as ExternalAgentPayload["executionMode"] })}>
+                {["MANUAL_COPY_PASTE", "CLI_MANUAL", "API", "FUTURE_AUTOMATED"].map((mode) => <option key={mode} value={mode}>{mode}</option>)}
+              </select>
+              <Textarea disabled={!isKing} value={draft.command ?? ""} onChange={(e) => setDraft({ ...draft, command: e.target.value })} placeholder="Command template, e.g. codex exec --full-auto {promptFile}" />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Input disabled={!isKing} value={draft.workingDirectory ?? ""} onChange={(e) => setDraft({ ...draft, workingDirectory: e.target.value })} placeholder="Working directory override" />
+                <Input disabled={!isKing} value={draft.environmentProfile ?? ""} onChange={(e) => setDraft({ ...draft, environmentProfile: e.target.value })} placeholder="Environment profile" />
+                <Input disabled={!isKing} type="number" min={30} max={7200} value={draft.maxRuntimeSeconds} onChange={(e) => setDraft({ ...draft, maxRuntimeSeconds: Number(e.target.value) })} placeholder="Max runtime seconds" />
+                <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+                  <input disabled={!isKing} type="checkbox" checked={draft.bridgeEnabled} onChange={(e) => setDraft({ ...draft, bridgeEnabled: e.target.checked })} />
+                  Bridge enabled
+                </label>
+                <label className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm sm:col-span-2">
+                  <input disabled={!isKing} type="checkbox" checked={draft.requiresApproval} onChange={(e) => setDraft({ ...draft, requiresApproval: e.target.checked })} />
+                  Require King approval before runner claim
+                </label>
+              </div>
             <div className="flex flex-wrap items-center justify-between">
               {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
               {isKing ? (
-                <Button>
-                  <Save className="h-4 w-4" />
-                  {selected ? "Save External Agent" : "Create External Agent"}
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  {selected ? (
+                    <Button type="button" variant="outline" disabled={testingAgent} onClick={() => void testAgent()}>
+                      <Play className="h-4 w-4" />
+                      {testingAgent ? "Testing..." : "Test External Agent"}
+                    </Button>
+                  ) : null}
+                  <Button>
+                    <Save className="h-4 w-4" />
+                    {selected ? "Save External Agent" : "Create External Agent"}
+                  </Button>
+                </div>
               ) : null}
             </div>
+            {testResult ? (
+              <div className={testResult.status === "READY" ? "rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm" : "rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm"}>
+                <div className="font-semibold">Bridge test: {testResult.status}</div>
+                {testResult.issues.length ? <div className="mt-1 text-xs">{testResult.issues.join(" · ")}</div> : null}
+                <div className="mt-2 text-xs text-muted-foreground">Command: {testResult.commandTemplate ?? "Not configured"}</div>
+              </div>
+            ) : null}
 
           </form>
         </Card>
@@ -148,7 +202,13 @@ function toPayload(agent: ExternalAgentDto): ExternalAgentPayload {
     description: agent.description,
     capabilities: agent.capabilities,
     executionMode: agent.executionMode,
+    command: agent.command,
+    workingDirectory: agent.workingDirectory,
+    environmentProfile: agent.environmentProfile,
     isActive: agent.isActive,
+    bridgeEnabled: agent.bridgeEnabled,
+    maxRuntimeSeconds: agent.maxRuntimeSeconds,
+    requiresApproval: agent.requiresApproval,
     safetyLevel: agent.safetyLevel
   };
 }

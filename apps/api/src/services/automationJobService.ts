@@ -1,4 +1,4 @@
-import type { AutomationJobMode, AutomationJobStatus, Prisma } from "@prisma/client";
+import type { AutomationJob, AutomationJobMode, AutomationJobStatus, Prisma } from "@prisma/client";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { createAIProviderFromConfig } from "../ai/providerFactory.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
@@ -17,6 +17,7 @@ import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localD
 import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
 import { createOrUpdateAgentReviewForJob } from "./runnerResultReviewService.js";
 import { buildExternalAgentPrompt } from "./externalAgentWorkOrderService.js";
+import { createNotice } from "./royalSecretaryService.js";
 
 /** Statuses that count as "active" for duplicate prevention */
 export const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = [
@@ -247,7 +248,7 @@ export async function claimJob(runnerId: string) {
   const job = await prisma.automationJob.findFirst({
     where: { status: "APPROVED", runnerId: null },
     orderBy: { createdAt: "asc" },
-    include: { workOrder: { include: { project: true } } }
+    include: jobInclude
   });
 
   if (!job) return null;
@@ -310,7 +311,8 @@ export async function updateJobStatus(
 
 export async function submitReport(jobId: string, runnerId: string, report: SubmitReportInput) {
   const job = await prisma.automationJob.findFirst({
-    where: { id: jobId, runnerId }
+    where: { id: jobId, runnerId },
+    include: { externalAgentRuns: { orderBy: { createdAt: "desc" }, take: 1 } }
   });
   if (!job) {
     const err = new Error("AutomationJob not found or not owned by this runner");
@@ -338,6 +340,8 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
       decisionsMade: report.decisionsMade,
       remainingWork: report.remainingWork,
       nextRecommendedAction: report.nextRecommendedAction,
+      rawOutput: report.rawOutput,
+      externalAgentId: job.externalAgentRuns[0]?.externalAgentId ?? null,
       // M17E-2: every report records exactly which snapshots the job ran against.
       localDocumentSnapshotId: job.localDocumentSnapshotId,
       repositorySnapshotId: job.repositorySnapshotId,
@@ -370,7 +374,82 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
     console.warn("[AutomationJob] Agent review generation failed; runner report remains submitted:", err instanceof Error ? err.message : String(err));
   });
 
+  if (job.mode === "EXTERNAL_AGENT") {
+    await prisma.workOrder.update({
+      where: { id: job.workOrderId },
+      data: {
+        status: "NEEDS_REVIEW",
+        blockedReason: report.errors.length ? report.errors[0] : null
+      }
+    }).catch(() => undefined);
+    await notifyKingExternalAgentReport({
+      job,
+      reportId: implReport.id,
+      summary: report.summary,
+      errors: report.errors,
+      testResult: report.testResult
+    }).catch((err) => {
+      console.warn("[AutomationJob] Failed to create external agent completion notice:", err instanceof Error ? err.message : String(err));
+    });
+  }
+
   return implReport;
+}
+
+async function notifyKingExternalAgentReport(input: {
+  job: Pick<AutomationJob, "id" | "workOrderId" | "projectId"> & {
+    externalAgentRuns: Array<{ id: string; externalAgentId: string }>;
+  };
+  reportId: string;
+  summary: string;
+  errors: string[];
+  testResult: SubmitReportInput["testResult"];
+}) {
+  const workOrder = await prisma.workOrder.findUnique({
+    where: { id: input.job.workOrderId },
+    select: { title: true }
+  });
+  const run = input.job.externalAgentRuns[0] ?? null;
+  const severity = input.errors.length > 0 ? "WARNING" : "INFO";
+  const statusLine = input.errors.length > 0
+    ? "External agent execution finished with errors and needs King review."
+    : "External agent execution finished and is ready for King review.";
+
+  const notice = await createNotice({
+    title: input.errors.length > 0
+      ? `External agent needs review: ${workOrder?.title ?? input.job.workOrderId}`
+      : `External agent completed: ${workOrder?.title ?? input.job.workOrderId}`,
+    content: [
+      statusLine,
+      "",
+      `Work Order: ${workOrder?.title ?? input.job.workOrderId}`,
+      `Automation Job ID: ${input.job.id}`,
+      run ? `External Agent Run ID: ${run.id}` : null,
+      `Implementation Report ID: ${input.reportId}`,
+      `Test Result: ${input.testResult}`,
+      "",
+      input.summary,
+      input.errors.length ? `Errors: ${input.errors.slice(0, 3).join(" | ")}` : null
+    ].filter(Boolean).join("\n"),
+    severity,
+    sourceType: "AutomationJob",
+    sourceId: input.job.id,
+    projectId: input.job.projectId ?? undefined,
+    traceId: run?.id
+  });
+
+  await auditLog({
+    action: "external_agent_completion_notice_created",
+    resourceType: "Notice",
+    resourceId: notice?.id ?? null,
+    metadata: {
+      automationJobId: input.job.id,
+      workOrderId: input.job.workOrderId,
+      externalAgentRunId: run?.id ?? null,
+      implementationReportId: input.reportId,
+      severity
+    }
+  }).catch(() => undefined);
 }
 
 export async function heartbeat(runnerId: string, meta?: { version?: string; hostname?: string }) {
@@ -426,12 +505,51 @@ export async function listRunners() {
 }
 
 const jobInclude = {
-  workOrder: { select: { id: true, title: true, status: true, projectId: true } },
+  workOrder: {
+    select: {
+      id: true,
+      title: true,
+      status: true,
+      projectId: true,
+      assignedExternalAgentId: true,
+      assignedExternalAgent: {
+        select: {
+          id: true,
+          name: true,
+          type: true,
+          command: true,
+          workingDirectory: true,
+          environmentProfile: true,
+          bridgeEnabled: true,
+          maxRuntimeSeconds: true,
+          requiresApproval: true,
+          capabilities: true,
+          safetyLevel: true
+        }
+      }
+    }
+  },
   project: { select: { id: true, name: true } },
   agent: { select: { id: true, slug: true, name: true, title: true } },
   runner: { select: { id: true, name: true, status: true } },
   createdByUser: { select: { id: true, displayName: true } },
-  approvedByUser: { select: { id: true, displayName: true } }
+  approvedByUser: { select: { id: true, displayName: true } },
+  externalAgentRuns: {
+    orderBy: { createdAt: "desc" },
+    take: 1,
+    select: {
+      id: true,
+      externalAgentId: true,
+      workOrderId: true,
+      automationJobId: true,
+      status: true,
+      inputPrompt: true,
+      attemptNumber: true,
+      metadata: true,
+      createdAt: true,
+      updatedAt: true
+    }
+  }
 } as const;
 
 // --- AI plan generation ---

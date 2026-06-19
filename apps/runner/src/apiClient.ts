@@ -4,6 +4,7 @@
  */
 
 import type { ImportedPatchStatus } from "./importedPatchStatus.js";
+import type { RunnerExternalAgent, RunnerExternalAgentRun } from "./externalAgents/types.js";
 export type { ImportedPatchStatus } from "./importedPatchStatus.js";
 
 export interface ApiClientConfig {
@@ -37,7 +38,10 @@ export interface AutomationJob {
     title: string;
     status: string;
     projectId: string | null;
+    assignedExternalAgentId?: string | null;
+    assignedExternalAgent?: RunnerExternalAgent | null;
   };
+  externalAgentRuns?: RunnerExternalAgentRun[];
   project: { id: string; name: string } | null;
   agent: { id: string; slug: string; name: string; title: string } | null;
 }
@@ -96,6 +100,22 @@ export class ApiClient {
     await this.request("POST", `/api/runner/jobs/${jobId}/step`, step);
   }
 
+  async markExternalAgentRunRunning(jobId: string, payload: { workspacePath: string; commandTemplate: string }): Promise<void> {
+    await this.request("POST", `/api/runner/jobs/${jobId}/external-agent-run/running`, payload);
+  }
+
+  async completeExternalAgentRun(jobId: string, payload: {
+    status: "SUCCEEDED" | "FAILED" | "TIMED_OUT" | "NEEDS_REVIEW";
+    outputText?: string | null;
+    artifactPaths?: string[];
+    logPath?: string | null;
+    exitCode?: number | null;
+    errorMessage?: string | null;
+    metadata?: Record<string, unknown> | null;
+  }): Promise<void> {
+    await this.request("POST", `/api/runner/jobs/${jobId}/external-agent-run/complete`, payload);
+  }
+
   async submitReport(jobId: string, report: {
     summary: string;
     filesChanged: string[];
@@ -135,7 +155,19 @@ export class ApiClient {
     return this.request("GET", `/api/runner/patch-artifacts/${artifactId}`);
   }
 
-  async getRunnerSettings(): Promise<{ allowBranchPush: boolean; allowPrCreate: boolean; requireFreshLocalContext: boolean }> {
+  async getRunnerSettings(): Promise<{
+    allowBranchPush: boolean;
+    allowPrCreate: boolean;
+    requireFreshLocalContext: boolean;
+    externalAgentBridgeEnabled: boolean;
+    allowExternalAgentWrite: boolean;
+    allowExternalAgentNetwork: boolean;
+    allowExternalAgentBranchPush: boolean;
+    allowExternalAgentPrCreate: boolean;
+    allowExternalAgentDeploy: boolean;
+    maxExternalAgentRuntimeSeconds: number;
+    maxExternalAgentAutoRetries: number;
+  }> {
     return this.request("GET", "/api/runner/settings");
   }
 }

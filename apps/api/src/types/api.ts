@@ -1,4 +1,4 @@
-import type { Agent, AgentResponse, KnowledgeCategory, KnowledgeCandidateStatus, Memory, ProviderBalanceSnapshot, Report, Task, TaskMode, TaskStatus } from "@prisma/client";
+import type { Agent, AgentResponse, AutomationJob, ExternalAgent, ExternalAgentRun, KingdomNextExecutableAction, KnowledgeCategory, KnowledgeCandidateStatus, Memory, ProviderBalanceSnapshot, Report, Task, TaskMode, TaskStatus, WorkOrder } from "@prisma/client";
 
 export type PublicUser = {
   id: string;
@@ -39,6 +39,28 @@ export type AgentDto = Pick<Agent, "id" | "slug" | "name" | "title" | "role" | "
 
 export type CouncilResponseDto = AgentResponse & {
   agent: AgentDto;
+};
+
+export type CouncilNextExecutableActionDto = KingdomNextExecutableAction;
+
+export type PlannerResultDto = {
+  drafted: number;
+  skipped: number;
+  sessionId: string;
+  draftedWorkOrderIds: string[];
+  createdWorkOrder?: WorkOrder | null;
+  skipReason?: string;
+  traceId?: string;
+};
+
+export type CouncilExternalAgentExecutionDto = {
+  workOrder: WorkOrder;
+  job: AutomationJob;
+  externalAgentRun: ExternalAgentRun | null;
+  externalAgent: ExternalAgent | null;
+  plannerResult: PlannerResultDto | null;
+  alreadyScheduled: boolean;
+  message: string;
 };
 
 export type TaskDto = Pick<Task, "id" | "title" | "command" | "mode" | "status" | "createdBy" | "createdAt" | "updatedAt"> & {

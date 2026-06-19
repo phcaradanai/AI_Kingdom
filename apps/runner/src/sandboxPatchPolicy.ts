@@ -100,14 +100,14 @@ export interface JobContextBindingResult {
 }
 
 /**
- * M17E-2: SANDBOX_PATCH must refuse STALE/MISSING context when fresh local
+ * M17E-2: SANDBOX_PATCH and EXTERNAL_AGENT must refuse STALE/MISSING context when fresh local
  * context is required; VALIDATION_ONLY proceeds but carries warnings when the
  * context is PARTIAL, STALE, or MISSING.
  */
 export function evaluateJobContextBinding(input: JobContextBindingInput): JobContextBindingResult {
   const status = input.contextValidationStatus ?? null;
 
-  if (input.mode === "SANDBOX_PATCH") {
+  if (input.mode === "SANDBOX_PATCH" || input.mode === "EXTERNAL_AGENT") {
     if (input.requireFreshLocalContext) {
       if (status === "STALE") {
         return { proceed: false, reason: "Job context binding is STALE; the project's local docs changed or aged out since binding.", warnings: [] };
@@ -116,7 +116,7 @@ export function evaluateJobContextBinding(input: JobContextBindingInput): JobCon
         return { proceed: false, reason: "Job context binding is MISSING; no project snapshot was bound to this job.", warnings: [] };
       }
       if (status === "PARTIAL") {
-        return { proceed: false, reason: "Job context binding is PARTIAL; SANDBOX_PATCH requires FRESH project context.", warnings: [] };
+        return { proceed: false, reason: `Job context binding is PARTIAL; ${input.mode} requires FRESH project context.`, warnings: [] };
       }
       if (!status || status === "NOT_REQUIRED") {
         // Legacy job payload — fall back to the M17E-1 provenance check.

@@ -268,7 +268,7 @@ export type ContextValidationOutcome = {
 /**
  * Validates project context before an automation job is created.
  *
- * - SANDBOX_PATCH requires a project linkage and FRESH local context; STALE,
+ * - SANDBOX_PATCH and EXTERNAL_AGENT require a project linkage and FRESH local context; STALE,
  *   MISSING, or PARTIAL context refuses the job.
  * - VALIDATION_ONLY (and OBSERVE/PLAN_ONLY) may proceed with PARTIAL/STALE/MISSING
  *   context, but the outcome carries warnings that must be surfaced.
@@ -281,7 +281,7 @@ export async function validateContextForAutomationJob(workOrderId: string, mode:
     throw err;
   }
 
-  const contextRequired = mode === "SANDBOX_PATCH";
+  const contextRequired = mode === "SANDBOX_PATCH" || mode === "EXTERNAL_AGENT";
 
   if (!workOrder.projectId) {
     if (contextRequired) {
@@ -289,7 +289,7 @@ export async function validateContextForAutomationJob(workOrderId: string, mode:
         ok: false,
         status: "MISSING",
         contextRequired,
-        reason: "SANDBOX_PATCH requires the work order to be linked to a project with fresh local document context.",
+        reason: `${mode} requires the work order to be linked to a project with fresh local document context.`,
         skipToken: "project_missing",
         warnings: [],
         binding: null,
@@ -322,7 +322,7 @@ export async function validateContextForAutomationJob(workOrderId: string, mode:
       ok: false,
       status: binding.status,
       contextRequired,
-      reason: `SANDBOX_PATCH refused: project context is ${binding.status}. ${binding.warnings.join(" ")}`.trim(),
+      reason: `${mode} refused: project context is ${binding.status}. ${binding.warnings.join(" ")}`.trim(),
       skipToken,
       warnings: binding.warnings,
       binding,

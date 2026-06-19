@@ -4,17 +4,24 @@ import { prisma } from "../db/prisma.js";
 import { requireRole } from "../middleware/rbac.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultExternalAgents } from "../services/externalAgentWorkOrderService.js";
+import { getBooleanSetting } from "../services/settingsService.js";
 
 const router = Router();
 
 const externalAgentSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  type: z.enum(["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "CUSTOM"]),
+  type: z.enum(["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "GENERIC_CLI", "MANUAL_ONLY", "CUSTOM"]),
   roleTitle: z.string().trim().min(1).max(160),
   description: z.string().trim().max(1200).default(""),
   capabilities: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
   executionMode: z.enum(["MANUAL_COPY_PASTE", "CLI_MANUAL", "API", "FUTURE_AUTOMATED"]).default("MANUAL_COPY_PASTE"),
+  command: z.string().trim().max(2000).optional().nullable(),
+  workingDirectory: z.string().trim().max(1000).optional().nullable(),
+  environmentProfile: z.string().trim().max(120).optional().nullable(),
   isActive: z.boolean().default(true),
+  bridgeEnabled: z.boolean().default(false),
+  maxRuntimeSeconds: z.number().int().min(30).max(7200).default(900),
+  requiresApproval: z.boolean().default(true),
   safetyLevel: z.enum(["LOW_RISK", "MEDIUM_RISK", "HIGH_RISK"]).default("MEDIUM_RISK")
 });
 
@@ -101,6 +108,52 @@ router.delete("/:id", requireRole("KING"), async (req, res, next) => {
       metadata: { softDelete: true, type: externalAgent.type }
     });
     res.json({ externalAgent });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/:id/test", requireRole("KING"), async (req, res, next) => {
+  try {
+    const externalAgent = await prisma.externalAgent.findUnique({ where: { id: req.params.id } });
+    if (!externalAgent) {
+      res.status(404).json({ error: "External agent not found" });
+      return;
+    }
+    const bridgeEnabled = await getBooleanSetting("EXTERNAL_AGENT_BRIDGE_ENABLED", false);
+    const issues = [
+      bridgeEnabled ? null : "EXTERNAL_AGENT_BRIDGE_ENABLED is false",
+      externalAgent.isActive ? null : "External agent is inactive",
+      externalAgent.bridgeEnabled ? null : "Agent bridgeEnabled is false",
+      externalAgent.type === "MANUAL_ONLY" ? "Manual-only agents cannot be run by the bridge" : null,
+      externalAgent.command?.trim() ? null : "Agent command template is empty"
+    ].filter((item): item is string => Boolean(item));
+    const prompt = [
+      "# AI Kingdom External Agent Bridge Test",
+      "",
+      "Reply with one short line that includes the tool name and version if available.",
+      "Do not edit files.",
+      "Do not run network, push, create PRs, deploy, or print environment variables."
+    ].join("\n");
+
+    await auditLog({
+      userId: req.user?.id,
+      action: "test_external_agent_bridge_config",
+      resourceType: "external_agent",
+      resourceId: externalAgent.id,
+      metadata: { bridgeEnabled, issues, type: externalAgent.type }
+    }).catch(() => undefined);
+
+    res.json({
+      test: {
+        status: issues.length === 0 ? "READY" : "BLOCKED",
+        issues,
+        prompt,
+        commandTemplate: externalAgent.command,
+        maxRuntimeSeconds: externalAgent.maxRuntimeSeconds,
+        captures: ["stdout", "stderr", "exitCode", "durationMs", "version/output preview"]
+      }
+    });
   } catch (error) {
     next(error);
   }

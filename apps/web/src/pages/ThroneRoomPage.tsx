@@ -1,7 +1,7 @@
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, ChevronDown, ClipboardCheck, Cpu, ExternalLink, FileText, Handshake, Hammer, Layers, ScrollText, Search, Send, Server, ShieldCheck, Sparkles, Clock3, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { FormEvent, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { LivingKingdomView } from "@/components/kingdom/LivingKingdomView";
 import { PageHeader } from "@/components/PageHeader";
 import { StatusBadge } from "@/components/ui/StatusBadge";
@@ -78,6 +78,7 @@ export function ThroneRoomPage() {
 // The decree/council terminal — preserved verbatim as the "Command" view of the
 // Throne Room. The page below makes the Living Kingdom the default visual view.
 function ThroneRoomCommand() {
+  const navigate = useNavigate();
   const [command, setCommand] = useState("");
   const [mode, setMode] = useState<TaskMode>("ASK");
   const [error, setError] = useState<string | null>(null);
@@ -89,10 +90,12 @@ function ThroneRoomCommand() {
   const [workOrderMessage, setWorkOrderMessage] = useState<string | null>(null);
   const [workOrderError, setWorkOrderError] = useState<string | null>(null);
   const [isCreatingWorkOrder, setIsCreatingWorkOrder] = useState(false);
+  const [isExecutingExternalAgent, setIsExecutingExternalAgent] = useState(false);
   const submitCommand = useKingdomStore((state) => state.submitCommand);
   const isLoading = useKingdomStore((state) => state.isLoading);
   const isProcessing = useKingdomStore((state) => state.isProcessing);
   const tasks = useKingdomStore((state) => state.tasks);
+  const settings = useKingdomStore((state) => state.settings);
 
   const latestTask = tasks[0];
   const latestSession = latestTask?.sessions[0];
@@ -114,15 +117,21 @@ function ThroneRoomCommand() {
 
   async function createHandoff() {
     if (!latestTask || !latestSession) return;
+    console.info("[CouncilWorkOrderTrace] Button Click", { action: "CREATE_EXTERNAL_HANDOFF", taskId: latestTask.id, sessionId: latestSession.id });
     setHandoffMessage(null);
     setHandoffError(null);
     setHandoffWorkOrder(null);
     setIsCreatingHandoff(true);
     try {
+      console.info("[CouncilWorkOrderTrace] API Request", { route: `/api/tasks/${latestTask.id}/council/${latestSession.id}/handoff` });
       const response = await api.createCouncilHandoff(latestTask.id, latestSession.id);
+      console.info("[CouncilWorkOrderTrace] API Response", { workOrderId: response.workOrder.id, handoffBriefId: response.handoffBrief?.id ?? null });
       setHandoffWorkOrder(response.workOrder);
       const briefTitle = response.handoffBrief?.title ?? "Existing handoff";
       setHandoffMessage(`External handoff ready: ${briefTitle}`);
+      if (response.workOrder?.id) {
+        navigate(`/work-orders?focus=${encodeURIComponent(response.workOrder.id)}`);
+      }
     } catch (handoffError) {
       setHandoffError(handoffError instanceof Error ? handoffError.message : "Unable to create external-agent handoff");
     } finally {
@@ -132,21 +141,66 @@ function ThroneRoomCommand() {
 
   async function createWorkOrder() {
     if (!latestSession) return;
+    console.info("[CouncilWorkOrderTrace] Button Click", { action: "CREATE_WORK_ORDER", sessionId: latestSession.id });
     setWorkOrderMessage(null);
     setWorkOrderError(null);
     setIsCreatingWorkOrder(true);
     try {
+      console.info("[CouncilWorkOrderTrace] API Request", { route: `/api/council/${latestSession.id}/work-order` });
       const result = await api.planCouncilWorkOrder(latestSession.id);
+      console.info("[CouncilWorkOrderTrace] API Response", {
+        traceId: result.traceId ?? null,
+        drafted: result.drafted,
+        skipped: result.skipped,
+        createdWorkOrderId: result.createdWorkOrder?.id ?? result.draftedWorkOrderIds[0] ?? null
+      });
       setCreatedWorkOrderIds(result.draftedWorkOrderIds);
+      const createdId = result.createdWorkOrder?.id ?? result.draftedWorkOrderIds[0];
+      if (!createdId) {
+        throw new Error(result.skipReason ?? "no Work Order was created");
+      }
       setWorkOrderMessage(
         result.drafted > 0
-          ? `${result.drafted} work order${result.drafted === 1 ? "" : "s"} drafted from the council recommendation.`
+          ? `${result.drafted} work order${result.drafted === 1 ? "" : "s"} created from the council recommendation.`
           : "No new work orders were drafted; existing items may already cover this recommendation."
       );
+      navigate(`/work-orders?focus=${encodeURIComponent(createdId)}`);
     } catch (workOrderError) {
-      setWorkOrderError(workOrderError instanceof Error ? workOrderError.message : "Unable to create work order from council recommendation");
+      const reason = workOrderError instanceof Error ? workOrderError.message : "Unable to create work order from council recommendation";
+      setWorkOrderError(reason.startsWith("Work Order creation failed:") ? reason : `Work Order creation failed: ${reason}`);
     } finally {
       setIsCreatingWorkOrder(false);
+    }
+  }
+
+  async function executeWithExternalAgent() {
+    if (!latestSession) return;
+    console.info("[CouncilExternalAgentTrace] Button Click", { action: "CREATE_WORK_ORDER_AND_RUN_EXTERNAL_AGENT", sessionId: latestSession.id });
+    setWorkOrderMessage(null);
+    setWorkOrderError(null);
+    setIsExecutingExternalAgent(true);
+    try {
+      console.info("[CouncilExternalAgentTrace] API Request", { route: `/api/council/${latestSession.id}/execute-external-agent` });
+      const result = await api.executeCouncilWithExternalAgent(latestSession.id);
+      console.info("[CouncilExternalAgentTrace] API Response", {
+        workOrderId: result.workOrder.id,
+        automationJobId: result.job.id,
+        automationJobStatus: result.job.status,
+        externalAgentRunId: result.externalAgentRun?.id ?? null,
+        externalAgentId: result.externalAgent?.id ?? null,
+        alreadyScheduled: result.alreadyScheduled
+      });
+      const ids = result.plannerResult?.draftedWorkOrderIds?.length
+        ? result.plannerResult.draftedWorkOrderIds
+        : [result.workOrder.id];
+      setCreatedWorkOrderIds(ids);
+      setWorkOrderMessage(result.message || "External agent execution approved. The Kingdom runner will report back for King review.");
+      navigate(`/work-orders?focus=${encodeURIComponent(result.workOrder.id)}`);
+    } catch (executionError) {
+      const reason = executionError instanceof Error ? executionError.message : "Unable to execute council work with an external agent";
+      setWorkOrderError(reason.startsWith("External Agent execution failed:") ? reason : `External Agent execution failed: ${reason}`);
+    } finally {
+      setIsExecutingExternalAgent(false);
     }
   }
 
@@ -269,10 +323,13 @@ function ThroneRoomCommand() {
                 session={latestSession}
                 createdWorkOrderIds={createdWorkOrderIds}
                 handoffWorkOrderId={handoffWorkOrder?.id}
+                plannerMode={settings.find((setting) => setting.key === "COUNCIL_AUTO_WORK_ORDER_MODE")?.value ?? null}
                 isCreatingWorkOrder={isCreatingWorkOrder}
                 isCreatingHandoff={isCreatingHandoff}
+                isExecutingExternalAgent={isExecutingExternalAgent}
                 onCreateWorkOrder={createWorkOrder}
                 onCreateHandoff={createHandoff}
+                onExecuteExternalAgent={executeWithExternalAgent}
               />
 
               <CouncilSourceLinks
@@ -485,49 +542,70 @@ function RecommendedNextStepCard({
   session,
   createdWorkOrderIds,
   handoffWorkOrderId,
+  plannerMode,
   isCreatingWorkOrder,
   isCreatingHandoff,
+  isExecutingExternalAgent,
   onCreateWorkOrder,
-  onCreateHandoff
+  onCreateHandoff,
+  onExecuteExternalAgent
 }: {
   task: TaskDto;
   session: CouncilSessionDto;
   createdWorkOrderIds: string[];
   handoffWorkOrderId?: string;
+  plannerMode: string | null;
   isCreatingWorkOrder: boolean;
   isCreatingHandoff: boolean;
+  isExecutingExternalAgent: boolean;
   onCreateWorkOrder: () => void;
   onCreateHandoff: () => void;
+  onExecuteExternalAgent: () => void;
 }) {
-  const nextStep = getRecommendedNextStep(task, session, createdWorkOrderIds.length > 0 || Boolean(handoffWorkOrderId));
+  const createdWorkOrderId = session.createdWorkOrderId ?? createdWorkOrderIds[0] ?? handoffWorkOrderId;
+  const nextStep = getPrimaryNextAction(task, session, {
+    plannerMode,
+    createdWorkOrderId,
+    isCreatingWorkOrder,
+    isCreatingHandoff,
+    isExecutingExternalAgent
+  });
+  const PrimaryIcon = nextStep.icon;
   const hasReport = (session.reports?.length ?? 0) > 0 || task.reports.length > 0;
-  const canAct = session.status === "COMPLETED";
 
   return (
     <div className="rounded-xl border border-primary/30 bg-primary/10 p-5 sm:p-6">
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(380px,440px)] xl:items-start">
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(260px,340px)] xl:items-start">
         <div className="min-w-0">
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-primary/25 bg-background/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-primary">
             <ArrowRight className="h-3 w-3" />
-            Recommended Next Step
+            Next Action
           </div>
           <h3 className="break-words font-display text-xl leading-snug">{nextStep.title}</h3>
           <p className="mt-2 text-sm leading-relaxed text-foreground/75">{nextStep.description}</p>
+          {nextStep.disabledReason && (
+            <p className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm font-semibold text-amber-300">
+              {nextStep.disabledReason}
+            </p>
+          )}
         </div>
-        <div className="grid w-full grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-2">
-          <Button type="button" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingWorkOrder} onClick={onCreateWorkOrder}>
-            <Hammer className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">{isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order"}</span>
-          </Button>
-          <Button type="button" variant="secondary" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={!canAct || isCreatingHandoff} onClick={onCreateHandoff}>
-            <Handshake className="h-4 w-4 shrink-0" />
-            <span className="min-w-0 break-words">{isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff"}</span>
-          </Button>
+        <div className="w-full">
+          {nextStep.to ? (
+            <Link to={nextStep.to} className="inline-flex min-h-14 w-full items-center justify-center gap-2 rounded-md border border-primary/40 bg-primary px-4 py-3 text-center text-sm font-semibold leading-snug text-primary-foreground hover:bg-primary/90">
+              <PrimaryIcon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words">{nextStep.buttonLabel}</span>
+            </Link>
+          ) : (
+            <Button type="button" className="h-auto min-h-14 w-full px-4 py-3 text-center leading-snug" disabled={nextStep.disabled} onClick={nextStep.onClick === "handoff" ? onCreateHandoff : nextStep.onClick === "externalExecution" ? onExecuteExternalAgent : onCreateWorkOrder}>
+              <PrimaryIcon className="h-4 w-4 shrink-0" />
+              <span className="min-w-0 break-words">{nextStep.buttonLabel}</span>
+            </Button>
+          )}
         </div>
       </div>
       <div className="mt-5 grid gap-3 border-t border-primary/20 pt-4 sm:grid-cols-2 xl:grid-cols-3">
         {(createdWorkOrderIds.length > 0 || handoffWorkOrderId) && (
-          <Link to="/work-orders" className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
+          <Link to={createdWorkOrderId ? `/work-orders?focus=${encodeURIComponent(createdWorkOrderId)}` : "/work-orders"} className="inline-flex min-h-12 items-center justify-center gap-1.5 rounded-md border border-border bg-background/50 px-3 py-2 text-center text-sm font-semibold leading-snug text-primary hover:border-primary/50">
             <ExternalLink className="h-3.5 w-3.5 shrink-0" />
             <span className="min-w-0 break-words">Open Created Work Order</span>
           </Link>
@@ -559,11 +637,12 @@ function CouncilSourceLinks({
   handoffWorkOrderId?: string;
 }) {
   const reportCount = new Set([...(session.reports ?? []), ...task.reports].map((report) => report.id)).size;
+  const workOrderId = session.createdWorkOrderId ?? createdWorkOrderIds[0] ?? handoffWorkOrderId;
   const links = [
     { label: "Council Record", description: "Full council archive and source session.", to: "/council", show: true },
     { label: "Royal Brief", description: "Daily summary remains the generated brief source.", to: "/royal-brief", show: true },
     { label: "Project Context", description: task.projectId ? "Project docs, artifacts, and context binding." : "No project is linked to this decree yet.", to: task.projectId ? `/projects/${task.projectId}` : "/projects", show: true },
-    { label: "Work Order", description: createdWorkOrderIds.length > 0 || handoffWorkOrderId ? "Open the implementation queue for the created item." : "Implementation queue for council follow-up.", to: "/work-orders", show: true },
+    { label: "Work Order", description: workOrderId ? "Open the implementation queue for the created item." : "Implementation queue for council follow-up.", to: workOrderId ? `/work-orders?focus=${encodeURIComponent(workOrderId)}` : "/work-orders", show: true },
     { label: "Generated Report", description: `${reportCount} report${reportCount === 1 ? "" : "s"} linked to this council.`, to: "/reports", show: reportCount > 0 },
     { label: "Usage Trace", description: "Provider trace for final synthesis.", to: session.finalTraceId ? `/usage-traces/${session.finalTraceId}` : "", show: Boolean(session.finalTraceId) }
   ];
@@ -710,41 +789,115 @@ function getCouncilProgressMessage(session: CouncilSessionDto): string {
   return "Council is queued. The final synthesis will appear here when ready.";
 }
 
-function getRecommendedNextStep(task: TaskDto, session: CouncilSessionDto, hasCreatedWorkOrder: boolean) {
+function getPrimaryNextAction(
+  task: TaskDto,
+  session: CouncilSessionDto,
+  opts: {
+    plannerMode: string | null;
+    createdWorkOrderId?: string;
+    isCreatingWorkOrder: boolean;
+    isCreatingHandoff: boolean;
+    isExecutingExternalAgent: boolean;
+  }
+): {
+  title: string;
+  description: string;
+  buttonLabel: string;
+  icon: LucideIcon;
+  disabled: boolean;
+  disabledReason?: string;
+  onClick: "workOrder" | "handoff" | "externalExecution";
+  to?: string;
+} {
   const warning = extractContextWarning(session.finalSummary);
   if (session.status === "FAILED") {
     return {
       title: "Review failed role output",
-      description: "Council did not complete cleanly. Use the role reports and council record as the source before creating follow-up work."
+      description: "Council did not complete cleanly. Use the role reports and council record as the source before creating follow-up work.",
+      buttonLabel: "Open Council Record",
+      icon: FileText,
+      disabled: false,
+      onClick: "workOrder",
+      to: "/council"
     };
   }
   if (session.status !== "COMPLETED") {
     return {
       title: "Wait for final synthesis",
-      description: "The council is still convening. Create work orders or handoffs only after the Grand Vizier produces a final recommendation."
+      description: "The council is still convening. Create work orders or handoffs only after the Grand Vizier produces a final recommendation.",
+      buttonLabel: "Council Convening",
+      icon: Clock3,
+      disabled: true,
+      onClick: "workOrder"
     };
   }
-  if (warning) {
+  const action = session.nextExecutableAction ?? (warning ? "SCAN_LOCAL_DOCS" : "CREATE_WORK_ORDER");
+  const reason = session.nextExecutableActionReason ?? "";
+  const workOrderTo = opts.createdWorkOrderId ? `/work-orders?focus=${encodeURIComponent(opts.createdWorkOrderId)}` : "/work-orders";
+
+  if (action === "RUN_VALIDATION" || opts.createdWorkOrderId) {
+    return {
+      title: "Run Validation",
+      description: "A Work Order exists. Open it to run the validation gate or continue the implementation route.",
+      buttonLabel: "Open Created Work Order",
+      icon: ClipboardCheck,
+      disabled: false,
+      onClick: "workOrder",
+      to: workOrderTo
+    };
+  }
+  if (action === "SCAN_LOCAL_DOCS") {
     return {
       title: "Run local docs scan before SANDBOX_PATCH",
-      description: "The council completed, but automation needs fresh project context. Manual review and handoff remain available; patch execution should wait for fresh local docs."
+      description: reason || "The council completed, but automation needs fresh project context before executable work is created.",
+      buttonLabel: "Open Project Local Docs",
+      icon: Search,
+      disabled: false,
+      onClick: "workOrder",
+      to: task.projectId ? `/projects/${task.projectId}` : "/projects"
     };
   }
-  if (hasCreatedWorkOrder) {
+  if (action === "BIND_CONTEXT") {
     return {
-      title: "Open the created work order",
-      description: "A follow-up item now exists in the implementation queue. Use Work Orders as the source of truth for assignment, context, automation, and reports."
+      title: "Bind Project Context",
+      description: reason || "Project context must be linked before executable work is created.",
+      buttonLabel: "Open Project Context",
+      icon: Layers,
+      disabled: false,
+      onClick: "workOrder",
+      to: task.projectId ? `/projects/${task.projectId}` : "/projects"
     };
   }
-  if (task.mode === "BUILD") {
+  if (action === "CREATE_EXTERNAL_HANDOFF") {
     return {
-      title: "Create an implementation handoff",
-      description: "This decree was issued in BUILD mode. Create a Work Order or External Agent Handoff so execution stays in the implementation queue."
+      title: "Create External Agent Handoff",
+      description: reason || "Package the council recommendation as a manual external-agent handoff.",
+      buttonLabel: opts.isCreatingHandoff ? "Creating Handoff..." : "Create External Agent Handoff",
+      icon: Handshake,
+      disabled: opts.isCreatingHandoff,
+      onClick: "handoff"
+    };
+  }
+
+  const disabledByPlanner = action === "CREATE_WORK_ORDER" && (opts.plannerMode === "OFF" || opts.plannerMode === "DRAFT" || reason === "This council recommendation does not generate executable work orders.");
+  if (!disabledByPlanner && opts.plannerMode === "READY") {
+    return {
+      title: "Create Work Order and Run External Agent",
+      description: reason || "Create one executable Work Order, approve the External Agent Bridge job, and wait for the runner report.",
+      buttonLabel: opts.isExecutingExternalAgent ? "Starting External Agent..." : "Create Work Order and Run External Agent",
+      icon: Cpu,
+      disabled: opts.isExecutingExternalAgent,
+      onClick: "externalExecution"
     };
   }
   return {
-    title: "Choose the follow-up path",
-    description: "Use Create Work Order for implementation tracking, or create an External Agent Handoff when another coding agent should receive the council brief."
+    title: "Create Work Order",
+    description: reason || "Create one executable Work Order from the council recommendation.",
+    buttonLabel: opts.isCreatingWorkOrder ? "Creating Work Order..." : "Create Work Order",
+    icon: Hammer,
+    disabled: opts.isCreatingWorkOrder || disabledByPlanner,
+    disabledReason: disabledByPlanner ? "This council recommendation does not generate executable work orders." : undefined,
+    onClick: "workOrder"
   };
 }
 

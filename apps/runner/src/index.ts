@@ -28,6 +28,7 @@ import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationC
 import { buildValidationChildEnv, formatForwardedValidationEnvNames, validateValidationDatabaseEnv } from "./validationEnv.js";
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 import { resolveAgentCliConfig, runAgentCli } from "./agentCliRunner.js";
+import { getExternalAgentAdapter } from "./externalAgents/index.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -44,6 +45,11 @@ const APPROVAL_WAIT_MS = parseInt(process.env.APPROVAL_WAIT_MS ?? "300000", 10);
 // Server-side settings (fetched at startup)
 let ALLOW_BRANCH_PUSH = false;
 let REQUIRE_FRESH_LOCAL_CONTEXT = false;
+let SERVER_EXTERNAL_AGENT_BRIDGE_ENABLED = false;
+let ALLOW_EXTERNAL_AGENT_WRITE = false;
+let ALLOW_EXTERNAL_AGENT_NETWORK = false;
+let MAX_EXTERNAL_AGENT_RUNTIME_SECONDS = 900;
+const RUNNER_EXTERNAL_AGENT_BRIDGE_ENABLED = ["true", "1", "yes", "on"].includes((process.env.EXTERNAL_AGENT_BRIDGE_ENABLED ?? "false").toLowerCase());
 
 if (!RUNNER_TOKEN) {
   console.error("[Runner] RUNNER_TOKEN is required. Set it in .env or environment.");
@@ -68,7 +74,11 @@ async function main() {
     const settings = await api.getRunnerSettings();
     ALLOW_BRANCH_PUSH = settings.allowBranchPush;
     REQUIRE_FRESH_LOCAL_CONTEXT = settings.requireFreshLocalContext;
-    console.log(`[Runner] Settings: branch push=${ALLOW_BRANCH_PUSH}, pr create=${settings.allowPrCreate}, require fresh local context=${REQUIRE_FRESH_LOCAL_CONTEXT}`);
+    SERVER_EXTERNAL_AGENT_BRIDGE_ENABLED = settings.externalAgentBridgeEnabled;
+    ALLOW_EXTERNAL_AGENT_WRITE = settings.allowExternalAgentWrite;
+    ALLOW_EXTERNAL_AGENT_NETWORK = settings.allowExternalAgentNetwork;
+    MAX_EXTERNAL_AGENT_RUNTIME_SECONDS = settings.maxExternalAgentRuntimeSeconds;
+    console.log(`[Runner] Settings: branch push=${ALLOW_BRANCH_PUSH}, pr create=${settings.allowPrCreate}, require fresh local context=${REQUIRE_FRESH_LOCAL_CONTEXT}, external bridge=${SERVER_EXTERNAL_AGENT_BRIDGE_ENABLED && RUNNER_EXTERNAL_AGENT_BRIDGE_ENABLED}`);
   } catch (err) {
     console.warn("[Runner] Could not fetch server settings, using defaults:", err instanceof Error ? err.message : String(err));
   }
@@ -105,6 +115,11 @@ async function sendHeartbeat() {
 async function executeJob(job: AutomationJob) {
   if (job.mode === "VALIDATION_ONLY") {
     await executeValidationJob(job);
+    return;
+  }
+
+  if (job.mode === "EXTERNAL_AGENT") {
+    await executeExternalAgentJob(job);
     return;
   }
 
@@ -552,6 +567,281 @@ async function executeJob(job: AutomationJob) {
       console.log(`[Job ${job.id}] Workspace retained: ${workspaceDir}`);
     }
   }
+}
+
+async function executeExternalAgentJob(job: AutomationJob) {
+  const workspaceDir = getRunnerJobWorkspaceDir(job.id, WORKSPACE_BASE);
+  const commandsRun: string[] = [];
+  const testsRun: string[] = [];
+  const errors: string[] = [];
+  const logLines: string[] = [];
+  const log = (msg: string) => {
+    console.log(msg);
+    logLines.push(msg);
+  };
+
+  try {
+    await api.updateStatus(job.id, "RUNNING");
+
+    const agent = job.workOrder.assignedExternalAgent ?? null;
+    const run = job.externalAgentRuns?.[0] ?? null;
+    if (!SERVER_EXTERNAL_AGENT_BRIDGE_ENABLED || !RUNNER_EXTERNAL_AGENT_BRIDGE_ENABLED) {
+      const reason = "External Agent Bridge is disabled on the server or runner. Set EXTERNAL_AGENT_BRIDGE_ENABLED=true in both places before execution.";
+      await submitBlockedExternalAgentReport(job, reason, workspaceDir, logLines);
+      return;
+    }
+    if (!ALLOW_EXTERNAL_AGENT_WRITE) {
+      const reason = "ALLOW_EXTERNAL_AGENT_WRITE=false. External agent bridge execution is blocked until write access is explicitly enabled.";
+      await submitBlockedExternalAgentReport(job, reason, workspaceDir, logLines);
+      return;
+    }
+    if (!agent) {
+      await submitBlockedExternalAgentReport(job, "No assigned external agent was included in the job payload.", workspaceDir, logLines);
+      return;
+    }
+    if (!agent.bridgeEnabled || !agent.command?.trim() || agent.type === "MANUAL_ONLY") {
+      await submitBlockedExternalAgentReport(job, "Assigned external agent is not bridge-enabled or has no runnable command template.", workspaceDir, logLines);
+      return;
+    }
+    if (!run?.inputPrompt) {
+      await submitBlockedExternalAgentReport(job, "No queued ExternalAgentRun prompt was included in the job payload.", workspaceDir, logLines);
+      return;
+    }
+
+    const provenance = job.provenance ?? {};
+    const contextCheck = evaluateJobContextBinding({
+      mode: job.mode,
+      requireFreshLocalContext: true,
+      contextValidationStatus: job.contextValidationStatus,
+      localDocumentSnapshotId: (job.localDocumentSnapshotId ?? provenance.localDocumentSnapshotId) as string | null | undefined,
+      localDocumentSnapshotStale: provenance.localDocumentSnapshotStale as boolean | undefined
+    });
+    if (!contextCheck.proceed) {
+      await submitBlockedExternalAgentReport(job, `Refused EXTERNAL_AGENT job: ${contextCheck.reason}`, workspaceDir, logLines);
+      return;
+    }
+
+    log(`[Job ${job.id}] Starting external agent bridge in ${workspaceDir}`);
+    log(`[Job ${job.id}] External agent: ${agent.name} (${agent.type})`);
+
+    try {
+      const prepared = prepareRunnerWorkspace({ jobId: job.id, workspaceBase: WORKSPACE_BASE });
+      log(`[Job ${job.id}] Workspace prepared: ${prepared.workspaceDir}`);
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await submitBlockedExternalAgentReport(job, `Workspace preparation failed: ${errMsg}`, workspaceDir, logLines);
+      return;
+    }
+
+    const envCheck = validateValidationDatabaseEnv();
+    if (!envCheck.ok) {
+      await submitBlockedExternalAgentReport(job, envCheck.message, workspaceDir, logLines);
+      return;
+    }
+    log(`[Job ${job.id}] ${formatForwardedValidationEnvNames()}`);
+
+    const installResult = await installDependenciesForJob(job, workspaceDir, log);
+    if (!installResult.skipped) {
+      commandsRun.push(installResult.displayCommand);
+      if (!installResult.success) {
+        errors.push(DEPENDENCY_INSTALL_FAILURE);
+        await submitBlockedExternalAgentReport(job, `${DEPENDENCY_INSTALL_FAILURE}: ${installResult.output}`, workspaceDir, logLines);
+        return;
+      }
+    }
+
+    const preValidationResult = await runPreValidationForJob(job.id, workspaceDir, log);
+    for (const step of preValidationResult.steps) {
+      commandsRun.push(step.displayCommand);
+      logLines.push(`$ ${step.displayCommand}\nCWD: ${step.cwd}\nSTDOUT:\n${step.stdout}\nSTDERR:\n${step.stderr}`);
+    }
+    if (!preValidationResult.success) {
+      const failureMessage = preValidationResult.failureMessage ?? PREVALIDATION_FAILURE_PREFIX;
+      errors.push(failureMessage);
+      await submitBlockedExternalAgentReport(job, failureMessage, workspaceDir, logLines);
+      return;
+    }
+
+    const promptFile = path.join(workspaceDir, ".kingdom", "external-agent-prompt.md");
+    const agentCwd = resolveExternalAgentCwd(workspaceDir, agent.workingDirectory);
+    const timeoutMs = Math.min(agent.maxRuntimeSeconds || MAX_EXTERNAL_AGENT_RUNTIME_SECONDS, MAX_EXTERNAL_AGENT_RUNTIME_SECONDS) * 1000;
+    await api.markExternalAgentRunRunning(job.id, {
+      workspacePath: agentCwd,
+      commandTemplate: agent.command
+    });
+
+    const adapter = getExternalAgentAdapter(agent);
+    log(`[Job ${job.id}] Sending prompt to ${agent.name}.`);
+    const result = await adapter.execute(agent, {
+      jobId: job.id,
+      workspaceRoot: workspaceDir,
+      cwd: agentCwd,
+      promptFile,
+      promptText: run.inputPrompt,
+      timeoutMs,
+      allowNetwork: ALLOW_EXTERNAL_AGENT_NETWORK,
+      allowWrite: ALLOW_EXTERNAL_AGENT_WRITE
+    });
+
+    commandsRun.push(result.displayCommand);
+    logLines.push(`$ ${result.displayCommand}\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
+    await api.recordStep(job.id, {
+      sequence: 1,
+      stepType: "EXTERNAL_AGENT",
+      title: `External agent: ${agent.name}`,
+      status: result.exitCode === 0 ? "COMPLETED" : "FAILED",
+      command: result.command,
+      args: result.args,
+      output: sanitizeLogOutput(result.output, 30000),
+      exitCode: result.exitCode,
+      durationMs: result.durationMs,
+      metadata: {
+        externalAgentId: agent.id,
+        externalAgentRunId: run.id,
+        timedOut: result.timedOut,
+        outputTruncated: result.outputTruncated,
+        allowNetwork: ALLOW_EXTERNAL_AGENT_NETWORK,
+        allowWrite: ALLOW_EXTERNAL_AGENT_WRITE,
+        commandTemplate: agent.command
+      }
+    });
+
+    if (result.exitCode !== 0) {
+      errors.push(result.errorMessage ?? `External agent exited with ${result.exitCode ?? "unknown"}`);
+    }
+
+    const patchPayload = await generatePatch({
+      workspaceRoot: workspaceDir,
+      jobId: job.id,
+      workOrderTitle: job.workOrder.title,
+      allowBranchPush: false
+    });
+
+    log(`[Job ${job.id}] Running validation after external agent output...`);
+    const validationResults = await runValidation(workspaceDir);
+    patchPayload.validationResults = validationResults;
+    let testResult: "NOT_RUN" | "PASSED" | "FAILED" | "PARTIAL" = "NOT_RUN";
+    for (const vr of validationResults) {
+      commandsRun.push(vr.command);
+      testsRun.push(vr.command);
+      if (testResult === "NOT_RUN") testResult = vr.success ? "PASSED" : "FAILED";
+      else if (!vr.success) testResult = testResult === "PASSED" ? "PARTIAL" : "FAILED";
+      if (!vr.success) errors.push(vr.failureSummary ?? (vr.stderr.trim() ? `Exit ${vr.exitCode}: ${vr.command}\n${vr.stderr.trim()}` : `Exit ${vr.exitCode}: ${vr.command}`));
+      logLines.push(`$ ${vr.command}\nCWD: ${vr.cwd}\nTIMED_OUT: ${vr.timedOut}\nSTDOUT:\n${vr.stdout}\nSTDERR:\n${vr.stderr}`);
+    }
+
+    const emptyPatch = isEmptyPatch(patchPayload);
+    let artifact: { id: string } | null = null;
+    if (!emptyPatch) {
+      artifact = await submitPatchArtifact(api, job.id, patchPayload);
+      if (artifact) log(`[Job ${job.id}] Patch artifact submitted: ${artifact.id}`);
+    }
+
+    const externalRunStatus = result.timedOut
+      ? "TIMED_OUT"
+      : errors.length > 0
+        ? "FAILED"
+        : "SUCCEEDED";
+    await api.completeExternalAgentRun(job.id, {
+      status: externalRunStatus,
+      outputText: result.output,
+      artifactPaths: [...result.artifactPaths, ...(artifact ? [`patchArtifact:${artifact.id}`] : [])],
+      logPath: result.logPath,
+      exitCode: result.exitCode,
+      errorMessage: errors[0] ?? null,
+      metadata: {
+        filesChanged: patchPayload.filesChanged,
+        validationPassed: validationResults.every((vr) => vr.success),
+        retryCount: run.attemptNumber - 1,
+        commandTemplate: agent.command,
+        workspacePath: workspaceDir
+      }
+    });
+
+    const logsPreview = sanitizeLogOutput(logLines.slice(-100).join("\n"));
+    await api.submitReport(job.id, {
+      summary: emptyPatch
+        ? `External agent "${agent.name}" completed but produced no file modifications for "${job.workOrder.title}".`
+        : `External agent "${agent.name}" completed bridge execution for "${job.workOrder.title}".`,
+      filesChanged: patchPayload.filesChanged,
+      commandsRun,
+      testsRun,
+      testResult,
+      errors,
+      decisionsMade: [`External agent selected: ${agent.name}`, "Branch push, PR creation, and deploy were not attempted."],
+      remainingWork: errors.length ? ["Review failed external agent output and validation results."] : [],
+      nextRecommendedAction: errors.length ? "Review bridge run and retry with a revision prompt if safe." : "Review patch artifact and agent review summary.",
+      logsPreview,
+      rawOutput: logsPreview,
+      patchSummary: emptyPatch ? "No files changed." : patchPayload.summary,
+      contextUsed: buildContextUsed(job)
+    });
+
+    log(`[Job ${job.id}] External agent report submitted. Job is NEEDS_REVIEW.`);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    console.error(`[Job ${job.id}] External agent fatal error:`, errMsg);
+    try {
+      await api.completeExternalAgentRun(job.id, {
+        status: "FAILED",
+        errorMessage: errMsg,
+        metadata: { workspacePath: workspaceDir }
+      }).catch(() => undefined);
+      await api.updateStatus(job.id, "FAILED", {
+        logsPreview: sanitizeLogOutput([...logLines, `ERROR: ${errMsg}`].slice(-50).join("\n"))
+      });
+    } catch {
+      // Best effort.
+    }
+  } finally {
+    if (fs.existsSync(workspaceDir)) {
+      console.log(`[Job ${job.id}] Workspace retained: ${workspaceDir}`);
+    }
+  }
+}
+
+function resolveExternalAgentCwd(workspaceRoot: string, workingDirectory: string | null | undefined): string {
+  if (!workingDirectory?.trim()) return workspaceRoot;
+  if (path.isAbsolute(workingDirectory)) {
+    throw new Error("External agent workingDirectory must be relative to the isolated workspace.");
+  }
+  const resolved = path.resolve(workspaceRoot, workingDirectory);
+  const root = path.resolve(workspaceRoot);
+  const rootWithSep = root.endsWith(path.sep) ? root : `${root}${path.sep}`;
+  if (resolved !== root && !resolved.startsWith(rootWithSep)) {
+    throw new Error("External agent workingDirectory escapes the isolated workspace.");
+  }
+  return resolved;
+}
+
+async function submitBlockedExternalAgentReport(
+  job: AutomationJob,
+  reason: string,
+  workspaceDir: string,
+  logLines: string[]
+) {
+  const logsPreview = sanitizeLogOutput([...logLines, reason].slice(-50).join("\n"));
+  await api.completeExternalAgentRun(job.id, {
+    status: "FAILED",
+    errorMessage: reason,
+    metadata: { workspacePath: workspaceDir }
+  }).catch(() => undefined);
+  await api.submitReport(job.id, {
+    summary: `External agent bridge run for "${job.workOrder.title}" was blocked: ${reason}`,
+    filesChanged: [],
+    commandsRun: [],
+    testsRun: [],
+    testResult: "NOT_RUN",
+    errors: [reason],
+    decisionsMade: [],
+    remainingWork: ["Fix bridge configuration and retry the work order."],
+    nextRecommendedAction: "Review External Agent Bridge settings",
+    logsPreview,
+    rawOutput: logsPreview,
+    contextUsed: buildContextUsed(job)
+  }).catch(async () => {
+    await api.updateStatus(job.id, "FAILED", { logsPreview }).catch(() => undefined);
+  });
 }
 
 /**

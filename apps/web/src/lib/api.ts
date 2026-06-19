@@ -46,6 +46,7 @@ import type {
   RouteChainEntryDto,
   SecretaryBriefDto,
   CouncilSessionDto,
+  CouncilExternalAgentExecutionDto,
   CurrentAgentActivityDto,
   DataQuality,
   DirectAgentMessagePayload,
@@ -251,6 +252,8 @@ export const api = {
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),
   updateExternalAgent: (id: string, payload: Partial<ExternalAgentPayload>) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+  testExternalAgent: (id: string) =>
+    apiRequest<{ test: import("@/types/api").ExternalAgentTestResultDto }>(`/external-agents/${id}/test`, { method: "POST" }),
   deleteExternalAgent: (id: string) => apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "DELETE" }),
   projects: (params?: { q?: string; status?: string; priority?: string }) => {
     const search = new URLSearchParams();
@@ -443,6 +446,11 @@ export const api = {
   councilSession: (id: string) => apiRequest<{ session: CouncilSessionDto }>(`/council/${id}`),
   planCouncilWorkOrder: (sessionId: string) =>
     apiRequest<PlannerResultDto>(`/council/${sessionId}/work-order`, { method: "POST" }),
+  executeCouncilWithExternalAgent: (sessionId: string, externalAgentId?: string | null) =>
+    apiRequest<CouncilExternalAgentExecutionDto>(`/council/${sessionId}/execute-external-agent`, {
+      method: "POST",
+      body: JSON.stringify(externalAgentId ? { externalAgentId } : {})
+    }),
   reports: (params?: { category?: string; importance?: string }) => {
     const search = new URLSearchParams();
     if (params?.category) search.set("category", params.category);
