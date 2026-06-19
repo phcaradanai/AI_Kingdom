@@ -8,6 +8,20 @@
 
 export const SANDBOX_PATCH_NO_PUSH = "SANDBOX_PATCH_NO_PUSH";
 
+/**
+ * commandPolicy for a job that re-applies an ALREADY KING-APPROVED PatchArtifact and
+ * pushes it to a safe `kingdom/job-*` branch. Because the underlying diff was already
+ * reviewed and approved, the runner pushes without waiting for a second approval —
+ * but push still only happens when the server's ALLOW_BRANCH_PUSH setting is on, and
+ * only to a safe branch (never main, never merge/PR/deploy).
+ */
+export const APPLY_APPROVED_PATCH_PUSH = "APPLY_APPROVED_PATCH_PUSH";
+
+/** True when the job carries an already-approved patch that may push without re-approval. */
+export function isPreApprovedPushPolicy(commandPolicy: string | null | undefined): boolean {
+  return commandPolicy === APPLY_APPROVED_PATCH_PUSH;
+}
+
 export interface BranchPushEligibilityInput {
   allowBranchPush: boolean;
   commandPolicy: string | null;

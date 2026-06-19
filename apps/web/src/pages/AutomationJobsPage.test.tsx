@@ -43,6 +43,7 @@ const apiMocks = vi.hoisted(() => ({
   rejectPatchArtifact: vi.fn(),
   requestPatchRevision: vi.fn(),
   createPatchPr: vi.fn(),
+  pushPatchBranch: vi.fn(),
   automationJobAgentReview: vi.fn(),
   regenerateAutomationJobAgentReview: vi.fn()
 }));

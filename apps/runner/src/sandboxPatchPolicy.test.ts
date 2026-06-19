@@ -6,8 +6,37 @@ import {
   evaluateFreshLocalContext,
   evaluateJobContextBinding,
   shouldPushWithoutApproval,
-  SANDBOX_PATCH_NO_PUSH
+  SANDBOX_PATCH_NO_PUSH,
+  APPLY_APPROVED_PATCH_PUSH,
+  isPreApprovedPushPolicy
 } from "./sandboxPatchPolicy.js";
+
+test("APPLY_APPROVED_PATCH_PUSH is push-eligible when branch push is enabled (not blocked like NO_PUSH)", () => {
+  const result = evaluateBranchPushEligibility({
+    allowBranchPush: true,
+    commandPolicy: APPLY_APPROVED_PATCH_PUSH,
+    branchName: "kingdom/job-abc12345-apply",
+    hasArtifact: true
+  });
+  assert.equal(result.attemptPush, true);
+});
+
+test("APPLY_APPROVED_PATCH_PUSH still respects the ALLOW_BRANCH_PUSH master switch", () => {
+  const result = evaluateBranchPushEligibility({
+    allowBranchPush: false,
+    commandPolicy: APPLY_APPROVED_PATCH_PUSH,
+    branchName: "kingdom/job-abc12345-apply",
+    hasArtifact: true
+  });
+  assert.equal(result.attemptPush, false);
+});
+
+test("isPreApprovedPushPolicy only matches the approved-patch push policy", () => {
+  assert.equal(isPreApprovedPushPolicy(APPLY_APPROVED_PATCH_PUSH), true);
+  assert.equal(isPreApprovedPushPolicy(SANDBOX_PATCH_NO_PUSH), false);
+  assert.equal(isPreApprovedPushPolicy(null), false);
+  assert.equal(isPreApprovedPushPolicy(undefined), false);
+});
 
 test("M17D-3: SANDBOX_PATCH_NO_PUSH blocks branch push even if branch push is enabled", () => {
   const result = evaluateBranchPushEligibility({

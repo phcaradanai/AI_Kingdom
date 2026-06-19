@@ -11,6 +11,7 @@ import {
   markPrCreated
 } from "../services/patchArtifactService.js";
 import { getBooleanSetting } from "../services/settingsService.js";
+import { createApprovedPatchPushJob } from "../services/approvedPatchPushService.js";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
 import { redactSecrets } from "../services/secretRedactorService.js";
@@ -72,6 +73,30 @@ router.post("/:id/approve", requireRole("KING"), async (req, res, next) => {
   } catch (err) {
     if (err instanceof Error && err.name === "NotFoundError") {
       res.status(404).json({ error: err.message });
+      return;
+    }
+    next(err);
+  }
+});
+
+/**
+ * POST /api/patch-artifacts/:id/push-branch — KING queues an apply-and-push job for an
+ * already-approved patch. Reuses the runner SANDBOX_PATCH pipeline with the
+ * APPLY_APPROVED_PATCH_PUSH policy. Actual push only happens when the runner's
+ * ALLOW_BRANCH_PUSH setting is on, and only to a safe `kingdom/job-*` branch.
+ */
+router.post("/:id/push-branch", requireRole("KING"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const job = await createApprovedPatchPushJob(id, req.user!.id);
+    res.status(201).json({ job });
+  } catch (err) {
+    if (err instanceof Error && err.name === "NotFoundError") {
+      res.status(404).json({ error: err.message });
+      return;
+    }
+    if (err instanceof Error && err.name === "ConflictError") {
+      res.status(409).json({ error: err.message });
       return;
     }
     next(err);

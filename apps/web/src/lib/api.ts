@@ -682,6 +682,8 @@ export const api = {
     }),
   createPatchPr: (id: string) =>
     apiRequest<PatchArtifactDto>(`/patch-artifacts/${id}/create-pr`, { method: "POST" }),
+  pushPatchBranch: (id: string) =>
+    apiRequest<{ job: AutomationJobDto }>(`/patch-artifacts/${id}/push-branch`, { method: "POST" }),
 
   // ── M17D-1: Living Loop ──────────────────────────────────────────────────────
   livingLoopStatus: () => apiRequest<{ status: LivingLoopStatusDto }>("/living-loop/status"),

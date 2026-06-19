@@ -20,7 +20,7 @@ import { sanitizeLogOutput } from "./secretRedactor.js";
 import { validateCommand } from "./commandValidator.js";
 import { applyImportedPatch, generatePatch, isEmptyPatch, runValidation, pushSafeBranch, submitPatchArtifact } from "./patchGenerator.js";
 import { executeValidationOnlyJob } from "./validationOnlyExecutor.js";
-import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
+import { buildContextUsed, evaluateBranchPushEligibility, evaluateJobContextBinding, isPreApprovedPushPolicy, shouldPushWithoutApproval } from "./sandboxPatchPolicy.js";
 import { decideImportedPatchStatus } from "./importedPatchStatus.js";
 import { getRunnerJobWorkspaceDir, getRunnerWorkspaceBase, prepareRunnerWorkspace } from "./workspacePreparation.js";
 import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDependencies } from "./dependencyInstaller.js";
@@ -669,11 +669,17 @@ async function attemptBranchPush(
 
   log(`[Job ${job.id}] Branch push enabled. Checking patch approval...`);
 
-  // Poll for King approval (HIGH/CRITICAL require explicit approval)
-  const approved = await waitForApproval(artifactId, log);
-  if (!approved) {
-    log(`[Job ${job.id}] Branch push skipped: patch not approved within timeout`);
-    return;
+  // Pre-approved patches (King already approved the source PatchArtifact, then
+  // explicitly requested this apply-and-push job) skip the second approval wait.
+  if (isPreApprovedPushPolicy(job.commandPolicy)) {
+    log(`[Job ${job.id}] Pre-approved patch policy — pushing without a second approval.`);
+  } else {
+    // Poll for King approval (HIGH/CRITICAL require explicit approval)
+    const approved = await waitForApproval(artifactId, log);
+    if (!approved) {
+      log(`[Job ${job.id}] Branch push skipped: patch not approved within timeout`);
+      return;
+    }
   }
 
   log(`[Job ${job.id}] Patch approved. Pushing branch: ${branchName}`);

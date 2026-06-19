@@ -266,6 +266,22 @@ export function AutomationJobsPage() {
     }
   }
 
+  async function pushBranch(artifactId: string) {
+    setPatchActionId(artifactId);
+    setActionError(null);
+    try {
+      await api.pushPatchBranch(artifactId);
+      setJobs(await api.automationJobs(statusFilter ? { status: statusFilter } : undefined));
+      if (selectedJob) {
+        setPatchArtifacts(await api.patchArtifacts({ automationJobId: selectedJob.id }));
+      }
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to queue branch push");
+    } finally {
+      setPatchActionId(null);
+    }
+  }
+
   async function handleImportPatch() {
     if (!importPatchJobId || !importPatchText.trim()) return;
     setImportPatchLoading(true);
@@ -663,6 +679,7 @@ export function AutomationJobsPage() {
                         onReject={() => void rejectPatch(artifact.id)}
                         onRevision={() => void requestRevision(artifact.id)}
                         onCreatePr={() => void createPr(artifact.id)}
+                        onPushBranch={() => void pushBranch(artifact.id)}
                       />
                     ))}
                   </div>
@@ -927,7 +944,8 @@ function PatchReviewCard({
   onApprove,
   onReject,
   onRevision,
-  onCreatePr
+  onCreatePr,
+  onPushBranch
 }: {
   artifact: PatchArtifactDto;
   isActing: boolean;
@@ -936,6 +954,7 @@ function PatchReviewCard({
   onReject: () => void;
   onRevision: () => void;
   onCreatePr: () => void;
+  onPushBranch: () => void;
 }) {
   const [showDiff, setShowDiff] = useState(false);
   const isHighRisk = artifact.riskLevel === "HIGH" || artifact.riskLevel === "CRITICAL";
@@ -1052,6 +1071,14 @@ function PatchReviewCard({
           <Button className="h-7 text-xs px-2.5" variant="outline" onClick={onRevision} disabled={isActing}>
             Request Revision
           </Button>
+        </div>
+      )}
+      {isKing && artifact.validationStatus === "APPROVED" && !artifact.branchPushed && (
+        <div className="flex flex-col gap-1 pt-1.5 border-t">
+          <Button className="h-7 text-xs px-2.5" onClick={onPushBranch} disabled={isActing}>
+            <GitBranch className="h-3 w-3 mr-1" />Push to branch
+          </Button>
+          <span className="text-[10px] text-muted-foreground">Queues a runner job to re-apply this approved patch and push a safe kingdom/job-* branch (only if branch push is enabled). No merge or deploy.</span>
         </div>
       )}
       {isKing && artifact.validationStatus === "APPROVED" && artifact.branchPushed && !artifact.prUrl && (
