@@ -85,6 +85,22 @@ describe("SettingsPage", () => {
     await waitFor(() => expect(apiMocks.updateSetting).toHaveBeenCalledWith("COUNCIL_AUTO_WORK_ORDER_MODE", "DRAFT"));
   });
 
+  it("renders UI_LANGUAGE as a constrained Thai language selector", async () => {
+    const user = userEvent.setup();
+    setSettings([setting({ key: "UI_LANGUAGE", value: "en", category: "UI" })]);
+
+    render(<SettingsPage />);
+
+    const select = screen.getByLabelText("UI_LANGUAGE");
+    expect(select).toHaveValue("en");
+    expect(screen.getByRole("option", { name: "English" })).toHaveValue("en");
+    expect(screen.getByRole("option", { name: "ภาษาไทย" })).toHaveValue("th");
+
+    await user.selectOptions(select, "th");
+
+    await waitFor(() => expect(apiMocks.updateSetting).toHaveBeenCalledWith("UI_LANGUAGE", "th"));
+  });
+
   it("does not send invalid enum values", async () => {
     setSettings([setting({ key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF" })]);
 
