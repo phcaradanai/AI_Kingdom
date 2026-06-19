@@ -341,6 +341,26 @@ enum RoyalBriefGeneratedBy {
   KING
 }
 
+enum DirectAgentSessionStatus {
+  OPEN
+  COMPLETED
+  FAILED
+  ARCHIVED
+}
+
+enum DirectAgentMessageRole {
+  USER
+  AGENT
+  SYSTEM
+}
+
+enum DirectAgentRequestType {
+  GENERAL_QUESTION
+  RESEARCH_ASSIGNMENT
+  SUMMARY_ASSIGNMENT
+  PERSONAL_TASK
+}
+
 model Notice {
   id               String         @id @default(cuid())
   projectId        String?
@@ -410,6 +430,7 @@ model User {
   approvedAutomationJobs AutomationJob[] @relation("AutomationJobApprovedBy")
   reviewedPatchArtifacts PatchArtifact[] @relation("PatchArtifactReviewedBy")
   royalBriefs            RoyalBrief[]    @relation("RoyalBriefGeneratedByUser")
+  directAgentSessions    DirectAgentSession[]
 }
 
 model RefreshToken {
@@ -470,6 +491,8 @@ model Agent {
   assignedWorkOrders WorkOrder[]
   automationJobs     AutomationJob[] @relation("AgentAutomationJobs")
   reviewSummaries    AgentReviewSummary[] @relation("AgentReviewSummaries")
+  directSessions      DirectAgentSession[]
+  directMessages      DirectAgentMessage[]
 }
 
 model ExternalAgent {
@@ -528,6 +551,59 @@ model Project {
   localDocumentSnapshots LocalDocumentSnapshot[]
   localDocumentInsights  LocalDocumentInsight[]
   reviewSummaries        AgentReviewSummary[]
+  directAgentSessions    DirectAgentSession[]
+}
+
+model DirectAgentSession {
+  id                   String                   @id @default(cuid())
+  agentId              String
+  projectId            String?
+  createdByUserId      String
+  title                String
+  requestType          DirectAgentRequestType   @default(GENERAL_QUESTION)
+  status               DirectAgentSessionStatus @default(OPEN)
+  summary              String?
+  latestTraceId        String?
+  latestUsageRecordId  String?
+  artifactId           String?
+  knowledgeCandidateId String?
+  providerName         String?
+  modelUsed            String?
+  fallbackNotice       String?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+  completedAt          DateTime?
+  agent                Agent                    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  project              Project?                 @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  createdByUser        User                     @relation(fields: [createdByUserId], references: [id], onDelete: Cascade)
+  messages             DirectAgentMessage[]
+
+  @@index([agentId])
+  @@index([projectId])
+  @@index([createdByUserId])
+  @@index([requestType])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model DirectAgentMessage {
+  id            String                 @id @default(cuid())
+  sessionId     String
+  agentId       String?
+  role          DirectAgentMessageRole
+  content       String
+  traceId       String?
+  usageRecordId String?
+  metadata      Json?
+  createdAt     DateTime               @default(now())
+  session       DirectAgentSession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  agent         Agent?                  @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([agentId])
+  @@index([role])
+  @@index([traceId])
+  @@index([createdAt])
 }
 
 model RepositorySnapshot {

@@ -48,6 +48,10 @@ import type {
   CouncilSessionDto,
   CurrentAgentActivityDto,
   DataQuality,
+  DirectAgentMessagePayload,
+  DirectAgentSessionDto,
+  DirectAgentSessionPayload,
+  DirectAgentSummaryDto,
   MemoryDto,
   MemoryPayload,
   ReportPayload,
@@ -215,6 +219,19 @@ export const api = {
     }),
   getAgentRoutingPreview: (id: string) => apiRequest<AgentRoutingPreviewDto>(`/agents/${id}/routing-preview`),
   getAgentEffectiveRequestPreview: (id: string) => apiRequest<EffectiveRequestPreviewDto>(`/agents/${id}/effective-request-preview`),
+  getDirectAgentOptions: () => apiRequest<{ agents: DirectAgentSummaryDto[] }>("/agent-conversations/agents"),
+  getDirectAgentSessions: () => apiRequest<{ sessions: DirectAgentSessionDto[] }>("/agent-conversations"),
+  getDirectAgentSession: (id: string) => apiRequest<{ session: DirectAgentSessionDto }>(`/agent-conversations/${id}`),
+  createDirectAgentSession: (payload: DirectAgentSessionPayload) =>
+    apiRequest<{ session: DirectAgentSessionDto }>("/agent-conversations", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
+  sendDirectAgentMessage: (id: string, payload: DirectAgentMessagePayload) =>
+    apiRequest<{ session: DirectAgentSessionDto }>(`/agent-conversations/${id}/messages`, {
+      method: "POST",
+      body: JSON.stringify(payload)
+    }),
   externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
   createExternalAgent: (payload: ExternalAgentPayload) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),

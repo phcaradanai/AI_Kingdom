@@ -10,6 +10,7 @@ import { requireAuth } from "./middleware/auth.js";
 import { errorHandler } from "./middleware/errors.js";
 import { requirePermission, requireRole } from "./middleware/rbac.js";
 import agentActivitiesRouter from "./routes/agentActivities.js";
+import agentConversationsRouter from "./routes/agentConversations.js";
 import knowledgeCandidatesRouter from "./routes/knowledgeCandidates.js";
 import knowledgeMemoriesRouter from "./routes/knowledgeMemories.js";
 import livingAgentsRouter from "./routes/livingAgents.js";
@@ -102,6 +103,7 @@ export function createApp() {
 
   app.use("/api/auth", authRouter);
   app.use("/api/agent-activities", requireAuth, agentActivitiesRouter);
+  app.use("/api/agent-conversations", requireAuth, agentConversationsRouter);
   app.use("/api/living-agents", requireAuth, livingAgentsRouter);
   app.use("/api/agents", requireAuth, requireRole("KING"), agentsRouter);
   app.use("/api/tasks", requireAuth, methodPermission("tasks"), tasksRouter);

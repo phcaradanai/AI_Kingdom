@@ -207,6 +207,66 @@ export type AgentPayload = {
   modelParameters?: ModelParameters | null;
 };
 
+export type DirectAgentRequestType = "GENERAL_QUESTION" | "RESEARCH_ASSIGNMENT" | "SUMMARY_ASSIGNMENT" | "PERSONAL_TASK";
+export type DirectAgentSaveMode = "NONE" | "ARTIFACT" | "KNOWLEDGE_CANDIDATE" | "BOTH";
+export type DirectAgentSessionStatus = "OPEN" | "COMPLETED" | "FAILED" | "ARCHIVED";
+export type DirectAgentMessageRole = "USER" | "AGENT" | "SYSTEM";
+
+export type DirectAgentSummaryDto = Pick<AgentDto, "id" | "slug" | "name" | "title" | "role" | "specialty" | "description" | "skills" | "isActive"> & {
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarVersion: number;
+};
+
+export type DirectAgentMessageDto = {
+  id: string;
+  sessionId: string;
+  agentId: string | null;
+  role: DirectAgentMessageRole;
+  content: string;
+  traceId: string | null;
+  usageRecordId: string | null;
+  metadata: unknown;
+  createdAt: string;
+};
+
+export type DirectAgentSessionDto = {
+  id: string;
+  agentId: string;
+  projectId: string | null;
+  createdByUserId: string;
+  title: string;
+  requestType: DirectAgentRequestType;
+  status: DirectAgentSessionStatus;
+  summary: string | null;
+  latestTraceId: string | null;
+  latestUsageRecordId: string | null;
+  artifactId: string | null;
+  knowledgeCandidateId: string | null;
+  providerName: string | null;
+  modelUsed: string | null;
+  fallbackNotice: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  agent: DirectAgentSummaryDto | null;
+  project: { id: string; name: string; codename: string | null } | null;
+  messages: DirectAgentMessageDto[];
+};
+
+export type DirectAgentMessagePayload = {
+  prompt: string;
+  requestType: DirectAgentRequestType;
+  saveMode: DirectAgentSaveMode;
+};
+
+export type DirectAgentSessionPayload = DirectAgentMessagePayload & {
+  agentId: string;
+  projectId?: string | null;
+  title?: string | null;
+};
+
 export type EffectiveRequestPreviewDto = {
   preview: {
     configuredProvider: string;

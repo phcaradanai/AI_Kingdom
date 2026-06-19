@@ -4,6 +4,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AgentsPage } from "@/pages/AgentsPage";
+import { AgentChatPage } from "@/pages/AgentChatPage";
 import { AuditPage } from "@/pages/AuditPage";
 import { CharterPage } from "@/pages/CharterPage";
 import { ExternalAgentsPage } from "@/pages/ExternalAgentsPage";
@@ -57,6 +58,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
           <Route path="/throne-room" element={<ThroneRoomPage />} />
           <Route path="/council" element={<CouncilPage />} />
           <Route path="/agents" element={<AgentsPage />} />
+          <Route path="/agent-chat" element={<AgentChatPage />} />
           <Route path="/external-agents" element={<ExternalAgentsPage />} />
           <Route path="/work-orders" element={<WorkOrdersPage />} />
           <Route path="/projects" element={<ProjectsPage />} />

@@ -57,6 +57,56 @@ export type ListAgentsResponse = {
   agents: AgentDto[];
 };
 
+export type DirectAgentRequestTypeDto = "GENERAL_QUESTION" | "RESEARCH_ASSIGNMENT" | "SUMMARY_ASSIGNMENT" | "PERSONAL_TASK";
+export type DirectAgentSaveModeDto = "NONE" | "ARTIFACT" | "KNOWLEDGE_CANDIDATE" | "BOTH";
+export type DirectAgentSessionStatusDto = "OPEN" | "COMPLETED" | "FAILED" | "ARCHIVED";
+export type DirectAgentMessageRoleDto = "USER" | "AGENT" | "SYSTEM";
+
+export type DirectAgentSummaryDto = Pick<AgentDto, "id" | "slug" | "name" | "title" | "role" | "specialty" | "isActive"> & {
+  description: string;
+  skills: string[];
+  displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarVersion: number;
+};
+
+export type DirectAgentMessageDto = {
+  id: string;
+  sessionId: string;
+  agentId: string | null;
+  role: DirectAgentMessageRoleDto;
+  content: string;
+  traceId: string | null;
+  usageRecordId: string | null;
+  metadata: unknown;
+  createdAt: string;
+};
+
+export type DirectAgentSessionDto = {
+  id: string;
+  agentId: string;
+  projectId: string | null;
+  createdByUserId: string;
+  title: string;
+  requestType: DirectAgentRequestTypeDto;
+  status: DirectAgentSessionStatusDto;
+  summary: string | null;
+  latestTraceId: string | null;
+  latestUsageRecordId: string | null;
+  artifactId: string | null;
+  knowledgeCandidateId: string | null;
+  providerName: string | null;
+  modelUsed: string | null;
+  fallbackNotice: string | null;
+  createdAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+  agent: DirectAgentSummaryDto | null;
+  project: { id: string; name: string; codename: string | null } | null;
+  messages: DirectAgentMessageDto[];
+};
+
 export type ListReportsResponse = {
   reports: Array<Report & { task: Pick<Task, "id" | "command" | "status" | "createdAt"> | null }>;
 };
