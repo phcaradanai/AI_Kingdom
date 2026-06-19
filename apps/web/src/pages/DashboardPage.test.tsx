@@ -59,6 +59,7 @@ const apiMocks = vi.hoisted(() => ({
   getKingdomActivity: vi.fn(),
   workOrders: vi.fn(),
   projects: vi.fn(),
+  secretaryBrief: vi.fn(),
   livingLoopStatus: vi.fn(),
   runLivingLoopOnce: vi.fn()
 }));
@@ -86,6 +87,14 @@ function resetApiMocks() {
     hiddenCount: 0
   });
   apiMocks.projects.mockResolvedValue({ projects: [] });
+  apiMocks.secretaryBrief.mockResolvedValue({
+    kingdomStatus: {
+      unreadNotices: 0, criticalNotices: 0, openMatters: 0, criticalMatters: 0,
+      awaitingRoyalDecision: 0, failedTasks: 0, workOrdersAwaitingReview: 1, budgetWarning: false
+    },
+    urgentNotices: [], openMatters: [], awaitingRoyalDecision: [],
+    recentAgentReports: [], recommendedActions: [], charter: null, vision: null
+  });
   apiMocks.livingLoopStatus.mockResolvedValue({ status: { pendingCandidates: 0 } });
   apiMocks.runLivingLoopOnce.mockResolvedValue({});
 }

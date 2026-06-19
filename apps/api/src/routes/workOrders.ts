@@ -9,10 +9,12 @@ import {
   buildExternalAgentPrompt,
   createHandoffBrief,
   createWorkOrderCompletionReport,
+  dispatchWorkOrder,
   generateWorkOrderFromMatter,
   generateWorkOrderFromTask,
   createWorkOrder
 } from "../services/externalAgentWorkOrderService.js";
+import { executeWorkOrderViaProvider } from "../services/externalAgentExecutionService.js";
 import { getWorkOrderRecommendations } from "../services/externalAgentRecommendationService.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
 import {
@@ -297,6 +299,42 @@ router.post("/:id/build-prompt/:externalAgentId", requireRole("KING", "CROWN_PRI
   }
 });
 
+/** POST /api/work-orders/:id/dispatch/:externalAgentId — one-step: assign agent, build prompt, move to IN_PROGRESS. */
+router.post("/:id/dispatch/:externalAgentId", requireRole("KING", "CROWN_PRINCE"), async (req, res, next) => {
+  try {
+    const { id, externalAgentId } = req.params as { id: string; externalAgentId: string };
+    const result = await dispatchWorkOrder(id, externalAgentId);
+
+    // When the agent is configured for API execution, run it now and store the report automatically.
+    let autoExecuted = false;
+    let executionError: string | null = null;
+    if (result.externalAgent.executionMode === "API") {
+      try {
+        await executeWorkOrderViaProvider(id, externalAgentId, { userId: req.user?.id, actorRole: req.user?.role });
+        autoExecuted = true;
+      } catch (execErr) {
+        executionError = execErr instanceof Error ? execErr.message : "Auto-execution failed";
+      }
+    }
+
+    await auditLog({
+      userId: req.user?.id,
+      action: "dispatch_work_order",
+      resourceType: "work_order",
+      resourceId: id,
+      metadata: { externalAgentId, externalAgentName: result.externalAgent.name, status: result.workOrder.status, executionMode: result.externalAgent.executionMode, autoExecuted }
+    });
+    const workOrder = await prisma.workOrder.findUnique({ where: { id }, include });
+    res.json({ workOrder, prompt: result.prompt, autoExecuted, executionError });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
 /** GET /api/work-orders/:id/external-agent-recommendations — ranked agent suggestions (any authenticated role). */
 router.get("/:id/external-agent-recommendations", async (req, res, next) => {
   try {
@@ -401,7 +439,8 @@ const automationJobCreateSchema = z.object({
   agentId: z.string().trim().optional().nullable(),
   mode: z.enum(["OBSERVE", "PLAN_ONLY", "SANDBOX_PATCH", "VALIDATION_ONLY"]).default("SANDBOX_PATCH"),
   commandPolicy: z.string().trim().max(1000).optional().nullable(),
-  allowedCommands: z.array(z.string().trim().min(1).max(100)).max(50).default([])
+  allowedCommands: z.array(z.string().trim().min(1).max(100)).max(50).default([]),
+  useAssignedAgentCli: z.boolean().optional()
 });
 
 router.post("/:id/automation-job", requireRole("KING"), async (req, res, next) => {
@@ -418,6 +457,7 @@ router.post("/:id/automation-job", requireRole("KING"), async (req, res, next) =
       mode: body.data.mode,
       commandPolicy: body.data.commandPolicy,
       allowedCommands: body.data.allowedCommands,
+      useAssignedAgentCli: body.data.useAssignedAgentCli,
       createdByUserId: req.user!.id
     });
     res.status(201).json({ job });

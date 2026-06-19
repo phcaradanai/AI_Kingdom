@@ -121,6 +121,7 @@ Key modules:
 - `preValidationRunner.ts`: pre-patch validation runs before applying any changes.
 - `importedPatchStatus.ts`: tracks and reports imported patch application status.
 - `secretRedactor.ts`: redacts secrets from runner output before sending to API.
+- `agentCliRunner.ts`: drives an external agent CLI (Claude Code/Codex/etc.) headlessly inside the job workspace during SANDBOX_PATCH so it can make real edits; the diff is then captured as a patch artifact (never pushed). Env-gated: `AGENT_CLI_ENABLED` + per-type `AGENT_CLI_<TYPE>_COMMAND`/`_ARGS`/`_TIMEOUT_MS` (`{PROMPT}` arg token or stdin, `shell:false`, timeout). The prompt is delivered via `AutomationJob.provenance.agentCli = { type, prompt }`, set when a job is created with `useAssignedAgentCli`.
 
 The runner must be bootstrapped (`npm run runner:bootstrap`) and started with the same `RUNNER_TOKEN` as the API. Confirm `/automation-jobs` shows `Online Runners = 1` before manual SANDBOX_PATCH acceptance.
 

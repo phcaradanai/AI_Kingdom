@@ -373,6 +373,8 @@ export const api = {
     apiRequest<{ recommendations: import("@/types/api").ExternalAgentRecommendationDto[] }>(`/work-orders/${id}/external-agent-recommendations`),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>
     apiRequest<{ prompt: string }>(`/work-orders/${id}/build-prompt/${externalAgentId}`, { method: "POST" }),
+  dispatchWorkOrder: (id: string, externalAgentId: string) =>
+    apiRequest<{ workOrder: WorkOrderDto; prompt: string; autoExecuted: boolean; executionError: string | null }>(`/work-orders/${id}/dispatch/${externalAgentId}`, { method: "POST" }),
   createHandoffBrief: (id: string) => apiRequest<{ handoffBrief: HandoffBriefDto }>(`/work-orders/${id}/handoff`, { method: "POST" }),
   workSessions: () => apiRequest<{ workSessions: WorkSessionDto[] }>("/work-sessions"),
   createWorkSession: (payload: { workOrderId: string; externalAgentId?: string | null; sessionLabel: string; inputPrompt: string }) =>

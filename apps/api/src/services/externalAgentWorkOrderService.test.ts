@@ -8,6 +8,7 @@ import {
   buildExternalAgentPrompt,
   createHandoffBrief,
   createImplementationReport,
+  dispatchWorkOrder,
   ensureDefaultExternalAgents,
   generateWorkOrderFromMatter,
   generateWorkOrderFromTask
@@ -154,6 +155,73 @@ test("implementation report can be submitted and handoff brief generated", async
     assert.match(handoff.handoffPrompt, /Handoff Brief/);
     assert.match(handoff.handoffPrompt, /Keep external agents manual-only/);
   } finally {
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("dispatchWorkOrder assigns agent, builds prompt, moves order to IN_PROGRESS, and notifies the King", async () => {
+  const { user } = await createUser("KING");
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CLAUDE_CODE" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "Dispatch flow work",
+      objective: "Exercise one-step dispatch",
+      acceptanceCriteria: ["Order is dispatched"],
+      validationCommands: ["npm run test"],
+      createdByUserId: user.id,
+      status: "DRAFT"
+    }
+  });
+
+  try {
+    const result = await dispatchWorkOrder(workOrder.id, externalAgent.id);
+    assert.equal(result.workOrder.assignedExternalAgentId, externalAgent.id);
+    assert.equal(result.workOrder.status, "IN_PROGRESS");
+    assert.match(result.prompt, /Work Order/);
+
+    const dispatchNotice = await prisma.notice.findFirst({
+      where: { sourceType: "work-order-dispatch", sourceId: workOrder.id }
+    });
+    assert.ok(dispatchNotice, "a dispatch notice should be created for the King");
+  } finally {
+    await prisma.notice.deleteMany({ where: { sourceId: workOrder.id } });
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("createImplementationReport notifies the King when an external agent reports back", async () => {
+  const { user } = await createUser("KING");
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CODEX" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "Report notification work",
+      objective: "Notify the King on report",
+      acceptanceCriteria: ["King is notified"],
+      validationCommands: ["npm run test"],
+      assignedExternalAgentId: externalAgent.id,
+      createdByUserId: user.id,
+      status: "IN_PROGRESS"
+    }
+  });
+
+  try {
+    const report = await createImplementationReport({
+      workOrderId: workOrder.id,
+      externalAgentId: externalAgent.id,
+      summary: "Completed the requested change",
+      filesChanged: ["apps/api/src/routes/workOrders.ts"],
+      testResult: "PASSED"
+    });
+
+    const notice = await prisma.notice.findFirst({
+      where: { sourceType: "work-order-report", sourceId: report.id }
+    });
+    assert.ok(notice, "a completion notice should be created for the King");
+    assert.match(notice!.title, /Work complete/);
+  } finally {
+    await prisma.notice.deleteMany({ where: { sourceType: "work-order-report" } });
     await prisma.workOrder.delete({ where: { id: workOrder.id } });
     await prisma.user.delete({ where: { id: user.id } });
   }

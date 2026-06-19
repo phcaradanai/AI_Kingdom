@@ -9,6 +9,7 @@ import { buildContextSourceTrace, formatRepositoryContextSection, getLatestSnaps
 import { createArtifact } from "./projectService.js";
 import { evaluateRecordValue } from "./dataValueGateService.js";
 import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
+import { createNotice } from "./royalSecretaryService.js";
 
 type WorkOrderWithRelations = WorkOrder & {
   assignedExternalAgent?: ExternalAgent | null;
@@ -255,6 +256,41 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
   ].join("\n\n"));
 }
 
+/**
+ * One-step dispatch: assign the chosen external agent to a work order, build the
+ * ready-to-paste prompt, and move the order into IN_PROGRESS — all in a single call.
+ * Returns the prompt so the King can hand it to Claude Code / Codex / Cline / etc.
+ */
+export async function dispatchWorkOrder(workOrderId: string, externalAgentId: string) {
+  const [workOrder, externalAgent] = await Promise.all([
+    prisma.workOrder.findUnique({ where: { id: workOrderId } }),
+    prisma.externalAgent.findUnique({ where: { id: externalAgentId } })
+  ]);
+  if (!workOrder) throw notFound("Work order not found");
+  if (!externalAgent) throw notFound("External agent not found");
+  if (!externalAgent.isActive) throw notFound("External agent is inactive");
+
+  // Build the prompt first so a failure here never leaves a half-dispatched order.
+  const prompt = await buildExternalAgentPrompt(workOrderId, externalAgentId);
+
+  const nextStatus = workOrder.status === "DRAFT" || workOrder.status === "READY" ? "IN_PROGRESS" : workOrder.status;
+  const updated = await prisma.workOrder.update({
+    where: { id: workOrderId },
+    data: { assignedExternalAgentId: externalAgentId, status: nextStatus }
+  });
+
+  await createNotice({
+    title: `Dispatched: ${workOrder.title}`,
+    content: `"${workOrder.title}" was dispatched to ${externalAgent.name} (${externalAgent.roleTitle}). Awaiting the implementation report.`,
+    severity: "INFO",
+    sourceType: "work-order-dispatch",
+    sourceId: workOrder.id,
+    projectId: workOrder.projectId ?? undefined
+  }).catch(() => undefined);
+
+  return { workOrder: updated, externalAgent, prompt };
+}
+
 export async function preventContextDrift(workOrderId: string) {
   const workOrder = await prisma.workOrder.findUnique({ where: { id: workOrderId } });
   if (!workOrder) throw notFound("Work order not found");
@@ -403,7 +439,41 @@ export async function createImplementationReport(input: {
     sourceId: report.id,
     tags: ["implementation-report", "work-order"]
   }).catch(() => undefined);
+  await notifyKingOfReport(workOrder, report).catch(() => undefined);
   return report;
+}
+
+/**
+ * Alert the King when an external agent reports back. Closes the loop:
+ * decree -> dispatch -> execution -> stored in the Kingdom -> the King is notified.
+ * The result is summarized into a single Notice (deduped by source via createNotice).
+ */
+async function notifyKingOfReport(workOrder: WorkOrder, report: ImplementationReport) {
+  const failed = report.testResult === "FAILED" || report.errors.length > 0;
+  const severity = failed ? "WARNING" : "INFO";
+  const filesLabel = report.filesChanged.length
+    ? `${report.filesChanged.length} file(s) changed`
+    : "no files changed";
+  const headline = failed
+    ? `Work needs attention: ${workOrder.title}`
+    : `Work complete: ${workOrder.title}`;
+  const content = [
+    `An external agent reported back on "${workOrder.title}".`,
+    `Result: ${report.testResult} · ${filesLabel}.`,
+    `Summary: ${trim(report.summary, 400)}`,
+    report.remainingWork.length ? `Remaining: ${report.remainingWork.slice(0, 3).map((item) => trim(item, 120)).join("; ")}` : "",
+    report.nextRecommendedAction ? `Recommended next step: ${trim(report.nextRecommendedAction, 200)}` : "",
+    "Open the Work Order to review the report and approve or archive it."
+  ].filter(Boolean).join("\n");
+
+  await createNotice({
+    title: headline,
+    content,
+    severity,
+    sourceType: "work-order-report",
+    sourceId: report.id,
+    projectId: workOrder.projectId ?? undefined
+  });
 }
 
 export async function createWorkOrderCompletionReport(workOrderId: string) {

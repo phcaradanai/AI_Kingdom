@@ -16,6 +16,7 @@ import { auditLog } from "./auditService.js";
 import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localDocumentAccessService.js";
 import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
 import { createOrUpdateAgentReviewForJob } from "./runnerResultReviewService.js";
+import { buildExternalAgentPrompt } from "./externalAgentWorkOrderService.js";
 
 /** Statuses that count as "active" for duplicate prevention */
 export const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = [
@@ -34,6 +35,9 @@ export interface CreateAutomationJobInput {
   commandPolicy?: string | null;
   allowedCommands?: string[];
   createdByUserId: string;
+  /** When true, build the assigned external agent's prompt and attach it so the runner can
+   *  drive that agent's CLI headlessly (real edits) during a SANDBOX_PATCH job. */
+  useAssignedAgentCli?: boolean;
 }
 
 export interface SubmitReportInput {
@@ -75,7 +79,8 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
     where: { id: input.workOrderId },
     include: {
       project: true,
-      assignedAgent: true
+      assignedAgent: true,
+      assignedExternalAgent: true
     }
   });
 
@@ -132,6 +137,16 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
   const localDocsProvenance = await buildLocalDocsProvenance(projectId);
   const contextValidationSummary = buildContextValidationSummary(contextOutcome);
 
+  // Optional: attach the assigned external agent's prompt so the runner can drive that
+  // agent's CLI headlessly during SANDBOX_PATCH. The runner still never pushes/merges/deploys.
+  let agentCliProvenance: { type: string; prompt: string } | null = null;
+  if (input.useAssignedAgentCli && mode === "SANDBOX_PATCH" && workOrder.assignedExternalAgent) {
+    const prompt = await buildExternalAgentPrompt(input.workOrderId, workOrder.assignedExternalAgent.id).catch(() => null);
+    if (prompt) {
+      agentCliProvenance = { type: workOrder.assignedExternalAgent.type, prompt };
+    }
+  }
+
   const job = await prisma.automationJob.create({
     data: {
       workOrderId: input.workOrderId,
@@ -144,7 +159,8 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
       planJson: planJson ?? undefined,
       provenance: {
         ...(localDocsProvenance ?? {}),
-        contextBinding: contextValidationSummary
+        contextBinding: contextValidationSummary,
+        ...(agentCliProvenance ? { agentCli: agentCliProvenance } : {})
       } as Prisma.InputJsonValue,
       localDocumentSnapshotId: contextOutcome.binding?.localDocumentSnapshotId ?? null,
       repositorySnapshotId: contextOutcome.binding?.repositorySnapshotId ?? null,

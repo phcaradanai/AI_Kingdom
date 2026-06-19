@@ -436,6 +436,9 @@ export function WorkOrdersPage() {
   const [assigningAgent, setAssigningAgent] = useState(false);
   const [assignMessage, setAssignMessage] = useState<string | null>(null);
   const [assignError, setAssignError] = useState<string | null>(null);
+  const [dispatching, setDispatching] = useState(false);
+  const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
+  const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [archivingCompleted, setArchivingCompleted] = useState(false);
 
   const selected = useMemo(() => selectedId ? workOrders.find((order) => order.id === selectedId) ?? null : null, [selectedId, workOrders]);
@@ -607,12 +610,12 @@ export function WorkOrdersPage() {
     }
   }
 
-  async function createJob() {
+  async function createJob(useAssignedAgentCli = false) {
     if (!selected || !canCreate) return;
     setCreatingJob(true);
     setError(null);
     try {
-      await api.createAutomationJobForWorkOrder(selected.id, { mode: "SANDBOX_PATCH" });
+      await api.createAutomationJobForWorkOrder(selected.id, { mode: "SANDBOX_PATCH", useAssignedAgentCli });
       const jobs = await api.automationJobs({ workOrderId: selected.id });
       setAutomationJobs(jobs);
     } catch (err) {
@@ -728,6 +731,34 @@ export function WorkOrdersPage() {
     }
     const response = await api.buildWorkOrderPrompt(selected.id, agentId);
     setGeneratedPrompt(response.prompt);
+  }
+
+  async function dispatch() {
+    const agentId = draft.assignedExternalAgentId ?? selected?.assignedExternalAgentId;
+    if (!agentId || !selected) {
+      setError("Select an external agent before dispatching.");
+      return;
+    }
+    setDispatching(true);
+    setDispatchMessage(null);
+    setDispatchError(null);
+    try {
+      const response = await api.dispatchWorkOrder(selected.id, agentId);
+      setGeneratedPrompt(response.prompt);
+      await copy(response.prompt);
+      if (response.autoExecuted) {
+        setDispatchMessage("Agent ran automatically via API — report stored and the King was notified. Review it below.");
+      } else if (response.executionError) {
+        setDispatchMessage(`Dispatched (prompt copied). Auto-execution failed: ${response.executionError}. Run it manually or check provider settings.`);
+      } else {
+        setDispatchMessage("Dispatched. Prompt copied — paste it into the external agent, then submit its report.");
+      }
+      await load();
+    } catch (err) {
+      setDispatchError(err instanceof Error ? err.message : "Failed to dispatch work order");
+    } finally {
+      setDispatching(false);
+    }
   }
 
   async function submitReport(event: FormEvent) {
@@ -1300,10 +1331,14 @@ export function WorkOrdersPage() {
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <h3 className="font-display text-lg">Prompt Builder</h3>
                   <div className="flex gap-2">
+                    {canCreate ? <Button onClick={() => void dispatch()} disabled={dispatching}><Send className="h-4 w-4" />{dispatching ? "Dispatching…" : "Dispatch to agent"}</Button> : null}
                     {canCreate ? <Button variant="outline" onClick={() => void buildPrompt()}><FileText className="h-4 w-4" />Generate</Button> : null}
                     {generatedPrompt ? <Button variant="outline" onClick={() => void copy(generatedPrompt)}><Clipboard className="h-4 w-4" />Copy</Button> : null}
                   </div>
                 </div>
+                <p className="mt-1 text-xs text-muted-foreground">Dispatch assigns the agent, builds the prompt, copies it, and moves the order to In Progress. Agents in API execution mode run automatically and file their report; manual agents are handed off for copy-paste.</p>
+                {dispatchMessage ? <p className="mt-2 text-xs text-emerald-600">{dispatchMessage}</p> : null}
+                {dispatchError ? <p className="mt-2 text-xs text-destructive">{dispatchError}</p> : null}
                 <FormField id="wo-prompt" label="Generated Prompt" className="mt-4">
                   <Textarea id="wo-prompt" className="min-h-72 font-mono text-xs" value={generatedPrompt} onChange={(e) => setGeneratedPrompt(e.target.value)} placeholder="Generated copy-paste prompt appears here." />
                 </FormField>
@@ -1364,14 +1399,26 @@ export function WorkOrdersPage() {
                       <Bot className="h-4 w-4 text-muted-foreground" />
                       Sandbox Patch Job
                     </h3>
-                    <Button
-                      variant="outline"
-                      onClick={() => void createJob()}
-                      disabled={creatingJob || Boolean(automationBlockedReason)}
-                    >
-                      <Play className="h-4 w-4" />
-                      {creatingJob ? "Creating…" : "Create Automation Job"}
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => void createJob(false)}
+                        disabled={creatingJob || Boolean(automationBlockedReason)}
+                      >
+                        <Play className="h-4 w-4" />
+                        {creatingJob ? "Creating…" : "Create Automation Job"}
+                      </Button>
+                      {selected?.assignedExternalAgentId ? (
+                        <Button
+                          onClick={() => void createJob(true)}
+                          disabled={creatingJob || Boolean(automationBlockedReason)}
+                          title="Runner drives the assigned agent's CLI to make real edits, then captures the diff as a patch for your review (no push)."
+                        >
+                          <Bot className="h-4 w-4" />
+                          {creatingJob ? "Creating…" : "Run with Agent CLI"}
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                   {automationBlockedReason ? (
                     <div className="mt-3 rounded-md border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">

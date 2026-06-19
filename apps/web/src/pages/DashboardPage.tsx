@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, ArrowRight, CheckCircle2, ClipboardList, FolderKanban, Scroll, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle2, ClipboardList, FolderKanban, Scroll, Zap } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
@@ -20,6 +20,7 @@ import type {
   NextActionItem,
   NextActionQueueDto,
   ProjectDto,
+  SecretaryBriefDto,
   WorkOrderDto
 } from "@/types/api";
 
@@ -226,6 +227,7 @@ export function DashboardPage() {
   const [activity, setActivity] = useState<KingdomActivityStreamDto | null>(null);
   const [workOrders, setWorkOrders] = useState<WorkOrderDto[]>([]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [brief, setBrief] = useState<SecretaryBriefDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [reloadKey, setReloadKey] = useState(0);
 
@@ -237,15 +239,17 @@ export function DashboardPage() {
       api.getKingdomHealth().catch(() => null),
       api.getKingdomActivity(8).catch(() => null),
       api.workOrders().catch(() => ({ workOrders: [] as WorkOrderDto[], hiddenCount: 0 })),
-      api.projects().catch(() => ({ projects: [] as ProjectDto[] }))
+      api.projects().catch(() => ({ projects: [] as ProjectDto[] })),
+      api.secretaryBrief().catch(() => null)
     ])
-      .then(([nextRes, healthRes, activityRes, ordersRes, projectsRes]) => {
+      .then(([nextRes, healthRes, activityRes, ordersRes, projectsRes, briefRes]) => {
         if (cancelled) return;
         setNextActions(nextRes);
         setHealth(healthRes);
         setActivity(activityRes);
         setWorkOrders(ordersRes.workOrders);
         setProjects(projectsRes.projects);
+        setBrief(briefRes);
       })
       .finally(() => {
         if (!cancelled) setIsLoading(false);
@@ -337,6 +341,39 @@ export function DashboardPage() {
           </div>
         ) : (
           <EmptyState icon={FolderKanban} title="No active initiatives" description="No active projects or open work orders right now." />
+        )}
+      </SectionCard>
+
+      {/* 3b. Agent Reports — what external agents delivered back into the Kingdom */}
+      <SectionCard
+        title="Agent Reports"
+        icon={Bot}
+        action={
+          <Link to="/work-orders" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+            {brief && brief.kingdomStatus.workOrdersAwaitingReview > 0
+              ? `${brief.kingdomStatus.workOrdersAwaitingReview} awaiting review`
+              : "All Work Orders"}
+          </Link>
+        }
+      >
+        {brief && brief.recentAgentReports.length > 0 ? (
+          <div className="space-y-3">
+            {brief.recentAgentReports.map((report) => (
+              <Link
+                key={report.id}
+                to="/work-orders"
+                className="block rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm transition-colors hover:border-primary/45 hover:bg-card/80"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className="font-semibold text-foreground">{report.title}</span>
+                  <StatusBadge status={report.severity} />
+                </div>
+                <p className="mt-1 line-clamp-2 text-sm leading-relaxed text-muted-foreground">{report.content}</p>
+              </Link>
+            ))}
+          </div>
+        ) : (
+          <EmptyState icon={Bot} title="No agent reports yet" description="Dispatch a work order to an external agent — its report will appear here when it returns." />
         )}
       </SectionCard>
 

@@ -1063,11 +1063,13 @@ export type SecretaryBriefDto = {
     criticalMatters: number;
     awaitingRoyalDecision: number;
     failedTasks: number;
+    workOrdersAwaitingReview: number;
     budgetWarning: boolean;
   };
   urgentNotices: NoticeDto[];
   openMatters: MatterDto[];
   awaitingRoyalDecision: MatterDto[];
+  recentAgentReports: NoticeDto[];
   recommendedActions: RecommendedAction[];
   charter: { mission: string } | null;
   vision: { content: string } | null;
@@ -1604,6 +1606,7 @@ export type AutomationJobPayload = {
   mode?: AutomationJobMode;
   commandPolicy?: string | null;
   allowedCommands?: string[];
+  useAssignedAgentCli?: boolean;
 };
 
 export type PatchValidationResult = {

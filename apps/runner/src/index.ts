@@ -27,6 +27,7 @@ import { DEPENDENCY_INSTALL_FAILURE, getDependencyInstallConfig, installRunnerDe
 import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationCommands } from "./preValidationRunner.js";
 import { buildValidationChildEnv, formatForwardedValidationEnvNames, validateValidationDatabaseEnv } from "./validationEnv.js";
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
+import { resolveAgentCliConfig, runAgentCli } from "./agentCliRunner.js";
 
 dotenv.config({ path: "../../.env" });
 dotenv.config();
@@ -393,6 +394,50 @@ async function executeJob(job: AutomationJob) {
             status: "PLANNED"
           });
         }
+      }
+    }
+
+    // Agent CLI execution — let a configured external agent CLI (Claude Code/Codex/etc.)
+    // make REAL edits in the sandbox. The resulting diff is captured as a patch below;
+    // the runner still never pushes/merges/deploys.
+    const agentCli = (job.provenance?.agentCli ?? null) as { type?: string; prompt?: string } | null;
+    if (job.mode === "SANDBOX_PATCH" && agentCli?.type && agentCli?.prompt) {
+      sequence++;
+      const resolved = resolveAgentCliConfig(agentCli.type, process.env);
+      if (!resolved.enabled) {
+        log(`[Job ${job.id}] Agent CLI step skipped: ${resolved.reason}`);
+        await api.recordStep(job.id, {
+          sequence,
+          stepType: "COMMAND",
+          title: `Agent CLI (${agentCli.type})`,
+          detail: resolved.reason,
+          status: "BLOCKED",
+          output: `[BLOCKED] ${resolved.reason}`,
+          exitCode: -1
+        });
+        errors.push(`Agent CLI not run: ${resolved.reason}`);
+      } else {
+        log(`[Job ${job.id}] Running agent CLI '${resolved.config.command}' for ${agentCli.type}...`);
+        const cliResult = await runAgentCli({ config: resolved.config, prompt: agentCli.prompt, workspaceRoot: workspaceDir });
+        commandsRun.push(`agent-cli:${agentCli.type}`);
+        if (cliResult.timedOut) {
+          errors.push(`Agent CLI timed out (${agentCli.type}) after ${resolved.config.timeoutMs}ms`);
+        } else if (cliResult.exitCode !== 0) {
+          errors.push(`Agent CLI exited ${cliResult.exitCode} (${agentCli.type})`);
+        }
+        await api.recordStep(job.id, {
+          sequence,
+          stepType: "COMMAND",
+          title: `Agent CLI (${agentCli.type}): ${resolved.config.command}`,
+          status: cliResult.exitCode === 0 ? "COMPLETED" : "FAILED",
+          command: resolved.config.command,
+          output: sanitizeLogOutput(cliResult.output, 30000),
+          exitCode: cliResult.exitCode ?? -1,
+          durationMs: cliResult.durationMs,
+          metadata: { timedOut: cliResult.timedOut, agentCliType: agentCli.type }
+        });
+        logLines.push(`$ agent-cli:${agentCli.type}\n${sanitizeLogOutput(cliResult.output, 8000)}`);
+        log(`[Job ${job.id}] Agent CLI finished (exit ${cliResult.exitCode ?? "timeout"}, ${cliResult.durationMs}ms).`);
       }
     }
 
