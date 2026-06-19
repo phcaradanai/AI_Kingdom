@@ -92,7 +92,7 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
 - Audit log search is full-text across `action`, `resourceType`, `resourceId`, and user email only; metadata content is not searched.
 - Auth does not include SSO, OAuth, MFA, password reset, or email verification.
 - AI orchestration does not include tool calling or web search. Background autonomy now exists via the M19 scheduler (`kingdomSchedulerService.ts`) driving the gated Living Loop; there are still no fully autonomous tool-using agents.
-- Anthropic, Gemini, and local/Ollama are registry stubs only; runtime clients are not implemented yet.
+- Anthropic and Gemini now have real runtime clients (Anthropic via a native Messages API client in `anthropicProvider.ts`; Gemini via its OpenAI-compatible endpoint through `OpenAICompatibleProvider`). Both activate in the registry when their API key is present. Local/Ollama remains a registry stub with no runtime client yet.
 - Memory search is keyword/tag based; no vector database is implemented.
 - Project routing is deterministic keyword/alias/name/source-ancestry matching only; no vector database or autonomous background router is implemented.
 - Staging is configured but production deployment and production observability are not yet complete.

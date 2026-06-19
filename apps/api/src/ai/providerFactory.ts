@@ -4,6 +4,7 @@ import type { AIProvider } from "./aiProvider.js";
 import { MockAIProvider } from "./mockAIProvider.js";
 import { OpenAICompatibleProvider } from "./openAICompatibleProvider.js";
 import { OpenAIProvider } from "./openAIProvider.js";
+import { AnthropicProvider } from "./anthropicProvider.js";
 
 export type ProviderRuntimeConfig = {
   id: string;
@@ -55,7 +56,35 @@ export function createAIProviderByName(providerName: string): AIProvider {
     });
   }
 
+  if (providerName === "gemini") {
+    return createGeminiProvider("gemini", env.GEMINI_MODEL);
+  }
+
+  if (providerName === "anthropic") {
+    return createAnthropicProvider("anthropic", env.ANTHROPIC_MODEL);
+  }
+
   return new MockAIProvider();
+}
+
+/** Gemini exposes an OpenAI-compatible endpoint, so we reuse the OpenAI-compatible client. */
+function createGeminiProvider(providerId: string, defaultModel: string, baseUrl?: string | null): AIProvider {
+  return new OpenAICompatibleProvider({
+    providerId,
+    apiKey: env.GEMINI_API_KEY,
+    baseUrl: baseUrl ?? env.GEMINI_BASE_URL,
+    defaultModel
+  });
+}
+
+function createAnthropicProvider(providerId: string, defaultModel: string, baseUrl?: string | null): AIProvider {
+  return new AnthropicProvider({
+    providerId,
+    apiKey: env.ANTHROPIC_API_KEY,
+    baseUrl: baseUrl ?? env.ANTHROPIC_BASE_URL,
+    defaultModel,
+    anthropicVersion: env.ANTHROPIC_VERSION
+  });
 }
 
 export function createAIProviderFromConfig(config: ProviderRuntimeConfig): AIProvider {
@@ -72,6 +101,12 @@ export function createAIProviderFromConfig(config: ProviderRuntimeConfig): AIPro
     });
   }
   if (config.id === "deepseek" || config.type === "deepseek") return createAIProviderByName("deepseek");
+  if (config.id === "gemini" || config.type === "gemini") {
+    return createGeminiProvider(config.id, config.defaultModel, config.baseUrl);
+  }
+  if (config.id === "anthropic" || config.type === "anthropic") {
+    return createAnthropicProvider(config.id, config.defaultModel, config.baseUrl);
+  }
   if (config.type === "openai-compatible" && config.baseUrl) {
     return new OpenAICompatibleProvider({
       providerId: config.id,
