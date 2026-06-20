@@ -109,6 +109,8 @@ Desktop sidebar: show domain-level destinations and expandable children. Mobile:
 
 ### Wave 1: Foundation and Mission Control
 
+Progress: **Wave 1A complete** — application shell, navigation hierarchy, shared visual primitives, Dashboard, and Inbox. **Wave 1B pending** — Kingdom Operations, Royal Brief, and Living Loop page refinement.
+
 | Route | Primary refinement |
 | --- | --- |
 | `/dashboard` | Use a strong top-action band, compact health strip, and balanced two-column operational sections. Reduce repeated card borders and keep every item source-linked. |

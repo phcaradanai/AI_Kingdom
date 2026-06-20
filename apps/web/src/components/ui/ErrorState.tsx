@@ -12,9 +12,9 @@ interface ErrorStateProps {
 
 export function ErrorState({ title = "An Error Occurred", message = "Something went wrong. Please try again.", onRetry, className }: ErrorStateProps) {
   return (
-    <div className={cn("flex flex-col items-center justify-center rounded-xl border border-destructive/20 bg-destructive/5 p-8 text-center", className)}>
+    <div className={cn("flex flex-col items-center justify-center rounded-lg border border-destructive/20 bg-destructive/5 p-8 text-center", className)}>
       <AlertTriangle className="mb-4 h-8 w-8 text-destructive/80" />
-      <h3 className="mb-2 font-display text-lg text-foreground">{title}</h3>
+      <h3 className="mb-2 text-base font-semibold text-foreground">{title}</h3>
       <p className="max-w-md text-sm text-muted-foreground">{message}</p>
       {onRetry && (
         <Button onClick={onRetry} variant="outline" className="mt-6 border-destructive/50 text-destructive hover:bg-destructive/10 hover:text-destructive">

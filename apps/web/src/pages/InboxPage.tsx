@@ -16,6 +16,7 @@ import { PageHeader } from "@/components/PageHeader";
 import { ProvenanceLinks, provenanceFromNextAction } from "@/components/ProvenanceLinks";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { PageSection } from "@/components/ui/PageSection";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatCard } from "@/components/ui/StatCard";
 import { api } from "@/lib/api";
@@ -171,15 +172,15 @@ function DashboardSkeleton() {
       />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
-          <div key={index} className="h-28 animate-pulse rounded-xl border border-border bg-card/50" />
+          <div key={index} className="h-24 animate-pulse rounded-lg border border-border bg-card/50" />
         ))}
       </div>
-      <div className="h-72 animate-pulse rounded-xl border border-primary/25 bg-primary/5" />
+      <div className="h-72 animate-pulse rounded-lg border border-primary/25 bg-primary/5" />
       <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div className="h-56 animate-pulse rounded-xl border border-border bg-card/50" />
+        <div className="h-56 animate-pulse rounded-lg border border-border bg-card/50" />
         <div className="space-y-3">
-          <div className="h-24 animate-pulse rounded-xl border border-border bg-card/50" />
-          <div className="h-24 animate-pulse rounded-xl border border-border bg-card/50" />
+          <div className="h-24 animate-pulse rounded-lg border border-border bg-card/50" />
+          <div className="h-24 animate-pulse rounded-lg border border-border bg-card/50" />
         </div>
       </div>
     </div>
@@ -192,7 +193,7 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
   const sourceRoute = provenance.source?.to ?? item.routeTo;
 
   return (
-    <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-5 shadow-[0_0_20px_rgba(214,170,87,0.08)] sm:p-6">
+    <div className="rounded-lg border border-border border-l-2 border-l-primary bg-card p-5 sm:p-6">
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(220px,300px)]">
         <div className="min-w-0 space-y-5">
           <div className="flex flex-wrap items-center gap-2">
@@ -203,22 +204,22 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
           </div>
 
           <div className="min-w-0">
-            <h2 className="font-display text-2xl leading-tight text-foreground sm:text-3xl">{item.title}</h2>
+            <h2 className="text-xl font-semibold leading-tight text-foreground sm:text-2xl">{item.title}</h2>
             <div className="mt-3 max-w-3xl">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{tk("inbox.whyLabel")}</div>
+              <div className="text-xs font-semibold text-muted-foreground">{tk("inbox.whyLabel")}</div>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.why}</p>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-border/70 bg-background/35 p-4">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{tk("inbox.recommendedAction")}</div>
+              <div className="text-xs font-medium text-muted-foreground">{tk("inbox.recommendedAction")}</div>
               <div className="mt-2 text-sm font-semibold text-foreground">{item.actionLabel}</div>
             </div>
             <Link to={sourceRoute} className="rounded-lg border border-border/70 bg-background/35 p-4 transition hover:border-primary/40 hover:bg-primary/5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{tk("inbox.sourceOfTruth")}</div>
+                  <div className="text-xs font-medium text-muted-foreground">{tk("inbox.sourceOfTruth")}</div>
                   <div className="mt-2 text-sm font-semibold text-primary">{tk("inbox.openEntity", { entity: entityLabel(item.entityType, tk) })}</div>
                 </div>
                 <ExternalLink className="h-4 w-4 shrink-0 text-primary" />
@@ -229,11 +230,11 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
           <ProvenanceLinks {...provenance} />
         </div>
 
-        <div className="flex min-w-0 flex-col justify-between gap-4 rounded-xl border border-primary/20 bg-background/35 p-4">
+        <div className="flex min-w-0 flex-col justify-between gap-4 border-t border-border pt-5 lg:border-l lg:border-t-0 lg:pl-5 lg:pt-0">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{tk("inbox.priorityScore")}</div>
+            <div className="text-xs font-medium text-muted-foreground">{tk("inbox.priorityScore")}</div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="font-display text-5xl font-bold text-primary" aria-label={tk("inbox.priorityAria", { priority: item.priority })}>{item.priority}</span>
+              <span className="text-4xl font-semibold tabular-nums text-primary" aria-label={tk("inbox.priorityAria", { priority: item.priority })}>{item.priority}</span>
               <span className="text-sm text-muted-foreground">/100</span>
             </div>
             <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -254,7 +255,7 @@ function QueueItem({ item, busy, onRefreshContext }: { item: NextActionItem; bus
   const sourceRoute = provenance.source?.to ?? item.routeTo;
 
   return (
-    <div className="grid gap-3 rounded-xl border border-border bg-card/45 p-4 md:grid-cols-[minmax(0,1fr)_minmax(160px,auto)] md:items-center">
+    <div className="grid gap-3 rounded-lg border border-border bg-background/35 p-4 md:grid-cols-[minmax(0,1fr)_minmax(160px,auto)] md:items-center">
       <div className="min-w-0 space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <EntityTypeBadge type={item.entityType} />
@@ -312,14 +313,14 @@ function FilterPanel({
   return (
     <SectionCard title={tk("inbox.filters")} icon={Filter} contentClassName="space-y-4">
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tk("inbox.filterRisk")}</span>
+        <span className="text-xs font-semibold text-muted-foreground">{tk("inbox.filterRisk")}</span>
         <select className={selectCls} value={riskFilter} onChange={(event) => onRiskChange(event.target.value as RiskFilter)}>
           <option value="ALL">{tk("inbox.allRisks")}</option>
           {RISK_LEVELS.map((risk) => <option key={risk} value={risk}>{tk(`risk.${risk}`)}</option>)}
         </select>
       </label>
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tk("inbox.filterEntity")}</span>
+        <span className="text-xs font-semibold text-muted-foreground">{tk("inbox.filterEntity")}</span>
         <select className={selectCls} value={entityFilter} onChange={(event) => onEntityChange(event.target.value)}>
           <option value="ALL">{tk("inbox.allEntities")}</option>
           {entityTypes.map((type) => <option key={type} value={type}>{entityLabel(type, tk)}</option>)}
@@ -343,7 +344,7 @@ function FilterPanel({
 function SourceReferenceCards() {
   const tk = useTk();
   return (
-    <SectionCard title={tk("inbox.sourceRefTitle")} icon={Layers3}>
+    <PageSection title={tk("inbox.sourceRefTitle")} icon={Layers3}>
       <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SOURCE_LINKS.map((source) => (
           <Link
@@ -358,11 +359,11 @@ function SourceReferenceCards() {
               </div>
               <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{tk(`inbox.source.${source.type}.desc`)}</p>
             </div>
-            <span className="mt-3 text-xs font-bold uppercase tracking-wider text-primary">{tk("inbox.openSource")}</span>
+            <span className="mt-3 text-xs font-semibold text-primary">{tk("inbox.openSource")}</span>
           </Link>
         ))}
       </div>
-    </SectionCard>
+    </PageSection>
   );
 }
 
@@ -381,7 +382,7 @@ function RiskGroup({
   if (items.length === 0) return null;
 
   return (
-    <div className={cn("rounded-xl border p-3", RISK_SECTION_STYLES[risk])}>
+    <div className={cn("rounded-lg border p-3", RISK_SECTION_STYLES[risk])}>
       <div className="mb-3 flex items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2">
           <RiskBadge riskLevel={risk} />
@@ -535,23 +536,23 @@ export function InboxPage() {
       )}
 
       {summary && (
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard title={tk("inbox.stat.pending")} value={summary.totalPending} />
           <StatCard title={tk("inbox.stat.critical")} value={summary.criticalCount} className={summary.criticalCount > 0 ? "border-destructive/40" : undefined} />
           <StatCard title={tk("inbox.stat.high")} value={summary.highCount} className={summary.highCount > 0 ? "border-amber-500/40" : undefined} />
           <StatCard title={tk("inbox.stat.blocked")} value={summary.blockedCount} className={summary.blockedCount > 0 ? "border-destructive/30" : undefined} />
-          <StatCard title={tk("inbox.stat.escalated")} value={summary.escalatedCount} className={summary.escalatedCount > 0 ? "border-amber-500/30" : undefined} />
+          <StatCard title={tk("inbox.stat.escalated")} value={summary.escalatedCount} className={cn("col-span-2 sm:col-span-1", summary.escalatedCount > 0 && "border-amber-500/30")} />
         </div>
       )}
 
       {topAction ? (
-        <SectionCard title={tk("inbox.topActionTitle")} icon={Zap} contentClassName="p-0">
+        <PageSection title={tk("inbox.topActionTitle")} icon={Zap}>
           <TopActionCard
             item={topAction}
             busy={actionBusy[topAction.id] ?? false}
             onRefreshContext={handleContextRefresh}
           />
-        </SectionCard>
+        </PageSection>
       ) : (
         <EmptyState
           icon={CheckCircle2}
@@ -582,7 +583,7 @@ export function InboxPage() {
             }}
           />
 
-          <SectionCard
+          <PageSection
             title={tk("inbox.actionQueueTitle", { count: filteredQueue.length })}
             icon={Layers3}
             action={<span className="text-xs text-muted-foreground">{tk("inbox.totalCount", { count: queue.length })}</span>}
@@ -606,7 +607,7 @@ export function InboxPage() {
                 ))}
               </div>
             )}
-          </SectionCard>
+          </PageSection>
         </div>
       )}
     </div>

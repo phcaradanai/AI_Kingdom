@@ -9,6 +9,7 @@ import { KingdomHealthStrip } from "@/components/kingdom/KingdomHealthStrip";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { PageSection } from "@/components/ui/PageSection";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { api } from "@/lib/api";
@@ -66,9 +67,9 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
   const tk = useTk();
   if (!missionControl) {
     return (
-      <SectionCard title={tk("dashboard.missionControl")} icon={Gauge}>
+      <PageSection title={tk("dashboard.missionControl")} icon={Gauge}>
         <EmptyState icon={Gauge} title={tk("dashboard.mcUnavailableTitle")} description={tk("dashboard.mcUnavailableDesc")} />
-      </SectionCard>
+      </PageSection>
     );
   }
 
@@ -82,20 +83,20 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
   const recentActivity = missionControl.recentActivity.slice(0, 6);
 
   return (
-    <SectionCard
+    <PageSection
       title={tk("dashboard.missionControl")}
       icon={Gauge}
-      action={<Link to="/inbox" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">{tk("dashboard.actionInbox")}</Link>}
+      action={<Link to="/inbox" className="text-xs font-semibold text-primary hover:underline">{tk("dashboard.actionInbox")}</Link>}
     >
       <div className="space-y-6">
-        <div className="rounded-xl border border-border bg-card/70 p-4">
+        <div className="rounded-lg border border-border border-l-2 border-l-primary bg-card p-5">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{tk("dashboard.whatNext")}</span>
+            <span className="text-xs font-semibold text-muted-foreground">{tk("dashboard.whatNext")}</span>
             <span title={action.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
               {tk(`severity.${action.severity}`)}
             </span>
           </div>
-          <h3 className="mt-3 font-display text-xl text-foreground">{action.title}</h3>
+          <h3 className="mt-3 text-lg font-semibold text-foreground">{action.title}</h3>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{action.detail}</p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Link to={action.routeTo}>
@@ -104,7 +105,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
                 {tk("dashboard.openAction")}
               </Button>
             </Link>
-            <Link to={action.sourceReference.sourceRoute ?? action.sourceReference.routeTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+            <Link to={action.sourceReference.sourceRoute ?? action.sourceReference.routeTo} className="text-xs font-semibold text-primary hover:underline">
               {tk("dashboard.openSource")}
             </Link>
           </div>
@@ -184,15 +185,15 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
           )}
         </MissionSection>
       </div>
-    </SectionCard>
+    </PageSection>
   );
 }
 
 function MissionMetric({ label, value, to, source }: { label: string; value: number; to: string; source: string }) {
   const tk = useTk();
   return (
-    <Link to={to} className="rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:border-primary/45">
-      <div className="font-display text-2xl font-semibold text-foreground">{value}</div>
+    <Link to={to} className="min-h-24 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/45">
+      <div className="text-2xl font-semibold tabular-nums text-foreground">{value}</div>
       <div className="mt-1 text-sm font-semibold text-foreground">{label}</div>
       <div className="mt-2 text-xs text-muted-foreground">{tk("dashboard.sourcePrefix")} {source}</div>
     </Link>
@@ -202,24 +203,24 @@ function MissionMetric({ label, value, to, source }: { label: string; value: num
 function MissionSection({ title, icon: Icon, sourceTo, sourceLabel, children }: { title: string; icon: typeof Activity; sourceTo: string; sourceLabel: string; children: React.ReactNode }) {
   const tk = useTk();
   return (
-    <div className="space-y-3">
+    <section className="space-y-3 border-t border-border pt-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <Icon className="h-4 w-4 text-primary" />
-          <h3 className="font-display text-lg text-foreground">{title}</h3>
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         </div>
-        <Link to={sourceTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
+        <Link to={sourceTo} className="text-xs font-semibold text-primary hover:underline">
           {tk("dashboard.sourcePrefix")} {sourceLabel}
         </Link>
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
 function MissionCardShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-xl border border-border bg-card/70 p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       {children}
     </div>
   );
@@ -339,20 +340,20 @@ function MetricReviewCard({ title, value, to, reviewLabel = "Open source", descr
     <Link
       to={to}
       className={cn(
-        "group block rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm transition-colors hover:border-primary/45 hover:bg-card/80",
+        "group block rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/45 hover:bg-muted/20",
         className
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
+        <div className="text-xs font-medium text-muted-foreground">{title}</div>
         {Icon && <Icon className="h-4 w-4 text-primary/70" />}
       </div>
       <div className="mt-3 flex flex-wrap items-baseline gap-2">
-        <div className="font-display text-3xl font-bold text-foreground">{value}</div>
+        <div data-metric-value className="text-3xl font-semibold tabular-nums text-foreground">{value}</div>
         {trend && <div className={cn("text-xs font-semibold", trend.isPositive ? "text-emerald-500" : "text-red-500")}>{trend.value}</div>}
       </div>
       {description && <div className="mt-1 text-xs leading-relaxed text-muted-foreground">{description}</div>}
-      <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary group-hover:underline">
+      <div className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-primary group-hover:underline">
         {reviewLabel}
         <ArrowRight className="h-3.5 w-3.5" />
       </div>
@@ -456,14 +457,14 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
+    <div className="space-y-8">
       <PageHeader
         eyebrow={tk("dashboard.eyebrow")}
         title={tk("dashboard.title")}
         description={tk("dashboard.description")}
         action={canCommand ? (
           <Link to="/throne-room?view=command">
-            <Button variant="outline" className="gap-2">
+            <Button className="gap-2">
               <Scroll className="h-4 w-4" />
               {tk("dashboard.issueDecree")}
             </Button>
@@ -478,7 +479,7 @@ export function DashboardPage() {
       <SectionCard
         title={tk("dashboard.activityStream")}
         icon={Activity}
-        action={<Link to="/kingdom/operations" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">{tk("dashboard.operationsCenter")}</Link>}
+        action={<Link to="/kingdom/operations" className="text-xs font-semibold text-primary hover:underline">{tk("dashboard.operationsCenter")}</Link>}
       >
         <KingdomActivityFeed activities={activity?.activities ?? []} limit={8} />
       </SectionCard>

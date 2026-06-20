@@ -12,19 +12,19 @@ interface SectionCardProps {
 
 export function SectionCard({ title, icon: Icon, action, children, className, contentClassName }: SectionCardProps) {
   return (
-    <div className={cn("rounded-xl border border-border bg-card/60 backdrop-blur-sm overflow-hidden", className)}>
+    <section className={cn("overflow-hidden rounded-lg border border-border bg-card", className)}>
       {(title || action) && (
-        <div className="flex items-center justify-between border-b border-border/50 px-5 py-4 bg-muted/20">
-          <div className="flex items-center gap-3">
-            {Icon && <Icon className="h-5 w-5 text-primary" />}
-            {title && <h3 className="font-display text-lg text-foreground">{title}</h3>}
+        <div className="flex min-h-14 flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <div className="flex min-w-0 items-center gap-2.5">
+            {Icon && <Icon className="h-4 w-4 shrink-0 text-primary" />}
+            {title && <h2 className="min-w-0 break-words text-sm font-semibold text-foreground">{title}</h2>}
           </div>
-          {action && <div>{action}</div>}
+          {action && <div className="shrink-0">{action}</div>}
         </div>
       )}
       <div className={cn("p-5", contentClassName)}>
         {children}
       </div>
-    </div>
+    </section>
   );
 }

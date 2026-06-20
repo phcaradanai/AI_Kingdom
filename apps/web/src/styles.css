@@ -5,16 +5,16 @@
 @tailwind utilities;
 
 :root {
-  --background: 224 34% 7%;
-  --foreground: 42 36% 91%;
-  --card: 224 30% 11%;
-  --card-foreground: 42 36% 91%;
-  --primary: 42 78% 58%;
-  --primary-foreground: 224 34% 7%;
-  --muted: 225 19% 18%;
-  --muted-foreground: 42 15% 70%;
-  --border: 42 26% 24%;
-  --input: 225 24% 16%;
+  --background: 220 8% 8%;
+  --foreground: 40 18% 92%;
+  --card: 220 7% 11%;
+  --card-foreground: 40 18% 92%;
+  --primary: 42 72% 58%;
+  --primary-foreground: 220 8% 8%;
+  --muted: 220 7% 16%;
+  --muted-foreground: 40 8% 66%;
+  --border: 40 11% 24%;
+  --input: 220 7% 14%;
   --ring: 42 78% 58%;
 }
 
@@ -25,11 +25,10 @@
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 20% 5%, rgba(214, 170, 87, 0.16), transparent 34%),
-    linear-gradient(135deg, #090d18 0%, #111827 44%, #17131f 100%);
+  background: hsl(var(--background));
   color: hsl(var(--foreground));
   font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+  text-rendering: optimizeLegibility;
 }
 
 button,
@@ -39,9 +38,8 @@ textarea {
 }
 
 .glass {
-  background: rgba(18, 25, 43, 0.76);
-  border: 1px solid rgba(214, 170, 87, 0.22);
-  backdrop-filter: blur(18px);
+  background: hsl(var(--card));
+  border: 1px solid hsl(var(--border));
 }
 
 .agent-status-idle,

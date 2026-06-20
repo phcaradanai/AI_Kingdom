@@ -57,8 +57,8 @@ afterEach(() => {
 
 function getStatCardValue(title: string): string {
   const heading = screen.getByText(title);
-  const card = heading.closest(".rounded-xl") as HTMLElement;
-  return card.querySelector(".font-display")?.textContent ?? "";
+  const card = heading.closest("a") as HTMLElement;
+  return card.querySelector("[data-metric-value]")?.textContent ?? "";
 }
 
 function renderWithRouter(ui: React.ReactElement) {
