@@ -2,7 +2,7 @@
 
 ## Current State
 
-AI Kingdom Web MVP is implemented through M14. The app supports authenticated role-based access, task intake, Grand Vizier council processing, provider-agnostic AI routing with fallback, external agent work orders and handoffs, project-aware workspaces with Royal Secretary routing, persistent memory, generated reports, editable agents/settings/providers, staging-ready Docker deployment, Royal Treasury for cost tracking, Audit Log for operational oversight, and a Kingdom Charter + Vision constitutional layer that is injected into every council session.
+AI Kingdom is implemented through M21. The current system is a role-aware Kingdom Control Plane with Mission Control, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
@@ -50,8 +50,8 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 - Public health: `GET /health`, `GET /health/db`.
 - Auth: `POST /api/auth/login`, `POST /api/auth/logout`, `POST /api/auth/refresh`, `GET /api/auth/me`.
-- Core resources: `/api/tasks`, `/api/council`, `/api/reports`, `/api/memory` (also aliased as `/api/memories`).
-- Admin resources (KING only): `/api/agents`, `/api/settings`, `/api/providers`, `/api/users`; external agent create/update/delete is KING-only.
+- Core command and knowledge resources: `/api/tasks`, `/api/council`, `/api/reports`, `/api/memory` (also `/api/memories`), `/api/agent-activities`, `/api/agent-conversations`, `/api/living-agents`, `/api/knowledge-candidates`, and `/api/knowledge-memories`.
+- Admin/provider resources (KING only unless noted): `/api/agents`, `/api/settings`, `/api/providers`, `/api/provider-balances`, `/api/model-pricing`, `/api/route-chains`, and `/api/users`; external agent create/update/delete is KING-only.
 - External work resources: `/api/external-agents`, `/api/work-orders`, `/api/work-sessions`, `/api/implementation-reports`, `/api/handoff-briefs`. Reads are authenticated. Work-order create/update and handoff generation are KING/CROWN_PRINCE. Implementation reports can be submitted by KING/CROWN_PRINCE/MINISTER. SCRIBE is read-only. `GET /api/work-orders/:id/external-agent-recommendations` (any authenticated role) returns ranked agent recommendations for the work order. `POST /api/work-orders/:id/rebind-context` (KING/CROWN_PRINCE) repairs a stale or missing context binding. `POST /api/projects/:id/rebind-contexts` (KING/CROWN_PRINCE) bulk-repairs all MISSING/STALE work order bindings for a project. `POST /api/work-orders/reconcile-context-warnings` (KING/CROWN_PRINCE) bulk-reconciles all READY/IN_PROGRESS/NEEDS_REVIEW work orders with MISSING/STALE context — archives those with completion evidence (with audit trail), attempts context repair on the rest (also audited), and returns a summary.
 - Project workspace resources: `/api/projects`, `/api/project-routing`, `/api/project-inbox`, `/api/artifacts`, and `/api/projects/:id/export/obsidian`. Project reads are authenticated; create/update is KING/CROWN_PRINCE; delete/archive is KING-only. Project Inbox assignment is KING/CROWN_PRINCE. Artifacts can be created by KING/CROWN_PRINCE/MINISTER; SCRIBE is read-only.
 - Treasury resources (KING only): `/api/treasury/overview`, `/api/treasury/usage`, `/api/treasury/agents`, `/api/treasury/providers`, `/api/treasury/reports`.
@@ -60,35 +60,39 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 - Royal Secretary: `GET /api/secretary/brief` (all authenticated).
 - Notices (read: all; create/delete: KING; update: KING+CROWN_PRINCE): `GET /api/notices`, `GET /api/notices/:id`, `POST /api/notices`, `PATCH /api/notices/:id`, `DELETE /api/notices/:id`.
 - Matters (same RBAC as notices): `GET /api/matters`, `GET /api/matters/:id`, `POST /api/matters`, `PATCH /api/matters/:id`, `DELETE /api/matters/:id`.
-- Living Loop (KING/CROWN_PRINCE read, KING write): `GET /api/living-loop/status`, `GET /api/living-loop/scheduler` (M19 autonomy worker status), `GET /api/living-loop/runs`, `POST /api/living-loop/run`.
+- Living Loop (KING/CROWN_PRINCE read, KING write): `GET /api/living-loop/status`, `GET /api/living-loop/scheduler`, `GET /api/living-loop/runs`, `POST /api/living-loop/run`. Status includes auto-validation, auto-sandbox-patch, and M21 Auto Context Repair counters/gates.
 - Automation Candidates (KING/CROWN_PRINCE read, KING write): `GET /api/automation-candidates`, `POST /api/automation-candidates/:id/approve`, `/reject`, `/archive`, `/apply`.
 - Automation Jobs (KING only): `GET /api/automation-jobs`, `GET /api/automation-jobs/:id`, `POST /api/automation-jobs`, `POST /api/automation-jobs/:id/approve`, `POST /api/automation-jobs/:id/cancel`, `GET /api/automation-jobs/:id/agent-review`, `POST /api/automation-jobs/:id/agent-review/regenerate`.
 - Patch Artifacts (read: authenticated; approve/reject/request-revision/create-pr: KING only): `GET /api/patch-artifacts`, `GET /api/patch-artifacts/:id`, `POST /api/patch-artifacts/:id/approve`, `/reject`, `/request-revision`, `/create-pr`.
-- Runner: token-authenticated endpoints for heartbeat, job claim, step recording, status updates, patch artifact submission, and report submission (not part of the user-facing RBAC surface).
+- Runner: `/api/runners` provides King-governed runner records; token-authenticated `/api/runner` endpoints handle heartbeat, job claim, step recording, status updates, patch artifact submission, and report submission outside the user-facing RBAC surface.
 - Kingdom Operations Center (KING/CROWN_PRINCE): `GET /api/kingdom/presence` (agent state machine across all agents), `GET /api/kingdom/activity?limit=N` (unified activity stream, last 48h), `GET /api/kingdom/health` (6 health dimensions with HEALTHY/WARNING/CRITICAL status).
 - Kingdom Next Action Engine (KING/CROWN_PRINCE): `GET /api/next-actions` — live-computed priority queue of the highest-priority next King action across all entity types. Query params: `limit` (default 20, max 100), `entityTypes` (comma-separated filter: WorkOrder, AutomationJob, PatchArtifact, AgentRunner, HandoffBrief, AgentKnowledgeCandidate), `minRisk` (LOW/MEDIUM/HIGH/CRITICAL). Returns `{ computedAt, topAction, queue, summary: { totalPending, criticalCount, highCount, blockedCount, escalatedCount } }`.
+- Mission Control and decision support: `GET /api/mission-control` (KING/CROWN_PRINCE), `/api/kingdom/presence|activity|health`, `/api/royal-brief`, and `/api/strategy`.
+- Usage provenance: `/api/usage-traces` exposes trace/timeline evidence for authenticated users; runner endpoints remain token-authenticated and separate from user RBAC.
 
-RBAC is enforced server-side. `KING` has full access; `CROWN_PRINCE` can use tasks, council, reports, and memory; `MINISTER` can use tasks and reports; `SCRIBE` has read-only access to tasks, council, reports, and memory.
+RBAC is enforced server-side per route and HTTP method. `KING` owns administration and execution approvals; `CROWN_PRINCE` has operational/project/work-order access; `MINISTER` has permitted command/report/project workflows; `SCRIBE` is read-only on permitted records. Frontend navigation mirrors these rules but is not the security boundary.
 
 ## Current Web Routes
 
-Implemented pages: `/login`, `/dashboard`, `/charter`, `/vision`, `/notices`, `/matters`, `/projects`, `/projects/:id`, `/project-inbox`, `/artifacts`, `/throne-room`, `/council`, `/agents`, `/external-agents`, `/work-orders`, `/providers`, `/reports`, `/memory`, `/settings`, `/treasury`, `/audit`, `/profile`, `/users`, `/security`, `/living-loop`, `/automation-jobs`, `/inbox`, and `/kingdom/operations`.
+Implemented pages: `/login`, `/dashboard`, `/inbox`, `/kingdom/operations`, `/royal-brief`, `/living-loop`, `/throne-room`, `/council`, `/strategy`, `/projects`, `/projects/:id`, `/work-orders`, `/project-inbox`, `/artifacts`, `/reports`, `/memory`, `/agent-chat`, `/knowledge-lab`, `/knowledge-lab/candidates`, `/knowledge-lab/memories`, `/charter`, `/vision`, `/living-agents`, `/living-agents/:agentId`, `/agents`, `/external-agents`, `/providers`, `/routing`, `/automation-jobs`, `/treasury`, `/usage-traces/:traceId`, `/audit`, `/settings`, `/users`, `/notices`, `/matters`, `/security`, and `/profile`.
 
-Navigation is role-aware. The frontend also handles access-token refresh and clears the session when refresh fails.
+Navigation is role-aware and grouped into Mission Control / Command / Work / Knowledge / Agents & Models / System. Mission Control is read-only and source-linked; lifecycle actions remain on owning pages. The frontend handles access-token refresh and clears the session when refresh fails.
 
 ## Verification
 
-Validation baseline at FOUNDATION_OPERATIONS_CENTER (2026-06-17):
+Latest validation baseline at `b6ce344` (2026-06-20):
 
 - `npm run typecheck` (api, runner, web workspaces) — pass
-- `npm run test --workspace @ai-kingdom/api` (731/731 passing — +9 kingdom presence/activity/health service tests; 9/9 new tests confirmed passing individually with `--test-concurrency=1`)
-- `npm run test --workspace @ai-kingdom/runner` (87/87 passing)
-- `npm run test --workspace @ai-kingdom/web` (110/110 passing — +3 KingdomOperationsPage tests)
+- `npm run lint` (api, runner, web workspaces) — pass
+- `npm run test --workspace @ai-kingdom/web` — 132/132 pass
+- Focused provenance coverage (`ProvenanceLinks`, `InboxPage`, `KingdomOperationsPage`) — 26/26 pass
 - `npm run build` (api, runner, web workspaces) — pass
+- HTTP smoke: web 200, API health 200
+- Root `npm run test` did not complete: the serial API run reached 273 passing tests, then stopped producing output in the existing provider/orchestrator segment and was terminated; runner and web phases were not reached by that root command.
 
 **Gotcha:** new Prisma migrations must be deployed to the `ai_kingdom_test` database (`npm run test:db:prepare`, or `prisma migrate deploy` with the test `DATABASE_URL`) *before* running root `npm run test`; otherwise route tests fail with 500s caused by test-DB schema drift.
 
-Local smoke checks confirmed King login, treasury page rendering with agent/provider/model breakdowns, UsageRecord creation on task processing, budget warning banner activation, and no console errors.
+The web production build still emits the existing Rollup warning for a JavaScript chunk larger than 500 kB. No schema migration was part of M20/M21.
 
 ## Known Gaps
 
@@ -111,5 +115,6 @@ Local smoke checks confirmed King login, treasury page rendering with agent/prov
   - **Runner result reviews** (M17H): after report submission, the API creates/updates an `AgentReviewSummary` for the King. This is advisory only: it summarizes runner output and recommends approve/reject/revision/manual review, but it never approves a `PatchArtifact`, runs commands, applies patches, pushes branches, opens PRs, merges, or deploys.
 
 ## Known non-blocking:
-- Vitest 4.x with Vite 5.x emits deprecation warnings. Tests pass; consider pinning Vitest to a Vite 5-compatible version or upgrading Vite later.
-- One pre-existing backend test expects LivingLoopRun status COMPLETED; if shared test DB candidate counts hit daily cap, it may become SKIPPED. Consider isolating test data or resetting candidate counts in a follow-up.
+- Vitest 4.x with Vite 5.x emits esbuild/oxc deprecation warnings; the web suite still passes.
+- The serial root API suite can stall in the provider/orchestrator segment after substantial passing coverage. Isolate external-provider timing/config from the test environment before treating root `npm run test` as a reliable completion signal.
+- The web bundle has a >500 kB chunk warning; route-level code splitting remains a performance follow-up.

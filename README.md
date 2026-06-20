@@ -1,6 +1,6 @@
-# AI Kingdom Web MVP
+# AI Kingdom
 
-A production-minded MVP for a fictional digital kingdom where the user acts as King and issues royal commands to a council of specialized AI agents.
+A local-first Kingdom Control Plane where the King issues commands to specialized AI agents, reviews source-linked work, and governs sandboxed automation through explicit safety gates.
 
 ## Stack
 
@@ -9,8 +9,13 @@ A production-minded MVP for a fictional digital kingdom where the user acts as K
 - Zustand state
 - Node.js + Express + TypeScript
 - PostgreSQL + Prisma
+- Sandboxed local runner for validation and patch artifacts
 - JWT email/password auth
-- Provider-agnostic AI registry with OpenAI-compatible routing
+- Provider-agnostic AI routing with usage and cost provenance
+
+## Current Status
+
+Implemented through M21, including Mission Control navigation/provenance, the background Living Loop scheduler, and opt-in Auto Context Repair. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current capabilities and verification evidence, [ARCHITECTURE.md](ARCHITECTURE.md) for system boundaries, and [NEXT_TASK.md](NEXT_TASK.md) for the single next milestone.
 
 ## Setup
 
@@ -66,9 +71,11 @@ Supported runtime providers today:
 - `openai`
 - `openrouter`
 - `deepseek`
+- `anthropic` (native Messages API client)
+- `gemini` (OpenAI-compatible endpoint)
 - `openai-compatible`
 
-Anthropic, Gemini, and local/Ollama provider metadata is prepared for future runtime support.
+The built-in local sandbox baseline is the final deterministic fallback. Local/Ollama registry metadata exists, but there is no Ollama runtime client yet.
 
 Server-side credential env vars:
 
@@ -95,12 +102,12 @@ Use `/providers` or the provider status list in `/settings` to activate/deactiva
 
 Authentication uses bcrypt password hashes, short-lived JWT access tokens, and server-stored refresh token sessions. Login returns an access token and refresh token; logout revokes the active refresh session so the access token can no longer be used.
 
-Roles:
+Roles are enforced per route and HTTP method:
 
-- `KING`: full access to agents, settings, users, tasks, council, reports, and memory.
-- `CROWN_PRINCE`: tasks, council, reports, and memory.
-- `MINISTER`: tasks and reports.
-- `SCRIBE`: read-only access to tasks, council, reports, and memory.
+- `KING`: full administration plus all command, review, and execution approvals.
+- `CROWN_PRINCE`: operational command/project/work-order access without King-only administration.
+- `MINISTER`: permitted command, reporting, project, and implementation-report workflows.
+- `SCRIBE`: read-only access to permitted Kingdom records.
 
 JWT configuration:
 
@@ -119,9 +126,9 @@ Audit logs are written for login, logout, user creation/deactivation, settings c
 3. Choose a command mode: Ask, Plan, Research, or Build.
 4. Submit a royal command.
 5. Send the decree to the Grand Vizier.
-6. Review council responses, memory usage, auto-saved memories, and the final Grand Vizier summary.
+6. Review the council result, generated report, source-linked Work Order, or next action in Mission Control.
 
-M12.5 routes council responses through the provider registry. The mock provider remains the default; OpenAI, OpenRouter, DeepSeek, and generic OpenAI-compatible endpoints can be enabled with server-side env vars.
+Council responses route through the provider registry. The mock provider remains the code default; OpenAI, OpenRouter, DeepSeek, Anthropic, Gemini, and custom OpenAI-compatible endpoints can be enabled with server-side env vars.
 
 ## Royal Treasury
 
@@ -224,7 +231,7 @@ Use `/reports` to search, filter by category or importance, inspect source task/
 
 ## External Agent Bridge
 
-M13 adds manual handoff support for external app agents such as Claude Code, Codex, Cline, Kilo, Antigravity, Hermes, OpenCode, and custom executors. These agents are execution workers only. AI Kingdom remains the source of truth for objective, scope, constraints, acceptance criteria, and status.
+External app agents such as Claude Code, Codex, Cline, Kilo, Antigravity, Hermes, OpenCode, and custom executors remain execution workers only. AI Kingdom remains the source of truth for objective, scope, constraints, acceptance criteria, and status.
 
 Lifecycle:
 
@@ -235,7 +242,7 @@ Lifecycle:
 5. Handoff Brief
 6. Memory / Report / Next Task update
 
-Use `/external-agents` to view seeded manual handoff targets. Kings can create, edit, activate, or deactivate records. Seeded targets include Claude Code, Codex, Cline, Kilo, Antigravity, and Hermes. All M13 execution modes are manual copy-paste; the backend does not call external agent APIs.
+Use `/external-agents` to view seeded executor targets. Kings can create, edit, activate, or deactivate records. Manual copy-paste handoff remains the default. Two explicit, gated execution paths also exist: the runner can invoke a configured external-agent CLI inside a sandboxed job, and the Throne Room external-agent bridge can dispatch supported work through the runner. Both paths preserve WorkOrder/AutomationJob provenance, report outcomes back to the Kingdom, and do not call proprietary external-agent APIs directly.
 
 Use `/work-orders` to:
 
@@ -300,7 +307,7 @@ Confidence behavior:
 
 Every decision includes a reason, for example: `Matched AI Kingdom because keyword 'provider', keyword 'agent', keyword 'work order'.`
 
-Use `/project-inbox` to review low-confidence items, assign them to a project, or dismiss them. The router does not use embeddings or a vector database yet, and it does not run autonomous background workers.
+Use `/project-inbox` to review low-confidence items, assign them to a project, or dismiss them. This router remains deterministic and synchronous; it does not use embeddings, a vector database, or an autonomous routing worker. The separate M19 scheduler only drives the gated Living Loop.
 
 ### Artifact Vault and Obsidian Export
 
@@ -323,13 +330,13 @@ Project export v1 returns an Obsidian-friendly JSON payload rather than writing 
 
 ## Living Loop and Sandbox Runner
 
-`apps/runner` is an optional sandbox executor that claims `AutomationJob` work from the API and runs it in an isolated workspace. It is disabled by default (`LIVING_LOOP_ENABLED=false`) and never pushes branches, opens PRs, merges, or deploys on its own.
+`apps/runner` is an optional sandbox executor that claims approved `AutomationJob` work from the API and runs it in an isolated workspace. The runner can be started independently of the Living Loop. Autonomous candidate generation is disabled by default (`LIVING_LOOP_ENABLED=false`), and auto-created patch jobs never push branches, open PRs, merge, or deploy.
 
 Runner env vars (`apps/runner/.env`):
 
 ```env
 API_BASE_URL=http://localhost:4000
-RUNNER_TOKEN=...                # token-authenticated runner identity, set via /api/runners
+RUNNER_TOKEN=...                # same token used by npm run runner:bootstrap
 RUNNER_REPO_PATH=/absolute/path/to/repo   # required for VALIDATION_ONLY jobs (workspace copy source)
 WORKSPACE_BASE=/tmp/ai-kingdom-runner
 HEARTBEAT_INTERVAL_MS=15000
@@ -343,6 +350,10 @@ Living Loop settings (`/settings`, all default disabled / conservative):
 - `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS` — auto-creates `VALIDATION_ONLY` jobs (read/typecheck/test/build commands only; never edits files or pushes).
 - `LIVING_LOOP_AUTO_SANDBOX_PATCH` — auto-creates `SANDBOX_PATCH` jobs for LOW-risk, project-linked candidates only.
 - `LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS`, `LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES`, `LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE` — risk-policy gates for auto sandbox patches.
+- `LIVING_LOOP_AUTO_CONTEXT_REPAIR` — opt-in M21 stage that scans approved local-doc roots and rebinds MISSING/STALE WorkOrder context before later loop stages.
+- `LIVING_LOOP_MAX_DAILY_CONTEXT_REPAIRS`, `LIVING_LOOP_CONTEXT_REPAIR_COOLDOWN_MINUTES` — Auto Context Repair throttles.
+
+The M19 scheduler starts with the API process and checks `LIVING_LOOP_ENABLED` on every tick. Configure its interval with `LIVING_LOOP_INTERVAL_MS` (default 300000ms, minimum 15000ms). Use `npm run autonomy:enable` / `npm run autonomy:disable`; add `-- --with-sandbox-patch` or `-- --with-context-repair` only when those opt-in capabilities are intended.
 
 ### No-push policy
 
@@ -363,7 +374,7 @@ The Kingdom reads approved local project documentation before planning or patchi
 
 - `RUNNER_REPO_PATH` — absolute path the runner copies as its validation workspace (`apps/runner/.env`).
 - `LIVING_LOOP_REQUIRE_FRESH_LOCAL_CONTEXT` — when enabled (Settings), the runner refuses SANDBOX_PATCH jobs whose context binding is stale or missing.
-- `ENABLE_LIVING_LOOP_SCHEDULER` — reserved for a future scheduled Living Loop; the loop currently runs via `POST /api/living-loop/run` or the scheduled trigger path.
+- `LIVING_LOOP_INTERVAL_MS` — scheduler interval; the API scheduler still does nothing while `LIVING_LOOP_ENABLED=false`.
 
 **Test DB migrations:** the test suite uses the `ai_kingdom_test` database. After adding a Prisma migration, deploy it there before running tests:
 
@@ -384,6 +395,9 @@ npm run test
 npm run test:db:prepare
 npm run db:migrate
 npm run db:seed
+npm run runner:bootstrap
+npm run autonomy:enable
+npm run autonomy:disable
 ```
 
 ## Staging Deployment
@@ -488,7 +502,7 @@ The Grand Vizier is required for orchestration and cannot be deleted or deactiva
 
 Use `/settings` to edit safe runtime settings:
 
-- `AI_PROVIDER`: legacy default provider hint (`mock`, `openai-compatible`, `openai`, `openrouter`, or `deepseek`)
+- `AI_PROVIDER`: legacy default provider hint (`mock`, `openai-compatible`, `openai`, `openrouter`, `deepseek`, `anthropic`, or `gemini`)
 - `AI_COST_MODE`: `low`, `balanced`, or `quality`
 - `OPENAI_MODEL`
 - `AI_TIMEOUT_MS`
@@ -507,4 +521,3 @@ To reset seeded agents and default settings:
 ```bash
 npm run db:seed
 ```
-# AI_Kingdom

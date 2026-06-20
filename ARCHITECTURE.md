@@ -2,12 +2,13 @@
 
 ## Overview
 
-AI Kingdom is a TypeScript npm workspaces monorepo with two applications:
+AI Kingdom is a TypeScript npm workspaces monorepo with three applications:
 
 - `apps/api`: Express API, Prisma ORM, PostgreSQL, JWT auth, AI orchestration services.
 - `apps/web`: React/Vite dashboard, TailwindCSS styling, React Router pages, Zustand state.
+- `apps/runner`: token-authenticated sandbox worker for validation, external-agent CLI execution, patch capture, and structured result reporting.
 
-The backend owns persistence, authentication, RBAC, orchestration, AI provider selection, memory extraction, and report generation. The frontend is a role-aware dashboard client that calls REST endpoints through `apps/web/src/lib/api.ts`.
+The API owns persistence, authentication, RBAC, orchestration, provider routing, audit records, scheduler state, and execution policy. The frontend is a role-aware client that calls REST endpoints through `apps/web/src/lib/api.ts`. The runner executes only claimed jobs inside prepared workspaces and reports redacted evidence back to the API; it is not a second source of truth.
 
 ## Backend Layout
 
@@ -26,20 +27,24 @@ Primary services:
 - `royalSecretaryService.ts`: `Notice` and `Matter` CRUD with dedup logic; `inspectKingdomStatus` aggregates live kingdom health counts; `generateDailyBrief` returns status, urgent notices, open matters, awaiting-decision matters, `recommendedActions` list, and charter/vision context for the dashboard.
 - `kingdomComplianceService.ts`: `getKingdomContext()` loads charter + vision, auto-seeds from files if missing, never throws; returns empty string on failure so the orchestrator always proceeds.
 - `auditService.ts`: audit log writes for security-sensitive actions; read functions (`listAuditLogs`, `getAuditLogEntry`, `searchAuditLogs`) with filter/pagination support; `sanitizeMetadata` strips keys containing "password", "token", "apikey", "secret", "credential", "authorization", or "bearer" recursively before any response.
-- `externalAgentWorkOrderService.ts`: external executor bridge. Seeds manual handoff targets, generates work orders from tasks/matters, builds copy-paste prompts with charter/vision/project context, records implementation reports, creates handoff briefs, captures decision memories, and creates completion report summaries.
+- `externalAgentWorkOrderService.ts`: external work package service. Seeds manual handoff targets, generates work orders from tasks/matters, builds copy-paste prompts with charter/vision/project context, records implementation reports, creates handoff briefs, captures decision memories, and creates completion report summaries.
+- `externalAgentBridgeService.ts`: creates gated runner-backed external-agent jobs and records their lifecycle/outcome without calling proprietary agent APIs directly.
 - `projectService.ts`: seeds default projects, returns project overview counts, creates secret-checked artifacts, and generates Obsidian-friendly markdown export payloads.
 - `projectRoutingService.ts`: Royal Secretary project classifier. Uses deterministic keyword, alias, project name/codename, and source ancestry matching. Scores are explainable; confidence >=80 auto-assigns, 50-79 creates a suggested Project Inbox item, and <50 leaves the source unassigned for review.
 - `projectContextService.ts`: builds compact project context for agents: project identity, goals, status, active milestone, recent decisions/reports, open matters, active work orders, linked memories, and artifacts. Output is capped to avoid prompt bloat.
+- `livingLoopService.ts`: observes Kingdom state, proposes quality-gated candidates, and runs the three opt-in auto-act stages for context repair, validation jobs, and sandbox patch jobs.
+- `kingdomSchedulerService.ts`: in-process, non-overlapping scheduler that checks `LIVING_LOOP_ENABLED` each tick and drives `runLivingLoopOnce("SCHEDULED")`.
+- `missionControlService.ts` and `nextActionService.ts`: read-only command summaries that link back to WorkOrders, AutomationJobs, reviews, providers, and other owning records.
 
 ## Data Model
 
-Core Prisma models are `User`, `RefreshToken`, `AuditLog`, `Agent`, `AIProvider`, `AIProviderRoute`, `Project`, `ProjectRoutingCandidate`, `ProjectInboxItem`, `Artifact`, `ExternalAgent`, `WorkOrder`, `WorkSession`, `ImplementationReport`, `HandoffBrief`, `Setting`, `Task`, `CouncilSession`, `AgentResponse`, `Memory`, `Report`, `UsageRecord`, `TreasuryLedger`, `Budget`, `KingdomCharter`, `KingdomVision`, `Notice`, and `Matter`.
+Core Prisma model groups cover identity/audit, providers/usage, projects/context snapshots, commands/council, external work/execution, reports/knowledge, Living Loop candidates/runs, and Kingdom governance. The principal execution chain is `Task -> CouncilSession -> WorkOrder -> AutomationJob -> ImplementationReport/PatchArtifact -> AgentReviewSummary`, with source ids and trace ids preserving provenance between stages.
 
 Tasks belong to users and may produce council sessions and reports. Council sessions store selected agent IDs, provider/model metadata, fallback notices, consulted memory IDs, auto-saved memory IDs, agent responses, and final summary. Reports and memories retain source task/session references when generated from council output.
 
 Projects are long-running kingdom assets. `Task`, `Matter`, `Notice`, `CouncilSession`, `Report`, `Memory`, `WorkOrder`, `ImplementationReport`, `HandoffBrief`, and `Artifact` have optional `projectId` links so unassigned work remains valid. `ProjectRoutingCandidate` records every explainable routing decision. `ProjectInboxItem` holds low-confidence or ambiguous items for royal confirmation. `Artifact` is the project-linkable knowledge vault for prompts, specs, decisions, implementation reports, handoff briefs, architecture notes, research, code plans, decrees, and general notes.
 
-External agents are execution workers, not internal council members. `WorkOrder` is the source-of-truth package; `WorkSession` records a manual execution attempt; `ImplementationReport` captures what the external app agent did; `HandoffBrief` packages the current state for another executor. Backend code never runs shell commands for these models and never calls Claude Code/Codex/Cline APIs.
+External agents are execution workers, not internal council members. `WorkOrder` is the source-of-truth package; `WorkSession` records a manual execution attempt; `AutomationJob` records runner execution; `ImplementationReport` captures what ran and changed; `PatchArtifact` owns the reviewable diff; `HandoffBrief` packages current state for another executor. The API does not execute shell commands itself. CLI execution occurs only in `apps/runner` when explicitly enabled and represented by an approved/gated job; proprietary Claude Code/Codex/Cline APIs are not called directly.
 
 `UsageRecord` captures one row per AI call: provider, providerId, model, token counts (prompt/completion/total), and estimated USD cost calculated from a static pricing table in `src/pricing/providerPricing.ts`. Records link to the originating task, council session, and agent. The Grand Vizier generates two records per session (specialist call + synthesis pass). `TreasuryLedger` captures one COST entry per completed session. The `Budget` model exists in the schema but budget limits are currently read from `Setting` keys (`DAILY_BUDGET_LIMIT_USD`, `MONTHLY_BUDGET_LIMIT_USD`).
 
@@ -51,7 +56,7 @@ RBAC is enforced by `requireRole` and `methodPermission` middleware in `src/midd
 
 ## AI Provider Flow
 
-The provider abstraction is defined by `GenerateAgentResponseInput` and `AIProvider`. `mock` is the local default. `openAICompatibleProvider.ts` implements reusable Chat Completions calls for OpenAI, OpenRouter, DeepSeek, and future OpenAI-compatible APIs. `generateWithFallback` accepts a provider chain, records attempted providers, and returns usage from the provider that actually succeeded.
+The provider abstraction is defined by `GenerateAgentResponseInput` and `AIProvider`. `mock` is the local default. `openAICompatibleProvider.ts` implements reusable Chat Completions calls for OpenAI, OpenRouter, DeepSeek, Gemini, and custom OpenAI-compatible APIs. `anthropicProvider.ts` implements the native Anthropic Messages API. `generateWithFallback` accepts a provider chain, records attempted providers, and returns usage from the provider that actually succeeded; the local sandbox baseline remains the final fallback.
 
 `aiProviderRouter.ts` resolves provider choice by agent override, task mode policy, cost mode (`AI_COST_MODE=low|balanced|quality`), required capabilities, and fallback chain. The default fallback chain is `deepseek -> openrouter -> openai -> mock`. Fallback notices are stored on `CouncilSession.fallbackNotice`.
 
@@ -63,7 +68,7 @@ Agent records contain prompts, skills, response style, priority, and optional pr
 
 ## Frontend Layout
 
-Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders the dark kingdom dashboard shell, role-aware navigation, role badge, and sign-out. `authStore` stores the current user, access token, and refresh token. `kingdomStore` loads permitted kingdom data and provides actions for tasks, council processing, reports, memories, agents, providers, and settings. `/external-agents` manages manual executor targets; `/work-orders` handles prompt generation, implementation report submission, and handoff copying. `/projects` manages project records, `/projects/:id` shows linked project workspace context and Obsidian export payloads, `/project-inbox` handles low-confidence routing review, and `/artifacts` manages the project knowledge vault.
+Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders role-aware navigation grouped by purpose. The read-only Mission Control group contains Overview (`/dashboard`), Action Queue (`/inbox`), Operations (`/kingdom/operations`), Royal Brief (`/royal-brief`), and Living Loop (`/living-loop`). These pages summarize live API data and link back to owning records; lifecycle mutation remains on pages such as Work Orders and Automation Jobs. `authStore` owns session state, `kingdomStore` owns shared Kingdom data, and all network calls remain centralized in `apps/web/src/lib/api.ts`.
 
 ## Project Routing Flow
 
@@ -71,14 +76,17 @@ When a task, matter, notice, or work order is created without an explicit `proje
 
 Before council processing, the orchestrator injects compact project context when the task has `projectId`; otherwise it adds an explicit warning that no project is assigned and project-specific assumptions should be avoided. External work-order prompts use the same project context builder.
 
-## Living Loop Automation and Auto Sandbox Patch Safety (M17D)
+## Living Loop Automation and Auto Sandbox Patch Safety (M17D-M21)
 
 `livingLoopService.ts` runs an observe -> propose -> act cycle (`runLivingLoopOnce`), gated by `LIVING_LOOP_ENABLED`. `observeKingdomState()` reads work orders needing review/stale, failed/needs-review/stale automation jobs, patches pending review, stale runners, repeated provider failures, stale project inbox items, matters awaiting decision, and reports with remaining work. `proposeAutomationCandidates()` turns observations into `AutomationCandidate` rows (kinds: `WORK_ORDER_REVIEW`, `VALIDATION_JOB`, `PATCH_REVIEW`, `MEMORY_REVIEW`, `CLEANUP_REVIEW`, `PROVIDER_REVIEW`, `PROJECT_REVIEW`, `RUNNER_REVIEW`, `SANDBOX_PATCH`), each passing `dataValueGate()` (confidence threshold, summary/reason length) before being persisted.
 
-Two opt-in auto-act stages run after candidate proposal, both disabled by default and independently toggled via `Setting`:
+Three opt-in auto-act stages run after candidate proposal, all disabled by default and independently toggled via `Setting`:
 
+- `autoRepairContext()` (M21, `LIVING_LOOP_AUTO_CONTEXT_REPAIR`): scans approved local-doc roots once per project per tick and rebinds eligible MISSING/STALE WorkOrders. Daily and per-WorkOrder cooldown limits apply. Because this can satisfy the FRESH-context precondition for later auto-patch ticks, it is deliberately excluded from the default autonomy-enable command.
 - `autoCreateValidationJobs()` (M17D-2, `LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS`): creates `AutomationJob` rows in `VALIDATION_ONLY` mode for eligible `VALIDATION_JOB`/`WORK_ORDER_REVIEW` candidates. These jobs only run allowlisted read/typecheck/test/build commands on the runner — never edit files, never create patch artifacts, never push.
 - `autoCreateSandboxPatchJobs()` (M17D-3, `LIVING_LOOP_AUTO_SANDBOX_PATCH`): creates `AutomationJob` rows in `SANDBOX_PATCH` mode for eligible `SANDBOX_PATCH` candidates derived from work orders in `READY`/`IN_PROGRESS` status.
+
+The M19 scheduler starts from `server.ts`, uses an unref'd interval (`LIVING_LOOP_INTERVAL_MS`, default 300000ms, minimum 15000ms), prevents overlapping ticks, and re-reads `LIVING_LOOP_ENABLED` before every run. It adds timing, not capability: downstream context, risk, runner, review, and no-push gates remain authoritative.
 
 ### Auto Sandbox Patch risk policy (`livingLoopRiskPolicyService.ts`)
 
@@ -99,7 +107,7 @@ Any failure produces a `skippedReason` and an audit log entry (`living_loop_auto
 
 Jobs created by `autoCreateSandboxPatchJobs()` are always created with `commandPolicy: "SANDBOX_PATCH_NO_PUSH"` and `provenance.source: "LIVING_LOOP_AUTO_SANDBOX_PATCH"` (plus `loopRunId`, `candidateId`, `workOrderId`). On the runner, `evaluateBranchPushEligibility()` (`apps/runner/src/sandboxPatchPolicy.ts`) refuses to attempt a branch push whenever `commandPolicy === "SANDBOX_PATCH_NO_PUSH"`, **regardless of the server's `LIVING_LOOP_ALLOW_BRANCH_PUSH` setting**. The runner still generates a patch artifact, runs validation, and submits an `ImplementationReport` (linked to the `AutomationJob` and, via `PatchArtifact.automationJobId`, to the generated patch) — the job ends in `NEEDS_REVIEW` for King review in the Patch Review panel. Server-side `createPatchArtifact()` independently re-checks blocked paths and risk scoring (`patchRiskService.ts`), so even a MEDIUM/HIGH/CRITICAL-scored diff cannot auto-push: `shouldPushWithoutApproval()` only allows unattended push for `riskLevel: "LOW"` + `validationStatus: "PENDING"`, and `SANDBOX_PATCH_NO_PUSH` blocks push entirely for these auto-created jobs either way. No branch push, PR creation, merge, or deploy is ever performed automatically.
 
-The Living Loop dashboard card and `/living-loop` page surface `autoSandboxPatch` status (enabled, daily count/limit, cooldown, min confidence, jobs created last run) and `patchesPendingReview` (count of `PatchArtifact` rows with `validationStatus: "PENDING"`), and the Automation Jobs page tags auto-created jobs with a "Living Loop Auto Sandbox Patch" provenance badge plus a "No branch push / no PR auto-create" notice.
+The Living Loop dashboard card and `/living-loop` page surface `autoContextRepair`, `autoValidation`, and `autoSandboxPatch` state plus pending-review counts. The Automation Jobs page tags auto-created jobs with provenance and no-push notices, while Mission Control metrics link back to `/living-loop` as the owning status page.
 
 ## Project Context Binding (M17E-2)
 
