@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { AutomationCandidateDto, LivingLoopRunDto, LivingLoopStatusDto, PublicUser } from "@/types/api";
 import { LivingLoopPage } from "./LivingLoopPage";
 
@@ -121,8 +122,13 @@ function setupApiMocks(candidates: AutomationCandidateDto[] = [mockCandidate]) {
   apiMocks.settings.mockResolvedValue({ settings: [] });
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe("LivingLoopPage", () => {
@@ -165,6 +171,24 @@ describe("LivingLoopPage", () => {
     expect(screen.getByRole("button", { name: /Approve/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Reject/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Apply/ })).toBeInTheDocument();
+  });
+
+  it("renders Thai chrome while preserving source prose and raw enum tooltips", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    setUser("KING");
+    setupApiMocks([mockCandidate]);
+
+    render(<MemoryRouter><LivingLoopPage /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "ลูปมีชีวิต" })).toBeInTheDocument();
+    expect(screen.getByText("ขั้นตอนระบบอัตโนมัติ")).toBeInTheDocument();
+    expect(screen.getByText("ซ่อมบริบทอัตโนมัติ")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "รันครั้งเดียว" })).toBeInTheDocument();
+    expect(screen.getByTitle("Risk: MEDIUM")).toHaveTextContent("ความเสี่ยง: ปานกลาง");
+    expect(screen.getAllByTitle("PENDING")[0]).toHaveTextContent("รอดำเนินการ");
+    expect(screen.getByTitle("COMPLETED")).toHaveTextContent("เสร็จสิ้น");
+    expect(screen.getByTitle("MANUAL")).toHaveTextContent("สั่งรันเอง");
+    expect(screen.getByText(mockCandidate.title)).toBeInTheDocument();
   });
 
   it("hides approve, reject, and apply controls for non-KING roles", async () => {

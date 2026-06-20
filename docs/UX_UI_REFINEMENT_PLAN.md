@@ -26,7 +26,7 @@ The King should be able to answer these questions without hunting:
 - Surface primitives are visually inconsistent: `Card` uses `rounded-lg`, while `SectionCard` and `StatCard` use `rounded-xl`; shadows, borders, and backgrounds also differ.
 - Many compact labels use uppercase plus wide tracking, which is fragile in Thai.
 - The largest pages are difficult to keep visually coherent: Work Orders (1,873 lines), Agents (1,739), Treasury (1,326), Automation Jobs (1,105), and Throne Room (944).
-- Mission Control Phase 1 has semantic i18n keys on Dashboard and Inbox. The other Mission Control pages still need the same treatment.
+- All five Mission Control pages and their shared Health/Activity components use semantic English/Thai keys for static chrome; server-provided prose remains source data.
 
 Visual browser inspection was unavailable in the planning session because the in-app browser could not initialize. HTTP smoke checks passed for the web app at port 5174 and the API health endpoint at port 4000. Each implementation wave therefore requires fresh rendered screenshots before acceptance.
 
@@ -155,7 +155,7 @@ Desktop sidebar: show domain-level destinations and expandable children. Mobile:
 
 ### Wave 1: Foundation and Mission Control
 
-Progress: **Wave 1A complete** — application shell, navigation hierarchy, shared visual primitives, Dashboard, and Inbox. **Wave 1B visual refinement complete** — Kingdom Operations, Royal Brief, and Living Loop. Semantic i18n completion remains a separate follow-up.
+Progress: **Wave 1 complete** — application shell, navigation hierarchy, shared visual primitives, all five Mission Control surfaces, and semantic English/Thai keys for their static chrome. Source links, raw-enum tooltips, and server-provided prose boundaries are preserved.
 
 | Route | Primary refinement |
 | --- | --- |
@@ -165,7 +165,7 @@ Progress: **Wave 1A complete** — application shell, navigation hierarchy, shar
 | `/royal-brief` | Present a dated executive document with a clear generated timestamp, decision rail, and source-linked sections. Visually distinguish historical digest content from live state. |
 | `/living-loop` | Group controls into Status, Safety, Automation Stages, Candidate Queue, and History. Replace dense inline metric grids and raw JSON blocks with disclosure panels. |
 
-Wave 1 also completes semantic i18n keys for Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed.
+Wave 1 semantic i18n is complete for Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed.
 
 ### Wave 1B Layout Contract
 

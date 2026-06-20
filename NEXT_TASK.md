@@ -1,29 +1,30 @@
 # Next Task
 
-## M22: Premium UX Foundation + Mission Control - Phase 2
+## Premium UX Wave 2: Command-to-Execution Lifecycle
 
-Status: **in progress**
+Status: **planned**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 
 ### Goal
 
-Establish the shared visual foundation and apply it to the five Mission Control surfaces before refining the remaining pages. The result should be balanced, restrained, responsive, and consistent in English and Thai while preserving all source-of-truth links and lifecycle behavior.
+Apply the premium visual and interaction system to the command-to-execution lifecycle so the King can issue intent, inspect council evidence, track executable work, review runner results, and read reports without losing source ownership or approval boundaries.
 
-The next implementation wave must also apply the expressive premium system in `docs/UX_UI_REFINEMENT_PLAN.md`: purposeful motion, controlled depth, richer color and shape hierarchy, micro-interactions, consistent overlays, Lucide iconography, disciplined typography and spacing, and breakpoint-specific responsive composition.
+Wave 1 Mission Control foundation and semantic English/Thai migration are complete. Wave 2 must apply purposeful motion, controlled depth, richer color/shape hierarchy, micro-interactions, consistent overlays, Lucide iconography, disciplined typography/spacing, and breakpoint-specific responsive composition.
 
 ### Scope
 
-- App shell: desktop navigation hierarchy, mobile drawer, content-width variants, and stable page spacing.
-- Shared primitives: responsive `PageHeader`, restrained panel/section hierarchy, metric strip, toolbar, status display maps, and common states.
-- Mission Control pages: `/dashboard`, `/inbox`, `/kingdom/operations`, `/royal-brief`, and `/living-loop`.
-- Shared Mission Control components: `KingdomHealthStrip`, `KingdomActivityFeed`, provenance, and status badges.
-- Complete the semantic i18n work previously planned for Operations, Royal Brief, Living Loop, health, and activity labels.
+- `/throne-room`: decree-first command surface with advanced controls secondary.
+- `/council`: master-detail archive for sessions, role responses, evidence, and reports.
+- `/work-orders`: queue, focused detail, context/safety, handoff, and execution summary hierarchy.
+- `/automation-jobs`: execution queue plus runner, validation, patch, and review detail.
+- `/reports`: searchable archive with document list, reading pane, and provenance.
+- Shared lifecycle patterns: status timeline, source links, detail rail, action boundary, responsive filter drawer, and accessible feedback states.
 
 ### Constraints
 
 - No route rename, redirect, backend, Prisma, WorkOrder lifecycle, runner, or autonomy changes.
-- Mission Control remains read-only and links to owning records.
-- Preserve the Inbox WorkOrder context-refresh action and all existing `?focus=` behavior.
+- Preserve Task, CouncilSession, WorkOrder, AutomationJob, AgentReviewSummary, and Report source ownership.
+- Preserve all existing `?focus=` behavior, APIs, RBAC, context binding, runner policies, and lifecycle transitions.
 - Do not modify server-provided prose or remove raw enum audit evidence.
 - Avoid nested cards, radius above 8px for panels, decorative gradient/orb effects, and mobile all-route pill navigation.
 - Do not put required decisions, queues, reports, audit evidence, or source links inside carousels. Carousels remain optional and bounded.
@@ -32,28 +33,27 @@ The next implementation wave must also apply the expressive premium system in `d
 
 ### Delivery Order
 
-1. Completed: capture current desktop/mobile baselines and establish the Wave 1 layout contract.
-2. Completed: refine the app shell and shared page primitives.
-3. Completed: refine Dashboard and Inbox using the new foundation without regressing M22 Phase 1 i18n.
-4. Completed: refine Operations, Royal Brief, and Living Loop visual hierarchy without changing their behavior or source ownership.
-5. Complete the remaining semantic keys, then verify all five pages in English and Thai at desktop, tablet, and mobile sizes.
+1. Capture desktop/tablet/mobile baselines for all five routes and write the Wave 2 layout contract.
+2. Refine `/throne-room` and `/council` as command and evidence surfaces without duplicating ownership.
+3. Refine `/work-orders` while preserving context gates and safe/blocked action semantics.
+4. Refine `/automation-jobs` with a persistent King approval boundary.
+5. Refine `/reports`, then verify the full command-to-execution path in English and Thai.
 
 ### Acceptance
 
-- Mission Control pages share one spacing, typography, panel, toolbar, metric, and responsive system.
-- Desktop alignment is symmetric and mobile navigation uses a proper drawer.
+- The five pages share one lifecycle hierarchy, spacing, typography, panel, toolbar, status, and responsive system.
+- The King can identify the owning record, current state, next safe action, actor, and report trail without scanning duplicate summaries.
 - Thai and English labels do not overlap, clip, or resize fixed controls.
 - Motion and micro-interactions provide state feedback without replaying during routine refreshes, and reduced-motion mode remains fully usable.
 - Drawers, dialogs, tooltips, sticky regions, and responsive view changes preserve focus, provenance, and source navigation.
-- Source links, provenance, filters, `?focus=` behavior, status tooltips, and lifecycle actions remain intact.
+- Source links, provenance, filters, `?focus=` behavior, status tooltips, context gates, and lifecycle actions remain intact.
 - Focused page tests cover both languages and critical source links.
 - `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web` pass.
 
 ### Baseline
 
-- Runtime baseline: `7d566c9` (M22 Phase 1 merged to `main`).
+- Runtime baseline: Wave 1 completion commit on `codex/main`/local `main`.
 - Web app responds at `http://127.0.0.1:5174`; API health responds at `http://127.0.0.1:4000/health` in the current local session.
-- Latest recorded web suite: 136/136 passing; web typecheck/build passing.
+- Latest recorded web suite: 143/143 passing; root typecheck and web build passing.
 - Full route plan: 38 routes across six implementation waves in `docs/UX_UI_REFINEMENT_PLAN.md`.
-- Wave 1A validation: root typecheck passed; web suite 138/138 passed; web production build passed with the existing >500 kB chunk warning.
-- Wave 1B visual validation: root typecheck, 138/138 web tests, and web production build pass; rendered checks cover all three pages in Thai at desktop/mobile and English at desktop. The existing >500 kB bundle warning remains.
+- Wave 1 validation covers all five Mission Control pages in English/Thai and Operations, Royal Brief, and Living Loop at desktop, tablet, and mobile widths. The existing >500 kB bundle warning remains.

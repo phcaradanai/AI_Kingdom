@@ -1,4 +1,4 @@
-# Mission Control i18n Key Inventory (M22 — Phase 1)
+# Mission Control i18n Key Inventory (M22)
 
 This is the per-page inventory of **semantic translation keys** for the Mission
 Control surfaces. It exists so later pages can migrate incrementally without a
@@ -25,9 +25,9 @@ global rewrite, and so the "covered vs deferred" boundary is reviewable.
    **raw enum value in the `title` tooltip** (e.g. `title="Risk: CRITICAL"`).
 3. Server-provided prose is **data, not chrome** — it is never keyed.
 
-## Covered in Phase 1
+## Covered
 
-### Shared keys (used by both pages)
+### Shared keys
 
 | Namespace | Keys | Notes |
 |---|---|---|
@@ -36,6 +36,11 @@ global rewrite, and so the "covered vs deferred" boundary is reviewable.
 | `state.*` | `AWAITING_INPUT`, `AWAITING_DECISION`, `AWAITING_ACTION`, `BLOCKED` | inbox abstract state, raw enum in tooltip |
 | `severity.*` | `CRITICAL`, `WARNING`, `INFO` | mission-control severity, raw enum in tooltip |
 | `entity.*` | `WorkOrder`, `AutomationJob`, `PatchArtifact`, `AgentRunner`, `HandoffBrief`, `AgentKnowledgeCandidate`, `CouncilSession` | unknown types fall back to a humanized form |
+| `health.*` | strip title and `HEALTHY`/`WARNING`/`CRITICAL` | raw overall status kept in tooltip |
+| `activity.*` | activity types, why labels/reasons, empty state | raw activity type kept in tooltip |
+| `presence.*` | presence states and reason labels | raw agent state kept in tooltip |
+| `riskTag.*`, `candStatus.*`, `runStatus.*` | operational risk, candidate, and run labels | raw enums kept in tooltip |
+| `runnerStatus.*`, `patchValidation.*`, `providerHealth.*`, `contextBinding.*` | Royal Brief operational enum labels | raw enums kept in tooltip |
 
 ### Dashboard (`/dashboard`, `dashboard.*`)
 
@@ -61,6 +66,31 @@ summary stat labels (`stat.*`), `topActionTitle`, empty state, `whyLabel`,
 (`riskGroup.*`), and relative age (`age.m`/`age.h`/`age.d`). Risk/state/entity
 badges keep the raw enum in their tooltips.
 
+### Kingdom Operations (`/kingdom/operations`, `kingdomOps.*`)
+
+Covered: page header, refresh/loading/error states, health title/overall status,
+agent presence state/reason labels, three operational zone headings, activity
+types/reasons, current-operation metrics, review/retry actions, empty states,
+updated/auto-refresh text, and source labels. Health item labels/reasons, agent
+names/roles, activity summaries, and provenance identifiers remain API data.
+
+### Royal Brief (`/royal-brief`, `royalBrief.*`)
+
+Covered: page/section headings, generate action, empty states, decision count,
+stat labels, runner/context/patch/provider status labels, Living Loop run status
+and trigger, risk/digest badges, provider metric labels, context actions,
+provenance controls, and all source-link labels. Decision/highlight prose,
+runner/provider names, action identifiers, and generated brief text remain API
+data. Operational enums render translated labels with raw values in tooltips.
+
+### Living Loop (`/living-loop`, `livingLoop.*`)
+
+Covered: page header, status/constraint/stage/queue/history sections, settings
+states, automation limits, skip-note prefixes, candidate kind/risk/status/action
+labels, run status/trigger/count labels, empty states, and duration formatting.
+Candidate titles/summaries/reasons, run summaries, observed-count keys, skip
+reasons, setting descriptions, and raw JSON provenance remain source data.
+
 ## Deferred (intentionally NOT keyed in Phase 1)
 
 - **Server-provided prose**: a record's `title`, `detail`, `nextAction`,
@@ -80,9 +110,6 @@ badges keep the raw enum in their tooltips.
   pre-existing identifier text and is the one place a raw enum is still the
   primary visible label. Deferred: routing this through the `entity.*` keys is a
   follow-up (it touches the shared adapter, used well beyond these two pages).
-- **`KingdomHealthStrip` and `KingdomActivityFeed`**: rendered on the Dashboard
-  but own their own labels; they are separate components and migrate in a later
-  phase.
 - **Shared `timeAgo` / `formatDate` in `lib/utils`**: used across the whole app;
   migrating them is a global change kept out of this page-scoped phase. (The
   Inbox-local `formatAge` *is* keyed via `inbox.age.*`.)
@@ -96,7 +123,10 @@ badges keep the raw enum in their tooltips.
    keeping each `en` value equal to the current literal.
 2. Replace literals with `tk("<page>.<key>")`; for badges, keep the raw enum in
    `title`.
-3. Add an English + Thai test (reset `localStorage` in `beforeEach`/`afterEach`;
+3. Add English + Thai coverage (reset `localStorage` in `beforeEach`/`afterEach`;
    set `LANGUAGE_STORAGE_KEY` to `"th"` for the Thai case) asserting both
    languages and that source links/routes are unchanged.
 4. Append the page to the "Covered" section above.
+
+`i18nMessages.test.ts` enforces exact English/Thai key-set parity and basic
+interpolation behavior.

@@ -2,6 +2,7 @@ import { render, screen, waitFor, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { AgentPresenceDto, KingdomActivityItemDto, KingdomActivityStreamDto, KingdomHealthDto, KingdomPresenceDto } from "@/types/api";
 import { KingdomOperationsPage } from "./KingdomOperationsPage";
 
@@ -70,9 +71,14 @@ function renderPage() {
   );
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 describe("KingdomOperationsPage", () => {
@@ -122,6 +128,26 @@ describe("KingdomOperationsPage", () => {
     expect(screen.getByText("Executing sandbox patch")).toBeInTheDocument();
     expect(screen.getByText("Refactor service")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /WorkOrder: Refactor service/i })).toHaveAttribute("href", "/work-orders?focus=wo-1");
+  });
+
+  it("renders Thai chrome while preserving raw enums and source routes", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    apiMocks.getKingdomPresence.mockResolvedValue(mockPresence);
+    apiMocks.getKingdomActivity.mockResolvedValue(mockActivity);
+    apiMocks.getKingdomHealth.mockResolvedValue(mockHealth);
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { level: 1, name: "ปฏิบัติการราชอาณาจักร" })).toBeInTheDocument();
+    expect(screen.getByText("สถานะเอเจนต์")).toBeInTheDocument();
+    expect(screen.getByText("ปฏิบัติการปัจจุบัน")).toBeInTheDocument();
+    expect(screen.getByText("สตรีมกิจกรรม")).toBeInTheDocument();
+    expect(screen.getByText("สุขภาพราชอาณาจักร")).toBeInTheDocument();
+    expect(screen.getByTitle("HEALTHY")).toHaveTextContent("ปกติ");
+    expect(screen.getByTitle("ประเภทกิจกรรม: COUNCIL")).toHaveTextContent("สภา");
+    expect(screen.getByTitle("สถานะ: IDLE")).toHaveTextContent("พัก");
+    expect(screen.getByRole("link", { name: /CouncilSession #session-1/i })).toHaveAttribute("href", "/council");
+    expect(screen.getByText(mockActivityItem.summary)).toBeInTheDocument();
   });
 
   it("refresh button triggers all three API calls again", async () => {

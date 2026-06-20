@@ -1,5 +1,6 @@
 import { AlertCircle, AlertTriangle, CheckCircle2, Eye } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useTk } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { KingdomHealthDto, KingdomHealthItemDto, KingdomHealthStatus } from "@/types/api";
 
@@ -48,18 +49,20 @@ function HealthPill({ item }: { item: KingdomHealthItemDto }) {
  * Kingdom Operations Center.
  */
 export function KingdomHealthStrip({ health, className }: { health: KingdomHealthDto; className?: string }) {
+  const tk = useTk();
   return (
     <div className={cn("rounded-xl border border-border bg-card/60 p-4 backdrop-blur-sm", className)}>
       <div className="mb-3 flex items-center gap-2">
         <Eye className="h-4 w-4 text-primary" />
-        <span className="text-sm font-semibold text-foreground">Kingdom Health</span>
+        <span className="text-sm font-semibold text-foreground">{tk("health.title")}</span>
         <span
+          title={health.overallStatus}
           className={cn(
             "ml-auto rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider",
             HEALTH_COLORS[health.overallStatus]
           )}
         >
-          {health.overallStatus}
+          {tk(`health.status.${health.overallStatus}`)}
         </span>
       </div>
       <div className="flex flex-wrap gap-2">

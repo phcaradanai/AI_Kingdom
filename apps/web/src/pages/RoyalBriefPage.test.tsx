@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { LivingAgentDigestEntryDto, PublicUser, RoyalBriefDto } from "@/types/api";
 import { RoyalBriefPage } from "./RoyalBriefPage";
 
@@ -126,9 +127,14 @@ function setUser(role: PublicUser["role"]) {
   currentUser = { id: "user-1", email: `${role.toLowerCase()}@aikingdom.local`, displayName: role, role };
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
   vi.clearAllMocks();
   currentUser = null;
+  localStorage.clear();
 });
 
 describe("RoyalBriefPage", () => {
@@ -187,6 +193,27 @@ describe("RoyalBriefPage", () => {
     expect(await screen.findByText("Grand Vizier")).toBeInTheDocument();
     expect(screen.getByText("Royal Coordinator · VIZIER")).toBeInTheDocument();
     expect(screen.getByText("IDLE")).toBeInTheDocument();
+  });
+
+  it("renders Thai chrome while preserving source data, raw risk, and source links", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    setUser("KING");
+    apiMocks.latestRoyalBrief.mockResolvedValue({ brief: mockBrief });
+
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { level: 1, name: "สรุปประจำวันหลวง" })).toBeInTheDocument();
+    expect(screen.getByText("สรุปวันนี้")).toBeInTheDocument();
+    expect(screen.getByText("การตัดสินใจที่ต้องการ")).toBeInTheDocument();
+    expect(screen.getAllByTitle("HIGH").every((badge) => badge.textContent === "สูง")).toBe(true);
+    expect(screen.getByTitle("COMPLETED")).toHaveTextContent("เสร็จสิ้น");
+    expect(screen.getByTitle("MANUAL")).toHaveTextContent("สั่งรันเอง");
+    expect(screen.getByTitle("ONLINE")).toHaveTextContent("ออนไลน์");
+    expect(screen.getByTitle("PENDING")).toHaveTextContent("รอดำเนินการ");
+    expect(screen.getByTitle("HEALTHY")).toHaveTextContent("ปกติ");
+    expect(screen.getByRole("link", { name: "ดู" })).toHaveAttribute("href", "/automation-jobs");
+    expect(screen.getByText("Patch needs review: Refactor auth middleware")).toBeInTheDocument();
+    expect(screen.getAllByRole("link").some((link) => link.getAttribute("href") === "/providers")).toBe(true);
   });
 
   it("calls generateRoyalBrief and renders the returned brief when Generate Now is clicked", async () => {
