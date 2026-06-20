@@ -1,8 +1,9 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AppLayout } from "@/components/layout/AppLayout";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { NextActionItem, NextActionQueueDto, PublicUser } from "@/types/api";
 import { InboxPage } from "./InboxPage";
 
@@ -142,9 +143,14 @@ function renderLayout() {
   );
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
   vi.clearAllMocks();
   currentUser = null;
+  localStorage.clear();
 });
 
 describe("InboxPage", () => {
@@ -349,6 +355,43 @@ describe("InboxPage", () => {
       });
 
       resolveRefresh({ result: { workOrderId: "wo-ctx-1", status: "REFRESHED", oldStatus: "STALE", newStatus: "FRESH", scanRan: true, scanFailures: [], warnings: [] } });
+    });
+  });
+
+  describe("i18n semantic keys", () => {
+    it("renders English chrome and risk labels from semantic keys", async () => {
+      setUser("KING");
+      apiMocks.getNextActions.mockResolvedValue(mockQueueDto);
+
+      renderPage();
+
+      // "Top Action" is the loaded-state anchor used by the other tests.
+      expect(await screen.findByText("Top Action")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1, name: "What should the King do next?" })).toBeInTheDocument();
+      // Risk badge label is translated; raw enum is preserved in the tooltip.
+      const criticalBadge = screen.getAllByTitle("Risk: CRITICAL")[0]!;
+      expect(criticalBadge).toHaveTextContent("Critical");
+    });
+
+    it("renders Thai chrome and risk labels while preserving source links and raw-enum tooltips", async () => {
+      localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+      setUser("KING");
+      apiMocks.getNextActions.mockResolvedValue(mockQueueDto);
+
+      renderPage();
+
+      // Top-action section heading renders Thai from keys (loaded-state anchor).
+      expect(await screen.findByText("งานสำคัญสูงสุด")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1, name: "กษัตริย์ควรทำสิ่งใดต่อไป?" })).toBeInTheDocument();
+      // Risk badge shows the Thai label but keeps the raw enum in the tooltip.
+      const criticalBadge = screen.getAllByTitle("Risk: CRITICAL")[0]!;
+      expect(criticalBadge).toHaveTextContent("วิกฤต");
+      // Source-of-truth references keep their routes regardless of language.
+      const links = screen.getAllByRole("link");
+      expect(links.some((link) => link.getAttribute("href") === "/work-orders")).toBe(true);
+      expect(links.some((link) => link.getAttribute("href") === "/automation-jobs")).toBe(true);
+      // The WorkOrder provenance link still focuses the owning record.
+      expect(screen.getAllByRole("link", { name: /WorkOrder #wo-1/i }).every((link) => link.getAttribute("href") === "/work-orders?focus=wo-1")).toBe(true);
     });
   });
 

@@ -4,9 +4,13 @@ interface StatusBadgeProps {
   status: string;
   className?: string;
   type?: "default" | "success" | "warning" | "error" | "info";
+  /** Visible label override (e.g. a translated state name). Defaults to `status`. */
+  label?: string;
+  /** Tooltip override (e.g. the raw enum value). Defaults to no tooltip. */
+  title?: string;
 }
 
-export function StatusBadge({ status, className, type }: StatusBadgeProps) {
+export function StatusBadge({ status, className, type, label, title }: StatusBadgeProps) {
   let mappedType = type;
   
   // Auto-map some common statuses if type not provided
@@ -27,8 +31,8 @@ export function StatusBadge({ status, className, type }: StatusBadgeProps) {
   };
 
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider", variants[mappedType], className)}>
-      {status}
+    <span title={title} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider", variants[mappedType], className)}>
+      {label ?? status}
     </span>
   );
 }

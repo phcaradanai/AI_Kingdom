@@ -12,6 +12,7 @@ import { LoadingState } from "@/components/ui/LoadingState";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { api } from "@/lib/api";
+import { useTk } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type {
@@ -62,10 +63,11 @@ function humanizeStatus(value: string | null | undefined): string | null {
 }
 
 function MissionControlPanel({ missionControl }: { missionControl: MissionControlDto | null }) {
+  const tk = useTk();
   if (!missionControl) {
     return (
-      <SectionCard title="Mission Control" icon={Gauge}>
-        <EmptyState icon={Gauge} title="Mission Control unavailable" description="Open Work Orders, Automation Jobs, and Providers directly while this control plane loads." />
+      <SectionCard title={tk("dashboard.missionControl")} icon={Gauge}>
+        <EmptyState icon={Gauge} title={tk("dashboard.mcUnavailableTitle")} description={tk("dashboard.mcUnavailableDesc")} />
       </SectionCard>
     );
   }
@@ -81,16 +83,16 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
 
   return (
     <SectionCard
-      title="Mission Control"
+      title={tk("dashboard.missionControl")}
       icon={Gauge}
-      action={<Link to="/inbox" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Action Inbox</Link>}
+      action={<Link to="/inbox" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">{tk("dashboard.actionInbox")}</Link>}
     >
       <div className="space-y-6">
         <div className="rounded-xl border border-border bg-card/70 p-4">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">What should the King do next?</span>
-            <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
-              {action.severity}
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{tk("dashboard.whatNext")}</span>
+            <span title={action.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
+              {tk(`severity.${action.severity}`)}
             </span>
           </div>
           <h3 className="mt-3 font-display text-xl text-foreground">{action.title}</h3>
@@ -99,24 +101,24 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
             <Link to={action.routeTo}>
               <Button className="h-auto min-h-8 gap-1.5 whitespace-normal text-xs leading-snug">
                 <ArrowRight className="h-3.5 w-3.5 shrink-0" />
-                Open action
+                {tk("dashboard.openAction")}
               </Button>
             </Link>
             <Link to={action.sourceReference.sourceRoute ?? action.sourceReference.routeTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
-              Open source
+              {tk("dashboard.openSource")}
             </Link>
           </div>
           <ProvenanceLinks className="mt-4" {...missionProvenance(action.sourceReference)} />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MissionMetric label="Action Queue" value={missionControl.actionQueue.length} to="/inbox" source="NextActionQueue" />
-          <MissionMetric label="Active Work" value={missionControl.activeWork.length + missionControl.runningJobs.length} to="/work-orders" source="WorkOrder" />
-          <MissionMetric label="Needs Review" value={missionControl.needsReviewItems.length} to="/automation-jobs" source="AgentReviewSummary" />
-          <MissionMetric label="Blocked / Warnings" value={missionControl.blockedItems.length + missionControl.contextWarnings.length + missionControl.providerWarnings.length} to="/work-orders" source="WorkOrder" />
+          <MissionMetric label={tk("dashboard.metric.actionQueue")} value={missionControl.actionQueue.length} to="/inbox" source="NextActionQueue" />
+          <MissionMetric label={tk("dashboard.metric.activeWork")} value={missionControl.activeWork.length + missionControl.runningJobs.length} to="/work-orders" source="WorkOrder" />
+          <MissionMetric label={tk("dashboard.metric.needsReview")} value={missionControl.needsReviewItems.length} to="/automation-jobs" source="AgentReviewSummary" />
+          <MissionMetric label={tk("dashboard.metric.blockedWarnings")} value={missionControl.blockedItems.length + missionControl.contextWarnings.length + missionControl.providerWarnings.length} to="/work-orders" source="WorkOrder" />
         </div>
 
-        <MissionSection title="Action Queue" icon={Zap} sourceTo="/inbox" sourceLabel="NextActionQueue">
+        <MissionSection title={tk("dashboard.section.actionQueue")} icon={Zap} sourceTo="/inbox" sourceLabel="NextActionQueue">
           {actionQueue.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {actionQueue.slice(0, 4).map((item) => (
@@ -124,11 +126,11 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
               ))}
             </div>
           ) : (
-            <EmptyState icon={CheckCircle2} title="No queued actions" description="No source records currently need a King decision." />
+            <EmptyState icon={CheckCircle2} title={tk("dashboard.noQueuedTitle")} description={tk("dashboard.noQueuedDesc")} />
           )}
         </MissionSection>
 
-        <MissionSection title="Active Work" icon={ClipboardList} sourceTo="/work-orders" sourceLabel="WorkOrder">
+        <MissionSection title={tk("dashboard.section.activeWork")} icon={ClipboardList} sourceTo="/work-orders" sourceLabel="WorkOrder">
           {activeWork.length > 0 || runningJobs.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {activeWork.map((item) => (
@@ -139,11 +141,11 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
               ))}
             </div>
           ) : (
-            <EmptyState icon={ClipboardList} title="No active work" description="Mission Control will show active Work Orders and running Automation Jobs here." />
+            <EmptyState icon={ClipboardList} title={tk("dashboard.noActiveTitle")} description={tk("dashboard.noActiveDesc")} />
           )}
         </MissionSection>
 
-        <MissionSection title="Needs Review" icon={Bot} sourceTo="/automation-jobs" sourceLabel="AgentReviewSummary">
+        <MissionSection title={tk("dashboard.section.needsReview")} icon={Bot} sourceTo="/automation-jobs" sourceLabel="AgentReviewSummary">
           {needsReview.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {needsReview.map((item) => (
@@ -151,11 +153,11 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
               ))}
             </div>
           ) : (
-            <EmptyState icon={CheckCircle2} title="No results need review" description="Agent review summaries and runner results will appear here when they need a decision." />
+            <EmptyState icon={CheckCircle2} title={tk("dashboard.noReviewTitle")} description={tk("dashboard.noReviewDesc")} />
           )}
         </MissionSection>
 
-        <MissionSection title="Blocked / Warnings" icon={AlertTriangle} sourceTo="/work-orders" sourceLabel="WorkOrder">
+        <MissionSection title={tk("dashboard.section.blockedWarnings")} icon={AlertTriangle} sourceTo="/work-orders" sourceLabel="WorkOrder">
           {blockedItems.length > 0 || warnings.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {blockedItems.map((item) => (
@@ -166,11 +168,11 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
               ))}
             </div>
           ) : (
-            <EmptyState icon={CheckCircle2} title="No blockers or warnings" description="Context, provider, and execution warnings will appear here from their owning source records." />
+            <EmptyState icon={CheckCircle2} title={tk("dashboard.noBlockedTitle")} description={tk("dashboard.noBlockedDesc")} />
           )}
         </MissionSection>
 
-        <MissionSection title="Recent Activity" icon={Activity} sourceTo="/kingdom/operations" sourceLabel="AgentActivity">
+        <MissionSection title={tk("dashboard.section.recentActivity")} icon={Activity} sourceTo="/kingdom/operations" sourceLabel="AgentActivity">
           {recentActivity.length > 0 ? (
             <div className="grid gap-3 lg:grid-cols-2">
               {recentActivity.map((item) => (
@@ -178,7 +180,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
               ))}
             </div>
           ) : (
-            <EmptyState icon={Activity} title="No recent activity" description="Recent agent and execution activity will appear here from source records." />
+            <EmptyState icon={Activity} title={tk("dashboard.noRecentTitle")} description={tk("dashboard.noRecentDesc")} />
           )}
         </MissionSection>
       </div>
@@ -187,16 +189,18 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
 }
 
 function MissionMetric({ label, value, to, source }: { label: string; value: number; to: string; source: string }) {
+  const tk = useTk();
   return (
     <Link to={to} className="rounded-xl border border-border bg-muted/20 p-3 transition-colors hover:border-primary/45">
       <div className="font-display text-2xl font-semibold text-foreground">{value}</div>
       <div className="mt-1 text-sm font-semibold text-foreground">{label}</div>
-      <div className="mt-2 text-xs text-muted-foreground">Source: {source}</div>
+      <div className="mt-2 text-xs text-muted-foreground">{tk("dashboard.sourcePrefix")} {source}</div>
     </Link>
   );
 }
 
 function MissionSection({ title, icon: Icon, sourceTo, sourceLabel, children }: { title: string; icon: typeof Activity; sourceTo: string; sourceLabel: string; children: React.ReactNode }) {
+  const tk = useTk();
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -205,7 +209,7 @@ function MissionSection({ title, icon: Icon, sourceTo, sourceLabel, children }: 
           <h3 className="font-display text-lg text-foreground">{title}</h3>
         </div>
         <Link to={sourceTo} className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">
-          Source: {sourceLabel}
+          {tk("dashboard.sourcePrefix")} {sourceLabel}
         </Link>
       </div>
       {children}
@@ -222,11 +226,12 @@ function MissionCardShell({ children }: { children: React.ReactNode }) {
 }
 
 function MissionActionQueueCard({ item }: { item: MissionControlDto["actionQueue"][number] }) {
+  const tk = useTk();
   return (
     <MissionCardShell>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
-          {item.severity}
+        <span title={item.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
+          {tk(`severity.${item.severity}`)}
         </span>
         <span className="text-xs text-muted-foreground">{humanizeStatus(item.priorityKey)}</span>
       </div>
@@ -239,11 +244,12 @@ function MissionActionQueueCard({ item }: { item: MissionControlDto["actionQueue
 }
 
 function MissionWorkCard({ item }: { item: MissionControlDto["activeWork"][number] }) {
+  const tk = useTk();
   return (
     <MissionCardShell>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={item.displayState} />
-        {item.contextBindingStatus && <span className="text-xs text-muted-foreground">Context: {humanizeStatus(item.contextBindingStatus)}</span>}
+        <StatusBadge status={item.displayState} title={item.status} />
+        {item.contextBindingStatus && <span className="text-xs text-muted-foreground">{tk("dashboard.contextPrefix")} {humanizeStatus(item.contextBindingStatus)}</span>}
       </div>
       <div className="mt-2 font-semibold text-foreground">{item.title}</div>
       {item.blockedReason && <p className="mt-1 text-sm text-amber-400">{item.blockedReason}</p>}
@@ -261,7 +267,7 @@ function MissionJobCard({ item }: { item: MissionControlJobDto }) {
   return (
     <MissionCardShell>
       <div className="flex flex-wrap items-center gap-2">
-        <StatusBadge status={item.displayState} />
+        <StatusBadge status={item.displayState} title={item.status} />
         <span className="text-xs text-muted-foreground">{humanizeStatus(item.status)}</span>
       </div>
       <div className="mt-2 font-semibold text-foreground">{item.title}</div>
@@ -276,11 +282,12 @@ function MissionJobCard({ item }: { item: MissionControlJobDto }) {
 }
 
 function MissionReviewCard({ item }: { item: MissionControlReviewItemDto }) {
+  const tk = useTk();
   return (
     <MissionCardShell>
       <div className="flex flex-wrap items-center gap-2">
-        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
-          {item.severity}
+        <span title={item.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
+          {tk(`severity.${item.severity}`)}
         </span>
         <span className="text-xs text-muted-foreground">{humanizeStatus(item.kingRecommendation)}</span>
       </div>
@@ -293,12 +300,13 @@ function MissionReviewCard({ item }: { item: MissionControlReviewItemDto }) {
 }
 
 function MissionWarningCard({ item }: { item: MissionControlDto["providerWarnings"][number] }) {
+  const tk = useTk();
   return (
     <MissionCardShell>
       <div className="flex flex-wrap items-center gap-2">
         <AlertTriangle className="h-4 w-4 text-amber-400" />
-        <span className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
-          {item.severity}
+        <span title={item.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[item.severity])}>
+          {tk(`severity.${item.severity}`)}
         </span>
       </div>
       <div className="mt-2 font-semibold text-foreground">{item.title}</div>
@@ -414,6 +422,7 @@ export function LivingLoopDashboardCard() {
 // ── Dashboard ────────────────────────────────────────────────────────────────
 
 export function DashboardPage() {
+  const tk = useTk();
   const user = useAuthStore((state) => state.user);
   const canCommand = user?.role === "KING" || user?.role === "CROWN_PRINCE" || user?.role === "MINISTER";
 
@@ -443,20 +452,20 @@ export function DashboardPage() {
   }, []);
 
   if (isLoading) {
-    return <LoadingState message="Summoning royal briefings..." className="min-h-[60vh]" />;
+    return <LoadingState message={tk("dashboard.loading")} className="min-h-[60vh]" />;
   }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
-        eyebrow="Command Center"
-        title="Mission Control"
-        description="What the King should do next, why it matters, which source record caused it, and where to inspect or act."
+        eyebrow={tk("dashboard.eyebrow")}
+        title={tk("dashboard.title")}
+        description={tk("dashboard.description")}
         action={canCommand ? (
           <Link to="/throne-room?view=command">
             <Button variant="outline" className="gap-2">
               <Scroll className="h-4 w-4" />
-              Issue Royal Decree
+              {tk("dashboard.issueDecree")}
             </Button>
           </Link>
         ) : undefined}
@@ -467,9 +476,9 @@ export function DashboardPage() {
       {health && <KingdomHealthStrip health={health} />}
 
       <SectionCard
-        title="Operations Activity Stream"
+        title={tk("dashboard.activityStream")}
         icon={Activity}
-        action={<Link to="/kingdom/operations" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">Operations Center</Link>}
+        action={<Link to="/kingdom/operations" className="text-xs font-semibold uppercase tracking-wider text-primary hover:underline">{tk("dashboard.operationsCenter")}</Link>}
       >
         <KingdomActivityFeed activities={activity?.activities ?? []} limit={8} />
       </SectionCard>
