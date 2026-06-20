@@ -56,7 +56,7 @@ describe("ProvenanceLinks", () => {
       provenance: { source: "WorkOrder", id: "wo-1", observedAt: new Date().toISOString() }
     };
     renderWithRouter(<ProvenanceLinks {...provenanceFromNextAction(item)} />);
-    expect(screen.getByRole("link", { name: /WorkOrder #wo-1/i })).toHaveAttribute("href", "/work-orders");
+    expect(screen.getByRole("link", { name: /WorkOrder #wo-1/i })).toHaveAttribute("href", "/work-orders?focus=wo-1");
   });
 
   it("builds props from a KingdomActivityItem (source + actor)", () => {
@@ -71,5 +71,18 @@ describe("ProvenanceLinks", () => {
     renderWithRouter(<ProvenanceLinks {...provenanceFromActivity(item)} />);
     expect(screen.getByRole("link", { name: /AutomationJob #job-9/i })).toHaveAttribute("href", "/automation-jobs");
     expect(screen.getByText("Local Runner")).toBeInTheDocument();
+  });
+
+  it("focuses WorkOrder activity links on the owning record", () => {
+    const item: KingdomActivityItemDto = {
+      id: "act-2",
+      timestamp: new Date().toISOString(),
+      actor: "Royal Planner",
+      type: "WORK_ORDER",
+      summary: "Work order updated",
+      sourceReference: { entityType: "WorkOrder", entityId: "wo-2", routeTo: "/work-orders" }
+    };
+    renderWithRouter(<ProvenanceLinks {...provenanceFromActivity(item)} />);
+    expect(screen.getByRole("link", { name: /WorkOrder #wo-2/i })).toHaveAttribute("href", "/work-orders?focus=wo-2");
   });
 });

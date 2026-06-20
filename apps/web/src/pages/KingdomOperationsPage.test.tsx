@@ -98,6 +98,8 @@ describe("KingdomOperationsPage", () => {
 
     // Activity item
     expect(screen.getByText(mockActivityItem.summary)).toBeInTheDocument();
+    expect(screen.getAllByText("Why am I seeing this?").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: /CouncilSession #session-1/i })).toHaveAttribute("href", "/council");
   });
 
   it("shows agent state pill with correct label", async () => {
@@ -115,9 +117,10 @@ describe("KingdomOperationsPage", () => {
     renderPage();
 
     await screen.findByText("Agent Presence");
-    expect(screen.getAllByText("RUNNING").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Executing").length).toBeGreaterThan(0);
     expect(screen.getByText("Executing sandbox patch")).toBeInTheDocument();
     expect(screen.getByText("Refactor service")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /WorkOrder: Refactor service/i })).toHaveAttribute("href", "/work-orders?focus=wo-1");
   });
 
   it("refresh button triggers all three API calls again", async () => {

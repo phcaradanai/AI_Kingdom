@@ -1,7 +1,6 @@
 import {
   Activity,
   AlertTriangle,
-  Cpu,
   RefreshCw,
   Users,
   Zap
@@ -9,9 +8,10 @@ import {
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { ProvenanceLinks } from "@/components/ProvenanceLinks";
 import { KingdomActivityFeed } from "@/components/kingdom/KingdomActivityFeed";
 import { KingdomHealthStrip } from "@/components/kingdom/KingdomHealthStrip";
-import { initials, STATE_COLORS, STATE_DOT } from "@/components/kingdom/agentPresence";
+import { initials, STATE_COLORS, STATE_DOT, STATE_LABEL } from "@/components/kingdom/agentPresence";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -26,12 +26,24 @@ import type {
   KingdomPresenceDto
 } from "@/types/api";
 
+const PRESENCE_REASONS: Record<AgentPresenceDto["state"], string> = {
+  IDLE: "No active task, council activity, or assigned automation job was observed.",
+  THINKING: "A queued, thinking, or provider-waiting activity is currently active.",
+  COUNCIL: "An active council-linked response or reporting activity was observed.",
+  WORKING: "An active response, summary, memory, or report activity was observed.",
+  RUNNING: "An assigned automation job is claimed or running.",
+  WAITING_REVIEW: "An assigned automation job has reached review state.",
+  BLOCKED: "An assigned automation job failed and needs attention.",
+  ERROR: "The agent's most recent activity failed within the current error window."
+};
+
 // ── Agent Presence Card ───────────────────────────────────────────────────────
 
 function AgentCard({ agent }: { agent: AgentPresenceDto }) {
   const displayName = agent.displayName ?? agent.name;
   const stateColor = STATE_COLORS[agent.state];
   const dot = STATE_DOT[agent.state];
+  const stateLabel = STATE_LABEL[agent.state];
   const isActive = agent.state !== "IDLE";
 
   return (
@@ -57,13 +69,14 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-semibold text-foreground">{displayName}</span>
             <span
+              title={`State: ${agent.state}`}
               className={cn(
-                "ml-auto flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                "ml-auto flex max-w-[55%] shrink-0 items-center gap-1.5 rounded-full border px-2 py-0.5 text-center text-[10px] font-bold leading-3",
                 stateColor
               )}
             >
               <span className={cn("h-1.5 w-1.5 rounded-full", dot)} />
-              {agent.state}
+              {stateLabel}
             </span>
           </div>
 
@@ -86,6 +99,10 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
             <div className="mt-1 text-[11px] text-destructive truncate">{agent.blockingReason}</div>
           )}
 
+          <p className="mt-2 text-[10px] leading-4 text-muted-foreground">
+            <span className="font-semibold text-foreground/75">Why am I seeing this?</span> {PRESENCE_REASONS[agent.state]}
+          </p>
+
           <div className="flex items-center gap-2 mt-1.5">
             {agent.progress && (
               <span className="text-[10px] text-muted-foreground">{agent.progress}</span>
@@ -94,6 +111,15 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
               <span className="text-[10px] text-muted-foreground ml-auto">{timeAgo(agent.lastActivityAt)}</span>
             )}
           </div>
+
+          <ProvenanceLinks
+            className="mt-2"
+            source={agent.currentWorkOrder
+              ? { label: `WorkOrder: ${agent.currentWorkOrder.title}`, to: `/work-orders?focus=${encodeURIComponent(agent.currentWorkOrder.id)}` }
+              : { label: `Agent: ${displayName}`, to: `/living-agents/${agent.id}` }}
+            related={agent.currentWorkOrder ? [{ label: `Agent: ${displayName}`, to: `/living-agents/${agent.id}` }] : undefined}
+            updatedAt={agent.lastActivityAt}
+          />
         </div>
       </div>
     </div>
@@ -132,17 +158,25 @@ function CurrentOps({
           <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Needs Review</div>
           <div className="space-y-1.5">
             {waitingAgents.map(agent => (
-              <div key={agent.id} className="flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
-                <span className="truncate text-xs text-foreground">{agent.displayName ?? agent.name}</span>
-                {agent.currentWorkOrder && (
-                  <Link
-                    to="/automation-jobs"
-                    className="ml-auto shrink-0 text-[10px] text-amber-400 hover:underline"
-                  >
-                    Review
+              <div key={agent.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                  <span className="truncate text-xs text-foreground">{agent.displayName ?? agent.name}</span>
+                  <Link to="/automation-jobs" className="ml-auto shrink-0 text-[10px] text-amber-400 hover:underline">
+                    Review job
                   </Link>
-                )}
+                </div>
+                <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">
+                  <span className="font-semibold text-foreground/75">Why am I seeing this?</span> An assigned automation job has reached review state.
+                </p>
+                <ProvenanceLinks
+                  className="mt-2"
+                  source={agent.currentWorkOrder
+                    ? { label: `WorkOrder: ${agent.currentWorkOrder.title}`, to: `/work-orders?focus=${encodeURIComponent(agent.currentWorkOrder.id)}` }
+                    : { label: `Agent: ${agent.displayName ?? agent.name}`, to: `/living-agents/${agent.id}` }}
+                  related={[{ label: "Automation Jobs", to: "/automation-jobs" }]}
+                  updatedAt={agent.lastActivityAt}
+                />
               </div>
             ))}
           </div>
@@ -153,15 +187,7 @@ function CurrentOps({
       {recentJobs.length > 0 && (
         <div>
           <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recent Jobs</div>
-          <div className="space-y-1.5">
-            {recentJobs.map(job => (
-              <div key={job.id} className="flex items-start gap-2 rounded-lg border border-border/40 bg-muted/10 px-3 py-2">
-                <Cpu className="h-3.5 w-3.5 mt-0.5 shrink-0 text-muted-foreground" />
-                <span className="flex-1 truncate text-xs text-foreground/80">{job.summary}</span>
-                <span className="shrink-0 text-[10px] text-muted-foreground">{timeAgo(job.timestamp)}</span>
-              </div>
-            ))}
-          </div>
+          <KingdomActivityFeed activities={recentJobs} limit={5} />
         </div>
       )}
 

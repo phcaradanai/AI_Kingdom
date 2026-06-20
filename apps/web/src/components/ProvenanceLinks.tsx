@@ -21,6 +21,11 @@ function shortId(id: string) {
   return id.length > 10 ? `${id.slice(0, 8)}…` : id;
 }
 
+function sourceRoute(entityType: string, entityId: string, fallback: string) {
+  if (entityType === "WorkOrder") return `/work-orders?focus=${encodeURIComponent(entityId)}`;
+  return fallback;
+}
+
 function ProvenanceRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex items-baseline gap-2">
@@ -33,7 +38,7 @@ function ProvenanceRow({ label, children }: { label: string; children: ReactNode
 function LinkOrText({ link }: { link: ProvenanceLink }) {
   if (link.to) {
     return (
-      <Link to={link.to} className="text-primary underline-offset-2 hover:underline">
+      <Link to={link.to} title={link.label} className="text-primary underline-offset-2 hover:underline">
         {link.label}
       </Link>
     );
@@ -93,7 +98,10 @@ const ENTITY_ROUTES: Record<string, string> = {
 export function provenanceFromNextAction(item: NextActionItem): ProvenanceLinksProps {
   const p = item.provenance;
   return {
-    source: { label: `${p.source} #${shortId(p.id)}`, to: item.routeTo ?? ENTITY_ROUTES[p.source] },
+    source: {
+      label: `${p.source} #${shortId(p.id)}`,
+      to: sourceRoute(p.source, p.id, item.routeTo ?? ENTITY_ROUTES[p.source])
+    },
     updatedAt: p.observedAt
   };
 }
@@ -102,7 +110,10 @@ export function provenanceFromNextAction(item: NextActionItem): ProvenanceLinksP
 export function provenanceFromActivity(item: KingdomActivityItemDto): ProvenanceLinksProps {
   const ref = item.sourceReference;
   return {
-    source: { label: `${ref.entityType} #${shortId(ref.entityId)}`, to: ref.routeTo },
+    source: {
+      label: `${ref.entityType} #${shortId(ref.entityId)}`,
+      to: sourceRoute(ref.entityType, ref.entityId, ref.routeTo)
+    },
     generatedBy: item.actor,
     updatedAt: item.timestamp
   };

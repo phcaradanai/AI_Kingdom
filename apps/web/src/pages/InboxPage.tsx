@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
+import { ProvenanceLinks, provenanceFromNextAction } from "@/components/ProvenanceLinks";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionCard } from "@/components/ui/SectionCard";
@@ -25,6 +26,20 @@ type RiskLevel = NextActionItem["riskLevel"];
 type RiskFilter = RiskLevel | "ALL";
 
 const RISK_LEVELS: RiskLevel[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
+
+const RISK_LABELS: Record<RiskLevel, string> = {
+  CRITICAL: "Critical",
+  HIGH: "High",
+  MEDIUM: "Medium",
+  LOW: "Low"
+};
+
+const STATE_LABELS: Record<NextActionItem["abstractState"], string> = {
+  AWAITING_INPUT: "Awaiting input",
+  AWAITING_DECISION: "Awaiting decision",
+  AWAITING_ACTION: "Awaiting action",
+  BLOCKED: "Blocked"
+};
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   CRITICAL: "border-destructive/50 bg-destructive/10 text-destructive",
@@ -58,23 +73,23 @@ const SOURCE_LINKS = [
 
 function RiskBadge({ riskLevel }: { riskLevel: RiskLevel }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider", RISK_COLORS[riskLevel])}>
-      {riskLevel}
+    <span title={`Risk: ${riskLevel}`} className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider", RISK_COLORS[riskLevel])}>
+      {RISK_LABELS[riskLevel]}
     </span>
   );
 }
 
-function StateBadge({ state }: { state: string }) {
+function StateBadge({ state }: { state: NextActionItem["abstractState"] }) {
   return (
-    <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider", STATE_COLORS[state] ?? STATE_COLORS.AWAITING_INPUT)}>
-      {state.replace(/_/g, " ")}
+    <span title={`State: ${state}`} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", STATE_COLORS[state] ?? STATE_COLORS.AWAITING_INPUT)}>
+      {STATE_LABELS[state]}
     </span>
   );
 }
 
 function EntityTypeBadge({ type }: { type: string }) {
   return (
-    <span className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
+    <span title={`Entity type: ${type}`} className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
       {entityLabel(type)}
     </span>
   );
@@ -109,17 +124,6 @@ function entityLabel(type: string): string {
 
 function isContextRefreshItem(item: NextActionItem): boolean {
   return item.id.startsWith("WorkOrder:ctx:");
-}
-
-function routeForSource(type: string): string {
-  if (type === "WorkOrder" || type === "HandoffBrief") return "/work-orders";
-  if (type === "AutomationJob" || type === "PatchArtifact" || type === "AgentRunner") return "/automation-jobs";
-  if (type === "CouncilSession") return "/throne-room?view=command";
-  if (type === "ProjectContext" || type === "Project") return "/projects";
-  if (type === "Report") return "/reports";
-  if (type === "RoyalBrief") return "/royal-brief";
-  if (type === "AgentKnowledgeCandidate") return "/knowledge-lab/candidates";
-  return "/dashboard";
 }
 
 type ActionButtonProps = {
@@ -185,7 +189,8 @@ function DashboardSkeleton() {
 }
 
 function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem; busy: boolean; onRefreshContext: (item: NextActionItem) => void }) {
-  const sourceRoute = routeForSource(item.entityType);
+  const provenance = provenanceFromNextAction(item);
+  const sourceRoute = provenance.source?.to ?? item.routeTo;
 
   return (
     <div className="rounded-xl border-2 border-primary/30 bg-primary/5 p-5 shadow-[0_0_20px_rgba(214,170,87,0.08)] sm:p-6">
@@ -200,7 +205,10 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
 
           <div className="min-w-0">
             <h2 className="font-display text-2xl leading-tight text-foreground sm:text-3xl">{item.title}</h2>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground">{item.why}</p>
+            <div className="mt-3 max-w-3xl">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Why am I seeing this?</div>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.why}</p>
+            </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -218,6 +226,8 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
               </div>
             </Link>
           </div>
+
+          <ProvenanceLinks {...provenance} />
         </div>
 
         <div className="flex min-w-0 flex-col justify-between gap-4 rounded-xl border border-primary/20 bg-background/35 p-4">
@@ -240,7 +250,8 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
 }
 
 function QueueItem({ item, busy, onRefreshContext }: { item: NextActionItem; busy: boolean; onRefreshContext: (item: NextActionItem) => void }) {
-  const sourceRoute = routeForSource(item.entityType);
+  const provenance = provenanceFromNextAction(item);
+  const sourceRoute = provenance.source?.to ?? item.routeTo;
 
   return (
     <div className="grid gap-3 rounded-xl border border-border bg-card/45 p-4 md:grid-cols-[minmax(0,1fr)_minmax(160px,auto)] md:items-center">
@@ -252,7 +263,9 @@ function QueueItem({ item, busy, onRefreshContext }: { item: NextActionItem; bus
         </div>
         <div className="min-w-0">
           <h4 className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">{item.title}</h4>
-          <p className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.why}</p>
+          <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
+            <span className="font-semibold text-foreground/80">Why am I seeing this?</span> {item.why}
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {formatAge(item.ageHours)}</span>
@@ -261,6 +274,7 @@ function QueueItem({ item, busy, onRefreshContext }: { item: NextActionItem; bus
             Open source <ExternalLink className="h-3 w-3" />
           </Link>
         </div>
+        <ProvenanceLinks {...provenance} />
       </div>
       <div className="min-w-0 md:justify-self-end">
         <ActionButton item={item} busy={busy} onRefreshContext={onRefreshContext} />

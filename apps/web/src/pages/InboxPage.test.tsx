@@ -159,6 +159,8 @@ describe("InboxPage", () => {
     // actionLabel appears in both TopActionCard and queue item (same item in queue)
     expect(screen.getAllByRole("button", { name: /Review & Decide/ }).length).toBeGreaterThan(0);
     expect(screen.getByText("Recommended Action")).toBeInTheDocument();
+    expect(screen.getAllByText("Why am I seeing this?").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("link", { name: /WorkOrder #wo-1/i }).every((link) => link.getAttribute("href") === "/work-orders?focus=wo-1")).toBe(true);
   });
 
   it("groups the full action queue by risk", async () => {
@@ -184,7 +186,7 @@ describe("InboxPage", () => {
     await screen.findByText("Top Action");
     // totalPending=3, criticalCount=1, highCount=1, blockedCount=1
     expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getAllByText("CRITICAL").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Critical").length).toBeGreaterThan(0);
   });
 
   it("shows empty state when there are no pending actions", async () => {
