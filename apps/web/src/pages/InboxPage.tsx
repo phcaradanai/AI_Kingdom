@@ -19,27 +19,16 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatCard } from "@/components/ui/StatCard";
 import { api } from "@/lib/api";
+import { useTk, type TranslationVars } from "@/lib/i18n";
 import { cn, formatDate } from "@/lib/utils";
 import type { NextActionItem, NextActionQueueDto } from "@/types/api";
+
+type Tk = (key: string, vars?: TranslationVars) => string;
 
 type RiskLevel = NextActionItem["riskLevel"];
 type RiskFilter = RiskLevel | "ALL";
 
 const RISK_LEVELS: RiskLevel[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
-
-const RISK_LABELS: Record<RiskLevel, string> = {
-  CRITICAL: "Critical",
-  HIGH: "High",
-  MEDIUM: "Medium",
-  LOW: "Low"
-};
-
-const STATE_LABELS: Record<NextActionItem["abstractState"], string> = {
-  AWAITING_INPUT: "Awaiting input",
-  AWAITING_DECISION: "Awaiting decision",
-  AWAITING_ACTION: "Awaiting action",
-  BLOCKED: "Blocked"
-};
 
 const RISK_COLORS: Record<RiskLevel, string> = {
   CRITICAL: "border-destructive/50 bg-destructive/10 text-destructive",
@@ -63,63 +52,70 @@ const STATE_COLORS: Record<string, string> = {
 };
 
 const SOURCE_LINKS = [
-  { type: "WorkOrder", label: "Work Orders", to: "/work-orders", description: "Implementation queue, handoffs, reports, and review state." },
-  { type: "AutomationJob", label: "Automation Jobs", to: "/automation-jobs", description: "Runner jobs, patch validation, approval, and execution state." },
-  { type: "CouncilSession", label: "Royal Command", to: "/throne-room?view=command", description: "Council progress, synthesis, and created work orders." },
-  { type: "ProjectContext", label: "Projects", to: "/projects", description: "Project context, source documents, and local docs bindings." },
-  { type: "RoyalBrief", label: "Royal Brief", to: "/royal-brief", description: "Generated daily summary and decisions needing review." },
-  { type: "Report", label: "Reports", to: "/reports", description: "Generated reports, artifacts, and supporting analysis." }
+  { type: "WorkOrder", to: "/work-orders" },
+  { type: "AutomationJob", to: "/automation-jobs" },
+  { type: "CouncilSession", to: "/throne-room?view=command" },
+  { type: "ProjectContext", to: "/projects" },
+  { type: "RoyalBrief", to: "/royal-brief" },
+  { type: "Report", to: "/reports" }
 ];
 
 function RiskBadge({ riskLevel }: { riskLevel: RiskLevel }) {
+  const tk = useTk();
   return (
     <span title={`Risk: ${riskLevel}`} className={cn("inline-flex items-center rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider", RISK_COLORS[riskLevel])}>
-      {RISK_LABELS[riskLevel]}
+      {tk(`risk.${riskLevel}`)}
     </span>
   );
 }
 
 function StateBadge({ state }: { state: NextActionItem["abstractState"] }) {
+  const tk = useTk();
   return (
     <span title={`State: ${state}`} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold", STATE_COLORS[state] ?? STATE_COLORS.AWAITING_INPUT)}>
-      {STATE_LABELS[state]}
+      {tk(`state.${state}`)}
     </span>
   );
 }
 
 function EntityTypeBadge({ type }: { type: string }) {
+  const tk = useTk();
   return (
     <span title={`Entity type: ${type}`} className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-[10px] text-muted-foreground">
-      {entityLabel(type)}
+      {entityLabel(type, tk)}
     </span>
   );
 }
 
 function StatusBadges({ item }: { item: NextActionItem }) {
+  const tk = useTk();
   return (
     <>
       {item.isEscalated && (
         <span className="inline-flex items-center gap-1 rounded-full border border-amber-500/50 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-400">
-          <AlertCircle className="h-3 w-3" /> Escalated
+          <AlertCircle className="h-3 w-3" /> {tk("inbox.escalated")}
         </span>
       )}
       {(item.abstractState === "BLOCKED" || item.isBlocking > 0) && (
         <span className="inline-flex items-center gap-1 rounded-full border border-destructive/50 bg-destructive/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-destructive">
-          <ShieldAlert className="h-3 w-3" /> Blocking
+          <ShieldAlert className="h-3 w-3" /> {tk("inbox.blocking")}
         </span>
       )}
     </>
   );
 }
 
-function formatAge(hours: number): string {
-  if (hours < 1) return `${Math.max(1, Math.round(hours * 60))}m ago`;
-  if (hours < 24) return `${Math.round(hours)}h ago`;
-  return `${Math.round(hours / 24)}d ago`;
+function formatAge(hours: number, tk: Tk): string {
+  if (hours < 1) return tk("inbox.age.m", { n: Math.max(1, Math.round(hours * 60)) });
+  if (hours < 24) return tk("inbox.age.h", { n: Math.round(hours) });
+  return tk("inbox.age.d", { n: Math.round(hours / 24) });
 }
 
-function entityLabel(type: string): string {
-  return type.replace(/([a-z])([A-Z])/g, "$1 $2");
+/** Translated entity label, falling back to a humanized form for unkeyed types. */
+function entityLabel(type: string, tk: Tk): string {
+  const key = `entity.${type}`;
+  const translated = tk(key);
+  return translated === key ? type.replace(/([a-z])([A-Z])/g, "$1 $2") : translated;
 }
 
 function isContextRefreshItem(item: NextActionItem): boolean {
@@ -134,6 +130,7 @@ type ActionButtonProps = {
 };
 
 function ActionButton({ item, busy, onRefreshContext, size = "compact" }: ActionButtonProps) {
+  const tk = useTk();
   const className = size === "primary"
     ? "min-h-11 w-full px-4 py-2 text-sm sm:w-auto"
     : "min-h-9 w-full px-3 py-2 text-xs sm:w-auto";
@@ -147,7 +144,7 @@ function ActionButton({ item, busy, onRefreshContext, size = "compact" }: Action
         onClick={() => onRefreshContext(item)}
       >
         <RefreshCw className={cn("h-4 w-4 shrink-0", busy && "animate-spin")} />
-        <span className="min-w-0 break-words">{busy ? "Refreshing..." : item.actionLabel}</span>
+        <span className="min-w-0 break-words">{busy ? tk("inbox.refreshing") : item.actionLabel}</span>
       </Button>
     );
   }
@@ -164,12 +161,13 @@ function ActionButton({ item, busy, onRefreshContext, size = "compact" }: Action
 }
 
 function DashboardSkeleton() {
+  const tk = useTk();
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Kingdom Inbox"
-        title="What should the King do next?"
-        description="Live next actions from the Kingdom's source-of-truth pages."
+        eyebrow={tk("inbox.eyebrow")}
+        title={tk("inbox.title")}
+        description={tk("inbox.descriptionShort")}
       />
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
         {Array.from({ length: 5 }).map((_, index) => (
@@ -189,6 +187,7 @@ function DashboardSkeleton() {
 }
 
 function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem; busy: boolean; onRefreshContext: (item: NextActionItem) => void }) {
+  const tk = useTk();
   const provenance = provenanceFromNextAction(item);
   const sourceRoute = provenance.source?.to ?? item.routeTo;
 
@@ -206,21 +205,21 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
           <div className="min-w-0">
             <h2 className="font-display text-2xl leading-tight text-foreground sm:text-3xl">{item.title}</h2>
             <div className="mt-3 max-w-3xl">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Why am I seeing this?</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{tk("inbox.whyLabel")}</div>
               <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.why}</p>
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
             <div className="rounded-lg border border-border/70 bg-background/35 p-4">
-              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Recommended Action</div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{tk("inbox.recommendedAction")}</div>
               <div className="mt-2 text-sm font-semibold text-foreground">{item.actionLabel}</div>
             </div>
             <Link to={sourceRoute} className="rounded-lg border border-border/70 bg-background/35 p-4 transition hover:border-primary/40 hover:bg-primary/5">
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Source of Truth</div>
-                  <div className="mt-2 text-sm font-semibold text-primary">Open {entityLabel(item.entityType)}</div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{tk("inbox.sourceOfTruth")}</div>
+                  <div className="mt-2 text-sm font-semibold text-primary">{tk("inbox.openEntity", { entity: entityLabel(item.entityType, tk) })}</div>
                 </div>
                 <ExternalLink className="h-4 w-4 shrink-0 text-primary" />
               </div>
@@ -232,14 +231,14 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
 
         <div className="flex min-w-0 flex-col justify-between gap-4 rounded-xl border border-primary/20 bg-background/35 p-4">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">Priority Score</div>
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-muted-foreground">{tk("inbox.priorityScore")}</div>
             <div className="mt-3 flex items-baseline gap-2">
-              <span className="font-display text-5xl font-bold text-primary" aria-label={`Priority ${item.priority}`}>{item.priority}</span>
+              <span className="font-display text-5xl font-bold text-primary" aria-label={tk("inbox.priorityAria", { priority: item.priority })}>{item.priority}</span>
               <span className="text-sm text-muted-foreground">/100</span>
             </div>
             <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
               <Clock className="h-3.5 w-3.5" />
-              Observed {formatAge(item.ageHours)}
+              {tk("inbox.observed", { age: formatAge(item.ageHours, tk) })}
             </div>
           </div>
           <ActionButton item={item} busy={busy} onRefreshContext={onRefreshContext} size="primary" />
@@ -250,6 +249,7 @@ function TopActionCard({ item, busy, onRefreshContext }: { item: NextActionItem;
 }
 
 function QueueItem({ item, busy, onRefreshContext }: { item: NextActionItem; busy: boolean; onRefreshContext: (item: NextActionItem) => void }) {
+  const tk = useTk();
   const provenance = provenanceFromNextAction(item);
   const sourceRoute = provenance.source?.to ?? item.routeTo;
 
@@ -264,14 +264,14 @@ function QueueItem({ item, busy, onRefreshContext }: { item: NextActionItem; bus
         <div className="min-w-0">
           <h4 className="line-clamp-2 text-sm font-semibold leading-5 text-foreground">{item.title}</h4>
           <p className="mt-1 line-clamp-3 text-xs leading-5 text-muted-foreground">
-            <span className="font-semibold text-foreground/80">Why am I seeing this?</span> {item.why}
+            <span className="font-semibold text-foreground/80">{tk("inbox.whyLabel")}</span> {item.why}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-          <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {formatAge(item.ageHours)}</span>
-          <span>Priority <span className="font-semibold text-foreground">{item.priority}</span></span>
+          <span className="flex items-center gap-1"><Clock className="h-3 w-3" /> {formatAge(item.ageHours, tk)}</span>
+          <span>{tk("inbox.priority")} <span className="font-semibold text-foreground">{item.priority}</span></span>
           <Link to={sourceRoute} className="inline-flex items-center gap-1 font-semibold text-primary hover:underline">
-            Open source <ExternalLink className="h-3 w-3" />
+            {tk("inbox.openSource")} <ExternalLink className="h-3 w-3" />
           </Link>
         </div>
         <ProvenanceLinks {...provenance} />
@@ -306,42 +306,44 @@ function FilterPanel({
   onBlockedChange: (value: boolean) => void;
   onClear: () => void;
 }) {
+  const tk = useTk();
   const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm";
 
   return (
-    <SectionCard title="Filters" icon={Filter} contentClassName="space-y-4">
+    <SectionCard title={tk("inbox.filters")} icon={Filter} contentClassName="space-y-4">
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Risk</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tk("inbox.filterRisk")}</span>
         <select className={selectCls} value={riskFilter} onChange={(event) => onRiskChange(event.target.value as RiskFilter)}>
-          <option value="ALL">All risks</option>
-          {RISK_LEVELS.map((risk) => <option key={risk} value={risk}>{risk}</option>)}
+          <option value="ALL">{tk("inbox.allRisks")}</option>
+          {RISK_LEVELS.map((risk) => <option key={risk} value={risk}>{tk(`risk.${risk}`)}</option>)}
         </select>
       </label>
       <label className="block space-y-1.5">
-        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Entity Type</span>
+        <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{tk("inbox.filterEntity")}</span>
         <select className={selectCls} value={entityFilter} onChange={(event) => onEntityChange(event.target.value)}>
-          <option value="ALL">All entities</option>
-          {entityTypes.map((type) => <option key={type} value={type}>{entityLabel(type)}</option>)}
+          <option value="ALL">{tk("inbox.allEntities")}</option>
+          {entityTypes.map((type) => <option key={type} value={type}>{entityLabel(type, tk)}</option>)}
         </select>
       </label>
       <div className="space-y-2">
         <label className="flex items-center gap-2 rounded-lg border border-border bg-background/30 px-3 py-2 text-sm">
           <input type="checkbox" checked={escalatedOnly} onChange={(event) => onEscalatedChange(event.target.checked)} />
-          Escalated only
+          {tk("inbox.escalatedOnly")}
         </label>
         <label className="flex items-center gap-2 rounded-lg border border-border bg-background/30 px-3 py-2 text-sm">
           <input type="checkbox" checked={blockedOnly} onChange={(event) => onBlockedChange(event.target.checked)} />
-          Blocked only
+          {tk("inbox.blockedOnly")}
         </label>
       </div>
-      <Button variant="outline" className="h-9 w-full text-xs" onClick={onClear}>Clear Filters</Button>
+      <Button variant="outline" className="h-9 w-full text-xs" onClick={onClear}>{tk("inbox.clearFilters")}</Button>
     </SectionCard>
   );
 }
 
 function SourceReferenceCards() {
+  const tk = useTk();
   return (
-    <SectionCard title="Source of Truth References" icon={Layers3}>
+    <SectionCard title={tk("inbox.sourceRefTitle")} icon={Layers3}>
       <div className="grid auto-rows-fr gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {SOURCE_LINKS.map((source) => (
           <Link
@@ -351,12 +353,12 @@ function SourceReferenceCards() {
           >
             <div className="min-w-0">
               <div className="flex items-center justify-between gap-3">
-                <h4 className="font-semibold text-foreground">{source.label}</h4>
+                <h4 className="font-semibold text-foreground">{tk(`inbox.source.${source.type}.label`)}</h4>
                 <ExternalLink className="h-4 w-4 shrink-0 text-primary" />
               </div>
-              <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{source.description}</p>
+              <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted-foreground">{tk(`inbox.source.${source.type}.desc`)}</p>
             </div>
-            <span className="mt-3 text-xs font-bold uppercase tracking-wider text-primary">Open source</span>
+            <span className="mt-3 text-xs font-bold uppercase tracking-wider text-primary">{tk("inbox.openSource")}</span>
           </Link>
         ))}
       </div>
@@ -375,6 +377,7 @@ function RiskGroup({
   actionBusy: Record<string, boolean>;
   onRefreshContext: (item: NextActionItem) => void;
 }) {
+  const tk = useTk();
   if (items.length === 0) return null;
 
   return (
@@ -382,7 +385,7 @@ function RiskGroup({
       <div className="mb-3 flex items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2">
           <RiskBadge riskLevel={risk} />
-          <span className="text-sm font-semibold text-foreground">{riskTitle(risk)}</span>
+          <span className="text-sm font-semibold text-foreground">{tk(`inbox.riskGroup.${risk}`)}</span>
         </div>
         <span className="rounded-full border border-border bg-background/50 px-2 py-0.5 text-xs text-muted-foreground">{items.length}</span>
       </div>
@@ -400,13 +403,6 @@ function RiskGroup({
   );
 }
 
-function riskTitle(risk: RiskLevel): string {
-  if (risk === "CRITICAL") return "Act now";
-  if (risk === "HIGH") return "Review soon";
-  if (risk === "MEDIUM") return "Keep moving";
-  return "Lower urgency";
-}
-
 function filterItems(items: NextActionItem[], riskFilter: RiskFilter, entityFilter: string, escalatedOnly: boolean, blockedOnly: boolean): NextActionItem[] {
   return items.filter((item) => {
     if (riskFilter !== "ALL" && item.riskLevel !== riskFilter) return false;
@@ -418,6 +414,7 @@ function filterItems(items: NextActionItem[], riskFilter: RiskFilter, entityFilt
 }
 
 export function InboxPage() {
+  const tk = useTk();
   const [data, setData] = useState<NextActionQueueDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -459,7 +456,7 @@ export function InboxPage() {
       const { result } = await api.refreshWorkOrderContext(item.entityId);
       if (result.newStatus !== "FRESH") {
         const msgs = result.scanFailures.length > 0 ? result.scanFailures : result.warnings;
-        setActionWarning(msgs.length > 0 ? msgs[0]! : `Context is ${result.newStatus ?? "unchanged"} after refresh — check project local docs.`);
+        setActionWarning(msgs.length > 0 ? msgs[0]! : tk("inbox.contextNotFresh", { status: result.newStatus ?? "unchanged" }));
       }
       await load(true);
     } finally {
@@ -486,23 +483,23 @@ export function InboxPage() {
     return (
       <div className="space-y-6">
         <PageHeader
-          eyebrow="Kingdom Inbox"
-          title="What should the King do next?"
-          description="Live next actions from the Kingdom's source-of-truth pages."
+          eyebrow={tk("inbox.eyebrow")}
+          title={tk("inbox.title")}
+          description={tk("inbox.descriptionShort")}
           action={
             <Button variant="outline" onClick={handleRefresh} disabled={refreshing} className="h-9 px-3 text-xs">
               <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-              Retry
+              {tk("inbox.retry")}
             </Button>
           }
         />
-        <SectionCard title="Inbox Unavailable" icon={AlertCircle}>
+        <SectionCard title={tk("inbox.unavailableTitle")} icon={AlertCircle}>
           <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4">
-            <p className="text-sm font-semibold text-destructive">Unable to load Kingdom Inbox.</p>
+            <p className="text-sm font-semibold text-destructive">{tk("inbox.unavailableMessage")}</p>
             <p className="mt-1 text-sm text-muted-foreground">{error}</p>
             <Button variant="outline" onClick={handleRefresh} disabled={refreshing} className="mt-4 h-9 px-3 text-xs">
               <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-              Retry
+              {tk("inbox.retry")}
             </Button>
           </div>
         </SectionCard>
@@ -513,21 +510,21 @@ export function InboxPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        eyebrow="Kingdom Inbox"
-        title="What should the King do next?"
-        description="Live next actions across work orders, automation jobs, council output, project context, and reports."
+        eyebrow={tk("inbox.eyebrow")}
+        title={tk("inbox.title")}
+        description={tk("inbox.description")}
         action={
           <Button variant="outline" onClick={handleRefresh} disabled={refreshing} className="h-9 px-3 text-xs">
             <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-            {refreshing ? "Refreshing..." : "Refresh"}
+            {refreshing ? tk("inbox.refreshing") : tk("inbox.refresh")}
           </Button>
         }
       />
 
       {data && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card/40 px-4 py-3 text-xs text-muted-foreground">
-          <span>Computed {formatDate(data.computedAt)}</span>
-          <span>No auto-polling</span>
+          <span>{tk("inbox.computed", { date: formatDate(data.computedAt) })}</span>
+          <span>{tk("inbox.noAutoPolling")}</span>
         </div>
       )}
 
@@ -539,16 +536,16 @@ export function InboxPage() {
 
       {summary && (
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-          <StatCard title="Pending" value={summary.totalPending} />
-          <StatCard title="Critical" value={summary.criticalCount} className={summary.criticalCount > 0 ? "border-destructive/40" : undefined} />
-          <StatCard title="High" value={summary.highCount} className={summary.highCount > 0 ? "border-amber-500/40" : undefined} />
-          <StatCard title="Blocked" value={summary.blockedCount} className={summary.blockedCount > 0 ? "border-destructive/30" : undefined} />
-          <StatCard title="Escalated" value={summary.escalatedCount} className={summary.escalatedCount > 0 ? "border-amber-500/30" : undefined} />
+          <StatCard title={tk("inbox.stat.pending")} value={summary.totalPending} />
+          <StatCard title={tk("inbox.stat.critical")} value={summary.criticalCount} className={summary.criticalCount > 0 ? "border-destructive/40" : undefined} />
+          <StatCard title={tk("inbox.stat.high")} value={summary.highCount} className={summary.highCount > 0 ? "border-amber-500/40" : undefined} />
+          <StatCard title={tk("inbox.stat.blocked")} value={summary.blockedCount} className={summary.blockedCount > 0 ? "border-destructive/30" : undefined} />
+          <StatCard title={tk("inbox.stat.escalated")} value={summary.escalatedCount} className={summary.escalatedCount > 0 ? "border-amber-500/30" : undefined} />
         </div>
       )}
 
       {topAction ? (
-        <SectionCard title="Top Action" icon={Zap} contentClassName="p-0">
+        <SectionCard title={tk("inbox.topActionTitle")} icon={Zap} contentClassName="p-0">
           <TopActionCard
             item={topAction}
             busy={actionBusy[topAction.id] ?? false}
@@ -558,8 +555,8 @@ export function InboxPage() {
       ) : (
         <EmptyState
           icon={CheckCircle2}
-          title="No pending royal actions."
-          description="The Kingdom has no pending next actions."
+          title={tk("inbox.emptyTitle")}
+          description={tk("inbox.emptyDescription")}
         />
       )}
 
@@ -586,15 +583,15 @@ export function InboxPage() {
           />
 
           <SectionCard
-            title={`Action Queue (${filteredQueue.length})`}
+            title={tk("inbox.actionQueueTitle", { count: filteredQueue.length })}
             icon={Layers3}
-            action={<span className="text-xs text-muted-foreground">{queue.length} total</span>}
+            action={<span className="text-xs text-muted-foreground">{tk("inbox.totalCount", { count: queue.length })}</span>}
           >
             {filteredQueue.length === 0 ? (
               <EmptyState
                 icon={Filter}
-                title="No actions match these filters."
-                description="Clear filters to review the full Kingdom Inbox."
+                title={tk("inbox.noMatchTitle")}
+                description={tk("inbox.noMatchDescription")}
               />
             ) : (
               <div className="space-y-4">

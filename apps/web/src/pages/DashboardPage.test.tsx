@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { KingdomActivityStreamDto, KingdomHealthDto, MissionControlDto, NextActionItem, NextActionQueueDto, PublicUser, WorkOrderDto } from "@/types/api";
 import { DashboardPage } from "./DashboardPage";
 
@@ -223,9 +224,14 @@ function renderPage() {
   );
 }
 
+beforeEach(() => {
+  localStorage.clear();
+});
+
 afterEach(() => {
   vi.clearAllMocks();
   currentUser = null;
+  localStorage.clear();
 });
 
 describe("DashboardPage", () => {
@@ -305,6 +311,27 @@ describe("DashboardPage", () => {
     expect(await screen.findByText("Recent Activity")).toBeInTheDocument();
     expect(screen.getByText("Planning Work Order")).toBeInTheDocument();
     expect(screen.getByText("Work order created from project inbox")).toBeInTheDocument();
+  });
+
+  it("renders Thai chrome from semantic keys while preserving source links and raw-enum tooltips", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    setUser();
+    resetApiMocks();
+
+    renderPage();
+
+    // Page + panel title and the "what next?" prompt render Thai from keys.
+    expect((await screen.findAllByText("ศูนย์บัญชาการภารกิจ")).length).toBeGreaterThan(0);
+    expect(screen.getByText("กษัตริย์ควรทำสิ่งใดต่อไป?")).toBeInTheDocument();
+    // Section heading translated ("Action Queue" -> "คิวงาน").
+    expect(screen.getAllByText("คิวงาน").length).toBeGreaterThan(0);
+    // Server-provided prose is data, not chrome — it stays untranslated.
+    expect(screen.getAllByText("Work Order ready to dispatch: Prepare source links").length).toBeGreaterThan(0);
+    // State badge keeps the raw enum in its tooltip even in Thai.
+    expect(screen.getByTitle("READY")).toBeInTheDocument();
+    // Source links keep their routes regardless of language.
+    const links = screen.getAllByRole("link");
+    expect(links.some((link) => link.getAttribute("href") === "/work-orders")).toBe(true);
   });
 
   it("shows an empty Action Queue state without crashing", async () => {

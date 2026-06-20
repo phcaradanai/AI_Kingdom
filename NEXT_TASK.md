@@ -1,40 +1,39 @@
 # Next Task
 
-## M22: Mission Control i18n Foundation - Phase 1
+## M22: Mission Control i18n Foundation - Phase 2
 
 Status: **next**
-Scope: `DashboardPage`, `InboxPage`, and the shared status/provenance components they use.
+Scope: the remaining Mission Control surfaces — `KingdomOperationsPage` (`/kingdom/operations`), `RoyalBriefPage` (`/royal-brief`), `LivingLoopPage` (`/living-loop`) — plus the shared `KingdomHealthStrip` and `KingdomActivityFeed` components they render.
 
 ### Goal
 
-Replace fragile display-text translation on the two highest-traffic Mission Control pages with explicit semantic translation keys while preserving existing routes, API contracts, source links, and lifecycle behavior.
+Continue migrating fragile display-text translation to explicit semantic keys, reusing the `tk()` / `i18nMessages.ts` foundation and the per-page inventory established in Phase 1 (`docs/MISSION_CONTROL_I18N_KEYS.md`). No global rewrite — migrate page by page.
 
 ### Work
 
-1. Introduce semantic keys for page titles, section labels, actions, empty/error states, risk/state labels, and provenance labels used by Dashboard and Inbox.
-2. Keep raw enum values available in tooltips or technical detail, but never use raw enums as the primary user-facing label.
-3. Verify English and Thai text fit cards, badges, buttons, filters, and the mobile layout without clipping or overlap.
-4. Add a small per-page translation-key inventory so later pages can migrate incrementally without a global rewrite.
-5. Keep Mission Control read-only; the existing safe WorkOrder context-refresh action remains the only mutation on Inbox.
+1. Add `kingdomOps.*`, `royalBrief.*`, and `livingLoop.*` key namespaces to `apps/web/src/lib/i18nMessages.ts` (en value === current literal), and key the shared `KingdomHealthStrip` / `KingdomActivityFeed` labels.
+2. Replace static chrome with `tk()`; keep raw enum values in tooltips, never as the primary label.
+3. Verify English and Thai fit cards, badges, health pills, and the mobile layout without clipping.
+4. Extend the per-page inventory in `docs/MISSION_CONTROL_I18N_KEYS.md` (covered vs deferred).
+5. Keep Mission Control read-only; no new mutations.
 
 ### Constraints
 
-- No route renames or redirects in this phase.
+- No route renames or redirects.
 - No backend, Prisma, WorkOrder lifecycle, runner, or autonomy changes.
-- Do not create a duplicate Mission Control data store.
+- Additive only — do not modify `translateText` or the MutationObserver in `i18n.tsx`.
+- Do not key server-provided prose (titles, details, summaries, agent names, display states).
 - Every summary/action card must retain its owning-record link and provenance.
-- Do not expose raw root paths, credentials, or secret material.
 
 ### Acceptance
 
-- Dashboard and Inbox render equivalent English and Thai content from semantic keys.
-- Risk/state badges retain raw enum tooltips and readable translated labels.
-- Existing source links, `?focus=<workOrderId>` behavior, filters, and context refresh continue to work.
-- Focused page tests cover English/Thai labels and source links.
+- The three pages + shared health/activity components render equivalent English and Thai from semantic keys.
+- Risk/state/severity/health badges retain raw enum tooltips and readable translated labels.
+- Existing source links, `?focus=<workOrderId>` behavior, filters, and lifecycle actions continue to work.
+- Focused page tests cover English/Thai labels and source links (reset `localStorage` per test).
 - `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build` pass.
 
 ### Implementation Baseline
 
-- `codex/main` and local `main`: `b6ce344`.
-- `origin/main`: `9e0590a` (not pushed by Codex).
-- Latest web suite: 132/132 passing; root typecheck/lint/build passing.
+- M22 Phase 1 complete: `tk()` + `useTk()` in `apps/web/src/lib/i18n.tsx`, keys in `apps/web/src/lib/i18nMessages.ts`, Dashboard + Inbox migrated, inventory in `docs/MISSION_CONTROL_I18N_KEYS.md`.
+- Latest web suite: 136/136 passing; web typecheck/build passing.

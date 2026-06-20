@@ -1,6 +1,10 @@
 import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { resolveMessage } from "./i18nMessages";
 
 export type LanguageCode = "en" | "th";
+
+/** Variables for `{name}` interpolation in semantic-key translations. */
+export type TranslationVars = Record<string, string | number>;
 
 export const LANGUAGE_STORAGE_KEY = "ai-kingdom-ui-language";
 
@@ -127,7 +131,10 @@ const TRANSLATIONS: Record<LanguageCode, Record<string, string>> = {
 type I18nContextValue = {
   language: LanguageCode;
   setLanguage: (language: LanguageCode, options?: { persist?: boolean }) => void;
+  /** Legacy display-text translation (matches whole English strings). */
   t: (text: string) => string;
+  /** Semantic-key translation with `{var}` interpolation — the migration target. */
+  tk: (key: string, vars?: TranslationVars) => string;
 };
 
 const I18nContext = createContext<I18nContextValue | null>(null);
@@ -160,7 +167,8 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
       setLanguageState(nextLanguage);
       if (options?.persist !== false) writeStoredLanguage(nextLanguage);
     },
-    t: (text) => translateText(text, language)
+    t: (text) => translateText(text, language),
+    tk: (key, vars) => resolveMessage(key, language, vars)
   }), [language]);
 
   useEffect(() => {
@@ -193,7 +201,8 @@ export function useI18n() {
       setFallbackLanguage(nextLanguage);
       if (options?.persist !== false) writeStoredLanguage(nextLanguage);
     },
-    t: (text: string) => translateText(text, fallbackLanguage)
+    t: (text: string) => translateText(text, fallbackLanguage),
+    tk: (key: string, vars?: TranslationVars) => resolveMessage(key, fallbackLanguage, vars)
   };
 }
 
@@ -211,6 +220,11 @@ function writeStoredLanguage(language: LanguageCode) {
 
 export function useTranslate() {
   return useI18n().t;
+}
+
+/** Hook for semantic-key translation: `const tk = useTk(); tk("inbox.title")`. */
+export function useTk() {
+  return useI18n().tk;
 }
 
 function applyLanguagePatch(root: ParentNode | null, language: LanguageCode) {
