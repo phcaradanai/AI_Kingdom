@@ -1,5 +1,6 @@
-import { Activity, AlertTriangle, Archive, CheckCircle2, Clock, Cpu, Crown, FileWarning, Scroll, Shield, Sparkles, Vault, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Archive, CheckCircle2, Clock, Cpu, Crown, ExternalLink, FileWarning, Scroll, Shield, Sparkles, Vault, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { Button } from "@/components/ui/button";
@@ -37,18 +38,18 @@ function RiskBadge({ riskLevel }: { riskLevel: string }) {
 
 function DecisionCard({ decision }: { decision: RoyalBriefDecision }) {
   return (
-    <div className="rounded-xl border border-border bg-card/40 p-4 space-y-2">
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="font-display text-sm text-foreground">{decision.title}</h4>
+    <div className="space-y-3 rounded-lg border border-border bg-muted/10 p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <h4 className="min-w-0 flex-1 text-sm font-semibold leading-5 text-foreground">{decision.title}</h4>
         <RiskBadge riskLevel={decision.riskLevel} />
       </div>
-      <p className="text-sm text-muted-foreground">{decision.why}</p>
-      <p className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">Recommended:</span> {decision.recommendedAction}</p>
+      <p className="text-sm leading-6 text-muted-foreground">{decision.why}</p>
+      <p className="text-xs leading-5 text-muted-foreground"><span className="font-semibold text-foreground">Recommended:</span> {decision.recommendedAction}</p>
       <div className="flex flex-wrap items-center gap-2 pt-1">
         {decision.availableActions.map((action) => (
-          <span key={action} className="rounded-full border border-border px-2 py-0.5 text-[10px] uppercase tracking-wider text-muted-foreground">{action}</span>
+          <span key={action} title={action} className="rounded-full border border-border px-2 py-0.5 text-[10px] text-muted-foreground">{action}</span>
         ))}
-        <a href={decision.sourceLink} className="ml-auto text-xs font-semibold uppercase tracking-wider text-primary hover:underline">View</a>
+        <a href={decision.sourceLink} className="ml-auto text-xs font-semibold text-primary hover:underline">View</a>
       </div>
     </div>
   );
@@ -56,7 +57,7 @@ function DecisionCard({ decision }: { decision: RoyalBriefDecision }) {
 
 function HighlightRow({ highlight }: { highlight: RoyalBriefHighlight }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-border/60 bg-card/30 px-4 py-3">
+    <div className="flex items-start gap-3 px-1 py-3">
       <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-primary/70" />
       <div>
         <div className="text-sm font-semibold text-foreground">{highlight.title}</div>
@@ -68,11 +69,11 @@ function HighlightRow({ highlight }: { highlight: RoyalBriefHighlight }) {
 
 function AgentDigestCard({ entry }: { entry: LivingAgentDigestEntryDto }) {
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-border bg-card/40 p-4">
+    <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/10 p-4">
       <AgentPortrait agent={{ slug: entry.slug, name: entry.displayName, title: entry.displayTitle, avatarUrl: entry.avatarUrl }} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <h4 className="font-display text-sm text-foreground truncate">{entry.displayName}</h4>
+          <h4 className="truncate text-sm font-semibold text-foreground">{entry.displayName}</h4>
           <span className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider", DIGEST_STATUS_COLORS[entry.status])}>{entry.status}</span>
         </div>
         <div className="text-xs text-muted-foreground truncate">{entry.displayTitle} · {entry.role}</div>
@@ -84,6 +85,15 @@ function AgentDigestCard({ entry }: { entry: LivingAgentDigestEntryDto }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function SectionSourceLink({ to }: { to: string }) {
+  return (
+    <Link to={to} className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline">
+      <ExternalLink className="h-3.5 w-3.5" />
+      Source
+    </Link>
   );
 }
 
@@ -192,7 +202,7 @@ export function RoyalBriefPage() {
   const digest = brief.livingAgentDigest.items;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
+    <div className="space-y-6 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
         eyebrow="Royal Brief"
         title="Daily Royal Brief"
@@ -202,15 +212,28 @@ export function RoyalBriefPage() {
         ) : undefined}
       />
 
-      {/* 1. Today's Summary */}
-      <SectionCard title="Today's Summary" icon={Crown} action={<span className="text-xs text-muted-foreground">{formatDate(brief.briefDate)}</span>}>
-        <p className="text-sm text-foreground">{brief.summary}</p>
-      </SectionCard>
+      <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_22rem]" data-testid="royal-brief-layout">
+        <main className="min-w-0 space-y-6" data-testid="royal-brief-document">
+          {/* 1. Today's Summary */}
+          <SectionCard
+            title="Today's Summary"
+            icon={Crown}
+            className="bg-card/70"
+            contentClassName="p-6 sm:p-8"
+            action={(
+              <div className="text-right text-xs text-muted-foreground">
+                <time dateTime={brief.briefDate}>{formatDate(brief.briefDate)}</time>
+                <div className="mt-1 text-[10px]">{formatDate(brief.createdAt)}</div>
+              </div>
+            )}
+          >
+            <p className="text-sm leading-7 text-foreground sm:text-base">{brief.summary}</p>
+          </SectionCard>
 
       {/* 2. What the Kingdom did */}
       <SectionCard title="What the Kingdom Did" icon={CheckCircle2}>
         {highlights.length > 0 ? (
-          <div className="space-y-3">
+          <div className="divide-y divide-border/60">
             {highlights.map((h, i) => <HighlightRow key={i} highlight={h} />)}
           </div>
         ) : (
@@ -235,19 +258,8 @@ export function RoyalBriefPage() {
         )}
       </SectionCard>
 
-      {/* 4. Decisions needed from the King */}
-      <SectionCard title="Decisions Needed" icon={AlertTriangle} action={<span className="text-xs uppercase tracking-widest text-muted-foreground font-bold">{decisions.length} pending</span>}>
-        {decisions.length > 0 ? (
-          <div className="grid gap-3 xl:grid-cols-2">
-            {decisions.map((d) => <DecisionCard key={d.id} decision={d} />)}
-          </div>
-        ) : (
-          <EmptyState icon={CheckCircle2} title="Nothing Needs Your Attention" description="No outstanding decisions right now." />
-        )}
-      </SectionCard>
-
       {/* 5. Runner and automation status */}
-      <SectionCard title="Runner & Automation Status" icon={Cpu}>
+      <SectionCard title="Runner & Automation Status" icon={Cpu} action={<SectionSourceLink to="/automation-jobs" />}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-4">
           <StatCard className="bg-transparent border-none p-0" title="Online" value={runner.onlineCount} />
           <StatCard className="bg-transparent border-none p-0" title="Offline" value={runner.offlineCount} trend={runner.offlineCount > 0 ? { value: "Check", isPositive: false } : undefined} />
@@ -275,7 +287,7 @@ export function RoyalBriefPage() {
       </SectionCard>
 
       {/* 5b. Context binding health (M17E-2) */}
-      <SectionCard title="Context Health" icon={Shield}>
+      <SectionCard title="Context Health" icon={Shield} action={<SectionSourceLink to="/work-orders" />}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mb-4">
           <StatCard className="bg-transparent border-none p-0" title="WOs Blocked by Context" value={contextHealth.workOrdersBlockedByContext?.length ?? 0} trend={(contextHealth.workOrdersBlockedByContext?.length ?? 0) > 0 ? { value: "Refresh", isPositive: false } : undefined} />
           <StatCard className="bg-transparent border-none p-0" title="Auto Jobs Skipped" value={contextHealth.autoJobsSkippedForContext ?? 0} />
@@ -335,7 +347,7 @@ export function RoyalBriefPage() {
       </SectionCard>
 
       {/* 6. Patch review queue */}
-      <SectionCard title="Patch Review Queue" icon={Zap}>
+      <SectionCard title="Patch Review Queue" icon={Zap} action={<SectionSourceLink to="/automation-jobs" />}>
         {patch.patchesNeedingReview.length > 0 ? (
           <div className="space-y-2">
             {patch.patchesNeedingReview.map((p: any) => (
@@ -354,7 +366,7 @@ export function RoyalBriefPage() {
       </SectionCard>
 
       {/* 7. Provider and treasury status */}
-      <SectionCard title="Provider & Treasury Status" icon={Vault}>
+      <SectionCard title="Provider & Treasury Status" icon={Vault} action={<SectionSourceLink to="/providers" />}>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mb-4">
           <StatCard className="bg-transparent border-none p-0" title="Spend (24h)" value={`$${(treasury.totalCostUSD ?? 0).toFixed(4)}`} trend={treasury.overDailyBudget ? { value: "Over Budget", isPositive: false } : undefined} />
           <StatCard className="bg-transparent border-none p-0" title="Daily Budget" value={treasury.dailyBudgetLimitUSD !== null ? `$${treasury.dailyBudgetLimitUSD}` : "Unlimited"} />
@@ -375,7 +387,7 @@ export function RoyalBriefPage() {
       </SectionCard>
 
       {/* 8. Living Agent Activity Digest */}
-      <SectionCard title="Living Agent Activity Digest" icon={Shield}>
+      <SectionCard title="Living Agent Activity Digest" icon={Shield} action={<SectionSourceLink to="/living-agents" />}>
         {digest.length > 0 ? (
           <div className="grid gap-3 xl:grid-cols-2">
             {digest.map((entry) => <AgentDigestCard key={entry.agentId} entry={entry} />)}
@@ -397,6 +409,25 @@ export function RoyalBriefPage() {
           <p className="text-sm text-muted-foreground">This brief is generated from {(brief.provenance as any).sources?.length ?? 0} data sources covering the {(brief.provenance as any).windowHours ?? 24}-hour window ending {formatDate(brief.createdAt)}. Click "Show Details" to view raw provenance metadata.</p>
         )}
       </SectionCard>
+        </main>
+
+        <aside className="order-first space-y-4 xl:order-none xl:sticky xl:top-6" data-testid="royal-brief-decision-rail">
+          <SectionCard
+            title="Decisions Needed"
+            icon={AlertTriangle}
+            contentClassName="p-3"
+            action={<span className="text-xs font-semibold tabular-nums text-muted-foreground">{decisions.length} pending</span>}
+          >
+            {decisions.length > 0 ? (
+              <div className="space-y-3">
+                {decisions.map((d) => <DecisionCard key={d.id} decision={d} />)}
+              </div>
+            ) : (
+              <EmptyState icon={CheckCircle2} title="Nothing Needs Your Attention" description="No outstanding decisions right now." />
+            )}
+          </SectionCard>
+        </aside>
+      </div>
     </div>
   );
 }

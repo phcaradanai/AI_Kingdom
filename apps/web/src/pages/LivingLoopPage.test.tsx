@@ -135,6 +135,10 @@ describe("LivingLoopPage", () => {
     expect(await screen.findByText("Living Loop")).toBeInTheDocument();
     expect(await screen.findByText("Loop Status")).toBeInTheDocument();
     expect(await screen.findByText("Run History")).toBeInTheDocument();
+    expect(screen.getByTestId("living-loop-overview")).toBeInTheDocument();
+    expect(screen.getByTestId("automation-stages")).toBeInTheDocument();
+    expect(screen.getByTestId("candidate-queue")).toBeInTheDocument();
+    expect(screen.getByTestId("run-history")).toBeInTheDocument();
   });
 
   it("renders candidate queue items with reason and provenance", async () => {

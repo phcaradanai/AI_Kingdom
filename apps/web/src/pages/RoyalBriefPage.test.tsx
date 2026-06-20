@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LivingAgentDigestEntryDto, PublicUser, RoyalBriefDto } from "@/types/api";
 import { RoyalBriefPage } from "./RoyalBriefPage";
@@ -135,7 +136,7 @@ describe("RoyalBriefPage", () => {
     setUser("KING");
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: null });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText("No Royal Brief Yet")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Generate Now/ })).toBeInTheDocument();
@@ -145,7 +146,7 @@ describe("RoyalBriefPage", () => {
     setUser("MINISTER");
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: null });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText("No Royal Brief Yet")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Generate Now/ })).not.toBeInTheDocument();
@@ -155,18 +156,21 @@ describe("RoyalBriefPage", () => {
     setUser("KING");
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: mockBrief });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText(mockBrief.summary)).toBeInTheDocument();
     expect(screen.getByText("Living Loop activity")).toBeInTheDocument();
     expect(screen.getByText(/proposing 2 candidate/)).toBeInTheDocument();
+    expect(screen.getByTestId("royal-brief-document")).toContainElement(screen.getByText(mockBrief.summary));
+    expect(screen.getByTestId("royal-brief-decision-rail")).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Source" }).some((link) => link.getAttribute("href") === "/automation-jobs")).toBe(true);
   });
 
   it("renders decisions needed with risk level, recommended action, and source link", async () => {
     setUser("KING");
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: mockBrief });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText("Patch needs review: Refactor auth middleware")).toBeInTheDocument();
     expect(screen.getAllByText("HIGH").length).toBeGreaterThan(0);
@@ -178,7 +182,7 @@ describe("RoyalBriefPage", () => {
     setUser("KING");
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: mockBrief });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText("Grand Vizier")).toBeInTheDocument();
     expect(screen.getByText("Royal Coordinator · VIZIER")).toBeInTheDocument();
@@ -191,7 +195,7 @@ describe("RoyalBriefPage", () => {
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: null });
     apiMocks.generateRoyalBrief.mockResolvedValue({ brief: mockBrief });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     const button = await screen.findByRole("button", { name: /Generate Now/ });
     await userEvent.click(button);

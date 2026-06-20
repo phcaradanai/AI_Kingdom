@@ -109,7 +109,7 @@ Desktop sidebar: show domain-level destinations and expandable children. Mobile:
 
 ### Wave 1: Foundation and Mission Control
 
-Progress: **Wave 1A complete** — application shell, navigation hierarchy, shared visual primitives, Dashboard, and Inbox. **Wave 1B pending** — Kingdom Operations, Royal Brief, and Living Loop page refinement.
+Progress: **Wave 1A complete** — application shell, navigation hierarchy, shared visual primitives, Dashboard, and Inbox. **Wave 1B visual refinement complete** — Kingdom Operations, Royal Brief, and Living Loop. Semantic i18n completion remains a separate follow-up.
 
 | Route | Primary refinement |
 | --- | --- |
@@ -120,6 +120,13 @@ Progress: **Wave 1A complete** — application shell, navigation hierarchy, shar
 | `/living-loop` | Group controls into Status, Safety, Automation Stages, Candidate Queue, and History. Replace dense inline metric grids and raw JSON blocks with disclosure panels. |
 
 Wave 1 also completes semantic i18n keys for Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed.
+
+### Wave 1B Layout Contract
+
+- Operations uses three equal-height desktop zones for agent presence, current operations, and activity. Each zone scrolls internally at wide breakpoints; mobile keeps natural document flow.
+- Royal Brief uses a dated document column plus a sticky decision rail. Operational snapshots expose direct source links to Work Orders, Automation Jobs, Providers, and Living Agents.
+- Living Loop follows one stable sequence: Status and Safety, Automation Stages, Candidate Queue, and Run History. Settings and raw run details use disclosure controls so review work remains dominant.
+- Existing API calls, refresh behavior, context repair, candidate approval/apply actions, RBAC, provenance, runner boundaries, and source ownership remain unchanged.
 
 ### Wave 2: Command-to-Execution Lifecycle
 

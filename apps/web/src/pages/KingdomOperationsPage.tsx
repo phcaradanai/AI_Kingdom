@@ -49,10 +49,8 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
   return (
     <div
       className={cn(
-        "rounded-lg border p-3 transition-colors",
-        isActive
-          ? "border-border/60 bg-card/80"
-          : "border-border/30 bg-muted/10"
+        "px-2 py-3 transition-colors",
+        isActive ? "bg-muted/15" : "bg-transparent"
       )}
     >
       <div className="flex items-start gap-3">
@@ -80,7 +78,7 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
             </span>
           </div>
 
-          <div className="mt-0.5 text-[11px] text-muted-foreground truncate">{agent.role}</div>
+          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{agent.role}</div>
 
           {agent.currentTask && (
             <div className="mt-1.5 truncate text-xs text-foreground/80">{agent.currentTask}</div>
@@ -103,12 +101,12 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
             <span className="font-semibold text-foreground/75">Why am I seeing this?</span> {PRESENCE_REASONS[agent.state]}
           </p>
 
-          <div className="flex items-center gap-2 mt-1.5">
+          <div className="mt-1.5 flex items-center gap-2">
             {agent.progress && (
               <span className="text-[10px] text-muted-foreground">{agent.progress}</span>
             )}
             {agent.lastActivityAt && (
-              <span className="text-[10px] text-muted-foreground ml-auto">{timeAgo(agent.lastActivityAt)}</span>
+              <span className="ml-auto text-[10px] text-muted-foreground">{timeAgo(agent.lastActivityAt)}</span>
             )}
           </div>
 
@@ -143,7 +141,7 @@ function CurrentOps({
   const recentJobs = activity?.activities.filter(a => a.type === "AUTOMATION_JOB").slice(0, 5) ?? [];
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       {/* Active work summary */}
       <div className="grid grid-cols-2 gap-2">
         <OpsStatBox label="Running" count={runningAgents.length} color="text-emerald-400" />
@@ -155,7 +153,7 @@ function CurrentOps({
       {/* Waiting review — action items */}
       {waitingAgents.length > 0 && (
         <div>
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Needs Review</div>
+          <div className="mb-2 text-xs font-semibold text-muted-foreground">Needs Review</div>
           <div className="space-y-1.5">
             {waitingAgents.map(agent => (
               <div key={agent.id} className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2">
@@ -186,7 +184,7 @@ function CurrentOps({
       {/* Recent job events */}
       {recentJobs.length > 0 && (
         <div>
-          <div className="mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Recent Jobs</div>
+          <div className="mb-2 text-xs font-semibold text-muted-foreground">Recent Jobs</div>
           <KingdomActivityFeed activities={recentJobs} limit={5} />
         </div>
       )}
@@ -200,9 +198,9 @@ function CurrentOps({
 
 function OpsStatBox({ label, count, color }: { label: string; count: number; color: string }) {
   return (
-    <div className="rounded-lg border border-border/40 bg-muted/10 p-2.5">
-      <div className={cn("text-xl font-bold", count > 0 ? color : "text-muted-foreground/50")}>{count}</div>
-      <div className="text-[10px] text-muted-foreground">{label}</div>
+    <div className="min-h-20 rounded-md border border-border/50 bg-muted/10 p-3">
+      <div className={cn("text-xl font-semibold tabular-nums", count > 0 ? color : "text-muted-foreground/50")}>{count}</div>
+      <div className="mt-1 text-xs leading-4 text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -307,8 +305,8 @@ export function KingdomOperationsPage() {
       {/* Kingdom Health strip */}
       {health && <KingdomHealthStrip health={health} />}
 
-      {/* 3-column grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      {/* Equal-height operational zones keep the page scannable without one feed dominating it. */}
+      <div className="grid items-stretch gap-4 xl:grid-cols-3" data-testid="operations-zones">
         {/* Column 1: Agent Presence */}
         <SectionCard
           title="Agent Presence"
@@ -320,12 +318,13 @@ export function KingdomOperationsPage() {
               </span>
             ) : undefined
           }
-          contentClassName="p-3"
+          className="flex flex-col xl:h-[clamp(32rem,calc(100vh-20rem),42rem)]"
+          contentClassName="min-h-0 flex-1 p-2 xl:overflow-y-auto"
         >
           {agents.length === 0 ? (
             <EmptyState title="No agents configured." />
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y divide-border/60">
               {agents.map(agent => (
                 <AgentCard key={agent.id} agent={agent} />
               ))}
@@ -334,7 +333,12 @@ export function KingdomOperationsPage() {
         </SectionCard>
 
         {/* Column 2: Current Operations */}
-        <SectionCard title="Current Operations" icon={Zap} contentClassName="p-3">
+        <SectionCard
+          title="Current Operations"
+          icon={Zap}
+          className="flex flex-col xl:h-[clamp(32rem,calc(100vh-20rem),42rem)]"
+          contentClassName="min-h-0 flex-1 p-3 xl:overflow-y-auto"
+        >
           <CurrentOps presence={presence} activity={activity} />
         </SectionCard>
 
@@ -347,7 +351,8 @@ export function KingdomOperationsPage() {
               <span className="text-[11px] text-muted-foreground">last 48h</span>
             ) : undefined
           }
-          contentClassName="p-3 max-h-[600px] overflow-y-auto"
+          className="flex flex-col xl:h-[clamp(32rem,calc(100vh-20rem),42rem)]"
+          contentClassName="min-h-0 flex-1 p-3 xl:overflow-y-auto"
         >
           <KingdomActivityFeed activities={activity?.activities ?? []} />
         </SectionCard>

@@ -31,8 +31,8 @@ Establish the shared visual foundation and apply it to the five Mission Control 
 1. Completed: capture current desktop/mobile baselines and establish the Wave 1 layout contract.
 2. Completed: refine the app shell and shared page primitives.
 3. Completed: refine Dashboard and Inbox using the new foundation without regressing M22 Phase 1 i18n.
-4. Refine Operations, Royal Brief, and Living Loop while completing their semantic keys.
-5. Verify all five pages in English and Thai at desktop, tablet, and mobile sizes.
+4. Completed: refine Operations, Royal Brief, and Living Loop visual hierarchy without changing their behavior or source ownership.
+5. Complete the remaining semantic keys, then verify all five pages in English and Thai at desktop, tablet, and mobile sizes.
 
 ### Acceptance
 
@@ -50,3 +50,4 @@ Establish the shared visual foundation and apply it to the five Mission Control 
 - Latest recorded web suite: 136/136 passing; web typecheck/build passing.
 - Full route plan: 38 routes across six implementation waves in `docs/UX_UI_REFINEMENT_PLAN.md`.
 - Wave 1A validation: root typecheck passed; web suite 138/138 passed; web production build passed with the existing >500 kB chunk warning.
+- Wave 1B visual validation: root typecheck, 138/138 web tests, and web production build pass; rendered checks cover all three pages in Thai at desktop/mobile and English at desktop. The existing >500 kB bundle warning remains.

@@ -8,6 +8,7 @@ import { SectionCard } from "@/components/ui/SectionCard";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { LoadingState } from "@/components/ui/LoadingState";
+import { PageSection } from "@/components/ui/PageSection";
 import { api } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
@@ -88,8 +89,8 @@ function CandidateCard({ c, isKing, onAction, autoValidation, autoSandboxPatch, 
   const canApply = isKing && c.status === "APPROVED";
   const skipNote = autoValidationSkipNote(c, autoValidation ?? null, lastRunSkippedReasons ?? null) || autoSandboxPatchSkipNote(c, autoSandboxPatch ?? null, lastRunSkippedReasons ?? null);
   return (
-    <div className="rounded-xl border border-border bg-card/70 p-4 transition-all hover:border-primary/30">
-      <div className="flex items-start justify-between gap-4">
+    <div className="rounded-lg border border-border bg-card/70 p-4 transition-colors hover:border-primary/30">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 flex-1 space-y-2">
           <div className="flex flex-wrap items-center gap-2">
             <KindBadge kind={c.kind} />
@@ -123,14 +124,14 @@ function CandidateCard({ c, isKing, onAction, autoValidation, autoSandboxPatch, 
               <AlertTriangle className="h-3 w-3" />{skipNote}
             </div>
           )}
-          <div className="flex items-center gap-3 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-muted-foreground">
             <span>Source: {c.sourceType}/{c.sourceId.slice(0, 8)}</span>
             <span>Status: {c.status}</span>
             <span>{formatDate(c.createdAt)}</span>
           </div>
         </div>
         {isKing && (
-          <div className="flex shrink-0 flex-col gap-2">
+          <div className="flex shrink-0 flex-wrap gap-2 sm:flex-col">
             {canAct && <><Button variant="outline" className="h-7 text-[11px] border-emerald-500/30 text-emerald-400" onClick={() => onAction(c.id, "approve")}><CheckCircle2 className="mr-1 h-3 w-3" />Approve</Button><Button variant="outline" className="h-7 text-[11px] border-destructive/30 text-destructive" onClick={() => onAction(c.id, "reject")}><XCircle className="mr-1 h-3 w-3" />Reject</Button><Button variant="outline" className="h-7 text-[11px]" onClick={() => onAction(c.id, "archive")}><Archive className="mr-1 h-3 w-3" />Archive</Button></>}
             {canApply && <Button variant="outline" className="h-7 text-[11px] border-amber-500/30 text-amber-400" onClick={() => onAction(c.id, "apply")}><Zap className="mr-1 h-3 w-3" />Apply</Button>}
           </div>
@@ -241,120 +242,184 @@ export function LivingLoopPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
-      <PageHeader eyebrow="M21" title="Living Loop" description="Observe, repair context, propose work, and run gated automation with visible limits and review boundaries." />
-      <div className="grid gap-6 xl:grid-cols-2">
-        <SectionCard title="Loop Status" icon={Activity} action={<Button variant="outline" className="h-8 text-xs" onClick={runOnce} disabled={running}><Zap className={cn("mr-1.5 h-3.5 w-3.5", running && "animate-spin")} />{running ? "Running..." : "Run Once"}</Button>}>
-          {status && <div className="space-y-4"><div className="grid grid-cols-2 gap-4 sm:grid-cols-4"><StatCard className="bg-transparent border-none p-0" title="Enabled" value={status.enabled ? "Yes" : "No"} /><StatCard className="bg-transparent border-none p-0" title="Pending" value={status.pendingCandidates} /><StatCard className="bg-transparent border-none p-0" title="High/Critical" value={status.highCriticalCandidates} /><StatCard className="bg-transparent border-none p-0" title="Today" value={status.todayCandidates} /></div><div className="grid grid-cols-3 gap-4"><StatCard className="bg-transparent border-none p-0" title="Runner Issues" value={status.runnerIssues} /><StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={status.providerIssues} /><StatCard className="bg-transparent border-none p-0" title="Last Result" value={status.lastResult ?? "N/A"} /></div>{status.lastRun?.skippedReasons && status.lastRun.skippedReasons.length > 0 && <div className="text-[11px] text-amber-400/80">Last run skipped: {status.lastRun.skippedReasons.join("; ")}</div>}{status.lastRun?.error && <div className="text-[11px] text-destructive">Last run error: {status.lastRun.error}</div>}</div>}
-        </SectionCard>
-        <SectionCard title="Constraints" icon={AlertTriangle}><div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-2">Autonomy Safety Boundary</div><ul className="space-y-1 text-xs text-muted-foreground"><li>Auto context repair only scans approved local-document roots and refreshes WorkOrder context</li><li>Auto validation cannot edit files; auto sandbox patches still land in NEEDS_REVIEW</li><li>No automatic branch push, PR, merge, deploy, or trusted memory</li><li>Every candidate retains provenance and passes the data quality gate</li><li>KING remains the final decision owner</li></ul></div></SectionCard>
-      </div>
-      <SectionCard title="Auto Context Repair" icon={RefreshCw}>
-        {status?.autoContextRepair ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-              <StatCard className="bg-transparent border-none p-0" title="Status" value={status.autoContextRepair.enabled ? "Enabled" : "Disabled"} />
-              <StatCard className="bg-transparent border-none p-0" title="Repairs Today" value={`${status.autoContextRepair.dailyCount} / ${status.autoContextRepair.dailyLimit}`} />
-              <StatCard className="bg-transparent border-none p-0" title="Cooldown" value={`${status.autoContextRepair.cooldownMinutes}m`} />
-              <StatCard className="bg-transparent border-none p-0" title="Repaired Last Run" value={status.autoContextRepair.repairedLastRun} />
-            </div>
-            <div className="text-xs leading-relaxed text-muted-foreground">
-              Opt-in context repair can move MISSING or STALE WorkOrders back to FRESH. This satisfies the context gate but does not approve, push, merge, or deploy a patch.
-            </div>
-          </div>
-        ) : <div className="text-xs text-muted-foreground">Auto context repair status unavailable.</div>}
-      </SectionCard>
-      <SectionCard title="Auto Validation" icon={Shield}>
-        {status?.autoValidation ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-              <StatCard className="bg-transparent border-none p-0" title="Status" value={status.autoValidation.enabled ? "Enabled" : "Disabled"} />
-              <StatCard className="bg-transparent border-none p-0" title="Jobs Today" value={`${status.autoValidation.dailyCount} / ${status.autoValidation.dailyLimit}`} />
-              <StatCard className="bg-transparent border-none p-0" title="Cooldown" value={`${status.autoValidation.cooldownMinutes}m`} />
-              <StatCard className="bg-transparent border-none p-0" title="Created Last Run" value={status.autoValidation.jobsCreatedLastRun} />
-              <StatCard className="bg-transparent border-none p-0" title="Failures To Review" value={status.autoValidation.validationFailuresNeedingReview} />
-            </div>
-            {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoValidation:")).length > 0 && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-400">
-                <div className="mb-1 font-semibold uppercase tracking-wider">Auto validation skipped reasons (last run)</div>
-                <ul className="space-y-0.5">
-                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoValidation:")).map((r, i) => <li key={i}>{r.replace("AutoValidation: ", "")}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-        ) : <div className="text-xs text-muted-foreground">Auto validation status unavailable.</div>}
-      </SectionCard>
+      <PageHeader
+        eyebrow="M21"
+        title="Living Loop"
+        description="Observe, repair context, propose work, and run gated automation with visible limits and review boundaries."
+        action={(
+          <Button variant="outline" onClick={runOnce} disabled={running}>
+            <Zap className={cn("h-4 w-4", running && "animate-spin")} />
+            {running ? "Running..." : "Run Once"}
+          </Button>
+        )}
+      />
 
-      <SectionCard title="Auto Sandbox Patch" icon={Zap}>
-        {status?.autoSandboxPatch ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 sm:grid-cols-5">
-              <StatCard className="bg-transparent border-none p-0" title="Status" value={status.autoSandboxPatch.enabled ? "Enabled" : "Disabled"} />
-              <StatCard className="bg-transparent border-none p-0" title="Jobs Today" value={`${status.autoSandboxPatch.dailyCount} / ${status.autoSandboxPatch.dailyLimit}`} />
-              <StatCard className="bg-transparent border-none p-0" title="Cooldown" value={`${status.autoSandboxPatch.cooldownMinutes}m`} />
-              <StatCard className="bg-transparent border-none p-0" title="Min Confidence" value={`${status.autoSandboxPatch.minConfidence}%`} />
-              <StatCard className="bg-transparent border-none p-0" title="Created Last Run" value={status.autoSandboxPatch.jobsCreatedLastRun} />
+      <div className="grid items-stretch gap-4 xl:grid-cols-[minmax(0,1.35fr)_minmax(18rem,0.65fr)]" data-testid="living-loop-overview">
+        <SectionCard title="Loop Status" icon={Activity} className="h-full">
+          {status && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <StatCard className="min-h-20 bg-muted/10" title="Enabled" value={status.enabled ? "Yes" : "No"} />
+                <StatCard className="min-h-20 bg-muted/10" title="Pending" value={status.pendingCandidates} />
+                <StatCard className="min-h-20 bg-muted/10" title="High/Critical" value={status.highCriticalCandidates} />
+                <StatCard className="min-h-20 bg-muted/10" title="Today" value={status.todayCandidates} />
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <StatCard className="min-h-20 bg-muted/10" title="Runner Issues" value={status.runnerIssues} />
+                <StatCard className="min-h-20 bg-muted/10" title="Provider Issues" value={status.providerIssues} />
+                <StatCard className="min-h-20 bg-muted/10" title="Last Result" value={status.lastResult ?? "N/A"} />
+              </div>
+              {status.lastRun?.skippedReasons && status.lastRun.skippedReasons.length > 0 && (
+                <div className="text-[11px] leading-5 text-amber-400/80">Last run skipped: {status.lastRun.skippedReasons.join("; ")}</div>
+              )}
+              {status.lastRun?.error && <div className="text-[11px] text-destructive">Last run error: {status.lastRun.error}</div>}
             </div>
-            {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).length > 0 && (
-              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-400">
-                <div className="mb-1 font-semibold uppercase tracking-wider">Auto sandbox patch skipped reasons (last run)</div>
-                <ul className="space-y-0.5">
-                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).map((r, i) => <li key={i}>{r.replace("AutoSandboxPatch: ", "")}</li>)}
-                </ul>
-              </div>
-            )}
-            {(status.lastRun?.skippedReasons ?? []).filter((r) => r.includes("ContextBinding:")).length > 0 && (
-              <div className="rounded-lg border border-cyan-500/30 bg-cyan-500/10 p-3 text-[11px] text-cyan-400">
-                <div className="mb-1 font-semibold uppercase tracking-wider">Context binding skips (last run)</div>
-                <ul className="space-y-0.5">
-                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.includes("ContextBinding:")).map((r, i) => <li key={i}>{r}</li>)}
-                </ul>
-                <div className="mt-1 text-cyan-400/70">Jobs were skipped because project context was missing, stale, or partial. Scan local docs and rebind work order context.</div>
-              </div>
-            )}
+          )}
+        </SectionCard>
+
+        <SectionCard title="Constraints" icon={AlertTriangle} className="h-full" contentClassName="p-4">
+          <div className="text-xs font-semibold text-amber-400">Autonomy Safety Boundary</div>
+          <ul className="mt-2 divide-y divide-border/60 text-xs leading-5 text-muted-foreground">
+            <li className="py-2">Auto context repair only scans approved local-document roots and refreshes WorkOrder context</li>
+            <li className="py-2">Auto validation cannot edit files; auto sandbox patches still land in NEEDS_REVIEW</li>
+            <li className="py-2">No automatic branch push, PR, merge, deploy, or trusted memory</li>
+            <li className="py-2">Every candidate retains provenance and passes the data quality gate</li>
+            <li className="py-2">KING remains the final decision owner</li>
+          </ul>
+          <details className="mt-4 border-t border-border pt-3">
+            <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-semibold text-foreground [&::-webkit-details-marker]:hidden">
+              <SettingsIcon className="h-3.5 w-3.5 text-primary" />
+              Living Loop Settings
+            </summary>
+            <div className="mt-4"><LivingLoopSettingsPanel isKing={isKing} /></div>
+          </details>
+        </SectionCard>
+      </div>
+
+      <div data-testid="automation-stages">
+        <PageSection title="Automation Stages" description="Each stage keeps its own limits, cooldown, and review boundary." icon={Shield}>
+          <div className="grid items-stretch gap-4 xl:grid-cols-3">
+            <SectionCard title="Auto Context Repair" icon={RefreshCw} className="h-full" contentClassName="p-4">
+              {status?.autoContextRepair ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatCard className="min-h-20 bg-muted/10" title="Status" value={status.autoContextRepair.enabled ? "Enabled" : "Disabled"} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Repairs Today" value={`${status.autoContextRepair.dailyCount} / ${status.autoContextRepair.dailyLimit}`} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Cooldown" value={`${status.autoContextRepair.cooldownMinutes}m`} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Repaired Last Run" value={status.autoContextRepair.repairedLastRun} />
+                  </div>
+                  <p className="text-xs leading-5 text-muted-foreground">Opt-in context repair can move MISSING or STALE WorkOrders back to FRESH. This satisfies the context gate but does not approve, push, merge, or deploy a patch.</p>
+                </div>
+              ) : <div className="text-xs text-muted-foreground">Auto context repair status unavailable.</div>}
+            </SectionCard>
+
+            <SectionCard title="Auto Validation" icon={Shield} className="h-full" contentClassName="p-4">
+              {status?.autoValidation ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatCard className="min-h-20 bg-muted/10" title="Status" value={status.autoValidation.enabled ? "Enabled" : "Disabled"} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Jobs Today" value={`${status.autoValidation.dailyCount} / ${status.autoValidation.dailyLimit}`} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Cooldown" value={`${status.autoValidation.cooldownMinutes}m`} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Created Last Run" value={status.autoValidation.jobsCreatedLastRun} />
+                    <StatCard className="col-span-2 min-h-20 bg-muted/10" title="Failures To Review" value={status.autoValidation.validationFailuresNeedingReview} />
+                  </div>
+                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoValidation:")).length > 0 && (
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-400">
+                      <div className="mb-1 font-semibold">Auto validation skipped reasons (last run)</div>
+                      <ul className="space-y-0.5">{(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoValidation:")).map((r, i) => <li key={i}>{r.replace("AutoValidation: ", "")}</li>)}</ul>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-xs text-muted-foreground">Auto validation status unavailable.</div>}
+            </SectionCard>
+
+            <SectionCard title="Auto Sandbox Patch" icon={Zap} className="h-full" contentClassName="p-4">
+              {status?.autoSandboxPatch ? (
+                <div className="space-y-4">
+                  <div className="grid grid-cols-2 gap-3">
+                    <StatCard className="min-h-20 bg-muted/10" title="Status" value={status.autoSandboxPatch.enabled ? "Enabled" : "Disabled"} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Jobs Today" value={`${status.autoSandboxPatch.dailyCount} / ${status.autoSandboxPatch.dailyLimit}`} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Cooldown" value={`${status.autoSandboxPatch.cooldownMinutes}m`} />
+                    <StatCard className="min-h-20 bg-muted/10" title="Min Confidence" value={`${status.autoSandboxPatch.minConfidence}%`} />
+                    <StatCard className="col-span-2 min-h-20 bg-muted/10" title="Created Last Run" value={status.autoSandboxPatch.jobsCreatedLastRun} />
+                  </div>
+                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).length > 0 && (
+                    <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-[11px] text-amber-400">
+                      <div className="mb-1 font-semibold">Auto sandbox patch skipped reasons (last run)</div>
+                      <ul className="space-y-0.5">{(status.lastRun?.skippedReasons ?? []).filter((r) => r.startsWith("AutoSandboxPatch:")).map((r, i) => <li key={i}>{r.replace("AutoSandboxPatch: ", "")}</li>)}</ul>
+                    </div>
+                  )}
+                  {(status.lastRun?.skippedReasons ?? []).filter((r) => r.includes("ContextBinding:")).length > 0 && (
+                    <div className="rounded-md border border-cyan-500/30 bg-cyan-500/10 p-3 text-[11px] text-cyan-400">
+                      <div className="mb-1 font-semibold">Context binding skips (last run)</div>
+                      <ul className="space-y-0.5">{(status.lastRun?.skippedReasons ?? []).filter((r) => r.includes("ContextBinding:")).map((r, i) => <li key={i}>{r}</li>)}</ul>
+                      <div className="mt-1 text-cyan-400/70">Jobs were skipped because project context was missing, stale, or partial. Scan local docs and rebind work order context.</div>
+                    </div>
+                  )}
+                </div>
+              ) : <div className="text-xs text-muted-foreground">Auto sandbox patch status unavailable.</div>}
+            </SectionCard>
           </div>
-        ) : <div className="text-xs text-muted-foreground">Auto sandbox patch status unavailable.</div>}
-      </SectionCard>
-      <SectionCard title="Living Loop Settings" icon={SettingsIcon}>
-        <LivingLoopSettingsPanel isKing={isKing} />
-      </SectionCard>
-      <SectionCard title={`Candidate Queue (${candidates.length})`} icon={Eye}>
-        {candidates.length > 0 ? (<div className="space-y-4">{(["PENDING", "APPROVED", "APPLIED", "REJECTED", "ARCHIVED"] as const).map(sg => { const g = candidates.filter(x => x.status === sg); if (!g.length) return null; return <div key={sg} className="space-y-2"><h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">{sg} ({g.length})</h4><div className="space-y-2">{g.map(x => <CandidateCard key={x.id} c={x} isKing={isKing} onAction={act} autoValidation={status?.autoValidation} autoSandboxPatch={status?.autoSandboxPatch} lastRunSkippedReasons={status?.lastRun?.skippedReasons} />)}</div></div>; })}</div>) : <EmptyState title="No Candidates" description="Run the living loop to generate candidates." action={<Button variant="outline" onClick={runOnce} disabled={running}><Zap className="mr-1.5 h-3.5 w-3.5" />Run Once</Button>} />}
-      </SectionCard>
-      <SectionCard title="Run History" icon={Clock}>
-        {runs.length > 0 ? <div className="space-y-2">{runs.map(r => {
-          const sc = r.status === "COMPLETED" ? "text-emerald-400" : r.status === "FAILED" ? "text-destructive" : "text-primary";
-          return (
-            <div key={r.id} className="rounded-lg border border-border bg-muted/20 px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <span className={cn("text-xs font-bold uppercase tracking-wider", sc)}>{r.status}</span>
-                  <span className="text-sm font-medium">{r.triggerType}</span>
-                  {r.summary && <span className="text-xs text-muted-foreground line-clamp-1">{r.summary}</span>}
-                </div>
-                <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                  <span>{r.proposedCandidates} proposed</span>
-                  <span>{r.skippedCandidates} skipped</span>
-                  <span>{formatDate(r.createdAt)}</span>
-                </div>
-              </div>
-              {r.observedCounts && (
-                <div className="mt-2 flex flex-wrap gap-2 text-[10px] text-muted-foreground">
-                  {Object.entries(r.observedCounts).map(([k, v]) => (
-                    <span key={k} className="rounded-md border border-border/60 bg-muted/20 px-2 py-0.5">{k}: {v}</span>
-                  ))}
-                </div>
-              )}
-              {r.skippedReasons && r.skippedReasons.length > 0 && (
-                <div className="mt-2 text-[11px] text-amber-400/80">
-                  Skipped: {r.skippedReasons.join("; ")}
-                </div>
-              )}
-              {r.error && <div className="mt-2 text-[11px] text-destructive">Error: {r.error}</div>}
+        </PageSection>
+      </div>
+
+      <div data-testid="candidate-queue">
+        <SectionCard title={`Candidate Queue (${candidates.length})`} icon={Eye}>
+          {candidates.length > 0 ? (
+            <div className="space-y-5">
+              {(["PENDING", "APPROVED", "APPLIED", "REJECTED", "ARCHIVED"] as const).map((statusGroup) => {
+                const group = candidates.filter((candidate) => candidate.status === statusGroup);
+                if (!group.length) return null;
+                return (
+                  <section key={statusGroup} className="space-y-2">
+                    <h4 className="text-xs font-semibold text-muted-foreground">{statusGroup} ({group.length})</h4>
+                    <div className="space-y-2">{group.map((candidate) => <CandidateCard key={candidate.id} c={candidate} isKing={isKing} onAction={act} autoValidation={status?.autoValidation} autoSandboxPatch={status?.autoSandboxPatch} lastRunSkippedReasons={status?.lastRun?.skippedReasons} />)}</div>
+                  </section>
+                );
+              })}
             </div>
-          );
-        })}</div> : <EmptyState title="No Runs" />}
-      </SectionCard>
+          ) : (
+            <EmptyState title="No Candidates" description="Run the living loop to generate candidates." action={<Button variant="outline" onClick={runOnce} disabled={running}><Zap className="h-3.5 w-3.5" />Run Once</Button>} />
+          )}
+        </SectionCard>
+      </div>
+
+      <div data-testid="run-history">
+        <SectionCard title="Run History" icon={Clock} contentClassName="p-3">
+          {runs.length > 0 ? (
+            <div className="space-y-2">
+              {runs.map((run) => {
+                const statusColor = run.status === "COMPLETED" ? "text-emerald-400" : run.status === "FAILED" ? "text-destructive" : "text-primary";
+                return (
+                  <details key={run.id} className="rounded-lg border border-border bg-muted/10">
+                    <summary className="flex cursor-pointer list-none flex-col gap-2 px-4 py-3 [&::-webkit-details-marker]:hidden sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className={cn("text-xs font-semibold", statusColor)}>{run.status}</span>
+                        <span className="text-sm font-medium">{run.triggerType}</span>
+                        {run.summary && <span className="line-clamp-1 min-w-0 text-xs text-muted-foreground">{run.summary}</span>}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                        <span>{run.proposedCandidates} proposed</span>
+                        <span>{run.skippedCandidates} skipped</span>
+                        <span>{formatDate(run.createdAt)}</span>
+                      </div>
+                    </summary>
+                    <div className="border-t border-border px-4 py-3">
+                      {run.observedCounts && (
+                        <div className="flex flex-wrap gap-2 text-[10px] text-muted-foreground">
+                          {Object.entries(run.observedCounts).map(([key, value]) => <span key={key} className="rounded-md border border-border/60 px-2 py-0.5">{key}: {value}</span>)}
+                        </div>
+                      )}
+                      {run.skippedReasons && run.skippedReasons.length > 0 && <div className="mt-2 text-[11px] text-amber-400/80">Skipped: {run.skippedReasons.join("; ")}</div>}
+                      {run.error && <div className="mt-2 text-[11px] text-destructive">Error: {run.error}</div>}
+                    </div>
+                  </details>
+                );
+              })}
+            </div>
+          ) : <EmptyState title="No Runs" />}
+        </SectionCard>
+      </div>
     </div>
   );
 }

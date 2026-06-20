@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { PublicUser, RoyalBriefDto } from "@/types/api";
 import { RoyalBriefPage } from "./RoyalBriefPage";
@@ -76,7 +77,7 @@ describe("RoyalBriefPage — Context Health (M17E-2)", () => {
     currentUser = { id: "user-1", email: "king@aikingdom.local", displayName: "King", role: "KING" };
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: mockBrief });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText("Context Health")).toBeInTheDocument();
     expect(screen.getByText("Fix the drawbridge")).toBeInTheDocument();
@@ -88,7 +89,7 @@ describe("RoyalBriefPage — Context Health (M17E-2)", () => {
     currentUser = { id: "user-1", email: "king@aikingdom.local", displayName: "King", role: "KING" };
     apiMocks.latestRoyalBrief.mockResolvedValue({ brief: mockBrief });
 
-    render(<RoyalBriefPage />);
+    render(<MemoryRouter><RoyalBriefPage /></MemoryRouter>);
 
     expect(await screen.findByText("Refresh project context before patching: Castle Keep")).toBeInTheDocument();
     expect(screen.getByText(/Run a fresh local docs scan/)).toBeInTheDocument();

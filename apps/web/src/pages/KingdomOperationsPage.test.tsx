@@ -87,6 +87,7 @@ describe("KingdomOperationsPage", () => {
     expect(await screen.findByText("Agent Presence")).toBeInTheDocument();
     expect(screen.getByText("Current Operations")).toBeInTheDocument();
     expect(screen.getByText("Activity Stream")).toBeInTheDocument();
+    expect(screen.getByTestId("operations-zones")).toContainElement(screen.getByText("Agent Presence"));
 
     // Health strip
     expect(screen.getByText("Kingdom Health")).toBeInTheDocument();
