@@ -52,7 +52,7 @@ Wave 1 Mission Control foundation and semantic English/Thai migration are comple
 
 ### Baseline
 
-- Runtime baseline: Wave 2A working tree on `codex/main`, ready to merge into local `main` after commit.
+- Runtime baseline: Wave 2A completion commit is aligned on `codex/main` and local `main`.
 - Web app responds at `http://127.0.0.1:5174`; API health responds at `http://127.0.0.1:4000/health` in the current local session.
 - Latest recorded web suite: 150/150 passing; root typecheck and web build passing.
 - Full route plan: 38 routes across six implementation waves in `docs/UX_UI_REFINEMENT_PLAN.md`.
