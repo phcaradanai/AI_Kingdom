@@ -84,18 +84,19 @@ Navigation is role-aware and grouped into Mission Control / Command / Work / Kno
 
 ## Planned UX/UI Refinement
 
-The current 38-route frontend has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. Wave 1 shared shell/layout work and the visual refinement of all five Mission Control surfaces are complete. The roadmap next proceeds through command/execution, projects/strategy, agents/providers, knowledge/governance, and administration while preserving all current routes, source-of-truth ownership, RBAC, context-binding rules, and runner/approval boundaries.
+The current 38-route frontend has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. Wave 1 shared shell/layout work and the visual refinement of all five Mission Control surfaces are complete. Wave 2A is also complete for Throne Room and Council: decree entry is now the first command task with BUILD as the durable default and mode selection in an advanced disclosure; Council now uses a responsive session rail and source-linked evidence pane. Both surfaces use semantic English/Thai chrome and preserve existing APIs, source ownership, context rules, and execution gates.
 
-Wave 1 is complete. The next milestone is Premium UX Wave 2 for Throne Room, Council, Work Orders, Automation Jobs, and Reports. It will apply the expressive premium system while preserving source ownership, RBAC, context-binding rules, runner policies, lifecycle transitions, and King approval gates. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
+Wave 1 and Wave 2A are complete. The next refinement target is Work Orders, followed by Automation Jobs and Reports. These slices continue the expressive premium system while preserving source ownership, RBAC, context-binding rules, runner policies, lifecycle transitions, and King approval gates. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
 
 ## Verification
 
-Latest validation baseline after M22 Phase 2 UX Wave 1 completion (2026-06-20):
+Latest validation baseline after Premium UX Wave 2A completion (2026-06-21):
 
 - `npm run typecheck` (api, runner, web workspaces) — pass
-- `npm run test --workspace @ai-kingdom/web` — 143/143 pass
+- `npm run test --workspace @ai-kingdom/web` — 150/150 pass
 - `npm run build --workspace @ai-kingdom/web` — pass (pre-existing >500 kB chunk warning only)
 - Live EN/TH verification (preview server, KING login) covers all Mission Control pages, including `/kingdom/operations`, `/royal-brief`, and `/living-loop` at desktop, tablet, and mobile widths. Domain navigation, mobile drawer, responsive ordering, page hierarchy, metrics, source links, disclosures, translated enum labels, and Thai chrome render without observed overlap or clipping; server-provided prose remains unchanged data and out of scope.
+- Live EN/TH verification for Wave 2A covers `/throne-room?view=command` and `/council` at 1440px, 1024px, 430px, and 200% zoom. Command ordering, mobile action placement, mode/evidence disclosures, archive composition, source links, and translated wrapping render without observed overlap or horizontal clipping.
 - Prior baseline at `b6ce344`: typecheck/lint/build pass; web 132/132; focused provenance coverage 26/26
 - HTTP smoke: web 200, API health 200
 - Root `npm run test` did not complete: the serial API run reached 273 passing tests, then stopped producing output in the existing provider/orchestrator segment and was terminated; runner and web phases were not reached by that root command.

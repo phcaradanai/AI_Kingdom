@@ -176,6 +176,18 @@ Wave 1 semantic i18n is complete for Operations, Royal Brief, Living Loop, Kingd
 
 ### Wave 2: Command-to-Execution Lifecycle
 
+Progress: **Wave 2A complete** - Throne Room command hierarchy and Council archive refinement are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Work Orders, Automation Jobs, and Reports remain in the next slices.
+
+### Wave 2A Layout Contract
+
+- Throne Room keeps Live Kingdom and Command as separate views. Command intent links still open `?view=command`; the Command view puts decree entry and its single `Issue Decree` action above mode configuration and historical output.
+- `BUILD` is the durable default command mode. ASK, PLAN, RESEARCH, and BUILD remain available in a compact advanced disclosure with visible descriptions; changing mode never submits or mutates data.
+- The latest council result is a bounded operational area ordered as progress, final recommendation, next safe action, source-of-truth links, context warning, and role evidence. Existing execution, handoff, report, trace, project, and work-order behavior remains unchanged.
+- Council uses a real master-detail archive. The session rail owns selection and chronology; the detail pane owns source decree, synthesis, role evidence, report/project/trace links, and the existing explicit work-order action.
+- On mobile, command entry remains above the fold and Council composes as a bounded session list followed by the selected record. Touch targets remain at least 44px, translated text wraps within its region, and no sticky surface covers actions or evidence.
+- Motion is limited to view entry, selection, disclosure, hover, press, and focus feedback. Depth comes from one selected rail, borders, and tonal contrast; decorative glow, oversized symbols, nested cards, and gradients are excluded.
+- No carousel, modal, or drawer is introduced in this slice because decree modes, council evidence, actions, and source links are required operational content and must stay visible in normal document flow.
+
 | Route | Primary refinement |
 | --- | --- |
 | `/throne-room` | Make decree entry the first task, latest council result the second, and live Kingdom visualization supporting context. Keep advanced execution handoff actions in a clearly bounded result area. |

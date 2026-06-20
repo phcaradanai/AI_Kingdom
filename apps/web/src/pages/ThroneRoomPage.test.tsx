@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CouncilSessionDto, TaskDto } from "@/types/api";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import { ThroneRoomPage } from "./ThroneRoomPage";
 
 const nowIso = new Date().toISOString();
@@ -101,7 +102,7 @@ function makeTask(session = makeSession()): TaskDto {
   };
 }
 
-function renderPage(task: TaskDto | null = makeTask()) {
+function renderPage(task: TaskDto | null = makeTask(), initialEntry = "/") {
   storeState.tasks = task ? [task] : [];
   storeState.settings = [{ key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "READY" }];
   storeState.isLoading = false;
@@ -125,7 +126,7 @@ function renderPage(task: TaskDto | null = makeTask()) {
   });
 
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <ThroneRoomPage />
     </MemoryRouter>
   );
@@ -139,19 +140,46 @@ async function switchToCommand() {
 
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.removeItem(LANGUAGE_STORAGE_KEY);
   storeState.tasks = [];
   storeState.settings = [];
 });
 
 describe("ThroneRoomPage", () => {
-  it("renders mode helper text", async () => {
+  it("keeps decree entry first and mode selection in advanced controls", async () => {
     renderPage(null);
     await switchToCommand();
 
-    expect(screen.getByRole("button", { name: /ASK/i })).toBeInTheDocument();
-    expect(screen.getByText("Best when the King needs counsel, not a project plan.")).toBeInTheDocument();
+    const composer = screen.getByTestId("royal-decree-composer");
+    const archiveHeading = screen.getByRole("heading", { name: "Recent Decrees" });
+    expect(composer.compareDocumentPosition(archiveHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Use ASK mode" })).not.toBeVisible();
+
+    await userEvent.click(screen.getByText("Advanced council mode"));
+
+    expect(screen.getByRole("button", { name: "Use BUILD mode" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Best before a manual external-agent handoff.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Issue Decree/i })).toBeInTheDocument();
+  });
+
+  it("submits BUILD as the durable default mode", async () => {
+    renderPage(null);
+    await switchToCommand();
+
+    await userEvent.type(screen.getByLabelText("State the outcome"), "Build an implementation-ready council plan.");
+    await userEvent.click(screen.getByRole("button", { name: /Issue Decree/i }));
+
+    await waitFor(() => expect(storeState.submitCommand).toHaveBeenCalledWith("Build an implementation-ready council plan.", "BUILD"));
+  });
+
+  it("renders the refined command chrome in Thai", () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    renderPage(null, "/throne-room?view=command");
+
+    expect(screen.getByRole("heading", { name: "ออกพระราชโองการ" })).toBeInTheDocument();
+    expect(screen.getByLabelText("ระบุผลลัพธ์ที่ต้องการ")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "ออกพระราชโองการ" })).toBeInTheDocument();
+    expect(screen.getByText("โหมดสภาขั้นสูง")).toBeInTheDocument();
   });
 
   it("shows the final recommendation and Recommended Next Step first for completed councils", async () => {

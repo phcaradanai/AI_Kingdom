@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/ui/EmptyState";
 import { Textarea } from "@/components/ui/textarea";
 import { MarkdownDocument } from "@/components/ui/MarkdownDocument";
 import { api } from "@/lib/api";
+import { useTk } from "@/lib/i18n";
 import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
@@ -40,6 +41,7 @@ export function ThroneRoomPage() {
   // "issue/inspect a decree" deep-link with ?view=command so that flow is unchanged.
   const [searchParams] = useSearchParams();
   const [view, setView] = useState<ThroneView>(searchParams.get("view") === "command" ? "command" : "live");
+  const tk = useTk();
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -54,7 +56,7 @@ export function ThroneRoomPage() {
           )}
         >
           <Sparkles className="h-4 w-4" />
-          Live Kingdom
+          {tk("throne.liveKingdom")}
         </button>
         <button
           type="button"
@@ -66,7 +68,7 @@ export function ThroneRoomPage() {
           )}
         >
           <ScrollText className="h-4 w-4" />
-          Command
+          {tk("throne.command")}
         </button>
       </div>
 
@@ -79,8 +81,9 @@ export function ThroneRoomPage() {
 // Throne Room. The page below makes the Living Kingdom the default visual view.
 function ThroneRoomCommand() {
   const navigate = useNavigate();
+  const tk = useTk();
   const [command, setCommand] = useState("");
-  const [mode, setMode] = useState<TaskMode>("ASK");
+  const [mode, setMode] = useState<TaskMode>("BUILD");
   const [error, setError] = useState<string | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -207,95 +210,128 @@ function ThroneRoomCommand() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
       <PageHeader
-        eyebrow="Royal Command Terminal"
-        title="Issue a royal decree"
-        description="Capture your command and issue a decree. The Grand Vizier will automatically convene the council."
+        eyebrow={tk("throne.eyebrow")}
+        title={tk("throne.title")}
+        description={tk("throne.description")}
       />
 
-      <SectionCard contentClassName="p-6">
-        <form onSubmit={onSubmit}>
-          <div className="mb-5 flex flex-col gap-2 border-b border-border/60 pb-5 sm:flex-row sm:items-end sm:justify-between">
-            <div>
-              <h2 className="font-display text-2xl">Royal Decree</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Choose how the council should treat this command before issuing it.</p>
-            </div>
-            <div className="rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-xs font-semibold uppercase tracking-widest text-primary">
-              Issue Decree stays the primary action
-            </div>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {modes.map((item) => (
-              <button
-                key={item.value}
-                type="button"
-                onClick={() => setMode(item.value)}
-                className={cn(
-                  "flex flex-col items-start rounded-xl border p-5 text-left transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
-                  mode === item.value
-                    ? "border-primary bg-primary/10 text-primary shadow-[0_0_15px_rgba(214,170,87,0.1)]"
-                    : "border-border bg-muted/20 text-muted-foreground hover:border-primary/40 hover:bg-muted/40 hover:text-foreground"
-                )}
-              >
-                <div className="flex w-full items-center justify-between gap-2">
-                  <div className="font-display tracking-wide text-base">{item.label}</div>
-                  {mode === item.value && <CheckCircle2 className="h-4 w-4" />}
+      <SectionCard className="border-primary/25 bg-card" contentClassName="p-0">
+        <form onSubmit={onSubmit} data-testid="royal-decree-composer">
+          <div className="border-b border-border px-5 py-4 sm:px-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/25 bg-primary/10 text-primary">
+                  <ScrollText className="h-5 w-5" />
                 </div>
-                <div className="mt-2 text-sm opacity-90 leading-relaxed">{item.description}</div>
-                <div className="mt-3 rounded-md border border-current/10 bg-background/30 px-2.5 py-2 text-xs opacity-80 leading-relaxed">{item.useWhen}</div>
-              </button>
-            ))}
-          </div>
-          
-          <div className="mt-6 relative">
-            <label htmlFor="royal-command" className="mb-2 block text-sm font-semibold uppercase tracking-widest text-primary">Royal Decree</label>
-            <Textarea
-              id="royal-command"
-              className="min-h-[200px] resize-y rounded-xl border-primary/20 bg-background/50 p-5 text-base shadow-inner focus:border-primary/50 focus:ring-primary/20"
-              value={command}
-              onChange={(event) => setCommand(event.target.value)}
-              placeholder="State the royal decree. Example: Plan a six-week launch roadmap for the AI Kingdom MVP..."
-            />
-            <p className="mt-2 text-xs text-muted-foreground">The decree will be evaluated by the Grand Vizier and the appropriate council members.</p>
-            <div className="absolute right-4 bottom-10 opacity-10 pointer-events-none">
-               <ScrollText className="h-20 w-20" />
+                <div className="min-w-0">
+                  <h2 className="text-base font-semibold text-foreground">{tk("throne.composer.title")}</h2>
+                  <p className="mt-0.5 text-sm text-muted-foreground">{tk("throne.composer.subtitle")}</p>
+                </div>
+              </div>
+              <div className="rounded-md border border-primary/20 bg-primary/10 px-2.5 py-1.5 text-xs font-semibold text-primary">
+                {tk("throne.composer.mode", { mode })}
+              </div>
             </div>
           </div>
 
-          {error && (
-            <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive font-medium flex items-center gap-3">
-              <div className="rounded-full bg-destructive/20 p-1"><Server className="h-4 w-4" /></div>
-              {error}
+          <div className="grid gap-5 p-5 sm:p-6 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="min-w-0 lg:row-span-2">
+              <label htmlFor="royal-command" className="mb-2 block text-sm font-semibold text-foreground">{tk("throne.composer.outcome")}</label>
+              <Textarea
+                id="royal-command"
+                className="min-h-[120px] resize-y rounded-lg border-border bg-background/60 p-4 text-base leading-7 shadow-inner transition-colors duration-200 focus:border-primary/60 focus:ring-primary/20 sm:min-h-[176px]"
+                value={command}
+                onChange={(event) => setCommand(event.target.value)}
+                placeholder={tk("throne.composer.placeholder")}
+              />
+
+              {error && (
+                <div className="mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">
+                  <div className="rounded-full bg-destructive/20 p-1"><Server className="h-4 w-4" /></div>
+                  {error}
+                </div>
+              )}
             </div>
-          )}
-          
-          <div className="mt-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-t border-border pt-6">
-            <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-widest text-muted-foreground">
-              Mode: <span className="rounded-md bg-primary/10 px-2 py-1 text-primary">{mode}</span>
+
+            <div className="order-2 flex flex-col gap-3 border-t border-border pt-4 lg:col-start-2 lg:row-start-2">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-400" />
+                <span className="break-words">{tk("throne.safety")}</span>
+              </div>
+              <Button className="h-12 w-full px-8 text-sm" disabled={isLoading || isProcessing || !command.trim()}>
+                <Send className="mr-2 h-4 w-4" />
+                {isProcessing ? tk("throne.convening") : isLoading ? tk("throne.recording") : tk("throne.issue")}
+              </Button>
             </div>
-            <Button className="w-full sm:w-auto h-12 px-8 text-sm tracking-wide" disabled={isLoading || isProcessing || !command.trim()}>
-              <Send className="mr-2 h-4 w-4" />
-              {isProcessing ? "Convening Council..." : isLoading ? "Recording decree..." : "Issue Decree"}
-            </Button>
+
+            <div className="order-3 flex min-w-0 flex-col gap-4 lg:col-start-2 lg:row-start-1">
+              <div className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-muted/15" aria-label={tk("throne.workflow.label")}>
+                {[tk("throne.workflow.decree"), tk("throne.workflow.council"), tk("throne.workflow.gatedWork"), tk("throne.workflow.report")].map((stage, index) => (
+                  <div
+                    key={stage}
+                    className={cn(
+                      "flex min-h-11 items-center gap-2 border-border px-3 py-2 text-xs font-medium text-muted-foreground",
+                      index % 2 === 0 && "border-r",
+                      index < 2 && "border-b"
+                    )}
+                  >
+                    <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/10 font-mono text-[10px] tabular-nums text-primary">
+                      {index + 1}
+                    </span>
+                    <span className="min-w-0 break-words">{stage}</span>
+                  </div>
+                ))}
+              </div>
+
+              <details className="group rounded-lg border border-border bg-background/35">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Layers className="h-4 w-4 shrink-0 text-primary" />
+                    <span className="min-w-0 break-words">{tk("throne.advancedMode")}</span>
+                    <span className="font-mono text-xs text-muted-foreground">{mode}</span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+                </summary>
+                <div className="border-t border-border p-3">
+                  <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1" role="group" aria-label={tk("throne.mode.group")}>
+                    {modes.map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        aria-label={tk("throne.mode.use", { mode: item.label })}
+                        aria-pressed={mode === item.value}
+                        onClick={() => setMode(item.value)}
+                        className={cn(
+                          "min-h-11 rounded-md border px-3 py-2 text-left transition duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary active:translate-y-px",
+                          mode === item.value
+                            ? "border-primary/60 bg-primary/[0.12] text-primary shadow-sm"
+                            : "border-border bg-muted/10 text-muted-foreground hover:border-primary/35 hover:bg-muted/25 hover:text-foreground"
+                        )}
+                      >
+                        <span className="block text-sm font-semibold">{item.label}</span>
+                        <span className="mt-0.5 block text-xs leading-5">{tk(`throne.mode.${item.value}.description`)}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-xs leading-5 text-muted-foreground">{tk(`throne.mode.${mode}.useWhen`)}</p>
+                </div>
+              </details>
+            </div>
           </div>
         </form>
       </SectionCard>
 
       {latestTask && (
-        <SectionCard 
-          className="border-primary/30 bg-primary/5 shadow-[0_0_30px_rgba(214,170,87,0.05)] relative overflow-hidden" 
-          contentClassName="p-6 relative z-10"
+        <SectionCard
+          className="relative overflow-hidden border-primary/30 bg-card shadow-sm"
+          contentClassName="relative p-5 sm:p-6"
         >
-          <div className="absolute -right-10 -top-10 opacity-5 pointer-events-none">
-            <Sparkles className="h-64 w-64 text-primary" />
-          </div>
-
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="max-w-3xl">
               <div className="flex items-center gap-3 mb-3">
                 <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.2em] text-primary">
                   <Sparkles className="mr-1.5 h-3 w-3" />
-                  Grand Vizier Terminal
+                  {tk("throne.latestResult")}
                 </span>
                 <StatusBadge status={latestTask.status} />
               </div>
@@ -387,8 +423,8 @@ function ThroneRoomCommand() {
 
       <section>
         <div className="mb-6 flex items-end justify-between border-b border-border/50 pb-4">
-          <h2 className="font-display text-2xl">Recent Decrees</h2>
-          <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Archive ({tasks.length})</span>
+          <h2 className="text-lg font-semibold text-foreground">{tk("throne.recent")}</h2>
+          <span className="text-xs font-semibold text-muted-foreground">{tk("throne.archiveCount", { count: tasks.length })}</span>
         </div>
         
         {tasks.length > 0 ? (
@@ -400,8 +436,8 @@ function ThroneRoomCommand() {
         ) : (
           <EmptyState 
             icon={ScrollText}
-            title="No Royal Decrees" 
-            description="Your command archive is empty. Issue your first decree above." 
+            title={tk("throne.empty.title")}
+            description={tk("throne.empty.description")}
             className="py-12"
           />
         )}
