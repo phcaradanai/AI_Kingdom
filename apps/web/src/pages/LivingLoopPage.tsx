@@ -1,4 +1,4 @@
-import { Activity, AlertTriangle, Archive, CheckCircle2, Clock, Cpu, Eye, Settings as SettingsIcon, Shield, XCircle, Zap } from "lucide-react";
+import { Activity, AlertTriangle, Archive, CheckCircle2, Clock, Cpu, Eye, RefreshCw, Settings as SettingsIcon, Shield, XCircle, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { PageHeader } from "@/components/PageHeader";
@@ -219,7 +219,7 @@ export function LivingLoopPage() {
 
   async function load() {
     const [s, r, c] = await Promise.all([
-      api.livingLoopStatus().catch(() => ({ status: { enabled: false, lastRun: null, lastResult: null, todayCandidates: 0, pendingCandidates: 0, highCriticalCandidates: 0, runnerIssues: 0, providerIssues: 0, patchesPendingReview: 0, autoValidation: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, jobsCreatedLastRun: 0, validationFailuresNeedingReview: 0 }, autoSandboxPatch: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, minConfidence: 85, jobsCreatedLastRun: 0 } } })),
+      api.livingLoopStatus().catch(() => ({ status: { enabled: false, lastRun: null, lastResult: null, todayCandidates: 0, pendingCandidates: 0, highCriticalCandidates: 0, runnerIssues: 0, providerIssues: 0, patchesPendingReview: 0, autoContextRepair: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, repairedLastRun: 0 }, autoValidation: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, jobsCreatedLastRun: 0, validationFailuresNeedingReview: 0 }, autoSandboxPatch: { enabled: false, dailyCount: 0, dailyLimit: 0, cooldownMinutes: 0, minConfidence: 85, jobsCreatedLastRun: 0 } } })),
       api.livingLoopRuns(10).catch(() => ({ runs: [] })),
       api.automationCandidates({ limit: 50 }).catch(() => ({ candidates: [], total: 0 }))
     ]);
@@ -241,13 +241,28 @@ export function LivingLoopPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 slide-in-from-bottom-4">
-      <PageHeader eyebrow="M17D-2" title="Living Loop" description="Observe + Propose + Auto Validate: Kingdom state monitoring, automation candidate queue, and safe validation-only jobs." />
+      <PageHeader eyebrow="M21" title="Living Loop" description="Observe, repair context, propose work, and run gated automation with visible limits and review boundaries." />
       <div className="grid gap-6 xl:grid-cols-2">
         <SectionCard title="Loop Status" icon={Activity} action={<Button variant="outline" className="h-8 text-xs" onClick={runOnce} disabled={running}><Zap className={cn("mr-1.5 h-3.5 w-3.5", running && "animate-spin")} />{running ? "Running..." : "Run Once"}</Button>}>
           {status && <div className="space-y-4"><div className="grid grid-cols-2 gap-4 sm:grid-cols-4"><StatCard className="bg-transparent border-none p-0" title="Enabled" value={status.enabled ? "Yes" : "No"} /><StatCard className="bg-transparent border-none p-0" title="Pending" value={status.pendingCandidates} /><StatCard className="bg-transparent border-none p-0" title="High/Critical" value={status.highCriticalCandidates} /><StatCard className="bg-transparent border-none p-0" title="Today" value={status.todayCandidates} /></div><div className="grid grid-cols-3 gap-4"><StatCard className="bg-transparent border-none p-0" title="Runner Issues" value={status.runnerIssues} /><StatCard className="bg-transparent border-none p-0" title="Provider Issues" value={status.providerIssues} /><StatCard className="bg-transparent border-none p-0" title="Last Result" value={status.lastResult ?? "N/A"} /></div>{status.lastRun?.skippedReasons && status.lastRun.skippedReasons.length > 0 && <div className="text-[11px] text-amber-400/80">Last run skipped: {status.lastRun.skippedReasons.join("; ")}</div>}{status.lastRun?.error && <div className="text-[11px] text-destructive">Last run error: {status.lastRun.error}</div>}</div>}
         </SectionCard>
-        <SectionCard title="Constraints" icon={AlertTriangle}><div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-2">M17D-2: Auto Validation Only</div><ul className="space-y-1 text-xs text-muted-foreground"><li>✓ Only VALIDATION_ONLY jobs may auto-run (no file edits, no patches)</li><li>✓ No auto-patch, branch push, PR, merge, deploy, or trusted memory</li><li>✓ Every candidate has provenance + data quality gate</li><li>✓ GET routes never create candidates or jobs</li><li>✓ KING remains decision owner</li></ul></div></SectionCard>
+        <SectionCard title="Constraints" icon={AlertTriangle}><div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3"><div className="text-xs font-semibold uppercase tracking-wider text-amber-400 mb-2">Autonomy Safety Boundary</div><ul className="space-y-1 text-xs text-muted-foreground"><li>Auto context repair only scans approved local-document roots and refreshes WorkOrder context</li><li>Auto validation cannot edit files; auto sandbox patches still land in NEEDS_REVIEW</li><li>No automatic branch push, PR, merge, deploy, or trusted memory</li><li>Every candidate retains provenance and passes the data quality gate</li><li>KING remains the final decision owner</li></ul></div></SectionCard>
       </div>
+      <SectionCard title="Auto Context Repair" icon={RefreshCw}>
+        {status?.autoContextRepair ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+              <StatCard className="bg-transparent border-none p-0" title="Status" value={status.autoContextRepair.enabled ? "Enabled" : "Disabled"} />
+              <StatCard className="bg-transparent border-none p-0" title="Repairs Today" value={`${status.autoContextRepair.dailyCount} / ${status.autoContextRepair.dailyLimit}`} />
+              <StatCard className="bg-transparent border-none p-0" title="Cooldown" value={`${status.autoContextRepair.cooldownMinutes}m`} />
+              <StatCard className="bg-transparent border-none p-0" title="Repaired Last Run" value={status.autoContextRepair.repairedLastRun} />
+            </div>
+            <div className="text-xs leading-relaxed text-muted-foreground">
+              Opt-in context repair can move MISSING or STALE WorkOrders back to FRESH. This satisfies the context gate but does not approve, push, merge, or deploy a patch.
+            </div>
+          </div>
+        ) : <div className="text-xs text-muted-foreground">Auto context repair status unavailable.</div>}
+      </SectionCard>
       <SectionCard title="Auto Validation" icon={Shield}>
         {status?.autoValidation ? (
           <div className="space-y-4">

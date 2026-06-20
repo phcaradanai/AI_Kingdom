@@ -369,7 +369,7 @@ export function RunLivingLoopButton() {
 }
 
 export function LivingLoopDashboardCard() {
-  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null; autoValidationToday: number; validationFailures: number; autoSandboxPatchToday: number; patchesPendingReview: number } | null>(null);
+  const [status, setStatus] = useState<{ pending: number; highCritical: number; runnerIssues: number; providerIssues: number; lastRun: string | null; contextRepairEnabled: boolean; contextRepairsToday: number; contextRepairsLastRun: number; autoValidationToday: number; validationFailures: number; autoSandboxPatchToday: number; patchesPendingReview: number } | null>(null);
   const [loading, setLoading] = useState(true);
   useEffect(() => {
     api.livingLoopStatus()
@@ -379,6 +379,9 @@ export function LivingLoopDashboardCard() {
         runnerIssues: res.status.runnerIssues,
         providerIssues: res.status.providerIssues,
         lastRun: res.status.lastResult,
+        contextRepairEnabled: res.status.autoContextRepair?.enabled ?? false,
+        contextRepairsToday: res.status.autoContextRepair?.dailyCount ?? 0,
+        contextRepairsLastRun: res.status.autoContextRepair?.repairedLastRun ?? 0,
         autoValidationToday: res.status.autoValidation?.dailyCount ?? 0,
         validationFailures: res.status.autoValidation?.validationFailuresNeedingReview ?? 0,
         autoSandboxPatchToday: res.status.autoSandboxPatch?.dailyCount ?? 0,
@@ -396,6 +399,8 @@ export function LivingLoopDashboardCard() {
         <MetricReviewCard title="High/Critical" value={status.highCritical} to="/living-loop" reviewLabel={status.highCritical > 0 ? "Review" : "Open source"} trend={status.highCritical > 0 ? { value: "Urgent", isPositive: false } : undefined} />
         <MetricReviewCard title="Runner Issues" value={status.runnerIssues} to="/automation-jobs" reviewLabel={status.runnerIssues > 0 ? "Review" : "Open source"} trend={status.runnerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
         <MetricReviewCard title="Provider Issues" value={status.providerIssues} to="/providers" reviewLabel={status.providerIssues > 0 ? "Review" : "Open source"} trend={status.providerIssues > 0 ? { value: "Check", isPositive: false } : undefined} />
+        <MetricReviewCard title="Context Repairs Today" value={status.contextRepairsToday} to="/living-loop" trend={{ value: status.contextRepairEnabled ? "Enabled" : "Disabled", isPositive: status.contextRepairEnabled }} />
+        <MetricReviewCard title="Repaired Last Run" value={status.contextRepairsLastRun} to="/living-loop" />
         <MetricReviewCard title="Auto Validation Today" value={status.autoValidationToday} to="/automation-jobs" />
         <MetricReviewCard title="Validation Failures" value={status.validationFailures} to="/automation-jobs" reviewLabel={status.validationFailures > 0 ? "Review" : "Open source"} trend={status.validationFailures > 0 ? { value: "Review", isPositive: false } : undefined} />
         <MetricReviewCard title="Auto Patch Jobs Today" value={status.autoSandboxPatchToday} to="/automation-jobs" />

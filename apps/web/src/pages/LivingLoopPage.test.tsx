@@ -14,6 +14,13 @@ const mockStatus: LivingLoopStatusDto = {
   runnerIssues: 0,
   providerIssues: 0,
   patchesPendingReview: 1,
+  autoContextRepair: {
+    enabled: true,
+    dailyCount: 3,
+    dailyLimit: 20,
+    cooldownMinutes: 30,
+    repairedLastRun: 2
+  },
   autoValidation: {
     enabled: true,
     dailyCount: 2,
@@ -179,6 +186,19 @@ describe("LivingLoopPage", () => {
     expect(screen.getByText("60m")).toBeInTheDocument();
     expect(screen.getAllByText("Created Last Run").length).toBeGreaterThan(0);
     expect(screen.getByText("Failures To Review")).toBeInTheDocument();
+  });
+
+  it("shows auto context repair status, limits, and safety boundary", async () => {
+    setUser("KING");
+    setupApiMocks([]);
+
+    render(<MemoryRouter><LivingLoopPage /></MemoryRouter>);
+
+    expect(await screen.findByText("Auto Context Repair")).toBeInTheDocument();
+    expect(screen.getByText("3 / 20")).toBeInTheDocument();
+    expect(screen.getByText("30m")).toBeInTheDocument();
+    expect(screen.getByText("Repaired Last Run")).toBeInTheDocument();
+    expect(screen.getByText(/does not approve, push, merge, or deploy a patch/)).toBeInTheDocument();
   });
 
   it("shows an auto-created job link on an APPLIED VALIDATION_JOB candidate", async () => {

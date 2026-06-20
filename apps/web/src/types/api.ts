@@ -1925,6 +1925,14 @@ export type AutoValidationStatusDto = {
   validationFailuresNeedingReview: number;
 };
 
+export type AutoContextRepairStatusDto = {
+  enabled: boolean;
+  dailyCount: number;
+  dailyLimit: number;
+  cooldownMinutes: number;
+  repairedLastRun: number;
+};
+
 export type AutoSandboxPatchStatusDto = {
   enabled: boolean;
   dailyCount: number;
@@ -1944,6 +1952,7 @@ export type LivingLoopStatusDto = {
   runnerIssues: number;
   providerIssues: number;
   patchesPendingReview: number;
+  autoContextRepair: AutoContextRepairStatusDto;
   autoValidation: AutoValidationStatusDto;
   autoSandboxPatch: AutoSandboxPatchStatusDto;
 };

@@ -15,6 +15,13 @@ const mockStatus: LivingLoopStatusDto = {
   runnerIssues: 0,
   providerIssues: 0,
   patchesPendingReview: 1,
+  autoContextRepair: {
+    enabled: true,
+    dailyCount: 3,
+    dailyLimit: 20,
+    cooldownMinutes: 30,
+    repairedLastRun: 2
+  },
   autoValidation: {
     enabled: true,
     dailyCount: 4,
@@ -80,6 +87,17 @@ describe("LivingLoopDashboardCard", () => {
     expect(getStatCardValue("Auto Validation Today")).toBe("4");
     expect(screen.getByText("Validation Failures")).toBeInTheDocument();
     expect(getStatCardValue("Validation Failures")).toBe("3");
+  });
+
+  it("shows context repair activity and links it to the Living Loop source", async () => {
+    apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
+
+    renderWithRouter(<LivingLoopDashboardCard />);
+
+    expect(await screen.findByText("Context Repairs Today")).toBeInTheDocument();
+    expect(getStatCardValue("Context Repairs Today")).toBe("3");
+    expect(getStatCardValue("Repaired Last Run")).toBe("2");
+    expect(screen.getByText("Context Repairs Today").closest("a")).toHaveAttribute("href", "/living-loop");
   });
   it("shows auto patch jobs today and patches needing review", async () => {
     apiMocks.livingLoopStatus.mockResolvedValue({ status: mockStatus });
