@@ -21,11 +21,21 @@ import { getWorkOrderRecommendations } from "./externalAgentRecommendationServic
 import { auditLog } from "./auditService.js";
 import { buildNextActionUpdate, computeCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 
+export type PlannerRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
 export interface PlannerDraft {
   title: string;
   objective: string;
   rationale: string;
+  // M23 (Decree → Execution): BUILD councils emit an execution risk level and the
+  // files they expect to touch. These feed the downstream risk policy
+  // (isAutoPatchEligible) so a LOW-risk, fresh-context BUILD work order can be
+  // auto-executed as a sandbox patch, while anything higher pauses for King approval.
+  riskLevel?: PlannerRiskLevel;
+  fileHints?: string[];
 }
+
+const PLANNER_RISK_LEVELS: readonly PlannerRiskLevel[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
 
 export interface PlannerResult {
   drafted: number;
@@ -306,7 +316,9 @@ async function callPlannerLLM(opts: {
     generated = await generateWithFallback(
       providerCalls,
       {
-        command: "Review the council session and Kingdom context below. Generate 0-3 draft work orders as a JSON array. Return only the JSON array.",
+        command: task.mode === "BUILD"
+          ? "Review the BUILD council session and Kingdom context below. Generate 0-3 execution-ready draft work orders as a JSON array. Each object must include: title, objective, rationale, riskLevel (one of LOW/MEDIUM/HIGH/CRITICAL based on the council's Execution Decision), and fileHints (array of repo-relative file paths the work expects to touch). Use LOW only for small, well-scoped, low-blast-radius changes. Return only the JSON array."
+          : "Review the council session and Kingdom context below. Generate 0-3 draft work orders as a JSON array. Return only the JSON array.",
         mode: "PLAN",
         agentName: plannerAgent.name,
         agentRole: plannerAgent.title,
@@ -407,7 +419,27 @@ function validateDrafts(parsed: unknown): PlannerDraft[] {
     const objective = typeof obj.objective === "string" ? obj.objective.trim().slice(0, 5000) : "";
     const rationale = typeof obj.rationale === "string" ? obj.rationale.trim().slice(0, 1000) : "";
     if (!title || !objective) continue;
-    drafts.push({ title, objective, rationale });
+
+    // M23: optional BUILD execution metadata. Tolerant — absent/invalid fields are dropped,
+    // never throwing, so non-BUILD planner output is unaffected.
+    const riskRaw = typeof obj.riskLevel === "string" ? obj.riskLevel.trim().toUpperCase() : "";
+    const riskLevel = (PLANNER_RISK_LEVELS as readonly string[]).includes(riskRaw)
+      ? (riskRaw as PlannerRiskLevel)
+      : undefined;
+    const fileHints = Array.isArray(obj.fileHints)
+      ? obj.fileHints
+          .filter((h): h is string => typeof h === "string" && h.trim().length > 0)
+          .map((h) => h.trim().slice(0, 200))
+          .slice(0, 20)
+      : undefined;
+
+    drafts.push({
+      title,
+      objective,
+      rationale,
+      ...(riskLevel ? { riskLevel } : {}),
+      ...(fileHints && fileHints.length > 0 ? { fileHints } : {})
+    });
   }
 
   return drafts;
@@ -585,7 +617,18 @@ function buildCouncilWorkOrderProvenance(session: SessionInput, task: TaskInput,
       categories: ["ARCHITECTURE_DECISION", "BUG_LEARNING", "WORKFLOW_RULE"],
       requiresReview: true
     },
-    plannerRationale: draft.rationale
+    plannerRationale: draft.rationale,
+    taskMode: task.mode,
+    // M23: execution metadata carried for the downstream risk policy. Present only when
+    // the (BUILD) planner emitted it; absent for advisory modes.
+    ...(draft.riskLevel || (draft.fileHints && draft.fileHints.length > 0)
+      ? {
+          executionMetadata: {
+            ...(draft.riskLevel ? { riskLevel: draft.riskLevel } : {}),
+            ...(draft.fileHints && draft.fileHints.length > 0 ? { fileHints: draft.fileHints } : {})
+          }
+        }
+      : {})
   };
 }
 

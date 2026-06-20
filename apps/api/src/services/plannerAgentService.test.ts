@@ -62,6 +62,32 @@ test("parsePlannerResponse extracts JSON array wrapped in prose", () => {
   assert.equal(result[0]!.title, "Fix Y");
 });
 
+test("parsePlannerResponse captures BUILD execution metadata (riskLevel + fileHints)", () => {
+  const response = JSON.stringify([
+    {
+      title: "Add version endpoint",
+      objective: "Add GET /api/health/version",
+      rationale: "Council execution decision",
+      riskLevel: "low",
+      fileHints: ["apps/api/src/routes/health.ts", "", "  apps/api/src/app.ts  "]
+    }
+  ]);
+  const result = parsePlannerResponse(response);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]!.riskLevel, "LOW"); // normalized to uppercase
+  assert.deepEqual(result[0]!.fileHints, ["apps/api/src/routes/health.ts", "apps/api/src/app.ts"]); // trimmed + blanks dropped
+});
+
+test("parsePlannerResponse drops invalid riskLevel and non-array fileHints without throwing", () => {
+  const response = JSON.stringify([
+    { title: "T", objective: "O", rationale: "R", riskLevel: "SUPER_CRITICAL", fileHints: "not-an-array" }
+  ]);
+  const result = parsePlannerResponse(response);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]!.riskLevel, undefined);
+  assert.equal(result[0]!.fileHints, undefined);
+});
+
 test("parsePlannerResponse returns empty array on invalid JSON", () => {
   const result = parsePlannerResponse("This is not JSON at all");
   assert.deepEqual(result, []);
