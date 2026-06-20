@@ -72,6 +72,41 @@ const MANUAL_ONLY_GUARDRAILS = [
   "M17F-1 guardrail: do not expose secrets."
 ].join("\n");
 
+// M23 (Decree → Execution): in BUILD mode the council is asked to produce an
+// EXECUTION-READY plan — file-level changes, acceptance criteria, and validation
+// commands — that the planner can turn directly into a Work Order and the
+// runner/agent-CLI can carry out. The Architect and General stop "advising about"
+// the change and start specifying it. Execution still happens only through the
+// downstream gated path (planner → Work Order → King-authorized SANDBOX_PATCH /
+// external-agent job → runner → NEEDS_REVIEW); the council itself never creates a
+// job. ASK / PLAN / RESEARCH keep the advisory contracts above.
+const BUILD_ROLE_CONTRACTS: Record<string, string> = {
+  "royal-architect": [
+    "Return a section titled 'Architect Execution Plan'.",
+    "Specify an execution-ready plan the runner can follow: exact files to create or change (by path), the concrete edit for each (function/behavior level, not vague advice), new/changed interfaces, and migration/test files if needed.",
+    "Include: ordered implementation steps; validation commands (typecheck/test/build) that must pass; acceptance criteria; rollback strategy; and a risk level (LOW/MEDIUM/HIGH/CRITICAL) with justification.",
+    "Use only provided Project Context and local document context. Scope the plan to the linked project; if no project or fresh context is present, say so and mark risk HIGH."
+  ].join("\n"),
+  "royal-general": [
+    "Return a section titled 'General Execution Handoff'.",
+    "Turn the Architect Execution Plan into a runner-ready handoff: a single clear objective, the concrete change set, acceptance criteria, and the validation commands that gate completion.",
+    "Include: do-not-cross constraints (no push, no merge, no deploy, no PR, patch lands in NEEDS_REVIEW); the exact files in scope; and what evidence the implementation report must contain.",
+    "Keep it concrete enough to execute, but do not create runner jobs yourself — the King authorizes execution downstream."
+  ].join("\n"),
+  "grand-vizier": [
+    "Return a section titled 'Grand Vizier Execution Decision'.",
+    "Synthesize the council into an execution-ready decision the planner can convert into one Work Order: restate the single objective, the change set, acceptance criteria, validation commands, and an overall risk level (LOW/MEDIUM/HIGH/CRITICAL).",
+    "State plainly whether this is safe to auto-execute as a sandbox patch (risk LOW + fresh project context) or must pause for explicit King approval. Reference the Archivist, Researcher, Architect, and General outputs. Do not add unsupported facts."
+  ].join("\n")
+};
+
+const BUILD_EXECUTION_GUARDRAILS = [
+  "M23 BUILD mode: you MAY produce an execution-ready plan (concrete file-level changes, acceptance criteria, validation commands).",
+  "M23 guardrail: the council itself still creates no runner jobs — execution happens only through the King-authorized downstream path.",
+  "M23 guardrail: any resulting patch lands in NEEDS_REVIEW. Never auto-merge, auto-deploy, push branches, or create PRs.",
+  "M23 guardrail: do not weaken runner auth or context binding, and do not expose secrets or raw local root paths."
+].join("\n");
+
 export async function processTaskWithGrandVizier(taskId: string, userId: string) {
   const task = await prisma.task.findFirst({
     where: { id: taskId, createdBy: userId },
@@ -269,7 +304,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           agentName: agent.name,
           agentRole: agent.title,
           agentSkills: agent.skills,
-          systemPrompt: buildRoleSystemPrompt(agent),
+          systemPrompt: buildRoleSystemPrompt(agent, task.mode),
           responseStyle: agent.responseStyle,
           temperature: agent.temperature ?? undefined,
           maxTokens: agent.maxTokens ?? defaultMaxTokens,
@@ -527,7 +562,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         agentName: grandVizier.name,
         agentRole: grandVizier.title,
         agentSkills: grandVizier.skills,
-        systemPrompt: `${grandVizier.systemPrompt || grandVizier.prompt}\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.`,
+        systemPrompt: `${buildRoleSystemPrompt(grandVizier, task.mode)}\n\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.`,
         responseStyle: grandVizier.responseStyle,
         temperature: grandVizier.temperature ?? undefined,
         maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
@@ -842,11 +877,15 @@ async function buildContextWarning(projectId: string | null): Promise<string> {
   ].join("\n");
 }
 
-function buildRoleSystemPrompt(agent: Agent): string {
+function buildRoleSystemPrompt(agent: Agent, mode: TaskMode): string {
+  const contract = mode === "BUILD"
+    ? BUILD_ROLE_CONTRACTS[agent.slug] ?? ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel."
+    : ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel.";
+  const guardrails = mode === "BUILD" ? BUILD_EXECUTION_GUARDRAILS : MANUAL_ONLY_GUARDRAILS;
   return [
     agent.systemPrompt || agent.prompt,
-    ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel.",
-    MANUAL_ONLY_GUARDRAILS
+    contract,
+    guardrails
   ].join("\n\n");
 }
 
