@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { ExternalAgentRecommendationDto, PatchArtifactDto, PublicUser, WorkOrderContextDto, WorkOrderDto } from "@/types/api";
 import { WorkOrdersPage } from "./WorkOrdersPage";
 
@@ -146,9 +147,9 @@ function mockBaseApi(context: WorkOrderContextDto, patches: PatchArtifactDto[] =
   apiMocks.reconcileContextWarnings.mockResolvedValue({ result: { totalInspected: 0, archived: 0, contextRepaired: 0, skipped: 0, results: [] } });
 }
 
-function renderPage() {
+function renderPage(initialEntry = "/") {
   return render(
-    <MemoryRouter>
+    <MemoryRouter initialEntries={[initialEntry]}>
       <WorkOrdersPage />
     </MemoryRouter>
   );
@@ -161,6 +162,7 @@ async function selectOrder() {
 
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.removeItem(LANGUAGE_STORAGE_KEY);
   currentUser = null;
 });
 
@@ -184,6 +186,54 @@ describe("WorkOrdersPage — Project Context (M17E-2)", () => {
 
     expect(await screen.findByRole("heading", { name: "Work Orders" })).toBeInTheDocument();
     expect(screen.getByText("Work Queue")).toBeInTheDocument();
+  });
+
+  it("keeps creation explicit when no work order is selected", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+
+    renderPage();
+
+    expect(await screen.findByText("Select a work order")).toBeInTheDocument();
+    expect(document.querySelector("#wo-title")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getAllByRole("button", { name: "Create Work Order" })[0]!);
+
+    expect(screen.getByRole("heading", { name: "Create Work Order" })).toBeInTheDocument();
+    expect(document.querySelector("#wo-title")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Close creation" })).toBeInTheDocument();
+  });
+
+  it("shows a section index while keeping source fields collapsed until requested", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+
+    renderPage();
+    await selectOrder();
+
+    expect(screen.getByRole("link", { name: "Summary" })).toHaveAttribute("href", "#work-order-overview");
+    expect(screen.getByRole("link", { name: "Context & Safety" })).toHaveAttribute("href", "#work-order-project-context");
+    expect(screen.getByRole("link", { name: "Execution" })).toHaveAttribute("href", "#work-order-automation");
+    expect(document.querySelector("#wo-title")).not.toBeVisible();
+
+    await userEvent.click(screen.getByText("Edit source fields"));
+    expect(document.querySelector("#wo-title")).toBeVisible();
+  });
+
+  it("renders the refined queue and empty detail chrome in Thai", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "ใบสั่งงาน" })).toBeInTheDocument();
+    expect(screen.getByText("คิวงาน")).toBeInTheDocument();
+    expect(screen.getByText("เลือกใบสั่งงาน")).toBeInTheDocument();
+    expect(screen.getByText("ตัวกรองขั้นสูง")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "สร้างใบสั่งงาน" }).length).toBeGreaterThan(0);
   });
 
   it("shows the Project Context panel with binding details for a FRESH binding", async () => {

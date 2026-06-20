@@ -2,7 +2,7 @@
 
 ## Premium UX Wave 2: Command-to-Execution Lifecycle
 
-Status: **in progress - Wave 2A complete**
+Status: **in progress - Wave 2A and Wave 2B complete**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 
 ### Goal
@@ -35,8 +35,8 @@ Wave 1 Mission Control foundation and semantic English/Thai migration are comple
 
 1. Completed: capture desktop/tablet/mobile baselines for the first slice and write the Wave 2A layout contract.
 2. Completed: refine `/throne-room` and `/council` as command and evidence surfaces without duplicating ownership.
-3. Next: refine `/work-orders` while preserving context gates and safe/blocked action semantics.
-4. Refine `/automation-jobs` with a persistent King approval boundary.
+3. Completed: refine `/work-orders` while preserving context gates and safe/blocked action semantics.
+4. Next: refine `/automation-jobs` with a persistent King approval boundary.
 5. Refine `/reports`, then verify the full command-to-execution path in English and Thai.
 
 ### Acceptance
@@ -52,9 +52,10 @@ Wave 1 Mission Control foundation and semantic English/Thai migration are comple
 
 ### Baseline
 
-- Runtime baseline: Wave 2A completion commit is aligned on `codex/main` and local `main`.
+- Runtime baseline: Wave 2B completion is ready to align on `codex/main` and local `main`.
 - Web app responds at `http://127.0.0.1:5174`; API health responds at `http://127.0.0.1:4000/health` in the current local session.
-- Latest recorded web suite: 150/150 passing; root typecheck and web build passing.
+- Latest recorded web suite: 153/153 passing; root typecheck and web build passing.
 - Full route plan: 38 routes across six implementation waves in `docs/UX_UI_REFINEMENT_PLAN.md`.
 - Wave 1 validation covers all five Mission Control pages in English/Thai and Operations, Royal Brief, and Living Loop at desktop, tablet, and mobile widths. The existing >500 kB bundle warning remains.
 - Wave 2A validation covers Throne Room and Council in English/Thai at 1440px, 1024px, 430px, and 200% zoom. Decree entry, mode disclosure, master-detail selection, evidence disclosure, source links, and explicit work-order creation have focused test coverage.
+- Wave 2B validation covers the Work Orders queue-and-detail workspace in English/Thai at desktop, mobile, and 200% zoom. Explicit creation, quick and advanced filters, section navigation, source-field disclosure, source links, and `?focus=` selection have focused test coverage.

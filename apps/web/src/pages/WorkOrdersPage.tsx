@@ -1,6 +1,6 @@
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye, ArrowRight, ExternalLink, Clock, Layers } from "lucide-react";
+import { Bot, Clipboard, FileText, Handshake, Plus, Play, Send, CheckSquare, Square, Trash2, Archive, CheckCircle2, AlertTriangle, Shield, CheckCircle, XCircle, GitBranch, Eye, ArrowRight, ExternalLink, Clock, Layers, ChevronDown, Filter, ListChecks, X } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
@@ -9,6 +9,7 @@ import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
+import { useTk } from "@/lib/i18n";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type { AutomationJobDto, AutomationJobMode, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderExecutionTarget, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
@@ -207,7 +208,7 @@ function WorkOrderSection({
     <Card id={id}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-display text-lg">{title}</h2>
+          <h2 className="text-base font-semibold text-foreground">{title}</h2>
           {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
         </div>
         {source ? (
@@ -238,34 +239,35 @@ function WorkOrderStatusSummary({
   contextStatus: string;
   nextStep: ReturnType<typeof getRecommendedNextStep>;
 }) {
+  const tk = useTk();
   const assignedAgent = order.assignedExternalAgent?.name ?? "Unassigned";
   return (
     <Card className="border-primary/30 bg-primary/5">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Work Order Detail</p>
-          <h2 className="mt-2 break-words font-display text-2xl leading-tight">{order.title}</h2>
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{order.objective || "No objective recorded."}</p>
+          <p className="text-xs font-semibold text-primary">{tk("workOrders.detailEyebrow")}</p>
+          <h2 className="mt-2 break-words text-xl font-semibold leading-7 text-foreground sm:text-2xl">{order.title}</h2>
+          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{order.objective || tk("workOrders.noObjective")}</p>
         </div>
         <div className="flex flex-wrap gap-2 lg:justify-end">
           <span className="rounded-full border border-border bg-background/40 px-2.5 py-1 text-xs font-semibold">{getStatusLabel(order.status)}</span>
           <span className="rounded-full border border-border bg-background/40 px-2.5 py-1 text-xs font-semibold">{order.priority}</span>
           <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", contextStatusColor(contextStatus))}>
-            Context: {contextStatus}
+            {tk("workOrders.contextStatus", { status: contextStatus })}
           </span>
         </div>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-3">
         <div className="rounded-md border border-border/70 bg-background/30 p-3">
-          <div className="text-xs text-muted-foreground">Assigned external agent</div>
-          <div className="mt-1 text-sm font-semibold">{assignedAgent}</div>
+          <div className="text-xs text-muted-foreground">{tk("workOrders.assignedAgent")}</div>
+          <div className="mt-1 text-sm font-semibold">{assignedAgent === "Unassigned" ? tk("workOrders.unassigned") : assignedAgent}</div>
         </div>
         <div className="rounded-md border border-border/70 bg-background/30 p-3">
-          <div className="text-xs text-muted-foreground">State</div>
+          <div className="text-xs text-muted-foreground">{tk("workOrders.state")}</div>
           <div className="mt-1 text-sm font-semibold">{getStatusLabel(order.status)}</div>
         </div>
         <div className="rounded-md border border-border/70 bg-background/30 p-3">
-          <div className="text-xs text-muted-foreground">Next recommended action</div>
+          <div className="text-xs text-muted-foreground">{tk("workOrders.nextAction")}</div>
           <div className="mt-1 text-sm font-semibold">{nextStep.title}</div>
         </div>
       </div>
@@ -280,6 +282,7 @@ function WorkOrderNextStepCard({
   nextStep: ReturnType<typeof getRecommendedNextStep>;
   blockedReason: string | null;
 }) {
+  const tk = useTk();
   const tone = nextStep.dangerous
     ? "border-red-500/30 bg-red-500/10"
     : nextStep.blocked || blockedReason
@@ -292,9 +295,9 @@ function WorkOrderNextStepCard({
         <div>
           <div className="flex items-center gap-2 text-sm font-semibold">
             {nextStep.blocked || blockedReason ? <AlertTriangle className="h-4 w-4 text-amber-500" /> : <ArrowRight className="h-4 w-4 text-primary" />}
-            Next Step
+            {tk("workOrders.nextStep")}
           </div>
-          <h2 className="mt-2 font-display text-xl">{nextStep.title}</h2>
+          <h2 className="mt-2 text-lg font-semibold text-foreground">{nextStep.title}</h2>
           <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{blockedReason ?? nextStep.description}</p>
         </div>
         {nextStep.sourceTo.startsWith("#") ? (
@@ -314,18 +317,19 @@ function WorkOrderNextStepCard({
 }
 
 function WorkOrderSourceLinks({ order }: { order: WorkOrderDto }) {
+  const tk = useTk();
   const projectTo = order.projectId ? `/projects/${order.projectId}` : "/projects";
   const links = [
-    { label: "Project context", to: projectTo, description: "Project docs, routing, and context binding." },
-    { label: "Reports", to: "#work-order-history", description: "Implementation reports and review history for this work order." },
-    { label: "Automation jobs", to: "/automation-jobs", description: "Runner execution and patch review source." },
-    { label: "External agent", to: "/external-agents", description: "Agent registry and assignment context." }
+    { label: tk("workOrders.source.project"), to: projectTo, description: tk("workOrders.source.projectDescription") },
+    { label: tk("workOrders.source.reports"), to: "#work-order-history", description: tk("workOrders.source.reportsDescription") },
+    { label: tk("workOrders.source.automation"), to: "/automation-jobs", description: tk("workOrders.source.automationDescription") },
+    { label: tk("workOrders.source.agent"), to: "/external-agents", description: tk("workOrders.source.agentDescription") }
   ];
   return (
     <Card className="p-4">
       <div className="flex items-center gap-2">
         <Layers className="h-4 w-4 text-muted-foreground" />
-        <h2 className="font-display text-base">Source of Truth</h2>
+        <h2 className="text-sm font-semibold text-foreground">{tk("workOrders.sourceTruth")}</h2>
       </div>
       <div className="mt-3 grid gap-2 md:grid-cols-2 xl:grid-cols-4">
         {links.map((link) => {
@@ -350,6 +354,27 @@ function WorkOrderSourceLinks({ order }: { order: WorkOrderDto }) {
   );
 }
 
+function WorkOrderDetailIndex() {
+  const tk = useTk();
+  const links = [
+    { label: tk("workOrders.index.summary"), to: "#work-order-overview" },
+    { label: tk("workOrders.index.context"), to: "#work-order-project-context" },
+    { label: tk("workOrders.index.agent"), to: "#work-order-agent" },
+    { label: tk("workOrders.index.execution"), to: "#work-order-automation" },
+    { label: tk("workOrders.index.history"), to: "#work-order-history" }
+  ];
+
+  return (
+    <nav className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2" aria-label={tk("workOrders.indexAria")}>
+      {links.map((link) => (
+        <a key={link.to} href={link.to} className="inline-flex min-h-10 shrink-0 items-center rounded-md px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+          {link.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
 function StatusQuickFilters({
   statusFilter,
   includeArchived,
@@ -363,6 +388,7 @@ function StatusQuickFilters({
   onStatus: (status: string) => void;
   onArchived: () => void;
 }) {
+  const tk = useTk();
   const counts = {
     NEEDS_REVIEW: workOrders.filter((order) => order.status === "NEEDS_REVIEW").length,
     READY: workOrders.filter((order) => order.status === "READY").length,
@@ -370,18 +396,19 @@ function StatusQuickFilters({
     ARCHIVED: workOrders.filter((order) => order.status === "ARCHIVED").length
   };
   const items = [
-    { label: "Needs Review", status: "NEEDS_REVIEW", count: counts.NEEDS_REVIEW },
-    { label: "Ready", status: "READY", count: counts.READY },
-    { label: "In Progress", status: "IN_PROGRESS", count: counts.IN_PROGRESS }
+    { label: tk("workOrders.quick.needsReview"), status: "NEEDS_REVIEW", count: counts.NEEDS_REVIEW },
+    { label: tk("workOrders.quick.ready"), status: "READY", count: counts.READY },
+    { label: tk("workOrders.quick.inProgress"), status: "IN_PROGRESS", count: counts.IN_PROGRESS }
   ];
   return (
-    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-2">
+    <div className="grid grid-cols-2 gap-2">
       <button
         type="button"
         onClick={() => onStatus("")}
-        className={cn("rounded-md border px-3 py-2 text-left text-xs transition", !statusFilter && !includeArchived ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+        aria-pressed={!statusFilter && !includeArchived}
+        className={cn("min-h-12 rounded-md border px-3 py-2 text-left text-xs transition", !statusFilter && !includeArchived ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
       >
-        <span className="block font-semibold">Active</span>
+        <span className="block font-semibold">{tk("workOrders.quick.active")}</span>
         <span>{workOrders.length}</span>
       </button>
       {items.map((item) => (
@@ -389,7 +416,8 @@ function StatusQuickFilters({
           key={item.status}
           type="button"
           onClick={() => onStatus(item.status)}
-          className={cn("rounded-md border px-3 py-2 text-left text-xs transition", statusFilter === item.status ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+          aria-pressed={statusFilter === item.status}
+          className={cn("min-h-12 rounded-md border px-3 py-2 text-left text-xs transition", statusFilter === item.status ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
         >
           <span className="block font-semibold">{item.label}</span>
           <span>{item.count}</span>
@@ -398,9 +426,10 @@ function StatusQuickFilters({
       <button
         type="button"
         onClick={onArchived}
-        className={cn("rounded-md border px-3 py-2 text-left text-xs transition", statusFilter === "ARCHIVED" && includeArchived ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+        aria-pressed={statusFilter === "ARCHIVED" && includeArchived}
+        className={cn("min-h-12 rounded-md border px-3 py-2 text-left text-xs transition", statusFilter === "ARCHIVED" && includeArchived ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
       >
-        <span className="block font-semibold">Archived</span>
+        <span className="block font-semibold">{tk("workOrders.quick.archived")}</span>
         <span>{counts.ARCHIVED}</span>
       </button>
     </div>
@@ -408,6 +437,7 @@ function StatusQuickFilters({
 }
 
 export function WorkOrdersPage() {
+  const tk = useTk();
   const [searchParams] = useSearchParams();
   const focusedWorkOrderId = searchParams.get("focus");
   const user = useAuthStore((state) => state.user);
@@ -417,6 +447,8 @@ export function WorkOrdersPage() {
   const [externalAgents, setExternalAgents] = useState<ExternalAgentDto[]>([]);
   const [projects, setProjects] = useState<ProjectDto[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [draft, setDraft] = useState<WorkOrderPayload>(blankWorkOrder);
   const [reportDraft, setReportDraft] = useState(blankReport);
   const [loadingWorkOrders, setLoadingWorkOrders] = useState(true);
@@ -476,6 +508,8 @@ export function WorkOrdersPage() {
       if (focused) {
         setSelectedId(focused.id);
         setDraft(toPayload(focused));
+        setIsCreating(false);
+        setIsEditorOpen(false);
       } else if (selectedId && !orders.workOrders.some((order) => order.id === selectedId)) {
         setSelectedId(null);
       }
@@ -495,6 +529,8 @@ export function WorkOrdersPage() {
 
   function select(order: WorkOrderDto | null) {
     setSelectedId(order?.id ?? null);
+    setIsCreating(false);
+    setIsEditorOpen(false);
     setDraft(order ? toPayload(order) : blankWorkOrder);
     setGeneratedPrompt("");
     setError(null);
@@ -522,6 +558,19 @@ export function WorkOrdersPage() {
       setWorkOrderContext(null);
       setAgentRecommendations([]);
     }
+  }
+
+  function startCreating() {
+    setSelectedId(null);
+    setIsCreating(true);
+    setIsEditorOpen(true);
+    setDraft(blankWorkOrder);
+    setGeneratedPrompt("");
+    setWorkOrderContext(null);
+    setAutomationJobs([]);
+    setPatchArtifacts([]);
+    setAgentRecommendations([]);
+    setError(null);
   }
 
   async function refreshContext(workOrderId: string) {
@@ -590,6 +639,7 @@ export function WorkOrdersPage() {
     try {
       await api.archiveWorkOrderAsCompleted(selected.id);
       setSelectedId(null);
+      setIsCreating(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to archive work order");
@@ -709,6 +759,8 @@ export function WorkOrdersPage() {
         }
         if (response.workOrder) {
           setSelectedId(response.workOrder.id);
+          setIsCreating(false);
+          setIsEditorOpen(false);
         } else {
           setError("Create failed: no work order returned.");
         }
@@ -726,6 +778,8 @@ export function WorkOrdersPage() {
       const response = await api.workOrderFromTask(taskId.trim());
       if (response.workOrder) {
         setSelectedId(response.workOrder.id);
+        setIsCreating(false);
+        setIsEditorOpen(false);
       } else {
         setError("Work order generation skipped by central gate.");
       }
@@ -742,6 +796,8 @@ export function WorkOrdersPage() {
       const response = await api.workOrderFromMatter(matterId.trim());
       if (response.workOrder) {
         setSelectedId(response.workOrder.id);
+        setIsCreating(false);
+        setIsEditorOpen(false);
       } else {
         setError("Work order generation skipped by central gate.");
       }
@@ -912,19 +968,35 @@ export function WorkOrdersPage() {
   return (
     <>
       <PageHeader
-        eyebrow="External Work"
-        title="Work Orders"
-        description="Review implementation packages, decide the next safe action, and follow source-of-truth links for context, reports, agents, and automation."
+        eyebrow={tk("workOrders.eyebrow")}
+        title={tk("workOrders.title")}
+        description={tk("workOrders.description")}
+        action={canCreate ? (
+          <Button type="button" variant={isCreating ? "outline" : "primary"} className="h-11" onClick={isCreating ? () => select(null) : startCreating}>
+            {isCreating ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {isCreating ? tk("workOrders.closeCreation") : tk("workOrders.create")}
+          </Button>
+        ) : undefined}
       />
 
-      <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
-        <div className="space-y-4">
-          <Card>
-            <div className="flex items-center justify-between gap-3">
-              <h2 className="font-display text-lg">Work Queue</h2>
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]" data-testid="work-orders-workspace">
+        <aside className="min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card lg:sticky lg:top-4" aria-label={tk("workOrders.queueAria")}>
+          <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">{tk("workOrders.queueTitle")}</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">{tk("workOrders.queueDescription")}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="rounded-md border border-border bg-muted/20 px-2 py-1 font-mono text-xs tabular-nums text-muted-foreground">{workOrders.length}</span>
               {loadingWorkOrders ? <Clock className="h-4 w-4 animate-pulse text-muted-foreground" /> : null}
             </div>
-            <div className="mt-4">
+          </div>
+
+          <div className="border-b border-border p-4">
+            <div>
               <StatusQuickFilters
                 statusFilter={statusFilter}
                 includeArchived={includeArchived}
@@ -933,123 +1005,128 @@ export function WorkOrdersPage() {
                 onArchived={applyArchivedFilter}
               />
             </div>
-            <div className="mt-4 grid gap-3">
-              <FormField id="filter-status" label="Status">
-                <select id="filter-status" className={selectCls} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                  <option value="">All statuses</option>
-                  {statuses.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
-                </select>
-              </FormField>
-              <FormField id="filter-priority" label="Priority">
-                <select id="filter-priority" className={selectCls} value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
-                  <option value="">All priorities</option>
-                  {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
-                </select>
-              </FormField>
-              <FormField id="filter-agent" label="External Agent">
-                <select id="filter-agent" className={selectCls} value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
-                  <option value="">All external agents</option>
-                  {externalAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-                </select>
-              </FormField>
-              <div className="mt-2 space-y-2 border-t border-border pt-3">
-                <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
-                  <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} className="rounded border-border" />
-                  Show archived
-                </label>
-                <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
-                  <input type="checkbox" checked={includeLegacy} onChange={(e) => setIncludeLegacy(e.target.checked)} className="rounded border-border" />
-                  Show legacy
-                </label>
-                <label className="flex items-center gap-2 text-sm text-foreground/80 cursor-pointer">
-                  <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} className="rounded border-border" />
-                  Show test/debug
-                </label>
-              </div>
-            </div>
-          </Card>
 
-          {canCreate ? (
-            <Card>
-              <h2 className="font-display text-lg">Generate from source</h2>
-              <div className="mt-4 space-y-3">
-                <FormField id="gen-task-id" label="Task ID" description="Generate a work order from an existing royal decree/task.">
-                  <div className="flex gap-2">
-                    <Input id="gen-task-id" value={taskId} onChange={(e) => setTaskId(e.target.value)} placeholder="Paste task ID" />
-                    <Button type="button" variant="outline" onClick={() => void generateFromTask()}>Task</Button>
-                  </div>
+            <details className="group mt-3 rounded-lg border border-border bg-background/25">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2"><Filter className="h-4 w-4 text-primary" />{tk("workOrders.advancedFilters")}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              <div className="grid gap-3 border-t border-border p-3">
+                <FormField id="filter-status" label={tk("workOrders.filter.status")}>
+                  <select id="filter-status" className={selectCls} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                    <option value="">{tk("workOrders.filter.allStatuses")}</option>
+                    {statuses.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
+                  </select>
                 </FormField>
-                <FormField id="gen-matter-id" label="Matter ID" description="Generate a work order from a Secretary matter.">
-                  <div className="flex gap-2">
-                    <Input id="gen-matter-id" value={matterId} onChange={(e) => setMatterId(e.target.value)} placeholder="Paste matter ID" />
-                    <Button type="button" variant="outline" onClick={() => void generateFromMatter()}>Matter</Button>
-                  </div>
+                <FormField id="filter-priority" label={tk("workOrders.filter.priority")}>
+                  <select id="filter-priority" className={selectCls} value={priorityFilter} onChange={(e) => setPriorityFilter(e.target.value)}>
+                    <option value="">{tk("workOrders.filter.allPriorities")}</option>
+                    {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
+                  </select>
                 </FormField>
+                <FormField id="filter-agent" label={tk("workOrders.filter.agent")}>
+                  <select id="filter-agent" className={selectCls} value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}>
+                    <option value="">{tk("workOrders.filter.allAgents")}</option>
+                    {externalAgents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
+                  </select>
+                </FormField>
+                <div className="space-y-2 border-t border-border pt-3">
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-foreground/80">
+                    <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} className="rounded border-border" />
+                    {tk("workOrders.filter.showArchived")}
+                  </label>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-foreground/80">
+                    <input type="checkbox" checked={includeLegacy} onChange={(e) => setIncludeLegacy(e.target.checked)} className="rounded border-border" />
+                    {tk("workOrders.filter.showLegacy")}
+                  </label>
+                  <label className="flex min-h-11 cursor-pointer items-center gap-2 text-sm text-foreground/80">
+                    <input type="checkbox" checked={includeTestData} onChange={(e) => setIncludeTestData(e.target.checked)} className="rounded border-border" />
+                    {tk("workOrders.filter.showTest")}
+                  </label>
+                </div>
               </div>
-            </Card>
-          ) : null}
+            </details>
 
-          {canCreate ? <Button className="w-full" onClick={() => select(null)}><Plus className="h-4 w-4" />Create Work Order</Button> : null}
+            {canCreate ? (
+              <details className="group mt-3 rounded-lg border border-border bg-background/25">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><Layers className="h-4 w-4 text-primary" />{tk("workOrders.generateSource")}</span>
+                  <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+                </summary>
+                <div className="space-y-3 border-t border-border p-3">
+                  <FormField id="gen-task-id" label={tk("workOrders.generate.taskId")} description={tk("workOrders.generate.taskDescription")}>
+                    <div className="flex gap-2">
+                      <Input id="gen-task-id" value={taskId} onChange={(e) => setTaskId(e.target.value)} placeholder={tk("workOrders.generate.pasteTask")} />
+                      <Button type="button" variant="outline" onClick={() => void generateFromTask()}>{tk("workOrders.generate.task")}</Button>
+                    </div>
+                  </FormField>
+                  <FormField id="gen-matter-id" label={tk("workOrders.generate.matterId")} description={tk("workOrders.generate.matterDescription")}>
+                    <div className="flex gap-2">
+                      <Input id="gen-matter-id" value={matterId} onChange={(e) => setMatterId(e.target.value)} placeholder={tk("workOrders.generate.pasteMatter")} />
+                      <Button type="button" variant="outline" onClick={() => void generateFromMatter()}>{tk("workOrders.generate.matter")}</Button>
+                    </div>
+                  </FormField>
+                </div>
+              </details>
+            ) : null}
+          </div>
 
           {/* Bulk Actions */}
           {workOrders.length > 0 && canCreate && (
-            <Card className="p-3 bg-muted/40">
+            <div className="border-b border-border bg-muted/15 p-3">
               <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-semibold text-muted-foreground">{selectedIds.length} selected</span>
-                <Button variant="outline" className="h-7 text-xs px-2" onClick={toggleSelectAll}>
-                  {selectedIds.length === workOrders.length ? "Deselect All" : "Select All"}
+                <span className="text-xs font-semibold text-muted-foreground">{tk("workOrders.selectedCount", { count: selectedIds.length })}</span>
+                <Button variant="outline" className="h-9 px-2 text-xs" onClick={toggleSelectAll}>
+                  {selectedIds.length === workOrders.length ? tk("workOrders.deselectAll") : tk("workOrders.selectAll")}
                 </Button>
               </div>
               {selectedIds.length > 0 && (
                 <div className="mt-3 grid grid-cols-2 gap-2">
-                  <Button variant="outline" className="h-7 text-xs px-2 flex items-center gap-1" onClick={handleBulkArchive}>
-                    <Archive className="h-3 w-3" /> Archive
+                  <Button variant="outline" className="h-10 px-2 text-xs" onClick={handleBulkArchive}>
+                    <Archive className="h-3 w-3" /> {tk("workOrders.bulk.archive")}
                   </Button>
-                  <Button variant="outline" className="h-7 text-xs px-2 flex items-center gap-1" onClick={handleBulkComplete}>
-                    <CheckCircle2 className="h-3 w-3" /> Complete
+                  <Button variant="outline" className="h-10 px-2 text-xs" onClick={handleBulkComplete}>
+                    <CheckCircle2 className="h-3 w-3" /> {tk("workOrders.bulk.complete")}
                   </Button>
-                  <Button variant="outline" className="h-7 text-xs px-2 flex items-center gap-1" onClick={handleBulkLegacy}>
-                    Mark Legacy
+                  <Button variant="outline" className="h-10 px-2 text-xs" onClick={handleBulkLegacy}>
+                    {tk("workOrders.bulk.legacy")}
                   </Button>
-                  <Button variant="outline" className="h-7 text-xs px-2 text-destructive flex items-center gap-1 hover:bg-destructive/10" onClick={handleBulkDelete}>
-                    <Trash2 className="h-3 w-3" /> Delete Junk
+                  <Button variant="outline" className="h-10 px-2 text-xs text-destructive hover:bg-destructive/10" onClick={handleBulkDelete}>
+                    <Trash2 className="h-3 w-3" /> {tk("workOrders.bulk.delete")}
                   </Button>
                 </div>
               )}
-            </Card>
+            </div>
           )}
 
           {loadError ? (
-            <Card className="border-red-500/30 bg-red-500/10">
-              <p className="text-sm font-semibold text-red-100">Unable to load work orders.</p>
+            <div className="border-b border-red-500/30 bg-red-500/10 p-4">
+              <p className="text-sm font-semibold text-red-100">{tk("workOrders.loadError")}</p>
               <p className="mt-1 text-xs text-red-100/80">{loadError}</p>
-              <Button type="button" variant="outline" className="mt-3" onClick={() => void load()}>Retry</Button>
-            </Card>
+              <Button type="button" variant="outline" className="mt-3 h-11" onClick={() => void load()}>{tk("workOrders.retry")}</Button>
+            </div>
           ) : null}
 
           {loadingWorkOrders && workOrders.length === 0 ? (
-            <Card className="text-sm text-muted-foreground">Loading work orders...</Card>
+            <div className="border-b border-border p-4 text-sm text-muted-foreground">{tk("workOrders.loading")}</div>
           ) : null}
 
           {!loadingWorkOrders && !loadError && workOrders.length === 0 ? (
-            <Card>
-              <p className="text-sm font-semibold">No work orders match these filters.</p>
-              <p className="mt-1 text-xs text-muted-foreground">Clear filters or generate a work order from a task or matter.</p>
-            </Card>
+            <div className="p-6 text-center">
+              <p className="text-sm font-semibold">{tk("workOrders.emptyFilters")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{tk("workOrders.emptyFiltersDescription")}</p>
+            </div>
           ) : null}
 
-          <div className="space-y-3">
+          <div className="max-h-[640px] overflow-y-auto overscroll-contain lg:max-h-[calc(100vh-18rem)]">
             {workOrders.map((order) => (
-              <Card key={order.id} className={cn(
-                "relative p-4 transition",
-                selected?.id === order.id && "border-primary/60 bg-primary/10",
-                focusedWorkOrderId === order.id && "ring-2 ring-primary/60"
-              )}>
+              <div key={order.id} className={cn("relative border-t border-border first:border-t-0", focusedWorkOrderId === order.id && "ring-2 ring-inset ring-primary/60")}>
+                <span className={cn("absolute inset-y-0 left-0 w-0.5 bg-primary transition-opacity duration-200", selected?.id === order.id ? "opacity-100" : "opacity-0")} />
                 {canCreate && (
                   <button
                     type="button"
                     aria-label={selectedIds.includes(order.id) ? `Deselect ${order.title}` : `Select ${order.title}`}
-                    className="absolute left-3 top-3 z-10 text-muted-foreground hover:text-foreground"
+                    className="absolute left-3 top-4 z-10 flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                     onClick={() => toggleSelect(order.id)}
                   >
                     {selectedIds.includes(order.id) ? (
@@ -1059,130 +1136,165 @@ export function WorkOrdersPage() {
                     )}
                   </button>
                 )}
-                <button className={cn("w-full text-left", canCreate ? "pl-7" : "")} onClick={() => select(order)}>
+                <button
+                  type="button"
+                  aria-pressed={selected?.id === order.id}
+                  className={cn("group min-h-[124px] w-full p-4 text-left transition-colors duration-200 hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary", canCreate ? "pl-12" : "", selected?.id === order.id && "bg-primary/10")}
+                  onClick={() => select(order)}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <h2 className="break-words font-display text-base leading-snug">{order.title}</h2>
-                      <p className="mt-1 text-xs text-muted-foreground">Updated {formatDate(order.updatedAt)}</p>
+                      <h3 className="break-words text-sm font-semibold leading-5 text-foreground group-hover:text-primary">{order.title}</h3>
+                      <p className="mt-1 text-xs text-muted-foreground">{tk("workOrders.updated", { date: formatDate(order.updatedAt) })}</p>
                     </div>
-                    <span className="shrink-0 rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold">{order.priority}</span>
+                    <span className="shrink-0 rounded-md border border-border px-2 py-0.5 font-mono text-[11px] font-semibold" title={order.priority}>{order.priority}</span>
                   </div>
                   {renderWorkOrderBadges(order)}
                   <div className="mt-3 flex flex-wrap gap-2 border-t border-border/50 pt-2 text-xs text-muted-foreground">
                     <span className="font-medium text-foreground/80">{getStatusLabel(order.status)}</span>
-                    {order.assignedExternalAgent ? <span>{order.assignedExternalAgent.name}</span> : <span>Unassigned</span>}
-                    <span>Context: {order.contextBindingStatus ?? "Unknown"}</span>
+                    {order.assignedExternalAgent ? <span>{order.assignedExternalAgent.name}</span> : <span>{tk("workOrders.unassigned")}</span>}
+                    <span>{tk("workOrders.contextStatus", { status: order.contextBindingStatus ?? "Unknown" })}</span>
                   </div>
                 </button>
-              </Card>
+              </div>
             ))}
           </div>
-        </div>
+        </aside>
 
-        <div className="space-y-5">
+        <main className="min-w-0 space-y-5" data-testid="work-order-detail-pane">
           {selected && selectedNextStep ? (
             <>
               <WorkOrderStatusSummary order={selected} contextStatus={selectedContextStatus} nextStep={selectedNextStep} />
               <WorkOrderNextStepCard nextStep={selectedNextStep} blockedReason={automationBlockedReason && selectedNextStep.blocked ? automationBlockedReason : null} />
               <WorkOrderSourceLinks order={selected} />
+              <WorkOrderDetailIndex />
             </>
           ) : null}
 
-          <Card>
+          {!selected && !isCreating ? (
+            <Card className="flex min-h-[420px] items-center justify-center border-dashed bg-muted/5 text-center">
+              <div className="max-w-sm">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-muted/20 text-primary">
+                  <Clipboard className="h-6 w-6" />
+                </div>
+                <h2 className="mt-4 text-lg font-semibold text-foreground">{tk("workOrders.selectTitle")}</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{tk("workOrders.selectDescription")}</p>
+                {canCreate ? (
+                  <Button type="button" className="mt-5 h-11" onClick={startCreating}>
+                    <Plus className="h-4 w-4" />
+                    {tk("workOrders.create")}
+                  </Button>
+                ) : null}
+              </div>
+            </Card>
+          ) : null}
+
+          {selected || isCreating ? (
+          <Card id="work-order-overview">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <h2 className="font-display text-2xl">{selectedId ? "Overview" : "Create Work Order"}</h2>
+                <h2 className="text-xl font-semibold text-foreground">{selectedId ? tk("workOrders.overview") : tk("workOrders.create")}</h2>
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {selectedId ? "This page summarizes the order and preserves the editable source fields." : "Create a structured work order for external execution."}
+                  {selectedId ? tk("workOrders.overviewDescription") : tk("workOrders.createDescription")}
                 </p>
               </div>
               {selectedId && canCreate && selected?.status !== "ARCHIVED" && (
                 <Button
                   type="button"
                   variant="outline"
-                  className="shrink-0 border-red-500/40 bg-red-500/10 text-xs text-red-100 hover:bg-red-500/20"
+                  className="h-11 shrink-0 border-red-500/40 bg-red-500/10 text-xs text-red-100 hover:bg-red-500/20"
                   disabled={archivingCompleted}
                   onClick={() => void archiveAsCompleted()}
                 >
                   <Archive className="h-3.5 w-3.5" />
-                  {archivingCompleted ? "Archiving…" : "Archive as Completed"}
+                  {archivingCompleted ? tk("workOrders.archiving") : tk("workOrders.archiveCompleted")}
                 </Button>
               )}
             </div>
-            <form className="mt-5 space-y-4" onSubmit={save}>
-              <FormField id="wo-title" label="Title" required>
-                <Input id="wo-title" disabled={!canCreate} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Short, descriptive title for this work order" />
+            <details
+              className="group mt-5 rounded-lg border border-border bg-background/25"
+              open={isEditorOpen}
+              onToggle={(event) => setIsEditorOpen(event.currentTarget.open)}
+            >
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+                <span>{selectedId ? tk("workOrders.editFields") : tk("workOrders.fields")}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              <form className="space-y-4 border-t border-border p-4" onSubmit={save}>
+              <FormField id="wo-title" label={tk("workOrders.field.title")} required>
+                <Input id="wo-title" disabled={!canCreate} value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder={tk("workOrders.field.titlePlaceholder")} />
               </FormField>
 
-              <FormField id="wo-objective" label="Objective" description="Describe the result the external agent must achieve.">
-                <Textarea id="wo-objective" disabled={!canCreate} value={draft.objective} onChange={(e) => setDraft({ ...draft, objective: e.target.value })} placeholder="The external agent must…" />
+              <FormField id="wo-objective" label={tk("workOrders.field.objective")} description={tk("workOrders.field.objectiveDescription")}>
+                <Textarea id="wo-objective" disabled={!canCreate} value={draft.objective} onChange={(e) => setDraft({ ...draft, objective: e.target.value })} placeholder={tk("workOrders.field.objectivePlaceholder")} />
               </FormField>
 
-              <FormField id="wo-context" label="Context" description="Give project background and current state.">
-                <Textarea id="wo-context" disabled={!canCreate} value={draft.context ?? ""} onChange={(e) => setDraft({ ...draft, context: e.target.value })} placeholder="Background, current state, relevant history…" />
+              <FormField id="wo-context" label={tk("workOrders.field.context")} description={tk("workOrders.field.contextDescription")}>
+                <Textarea id="wo-context" disabled={!canCreate} value={draft.context ?? ""} onChange={(e) => setDraft({ ...draft, context: e.target.value })} placeholder={tk("workOrders.field.contextPlaceholder")} />
               </FormField>
 
-              <FormField id="wo-instructions" label="Instructions" description="Step-by-step execution guidance.">
-                <Textarea id="wo-instructions" disabled={!canCreate} value={draft.instructions ?? ""} onChange={(e) => setDraft({ ...draft, instructions: e.target.value })} placeholder="1. First step…" />
+              <FormField id="wo-instructions" label={tk("workOrders.field.instructions")} description={tk("workOrders.field.instructionsDescription")}>
+                <Textarea id="wo-instructions" disabled={!canCreate} value={draft.instructions ?? ""} onChange={(e) => setDraft({ ...draft, instructions: e.target.value })} placeholder={tk("workOrders.field.instructionsPlaceholder")} />
               </FormField>
 
-              <FormField id="wo-constraints" label="Constraints" description="Rules the external agent must not violate.">
-                <Textarea id="wo-constraints" disabled={!canCreate} value={draft.constraints ?? ""} onChange={(e) => setDraft({ ...draft, constraints: e.target.value })} placeholder="Do not modify… Do not expose…" />
+              <FormField id="wo-constraints" label={tk("workOrders.field.constraints")} description={tk("workOrders.field.constraintsDescription")}>
+                <Textarea id="wo-constraints" disabled={!canCreate} value={draft.constraints ?? ""} onChange={(e) => setDraft({ ...draft, constraints: e.target.value })} placeholder={tk("workOrders.field.constraintsPlaceholder")} />
               </FormField>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField id="wo-status" label="Status">
+                <FormField id="wo-status" label={tk("workOrders.field.status")}>
                   <select id="wo-status" disabled={!canCreate} className={selectCls} value={draft.status} onChange={(e) => setDraft({ ...draft, status: e.target.value as WorkOrderStatus })}>
                     {statuses.map((status) => <option key={status} value={status}>{getStatusLabel(status)}</option>)}
                   </select>
                 </FormField>
-                <FormField id="wo-priority" label="Priority">
+                <FormField id="wo-priority" label={tk("workOrders.field.priority")}>
                   <select id="wo-priority" disabled={!canCreate} className={selectCls} value={draft.priority} onChange={(e) => setDraft({ ...draft, priority: e.target.value as WorkOrderPriority })}>
                     {priorities.map((priority) => <option key={priority} value={priority}>{priority}</option>)}
                   </select>
                 </FormField>
-                <FormField id="wo-agent" label="Assigned External Agent" className="sm:col-span-2">
+                <FormField id="wo-agent" label={tk("workOrders.field.assignedAgent")} className="sm:col-span-2">
                   <select id="wo-agent" disabled={!canCreate} className={selectCls} value={draft.assignedExternalAgentId ?? ""} onChange={(e) => setDraft({ ...draft, assignedExternalAgentId: e.target.value || null })}>
-                    <option value="">Unassigned</option>
+                    <option value="">{tk("workOrders.unassigned")}</option>
                     {externalAgents.filter((agent) => agent.isActive).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                   </select>
                 </FormField>
-                <FormField id="wo-execution-target" label="Execution Target" className="sm:col-span-2">
+                <FormField id="wo-execution-target" label={tk("workOrders.field.executionTarget")} className="sm:col-span-2">
                   <select id="wo-execution-target" disabled={!canCreate} className={selectCls} value={draft.executionTarget ?? "AUTO"} onChange={(e) => setDraft({ ...draft, executionTarget: e.target.value as WorkOrderExecutionTarget })}>
                     {executionTargets.map((target) => <option key={target} value={target}>{target.replaceAll("_", " ")}</option>)}
                   </select>
                 </FormField>
-                <FormField id="wo-project" label="Target Project" className="sm:col-span-2">
+                <FormField id="wo-project" label={tk("workOrders.field.targetProject")} className="sm:col-span-2">
                   <select id="wo-project" disabled={!canCreate} className={selectCls} value={draft.projectId ?? ""} onChange={(e) => setDraft({ ...draft, projectId: e.target.value || null })}>
-                    <option value="">Auto-route (no override)</option>
+                    <option value="">{tk("workOrders.field.autoRoute")}</option>
                     {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
                   </select>
                 </FormField>
               </div>
 
-              <FormField id="wo-target-project" label="Target Project Name" description="Free-text name or description of the project this work targets.">
-                <Input id="wo-target-project" disabled={!canCreate} value={draft.targetProject ?? ""} onChange={(e) => setDraft({ ...draft, targetProject: e.target.value })} placeholder="e.g. AI Kingdom web dashboard" />
+              <FormField id="wo-target-project" label={tk("workOrders.field.targetProjectName")} description={tk("workOrders.field.targetProjectDescription")}>
+                <Input id="wo-target-project" disabled={!canCreate} value={draft.targetProject ?? ""} onChange={(e) => setDraft({ ...draft, targetProject: e.target.value })} placeholder={tk("workOrders.field.targetProjectPlaceholder")} />
               </FormField>
 
-              <FormField id="wo-target-repo" label="Target Repository" description="Repository URL or path for the external agent to work in.">
-                <Input id="wo-target-repo" disabled={!canCreate} value={draft.targetRepository ?? ""} onChange={(e) => setDraft({ ...draft, targetRepository: e.target.value })} placeholder="e.g. https://github.com/org/repo" />
+              <FormField id="wo-target-repo" label={tk("workOrders.field.targetRepository")} description={tk("workOrders.field.targetRepositoryDescription")}>
+                <Input id="wo-target-repo" disabled={!canCreate} value={draft.targetRepository ?? ""} onChange={(e) => setDraft({ ...draft, targetRepository: e.target.value })} placeholder={tk("workOrders.field.targetRepositoryPlaceholder")} />
               </FormField>
 
-              <FormField id="wo-acceptance" label="Acceptance Criteria" description="One item per line.">
-                <Textarea id="wo-acceptance" disabled={!canCreate} value={draft.acceptanceCriteria?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, acceptanceCriteria: lines(e.target.value) })} placeholder="All tests pass&#10;No console errors&#10;Feature works end-to-end" />
+              <FormField id="wo-acceptance" label={tk("workOrders.field.acceptance")} description={tk("workOrders.field.onePerLine")}>
+                <Textarea id="wo-acceptance" disabled={!canCreate} value={draft.acceptanceCriteria?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, acceptanceCriteria: lines(e.target.value) })} placeholder={tk("workOrders.field.acceptancePlaceholder")} />
               </FormField>
 
-              <FormField id="wo-validation" label="Validation Commands" description="One command per line.">
+              <FormField id="wo-validation" label={tk("workOrders.field.validation")} description={tk("workOrders.field.validationDescription")}>
                 <Textarea id="wo-validation" disabled={!canCreate} value={draft.validationCommands?.join("\n") ?? ""} onChange={(e) => setDraft({ ...draft, validationCommands: lines(e.target.value) })} placeholder="npm run typecheck&#10;npm run test --workspace @ai-kingdom/api&#10;npm run test --workspace @ai-kingdom/runner&#10;npm run test --workspace @ai-kingdom/web&#10;npm run build" />
               </FormField>
 
               {error ? <div className="rounded-md border border-red-400/30 bg-red-400/10 p-3 text-sm text-red-100">{error}</div> : null}
-              {canCreate ? <Button><Send className="h-4 w-4" />Save Work Order</Button> : null}
-            </form>
+              {canCreate ? <Button className="h-11"><Send className="h-4 w-4" />{tk("workOrders.save")}</Button> : null}
+              </form>
+            </details>
 
             {selected && (
               <details className="text-xs text-muted-foreground mt-5 border-t border-border pt-4">
-                <summary className="cursor-pointer hover:underline font-semibold">Technical Details</summary>
+                <summary className="cursor-pointer hover:underline font-semibold">{tk("workOrders.technicalDetails")}</summary>
                 <div className="mt-2 space-y-1 bg-muted/20 p-3 rounded-md font-mono">
                   <div>ID: {selected.id}</div>
                   {selected.sourceType && <div>Source Type: {selected.sourceType}</div>}
@@ -1195,6 +1307,7 @@ export function WorkOrdersPage() {
               </details>
             )}
           </Card>
+          ) : null}
 
           {selected ? (
             <>
@@ -1217,7 +1330,7 @@ export function WorkOrdersPage() {
                 source={{ label: "Open Projects", to: selected.projectId ? `/projects/${selected.projectId}` : "/projects" }}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-display text-lg flex items-center gap-2">
+                  <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
                     <Shield className="h-4 w-4 text-muted-foreground" />
                     Binding Status
                   </h3>
@@ -1308,7 +1421,7 @@ export function WorkOrdersPage() {
               >
                 <div className="flex items-center gap-2 mb-3">
                   <Bot className="h-4 w-4 text-muted-foreground" />
-                  <h3 className="font-display text-lg">Best Match</h3>
+                  <h3 className="text-base font-semibold text-foreground">Best Match</h3>
                 </div>
                 {assignMessage && (
                   <div className="mb-3 rounded-md border border-green-400/30 bg-green-400/10 p-2 text-xs text-green-700">{assignMessage}</div>
@@ -1366,7 +1479,7 @@ export function WorkOrdersPage() {
                 source={{ label: "Review handoffs", to: "#work-order-handoff" }}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 className="font-display text-lg">Prompt Builder</h3>
+                  <h3 className="text-base font-semibold text-foreground">Prompt Builder</h3>
                   <div className="flex gap-2">
                     {canCreate ? <Button onClick={() => void dispatch()} disabled={dispatching}><Send className="h-4 w-4" />{dispatching ? "Dispatching…" : "Dispatch to agent"}</Button> : null}
                     {canCreate ? <Button variant="outline" onClick={() => void buildPrompt()}><FileText className="h-4 w-4" />Generate</Button> : null}
@@ -1432,7 +1545,7 @@ export function WorkOrdersPage() {
                   source={{ label: "Open Automation Jobs", to: "/automation-jobs" }}
                 >
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="font-display text-lg flex items-center gap-2">
+                    <h3 className="flex items-center gap-2 text-base font-semibold text-foreground">
                       <Bot className="h-4 w-4 text-muted-foreground" />
                       Sandbox Patch Job
                     </h3>
@@ -1510,7 +1623,7 @@ export function WorkOrdersPage() {
                   description="Review imported or runner-generated patch artifacts before approving."
                   source={{ label: "Open Automation Jobs", to: "/automation-jobs" }}
                 >
-                  <h3 className="font-display text-lg flex items-center gap-2 mb-3">
+                  <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-foreground">
                     <Eye className="h-4 w-4 text-muted-foreground" />
                     Patches Needing Review
                   </h3>
@@ -1535,7 +1648,7 @@ export function WorkOrdersPage() {
                 source={{ label: "Open Work Orders", to: "/work-orders" }}
               >
                 <div className="flex flex-wrap items-center justify-between gap-3">
-                  <h3 id="work-order-handoff" className="font-display text-lg">Handoff Briefs</h3>
+                  <h3 id="work-order-handoff" className="text-base font-semibold text-foreground">Handoff Briefs</h3>
                   {canCreate ? <Button variant="outline" onClick={() => void handoff()}><Handshake className="h-4 w-4" />Generate Handoff</Button> : null}
                 </div>
                 <div className="mt-4 space-y-3">
@@ -1563,7 +1676,7 @@ export function WorkOrdersPage() {
               </WorkOrderSection>
             </>
           ) : null}
-        </div>
+        </main>
       </div>
     </>
   );

@@ -176,7 +176,7 @@ Wave 1 semantic i18n is complete for Operations, Royal Brief, Living Loop, Kingd
 
 ### Wave 2: Command-to-Execution Lifecycle
 
-Progress: **Wave 2A complete** - Throne Room command hierarchy and Council archive refinement are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Work Orders, Automation Jobs, and Reports remain in the next slices.
+Progress: **Wave 2A and Wave 2B complete** - Throne Room command hierarchy, Council archive refinement, and the Work Orders queue-and-detail workspace are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Automation Jobs and Reports remain in the next slices.
 
 ### Wave 2A Layout Contract
 
@@ -187,6 +187,16 @@ Progress: **Wave 2A complete** - Throne Room command hierarchy and Council archi
 - On mobile, command entry remains above the fold and Council composes as a bounded session list followed by the selected record. Touch targets remain at least 44px, translated text wraps within its region, and no sticky surface covers actions or evidence.
 - Motion is limited to view entry, selection, disclosure, hover, press, and focus feedback. Depth comes from one selected rail, borders, and tonal contrast; decorative glow, oversized symbols, nested cards, and gradients are excluded.
 - No carousel, modal, or drawer is introduced in this slice because decree modes, council evidence, actions, and source links are required operational content and must stay visible in normal document flow.
+
+### Wave 2B Work Orders Layout Contract
+
+- Work Orders uses a queue-and-detail workspace. The left rail owns counts, quick status filters, advanced filters, bulk selection, and record selection; the right pane owns the selected record and all lifecycle actions.
+- The page never opens the full creation form merely because no record is selected. `Create Work Order` is an explicit header action; closing or selecting a queue item returns to the record workspace without mutating data.
+- Quick status filters remain visible. Priority, agent, archive/legacy/test filters and source-id generation move into disclosures so records appear earlier without removing any capability.
+- A selected record keeps status, context freshness, next safe action, and source-of-truth links above detailed fields. A compact section index links to Overview, Context and Safety, Agent and Handoff, Execution, and History without hiding audit evidence in tabs.
+- Existing `?focus=` selection, editable source fields, bulk actions, context refresh/stale controls, external-agent assignment, handoff/prompt/report flows, automation jobs, patch review, archive confirmation, RBAC, and API behavior remain unchanged.
+- Mobile composes as queue first and selected detail second. Controls keep 44px touch targets, translated labels wrap inside stable regions, and no sticky element covers actions or the last queue row.
+- Motion is limited to selection, disclosure, focus, hover, and press feedback. Required decisions, context warnings, reports, patch evidence, and source links remain in document flow and never move into a carousel.
 
 | Route | Primary refinement |
 | --- | --- |
