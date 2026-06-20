@@ -1,39 +1,51 @@
 # Next Task
 
-## M22: Mission Control i18n Foundation - Phase 2
+## M22: Premium UX Foundation + Mission Control - Phase 2
 
 Status: **next**
-Scope: the remaining Mission Control surfaces — `KingdomOperationsPage` (`/kingdom/operations`), `RoyalBriefPage` (`/royal-brief`), `LivingLoopPage` (`/living-loop`) — plus the shared `KingdomHealthStrip` and `KingdomActivityFeed` components they render.
+Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 
 ### Goal
 
-Continue migrating fragile display-text translation to explicit semantic keys, reusing the `tk()` / `i18nMessages.ts` foundation and the per-page inventory established in Phase 1 (`docs/MISSION_CONTROL_I18N_KEYS.md`). No global rewrite — migrate page by page.
+Establish the shared visual foundation and apply it to the five Mission Control surfaces before refining the remaining pages. The result should be balanced, restrained, responsive, and consistent in English and Thai while preserving all source-of-truth links and lifecycle behavior.
 
-### Work
+### Scope
 
-1. Add `kingdomOps.*`, `royalBrief.*`, and `livingLoop.*` key namespaces to `apps/web/src/lib/i18nMessages.ts` (en value === current literal), and key the shared `KingdomHealthStrip` / `KingdomActivityFeed` labels.
-2. Replace static chrome with `tk()`; keep raw enum values in tooltips, never as the primary label.
-3. Verify English and Thai fit cards, badges, health pills, and the mobile layout without clipping.
-4. Extend the per-page inventory in `docs/MISSION_CONTROL_I18N_KEYS.md` (covered vs deferred).
-5. Keep Mission Control read-only; no new mutations.
+- App shell: desktop navigation hierarchy, mobile drawer, content-width variants, and stable page spacing.
+- Shared primitives: responsive `PageHeader`, restrained panel/section hierarchy, metric strip, toolbar, status display maps, and common states.
+- Mission Control pages: `/dashboard`, `/inbox`, `/kingdom/operations`, `/royal-brief`, and `/living-loop`.
+- Shared Mission Control components: `KingdomHealthStrip`, `KingdomActivityFeed`, provenance, and status badges.
+- Complete the semantic i18n work previously planned for Operations, Royal Brief, Living Loop, health, and activity labels.
 
 ### Constraints
 
-- No route renames or redirects.
-- No backend, Prisma, WorkOrder lifecycle, runner, or autonomy changes.
-- Additive only — do not modify `translateText` or the MutationObserver in `i18n.tsx`.
-- Do not key server-provided prose (titles, details, summaries, agent names, display states).
-- Every summary/action card must retain its owning-record link and provenance.
+- No route rename, redirect, backend, Prisma, WorkOrder lifecycle, runner, or autonomy changes.
+- Mission Control remains read-only and links to owning records.
+- Preserve the Inbox WorkOrder context-refresh action and all existing `?focus=` behavior.
+- Do not modify server-provided prose or remove raw enum audit evidence.
+- Avoid nested cards, radius above 8px for panels, decorative gradient/orb effects, and mobile all-route pill navigation.
+- Add shared abstractions only when the first migrated page proves the need.
+
+### Delivery Order
+
+1. Capture current desktop/mobile baselines and write the Wave 1 layout contract.
+2. Refine the app shell and shared page primitives.
+3. Refine Dashboard and Inbox using the new foundation without regressing M22 Phase 1 i18n.
+4. Refine Operations, Royal Brief, and Living Loop while completing their semantic keys.
+5. Verify all five pages in English and Thai at desktop, tablet, and mobile sizes.
 
 ### Acceptance
 
-- The three pages + shared health/activity components render equivalent English and Thai from semantic keys.
-- Risk/state/severity/health badges retain raw enum tooltips and readable translated labels.
-- Existing source links, `?focus=<workOrderId>` behavior, filters, and lifecycle actions continue to work.
-- Focused page tests cover English/Thai labels and source links (reset `localStorage` per test).
-- `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build` pass.
+- Mission Control pages share one spacing, typography, panel, toolbar, metric, and responsive system.
+- Desktop alignment is symmetric and mobile navigation uses a proper drawer.
+- Thai and English labels do not overlap, clip, or resize fixed controls.
+- Source links, provenance, filters, `?focus=` behavior, status tooltips, and lifecycle actions remain intact.
+- Focused page tests cover both languages and critical source links.
+- `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web` pass.
 
-### Implementation Baseline
+### Baseline
 
-- M22 Phase 1 complete: `tk()` + `useTk()` in `apps/web/src/lib/i18n.tsx`, keys in `apps/web/src/lib/i18nMessages.ts`, Dashboard + Inbox migrated, inventory in `docs/MISSION_CONTROL_I18N_KEYS.md`.
-- Latest web suite: 136/136 passing; web typecheck/build passing.
+- Runtime baseline: `7d566c9` (M22 Phase 1 merged to `main`).
+- Web app responds at `http://127.0.0.1:5174`; API health responds at `http://127.0.0.1:4000/health` in the current local session.
+- Latest recorded web suite: 136/136 passing; web typecheck/build passing.
+- Full route plan: 38 routes across six implementation waves in `docs/UX_UI_REFINEMENT_PLAN.md`.

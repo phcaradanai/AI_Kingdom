@@ -79,6 +79,12 @@ Implemented pages: `/login`, `/dashboard`, `/inbox`, `/kingdom/operations`, `/ro
 
 Navigation is role-aware and grouped into Mission Control / Command / Work / Knowledge / Agents & Models / System. Mission Control is read-only and source-linked; lifecycle actions remain on owning pages. The frontend handles access-token refresh and clears the session when refresh fails.
 
+## Planned UX/UI Refinement
+
+The current 38-route frontend now has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. The plan starts with shared shell/layout primitives and the five Mission Control surfaces, then proceeds through command/execution, projects/strategy, agents/providers, knowledge/governance, and administration. It preserves all current routes, source-of-truth ownership, RBAC, context-binding rules, and runner/approval boundaries.
+
+The next implementation milestone is M22 Phase 2: Premium UX Foundation + Mission Control. It also completes the semantic i18n migration previously planned for Kingdom Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed. No runtime UI changes are included in the planning document itself.
+
 ## Verification
 
 Latest validation baseline after M22 Phase 1 (2026-06-20):

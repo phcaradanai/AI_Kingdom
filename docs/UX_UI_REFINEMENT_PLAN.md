@@ -1,0 +1,213 @@
+# UX/UI Refinement Plan
+
+Date: 2026-06-20
+
+Scope: visual system, application shell, responsive behavior, and page-by-page refinement for all routes in `apps/web/src/main.tsx`.
+
+This plan changes presentation and interaction hierarchy only. It does not change route ownership, backend contracts, RBAC, WorkOrder lifecycle rules, runner safety gates, or Mission Control source-of-truth boundaries.
+
+## Outcome
+
+AI Kingdom should feel like a premium operational control plane: quiet, precise, balanced, and easy to scan repeatedly. Premium here means disciplined spacing, typography, alignment, hierarchy, and interaction states. It does not mean more glow, more gradients, larger headings, or putting every section in a decorative card.
+
+The King should be able to answer these questions without hunting:
+
+1. What needs attention now?
+2. What is running, blocked, or waiting for review?
+3. Which record owns this information?
+4. What is the next safe action?
+
+## Current Baseline
+
+- 38 user-facing routes: 37 authenticated routes plus `/login`.
+- Six sidebar groups with up to 32 visible links for a King account.
+- Desktop shell uses a fixed 288px sidebar and one `max-w-7xl` content width for every page type.
+- Mobile navigation renders all visible routes as one horizontal pill strip.
+- Surface primitives are visually inconsistent: `Card` uses `rounded-lg`, while `SectionCard` and `StatCard` use `rounded-xl`; shadows, borders, and backgrounds also differ.
+- Many compact labels use uppercase plus wide tracking, which is fragile in Thai.
+- The largest pages are difficult to keep visually coherent: Work Orders (1,873 lines), Agents (1,739), Treasury (1,326), Automation Jobs (1,105), and Throne Room (944).
+- Mission Control Phase 1 has semantic i18n keys on Dashboard and Inbox. The other Mission Control pages still need the same treatment.
+
+Visual browser inspection was unavailable in the planning session because the in-app browser could not initialize. HTTP smoke checks passed for the web app at port 5174 and the API health endpoint at port 4000. Each implementation wave therefore requires fresh rendered screenshots before acceptance.
+
+## Visual Direction
+
+### Layout geometry
+
+- Use a 12-column desktop grid with stable gutters and three explicit page widths:
+  - `compact`: forms and focused reading, approximately 760-880px.
+  - `standard`: lists and operational dashboards, approximately 1120-1280px.
+  - `wide`: dense comparison and execution surfaces, approximately 1360-1480px.
+- Keep primary content aligned to one left edge across the page header, toolbar, metrics, and body.
+- Use a spacing rhythm of 4, 8, 12, 16, 24, 32, and 48px. Avoid one-off margins.
+- Keep repeated metric and queue rows at stable heights. Dynamic labels must wrap inside their own region without shifting adjacent controls.
+- Use 8px or smaller radii for cards and panels. Pills remain reserved for status, compact filters, and counts.
+
+### Surface hierarchy
+
+- Level 0: page background and unframed page sections.
+- Level 1: bordered operational panels for a real tool, form, table, or repeated entity.
+- Level 2: selected/active rows and modal surfaces only.
+- Do not nest decorative cards. Use dividers, bands, and grouped rows inside a panel.
+- Reduce always-on blur and glow. Reserve a restrained brass highlight for focus, selection, and the single primary action.
+- Replace the current dark-blue-dominant background with a neutral graphite/ink base, warm brass identity accent, cool gray structure, and semantic green/amber/red status colors.
+- Remove decorative radial/gradient atmosphere from routine work pages. The visual identity should come from type, proportion, iconography, and material contrast.
+
+### Typography
+
+- Keep the display face for the product name and major Kingdom document titles only.
+- Use the interface sans-serif for page titles, section titles, tables, forms, and controls.
+- Reduce uppercase labels and wide tracking, especially for Thai. Use sentence case for navigation, field labels, section headings, and card titles.
+- Standardize type roles: page title, page description, section title, body, metadata, and audit/code text.
+- Keep page titles operational in scale. Dense tools should not use hero-sized headings.
+
+### Interaction and responsive behavior
+
+- Replace the mobile all-route pill strip with a menu button and full-height navigation drawer.
+- Add contextual sub-navigation or tabs within large domains instead of exposing every child route at the same sidebar level.
+- Standardize page actions: one primary command, secondary outline commands, destructive actions in a menu or confirmation flow.
+- Use icon buttons with Lucide icons for familiar tools such as refresh, edit, archive, copy, close, and expand; include tooltips where meaning is not obvious.
+- Standardize loading, empty, error, disabled, selected, hover, focus-visible, and stale-data states.
+- Keep all source/provenance links visible and preserve raw enum values in tooltips where audit evidence requires them.
+
+## Foundation Components
+
+Implement these before polishing individual pages:
+
+1. `AppShell`: desktop sidebar, mobile drawer, responsive content widths, current-domain context.
+2. `PageLayout`: `compact`, `standard`, and `wide` variants with consistent vertical rhythm.
+3. `PageHeader`: responsive title/action alignment, optional breadcrumbs, optional tabs, no forced uppercase.
+4. `PageToolbar`: search, filters, result count, view controls, and primary action in a stable row.
+5. `Section`: unframed section heading and content spacing.
+6. `Panel`: restrained tool/list/form container replacing overlapping `Card`/`SectionCard` styles.
+7. `MetricStrip`: equal-height metrics with compact labels and semantic deltas.
+8. `DataList` and `DataTable`: shared row density, selection, empty state, mobile fallback, and pagination.
+9. `DetailRail`: consistent metadata, provenance, status, and related-record links.
+10. `ActionBar`: sticky or local action area for review/approval flows.
+11. `Tabs` and `SegmentedControl`: domain views and compact modes.
+12. Shared display maps for status, risk, health, and entity labels in English and Thai.
+
+Do not create a general component library in one large rewrite. Add each primitive when the first wave proves its API, then reuse it in later waves.
+
+## Navigation Target
+
+Keep all current routes during refinement. Change grouping and hierarchy before considering redirects.
+
+| Domain | Primary destinations | Secondary destinations |
+| --- | --- | --- |
+| Mission Control | Overview, Action Queue | Operations, Royal Brief, Living Loop |
+| Command | Throne Room, Work Orders | Council, Reports, Automation Jobs |
+| Workspace | Projects, Strategy | Project Inbox, Artifacts |
+| Agents | Agents, Agent Chat | External Agents, Living Agents |
+| Providers & Models | Providers, Routing | Treasury, Usage Trace detail |
+| Knowledge | Knowledge Lab, Institutional Memory | Charter, Vision |
+| Administration | Matters, Notices, Settings | Users, Audit, Security, Profile |
+
+Desktop sidebar: show domain-level destinations and expandable children. Mobile: use a drawer with the same hierarchy. Do not render more than one horizontal row of local tabs; overflow becomes a menu.
+
+## Page-by-Page Plan
+
+### Wave 1: Foundation and Mission Control
+
+| Route | Primary refinement |
+| --- | --- |
+| `/dashboard` | Use a strong top-action band, compact health strip, and balanced two-column operational sections. Reduce repeated card borders and keep every item source-linked. |
+| `/inbox` | Make the queue the dominant surface: stable filter rail on wide screens, compact filter drawer on mobile, consistent row anatomy, and one clear action per row. |
+| `/kingdom/operations` | Build a symmetric three-zone layout for presence, current operations, and activity. Use equal row heights and reduce decorative agent-card effects. |
+| `/royal-brief` | Present a dated executive document with a clear generated timestamp, decision rail, and source-linked sections. Visually distinguish historical digest content from live state. |
+| `/living-loop` | Group controls into Status, Safety, Automation Stages, Candidate Queue, and History. Replace dense inline metric grids and raw JSON blocks with disclosure panels. |
+
+Wave 1 also completes semantic i18n keys for Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed.
+
+### Wave 2: Command-to-Execution Lifecycle
+
+| Route | Primary refinement |
+| --- | --- |
+| `/throne-room` | Make decree entry the first task, latest council result the second, and live Kingdom visualization supporting context. Keep advanced execution handoff actions in a clearly bounded result area. |
+| `/council` | Use a master-detail archive: session list, selected council evidence, role responses, and source/report links. Avoid repeating the full latest-session presentation from Throne Room. |
+| `/work-orders` | Split the large surface into queue, focused detail, context/safety, handoff, and execution summary tabs or panels. Keep WorkOrder status and next safe action permanently visible. |
+| `/automation-jobs` | Use execution queue plus focused job detail. Separate runner steps, validation output, patch, and review into explicit tabs with a persistent approval boundary. |
+| `/reports` | Convert to a restrained archive with search/filter toolbar, document list, and reading pane. Preserve Task/Council/trace provenance. |
+
+### Wave 3: Projects and Strategy
+
+| Route | Primary refinement |
+| --- | --- |
+| `/projects` | Use a compact project portfolio list with health, active work, context freshness, and one primary create action. Avoid oversized project cards. |
+| `/projects/:id` | Add project header, health/status strip, and tabs for Overview, Work, Local Docs, Repository, Artifacts, and Export. Keep context ownership obvious. |
+| `/project-inbox` | Use a triage table/list with confidence, reason, suggested project, and safe bulk actions. Make uncertain routing evidence easy to compare. |
+| `/artifacts` | Use archive filters, type/source chips, compact rows, and a detail/preview pane. Clearly distinguish generic artifacts from reports and patch artifacts. |
+| `/strategy` | Separate Overview, Objectives, Opportunities, Assets, and Revenue into tabs or sections. Move creation forms into focused dialogs/drawers instead of showing several forms at once. |
+
+### Wave 4: Agents, Providers, and Models
+
+| Route | Primary refinement |
+| --- | --- |
+| `/agents` | Use agent list plus focused configuration detail. Group Identity, Prompt, Skills, Routing, Fallbacks, and Preview; keep validation feedback adjacent to the affected row. |
+| `/external-agents` | Present registry rows with availability, capability, execution mode, and test status. Use a focused create/edit dialog. |
+| `/agent-chat` | Create a stable three-pane desktop layout: sessions, conversation, context/source rail; collapse to one pane at a time on mobile. |
+| `/living-agents` | Use a compact operational roster with filters, state, active assignment, and profile link. Avoid decorative repeated cards when a list scans better. |
+| `/living-agents/:agentId` | Organize identity/health at top, then tabs for Timeline, Work, Relationships, Usage, and Knowledge. Keep long histories out of the header. |
+| `/providers` | Use provider registry table/list with readiness, credentials reference state, model health, and focused configuration drawer. Do not expose secrets. |
+| `/routing` | Visualize each fallback chain as an ordered vertical sequence with provider/model health and clear drag/reorder or step controls. Keep effective-source explanations visible. |
+| `/treasury` | Build a financial dashboard hierarchy: spend/budget first, trend second, provider/model analysis third, reconciliation/admin tools last. Reduce competing panels. |
+| `/usage-traces/:traceId` | Use an audit timeline with a compact attribution summary, token/cost metrics, provider attempts, and explicit links back to Task/Council/Report/Project. |
+
+### Wave 5: Knowledge and Governance
+
+| Route | Primary refinement |
+| --- | --- |
+| `/knowledge-lab` | Replace the landing-card page with a parent workspace and tabs for Candidates and Approved Knowledge. |
+| `/knowledge-lab/candidates` | Use a review queue with evidence, confidence, source trace, approve/reject actions, and a focused detail pane. |
+| `/knowledge-lab/memories` | Use a searchable compact knowledge library with source/agent filters and archive controls. |
+| `/memory` | Clarify the page as Institutional Memory, with authoring/search on one side and a readable entry detail on the other. Visually distinguish it from reviewed agent knowledge. |
+| `/charter` | Treat as a governed document: reading width, section navigation, last-updated metadata, and a distinct King-only edit mode. |
+| `/vision` | Match Charter's document system while emphasizing priorities, horizon, and last-updated state. Do not invent a separate visual language. |
+
+### Wave 6: Administration and Entry
+
+| Route | Primary refinement |
+| --- | --- |
+| `/matters` | Use an intake/review queue with priority, category, project, next action, and focused detail. Keep Task/WorkOrder creation as explicit transitions. |
+| `/notices` | Use a notification list with unread hierarchy, severity, source, timestamp, and compact read/archive tools. Avoid full cards per notice. |
+| `/settings` | Group settings by domain with local navigation, descriptions, validation, save state, and links to owning provider/treasury pages. |
+| `/users` | Use an account table with role, state, last activity, and a focused create-user dialog. Keep destructive actions secondary. |
+| `/audit` | Improve scan density with a filter toolbar, stable table columns, metadata drawer, and clear timestamp/actor/resource hierarchy. |
+| `/security` | Present session status, role/permissions, and operational health in three clear sections; keep sign-out as the only primary command. |
+| `/profile` | Use a compact identity page with account metadata and direct links to Security and language preferences. |
+| `/login` | Use a focused, centered authentication surface with visible AI Kingdom identity, restrained background, strong field states, and no marketing hero. |
+
+## Implementation Order and Gates
+
+Every wave follows the same sequence:
+
+1. Confirm `main` is current and merge it into `codex/main` before editing.
+2. Capture current desktop and mobile screenshots for the wave's pages.
+3. Write a short per-wave layout contract before changing components.
+4. Implement shared primitives only as required by the first page.
+5. Refine one page at a time and preserve existing behavior and source links.
+6. Add or update focused interaction tests.
+7. Verify English and Thai at desktop (1440x900), tablet (768x1024), and mobile (390x844).
+8. Run web typecheck, tests, and build.
+9. Commit on `codex/main`, fast-forward merge into local `main`, then return to `codex/main`.
+
+## Acceptance Criteria
+
+- All 38 routes use the same shell, spacing rhythm, typography roles, surface hierarchy, and state patterns.
+- Desktop layouts are symmetric and aligned without forcing unrelated panels to equal visual weight.
+- Mobile navigation does not require scrolling through every route horizontally.
+- No nested decorative cards, oversized tool headings, gradient-orb decoration, or one-color page hierarchy.
+- Cards and panels use 8px or smaller radii unless a compact status pill requires a full radius.
+- Thai and English labels fit controls, tabs, badges, tables, and mobile layouts without overlap or clipping.
+- Dashboard and other summary surfaces remain read-only and link to their owning source records.
+- WorkOrder, AutomationJob, provider, project-context, and approval behavior remains unchanged.
+- Keyboard focus, semantic headings, contrast, reduced motion, loading, empty, and error states are verified.
+- Focused tests pass, followed by `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web`.
+
+## Deferred Decisions
+
+- Route renames, redirects, and permanent route removal.
+- Backend response reshaping solely for presentation convenience.
+- Combining Institutional Memory with Agent Knowledge storage.
+- Combining provider configuration, routing, and Treasury APIs.
+- New automation capability or any change to approval, patch, branch, PR, merge, or deploy gates.
