@@ -15,7 +15,7 @@ import {
 import { auditLog } from "./auditService.js";
 import { getLatestLocalDocumentSnapshot, listLocalDocumentRoots } from "./localDocumentAccessService.js";
 import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
-import { createOrUpdateAgentReviewForJob } from "./runnerResultReviewService.js";
+import { createOrUpdateAgentReviewForJob, getAgentReviewForJob } from "./runnerResultReviewService.js";
 import { buildExternalAgentPrompt } from "./externalAgentWorkOrderService.js";
 import { createNotice } from "./royalSecretaryService.js";
 
@@ -407,28 +407,47 @@ async function notifyKingExternalAgentReport(input: {
 }) {
   const workOrder = await prisma.workOrder.findUnique({
     where: { id: input.job.workOrderId },
-    select: { title: true }
+    select: {
+      title: true,
+      projectId: true,
+      createdByUserId: true,
+      assignedAgent: { select: { name: true, title: true } }
+    }
   });
   const run = input.job.externalAgentRuns[0] ?? null;
-  const severity = input.errors.length > 0 ? "WARNING" : "INFO";
-  const statusLine = input.errors.length > 0
-    ? "External agent execution finished with errors and needs King review."
-    : "External agent execution finished and is ready for King review.";
+
+  // The steward (assigned kingdom agent, e.g. royal-architect) supervises the work;
+  // its verdict and King recommendation are produced by the agent review step that
+  // runs immediately before this notification.
+  const review = await getAgentReviewForJob(input.job.id).catch(() => null);
+  const stewardName = workOrder?.assignedAgent?.name ?? review?.reviewerAgent?.name ?? "Royal council";
+  const nextActions = Array.isArray(review?.nextActions) ? (review?.nextActions as string[]).slice(0, 3) : [];
+  const verdictNeedsAttention = review
+    ? review.verdict !== "PASS"
+    : input.errors.length > 0;
+  const severity = verdictNeedsAttention ? "WARNING" : "INFO";
+  const statusLine = verdictNeedsAttention
+    ? `${stewardName} reviewed the external agent's work and it needs King attention before it can be accepted.`
+    : `${stewardName} reviewed the external agent's work and it is ready for King review.`;
 
   const notice = await createNotice({
-    title: input.errors.length > 0
+    title: verdictNeedsAttention
       ? `External agent needs review: ${workOrder?.title ?? input.job.workOrderId}`
       : `External agent completed: ${workOrder?.title ?? input.job.workOrderId}`,
     content: [
       statusLine,
       "",
       `Work Order: ${workOrder?.title ?? input.job.workOrderId}`,
+      `Steward: ${stewardName}${workOrder?.assignedAgent?.title ? ` (${workOrder.assignedAgent.title})` : ""}`,
+      review ? `Verdict: ${review.verdict}` : null,
+      review ? `Recommendation for King: ${review.kingRecommendation}` : null,
       `Automation Job ID: ${input.job.id}`,
       run ? `External Agent Run ID: ${run.id}` : null,
       `Implementation Report ID: ${input.reportId}`,
       `Test Result: ${input.testResult}`,
       "",
-      input.summary,
+      review?.summary ?? input.summary,
+      nextActions.length ? `Next actions: ${nextActions.join(" | ")}` : null,
       input.errors.length ? `Errors: ${input.errors.slice(0, 3).join(" | ")}` : null
     ].filter(Boolean).join("\n"),
     severity,
@@ -437,6 +456,32 @@ async function notifyKingExternalAgentReport(input: {
     projectId: input.job.projectId ?? undefined,
     traceId: run?.id
   });
+
+  // Collect the outcome into Kingdom Memory so the result is retained, not just
+  // surfaced once in a notice. Saved against the King who created the work order.
+  if (workOrder?.createdByUserId && review) {
+    const memoryContent = [
+      `External agent execution for "${workOrder.title}".`,
+      `${stewardName} verdict: ${review.verdict}. Recommendation for King: ${review.kingRecommendation}.`,
+      review.summary,
+      nextActions.length ? `Next actions: ${nextActions.join(" | ")}` : null
+    ].filter(Boolean).join(" ").slice(0, 700);
+
+    await prisma.memory.create({
+      data: {
+        type: "LESSON",
+        title: `Outcome: ${workOrder.title}`.slice(0, 200),
+        content: memoryContent,
+        tags: ["external-agent", "outcome", review.verdict.toLowerCase()],
+        importance: verdictNeedsAttention ? "HIGH" : "MEDIUM",
+        source: "external-agent-review",
+        projectId: workOrder.projectId ?? undefined,
+        createdBy: workOrder.createdByUserId
+      }
+    }).catch((err) => {
+      console.warn("[AutomationJob] Failed to save outcome memory:", err instanceof Error ? err.message : String(err));
+    });
+  }
 
   await auditLog({
     action: "external_agent_completion_notice_created",

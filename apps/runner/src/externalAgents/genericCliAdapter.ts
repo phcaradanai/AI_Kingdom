@@ -205,7 +205,10 @@ function resolveInsideWorkspace(workspaceRoot: string, candidate: string): strin
 }
 
 function buildExternalAgentEnv(input: { allowNetwork: boolean; allowWrite: boolean; workspaceRoot: string }): NodeJS.ProcessEnv {
-  const safeNames = ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "TERM", "CI", "NO_COLOR"];
+  // USER/LOGNAME/SHELL are required for CLI agents (e.g. Claude Code) to resolve the
+  // user's login keychain and authenticate; without them the agent runs unauthenticated
+  // ("Not logged in") and silently makes no edits. These are not secrets.
+  const safeNames = ["PATH", "HOME", "TMPDIR", "TEMP", "TMP", "TERM", "CI", "NO_COLOR", "USER", "LOGNAME", "SHELL"];
   const env: NodeJS.ProcessEnv = {};
   for (const name of safeNames) {
     const value = process.env[name];

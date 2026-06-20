@@ -131,7 +131,13 @@ export class ApiClient {
     logsPreview?: string | null;
     contextUsed?: Record<string, unknown> | null;
   }): Promise<void> {
-    await this.request("POST", `/api/runner/jobs/${jobId}/report`, report);
+    // The API caps each errors[] entry at 1000 chars; oversized validation/agent
+    // failure strings would otherwise 400 the whole report. Truncate defensively.
+    const capped = {
+      ...report,
+      errors: report.errors.map((e) => (e.length > 1000 ? `${e.slice(0, 997)}...` : e))
+    };
+    await this.request("POST", `/api/runner/jobs/${jobId}/report`, capped);
   }
 
   async submitPatchArtifact(jobId: string, payload: {

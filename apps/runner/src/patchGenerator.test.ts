@@ -6,6 +6,11 @@ import path from "node:path";
 import test from "node:test";
 import { applyImportedPatch, isEmptyPatch, runValidation, type PatchPayload } from "./patchGenerator.js";
 
+// runValidation reads RUNNER_VALIDATION_COMMANDS from process.env. The dev .env may
+// set it (loaded by with-test-env), which would change the default command set the
+// tests below assert on — clear it so these tests exercise the documented default.
+delete process.env.RUNNER_VALIDATION_COMMANDS;
+
 function makeTempDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
 }
@@ -63,6 +68,32 @@ test("patch validation runs explicit workspace test commands from workspace root
     assert.match(recorded, /postgresql:\/\/user:pass@localhost:5432\/test/);
   } finally {
     if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    if (previousTestDatabaseUrl === undefined) delete process.env.TEST_DATABASE_URL; else process.env.TEST_DATABASE_URL = previousTestDatabaseUrl;
+    fs.rmSync(workspace, { recursive: true, force: true });
+    fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });
+    fs.rmSync(binDir, { recursive: true, force: true });
+  }
+});
+
+test("RUNNER_VALIDATION_COMMANDS overrides the default validation command set", async () => {
+  const workspace = makeWorkspace();
+  const markerFile = path.join(makeTempDir("runner-patch-validation-marker-"), "commands.txt");
+  const binDir = makeFakeNpm(markerFile);
+  const previousPath = process.env.PATH;
+  const previousOverride = process.env.RUNNER_VALIDATION_COMMANDS;
+  const previousTestDatabaseUrl = process.env.TEST_DATABASE_URL;
+  try {
+    process.env.PATH = `${binDir}${path.delimiter}${process.env.PATH ?? ""}`;
+    process.env.TEST_DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
+    process.env.RUNNER_VALIDATION_COMMANDS = "typecheck, build";
+
+    const results = await runValidation(workspace);
+
+    assert.deepEqual(results.map((r) => r.command), ["npm run typecheck", "npm run build"]);
+    assert.ok(results.every((r) => r.success));
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH; else process.env.PATH = previousPath;
+    if (previousOverride === undefined) delete process.env.RUNNER_VALIDATION_COMMANDS; else process.env.RUNNER_VALIDATION_COMMANDS = previousOverride;
     if (previousTestDatabaseUrl === undefined) delete process.env.TEST_DATABASE_URL; else process.env.TEST_DATABASE_URL = previousTestDatabaseUrl;
     fs.rmSync(workspace, { recursive: true, force: true });
     fs.rmSync(path.dirname(markerFile), { recursive: true, force: true });

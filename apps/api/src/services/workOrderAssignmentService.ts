@@ -4,6 +4,9 @@ import { getBooleanSetting } from "./settingsService.js";
 // Slugs that draft/orchestrate but do not execute work orders
 const NON_EXECUTOR_SLUGS = new Set(["planner", "grand-vizier"]);
 
+// Signals that a work order is code/engineering work — routed to the Royal Architect.
+const CODE_INTENT = /\b(code|coding|refactor|refactoring|typescript|javascript|tsx?|api|endpoint|route|router|bug|debug|fix|patch|compile|typecheck|lint|function|class|module|component|frontend|backend|database|migration|schema|prisma|test|build|deploy|runtime|server|repository|codebase|architecture)\b/i;
+
 export interface AssignmentResult {
   agentId: string;
   agentName: string;
@@ -59,7 +62,24 @@ export async function selectAgent(workOrder: {
   const pool = candidates.filter((a) => !NON_EXECUTOR_SLUGS.has(a.slug));
   if (pool.length === 0) return null;
 
-  const keywords = extractKeywords(`${workOrder.title} ${workOrder.objective} ${workOrder.context} ${workOrder.instructions}`);
+  const rawText = `${workOrder.title} ${workOrder.objective} ${workOrder.context} ${workOrder.instructions}`;
+
+  // Domain routing: code/engineering work is supervised by the Royal Architect.
+  // The generic keyword matcher below treats "code"/"build"/"implement" as stopwords,
+  // so without this a code work order can be mis-assigned (e.g. to the Treasurer).
+  if (CODE_INTENT.test(rawText)) {
+    const architect = pool.find((a) => a.slug === "royal-architect");
+    if (architect) {
+      return {
+        agentId: architect.id,
+        agentName: architect.name,
+        reason: `Routed to ${architect.name} (${architect.title}) — the work order involves code/engineering, which the Royal Architect supervises.`,
+        confidence: 0.9
+      };
+    }
+  }
+
+  const keywords = extractKeywords(rawText);
 
   let bestScore = 0;
   let bestAgent: (typeof pool)[number] | null = null;

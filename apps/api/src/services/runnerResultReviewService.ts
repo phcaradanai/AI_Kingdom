@@ -117,7 +117,7 @@ export async function createOrUpdateAgentReviewForJob(jobId: string, options: Ge
   const job = await prisma.automationJob.findUnique({
     where: { id: jobId },
     include: {
-      workOrder: { select: { id: true, title: true } },
+      workOrder: { select: { id: true, title: true, assignedAgent: { select: { id: true, isActive: true } } } },
       steps: { orderBy: { sequence: "asc" } }
     }
   });
@@ -127,11 +127,16 @@ export async function createOrUpdateAgentReviewForJob(jobId: string, options: Ge
     throw err;
   }
 
-  const [report, patchArtifact, reviewerAgent] = await Promise.all([
+  const [report, patchArtifact] = await Promise.all([
     prisma.implementationReport.findFirst({ where: { automationJobId: jobId }, orderBy: { createdAt: "desc" } }),
-    prisma.patchArtifact.findFirst({ where: { automationJobId: jobId }, orderBy: { createdAt: "desc" } }),
-    findReviewerAgent()
+    prisma.patchArtifact.findFirst({ where: { automationJobId: jobId }, orderBy: { createdAt: "desc" } })
   ]);
+
+  // The work order's assigned steward (e.g. royal-architect for code) is the
+  // responsible agent and owns the verdict; fall back to a default reviewer only
+  // when no steward is assigned.
+  const steward = job.workOrder?.assignedAgent;
+  const reviewerAgent = steward?.isActive ? steward : await findReviewerAgent();
 
   const draft = await generateAgentReviewDraft({ automationJob: job, report, patchArtifact }, options);
   const data = {

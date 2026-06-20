@@ -101,14 +101,34 @@ export async function generatePatch(opts: PatchGeneratorOptions): Promise<PatchP
   };
 }
 
+const DEFAULT_VALIDATION_COMMANDS: Array<{ cmd: string; args: string[] }> = [
+  { cmd: "npm", args: ["run", "typecheck"] },
+  { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/api"] },
+  { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/runner"] },
+  { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/web"] },
+  { cmd: "npm", args: ["run", "build"] }
+];
+
+/**
+ * Post-execution validation commands. Defaults to the full suite (typecheck + all
+ * workspace tests + build). Override with RUNNER_VALIDATION_COMMANDS — a
+ * comma-separated list of npm scripts (e.g. "typecheck" or "typecheck,build") — so a
+ * repo whose full suite is slow (or has known-failing tests) doesn't run it on every
+ * sandbox/bridge job. Only `npm run <script>` invocations are allowed.
+ */
+function resolveValidationCommands(env: NodeJS.ProcessEnv): Array<{ cmd: string; args: string[] }> {
+  const raw = env.RUNNER_VALIDATION_COMMANDS?.trim();
+  if (!raw) return DEFAULT_VALIDATION_COMMANDS;
+  const scripts = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => /^[a-zA-Z0-9:_-]+$/.test(s));
+  if (scripts.length === 0) return DEFAULT_VALIDATION_COMMANDS;
+  return scripts.map((script) => ({ cmd: "npm", args: ["run", script] }));
+}
+
 export async function runValidation(workspaceRoot: string): Promise<ValidationResult[]> {
-  const commands: Array<{ cmd: string; args: string[] }> = [
-    { cmd: "npm", args: ["run", "typecheck"] },
-    { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/api"] },
-    { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/runner"] },
-    { cmd: "npm", args: ["run", "test", "--workspace", "@ai-kingdom/web"] },
-    { cmd: "npm", args: ["run", "build"] }
-  ];
+  const commands = resolveValidationCommands(process.env);
 
   const results: ValidationResult[] = [];
   for (const { cmd, args } of commands) {

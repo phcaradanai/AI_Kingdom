@@ -213,3 +213,19 @@ test("assignedAgentId can be cleared via manual DB update (reversibility check)"
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
   }
 });
+
+test("selectAgent routes code/engineering work to the royal-architect steward", async () => {
+  const architect = await prisma.agent.findUnique({ where: { slug: "royal-architect" }, select: { id: true } });
+  if (!architect) return; // seeded royal-architect required; skip if absent
+
+  const result = await selectAgent({
+    title: "Fix a TypeScript bug in the API endpoint",
+    objective: "Refactor the backend route handler and add a regression test for the failing case.",
+    context: "",
+    instructions: "Patch apps/api/src/routes; keep changes scoped."
+  });
+
+  assert.ok(result, "expected an assignment for code work");
+  assert.equal(result!.agentId, architect.id, "code work should route to the royal-architect");
+  assert.match(result!.reason, /Royal Architect|code\/engineering/i);
+});
