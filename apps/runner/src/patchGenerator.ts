@@ -68,14 +68,22 @@ const VALIDATION_COMBINED_OUTPUT_MAX = 40_000;
 export async function generatePatch(opts: PatchGeneratorOptions): Promise<PatchPayload> {
   const { workspaceRoot, jobId, workOrderTitle, allowBranchPush } = opts;
 
+  // 0. Stage all workspace changes against the baseline commit so that NEWLY
+  // CREATED (untracked) files are captured — an external agent (Claude Code, etc.)
+  // typically *creates* files, which a plain `git diff` (working tree vs index)
+  // silently omits. Exclude the runner-internal `.kingdom/` prompt dir. The diff
+  // is then read from the index (`--cached`) so new, modified, and deleted files
+  // all appear. (`--` is intentionally avoided: the command validator rejects it.)
+  await runCommand("git", ["add", "-A", ".", ":(exclude).kingdom"], { workspaceRoot });
+
   // 1. Get diff stat
-  const statResult = await runCommand("git", ["diff", "--stat"], { workspaceRoot });
+  const statResult = await runCommand("git", ["diff", "--cached", "--stat"], { workspaceRoot });
   const diffStat = statResult.exitCode === 0
     ? sanitizeAndCap(statResult.stdout, DIFF_STAT_MAX)
     : null;
 
   // 2. Get full diff
-  const diffResult = await runCommand("git", ["diff"], { workspaceRoot });
+  const diffResult = await runCommand("git", ["diff", "--cached"], { workspaceRoot });
   const rawDiff = diffResult.exitCode === 0 ? diffResult.stdout : "";
   const fullPatch = rawDiff ? sanitizeAndCap(rawDiff, FULL_PATCH_MAX) : null;
   const diffPreview = rawDiff ? sanitizeAndCap(rawDiff, DIFF_PREVIEW_MAX) : null;
