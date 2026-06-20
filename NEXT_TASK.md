@@ -9,6 +9,8 @@ Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 
 Establish the shared visual foundation and apply it to the five Mission Control surfaces before refining the remaining pages. The result should be balanced, restrained, responsive, and consistent in English and Thai while preserving all source-of-truth links and lifecycle behavior.
 
+The next implementation wave must also apply the expressive premium system in `docs/UX_UI_REFINEMENT_PLAN.md`: purposeful motion, controlled depth, richer color and shape hierarchy, micro-interactions, consistent overlays, Lucide iconography, disciplined typography and spacing, and breakpoint-specific responsive composition.
+
 ### Scope
 
 - App shell: desktop navigation hierarchy, mobile drawer, content-width variants, and stable page spacing.
@@ -24,6 +26,8 @@ Establish the shared visual foundation and apply it to the five Mission Control 
 - Preserve the Inbox WorkOrder context-refresh action and all existing `?focus=` behavior.
 - Do not modify server-provided prose or remove raw enum audit evidence.
 - Avoid nested cards, radius above 8px for panels, decorative gradient/orb effects, and mobile all-route pill navigation.
+- Do not put required decisions, queues, reports, audit evidence, or source links inside carousels. Carousels remain optional and bounded.
+- Respect reduced motion, keyboard interaction, accessible overlay focus, 44px mobile touch targets, and the shared z-index scale.
 - Add shared abstractions only when the first migrated page proves the need.
 
 ### Delivery Order
@@ -39,6 +43,8 @@ Establish the shared visual foundation and apply it to the five Mission Control 
 - Mission Control pages share one spacing, typography, panel, toolbar, metric, and responsive system.
 - Desktop alignment is symmetric and mobile navigation uses a proper drawer.
 - Thai and English labels do not overlap, clip, or resize fixed controls.
+- Motion and micro-interactions provide state feedback without replaying during routine refreshes, and reduced-motion mode remains fully usable.
+- Drawers, dialogs, tooltips, sticky regions, and responsive view changes preserve focus, provenance, and source navigation.
 - Source links, provenance, filters, `?focus=` behavior, status tooltips, and lifecycle actions remain intact.
 - Focused page tests cover both languages and critical source links.
 - `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web` pass.

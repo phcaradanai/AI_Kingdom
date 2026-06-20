@@ -83,18 +83,18 @@ Navigation is role-aware and grouped into Mission Control / Command / Work / Kno
 
 ## Planned UX/UI Refinement
 
-The current 38-route frontend now has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. The plan starts with shared shell/layout primitives and the five Mission Control surfaces, then proceeds through command/execution, projects/strategy, agents/providers, knowledge/governance, and administration. It preserves all current routes, source-of-truth ownership, RBAC, context-binding rules, and runner/approval boundaries.
+The current 38-route frontend has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. Wave 1 shared shell/layout work and the visual refinement of all five Mission Control surfaces are complete. The roadmap next proceeds through command/execution, projects/strategy, agents/providers, knowledge/governance, and administration while preserving all current routes, source-of-truth ownership, RBAC, context-binding rules, and runner/approval boundaries.
 
-The next implementation milestone is M22 Phase 2: Premium UX Foundation + Mission Control. It also completes the semantic i18n migration previously planned for Kingdom Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed. No runtime UI changes are included in the planning document itself.
+The remaining M22 Phase 2 step is the semantic i18n migration for Kingdom Operations, Royal Brief, Living Loop, Kingdom Health, and Activity Feed. Subsequent waves will apply the expressive premium system now defined in the plan: purposeful motion, controlled depth and layering, richer color/shape hierarchy, micro-interactions, accessible modal/drawer patterns, consistent Lucide iconography, disciplined typography/spacing, and breakpoint-specific responsive composition. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
 
 ## Verification
 
-Latest validation baseline after M22 Phase 2 UX Wave 1A (2026-06-20):
+Latest validation baseline after M22 Phase 2 UX Wave 1B (2026-06-20):
 
 - `npm run typecheck` (api, runner, web workspaces) — pass
 - `npm run test --workspace @ai-kingdom/web` — 138/138 pass
 - `npm run build --workspace @ai-kingdom/web` — pass (pre-existing >500 kB chunk warning only)
-- Live EN/TH verification (preview server, KING login) on `/dashboard` and `/inbox` at desktop and mobile widths: domain navigation, mobile drawer, page headers, metrics, top action, filters, and Thai labels fit without clipping; server-provided prose remains unchanged data and out of scope
+- Live EN/TH verification (preview server, KING login) covers `/dashboard` and `/inbox` at desktop/mobile widths, plus `/kingdom/operations`, `/royal-brief`, and `/living-loop` in Thai at desktop/mobile and English at desktop. Domain navigation, mobile drawer, page hierarchy, metrics, filters, source links, disclosures, and Thai labels render without observed overlap or clipping; server-provided prose remains unchanged data and out of scope.
 - Prior baseline at `b6ce344`: typecheck/lint/build pass; web 132/132; focused provenance coverage 26/26
 - HTTP smoke: web 200, API health 200
 - Root `npm run test` did not complete: the serial API run reached 273 passing tests, then stopped producing output in the existing provider/orchestrator segment and was terminated; runner and web phases were not reached by that root command.

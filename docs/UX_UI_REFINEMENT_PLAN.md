@@ -70,6 +70,50 @@ Visual browser inspection was unavailable in the planning session because the in
 - Standardize loading, empty, error, disabled, selected, hover, focus-visible, and stale-data states.
 - Keep all source/provenance links visible and preserve raw enum values in tooltips where audit evidence requires them.
 
+### Expressive premium system
+
+Use the full interaction toolkit where it improves orientation, feedback, or task speed. The app should feel alive without making repeated operational work slower or less legible.
+
+#### Motion and micro-interactions
+
+- Define three motion durations: `fast` (100-140ms) for hover, press, and focus feedback; `standard` (180-240ms) for disclosure and state changes; `slow` (280-360ms) for drawers, dialogs, and major view transitions.
+- Animate opacity and transform by default. Avoid layout-heavy animation of width, height, top, or left when a transform-based transition can communicate the same change.
+- Use restrained entrance sequencing only for first-load summaries and newly inserted records. Repeated list navigation, filtering, and polling refreshes must not replay page-wide animation.
+- Give buttons, rows, tabs, toggles, status indicators, copy actions, disclosures, and drag handles clear hover, active, focus, loading, success, and failure feedback.
+- Use skeletons for predictable loading geometry, optimistic feedback only for reversible actions, and visible progress for operations whose completion is not immediate.
+- Respect `prefers-reduced-motion`: remove parallax, sequencing, and large transforms while retaining instant state feedback and focus visibility.
+
+#### Depth and z-index
+
+- Use a documented layer scale: base content, sticky page chrome, dropdown/popover, drawer, modal, toast, and critical confirmation. No arbitrary one-off z-index values.
+- Create depth with border contrast, small tonal shifts, controlled shadow, and overlap only when the relationship is meaningful. Do not simulate depth by stacking decorative cards.
+- Sticky headers, action bars, and detail rails must use an opaque or sufficiently solid backdrop so text never collides visually with scrolling content.
+- Reserve the strongest elevation for modal decisions and destructive confirmations. Hover elevation on rows and cards should remain subtle and must not shift layout.
+
+#### Color, shape, iconography, and type
+
+- Use graphite/ink neutrals for structure, warm brass for Kingdom identity and primary focus, cool cyan/blue for informational state, and semantic green/amber/red for health and risk.
+- Combine color with icon, text, or shape for every status. Color alone must never carry approval, failure, or blocked meaning.
+- Keep panel geometry rectilinear and precise. Use compact radius, clipped accent rails, dividers, status dots, and progress lines to create character without decorative blobs or oversized pills.
+- Use Lucide icons consistently at stable 16/18/20px sizes. Icon-only controls require an accessible name and tooltip; text remains present for unfamiliar or high-consequence commands.
+- Use tabular numerals for metrics, timestamps, cost, token, and queue counts. Thai and English share the same semantic type roles, but line-height and wrapping must be verified independently.
+
+#### Modals, drawers, and carousels
+
+- Use a modal for focused confirmation or short creation/edit tasks that should temporarily block the underlying page.
+- Use a side drawer for contextual detail, filters, configuration, and mobile navigation where preserving the current list or source context matters.
+- Keep primary detail routes for deep, linkable, or audit-heavy records. A drawer must not hide provenance, replace browser history, or become the only way to reach source evidence.
+- Use carousels only for bounded, visual, optional content such as agent presence or onboarding-like previews. Queues, decisions, reports, metrics, and audit records stay as lists, grids, tabs, or timelines so nothing important is hidden off-screen.
+- Every carousel requires visible position, previous/next controls, keyboard operation, touch support, pause behavior for autoplay, and a non-carousel layout at breakpoints where all items can fit cleanly.
+
+#### Responsive composition
+
+- Design each operational pattern for wide desktop, compact desktop/tablet, and mobile instead of only stacking desktop columns.
+- Recompose master-detail layouts into list then detail, move secondary filters into drawers, and turn wide data tables into deliberate mobile row summaries with access to full detail.
+- Keep touch targets at least 44px on mobile and preserve a stable command area above the fold. Sticky controls must not cover the final row or conflict with safe-area insets.
+- Use container-aware grids, `minmax(0, 1fr)`, explicit aspect ratios where media exists, and overflow ownership so translated text cannot widen the page or clip controls.
+- Verify responsive behavior at 1440x900, 1024x768, 768x1024, 430x932, and 390x844, including English, Thai, keyboard focus, 200% zoom, and reduced motion.
+
 ## Foundation Components
 
 Implement these before polishing individual pages:
@@ -85,7 +129,9 @@ Implement these before polishing individual pages:
 9. `DetailRail`: consistent metadata, provenance, status, and related-record links.
 10. `ActionBar`: sticky or local action area for review/approval flows.
 11. `Tabs` and `SegmentedControl`: domain views and compact modes.
-12. Shared display maps for status, risk, health, and entity labels in English and Thai.
+12. `Drawer`, `Dialog`, `Tooltip`, and `Toast`: one accessible overlay system with shared focus, escape, layering, and responsive behavior.
+13. Motion tokens and interaction-state utilities with reduced-motion fallbacks.
+14. Shared display maps for status, risk, health, and entity labels in English and Thai.
 
 Do not create a general component library in one large rewrite. Add each primitive when the first wave proves its API, then reuse it in later waves.
 
@@ -193,12 +239,13 @@ Every wave follows the same sequence:
 1. Confirm `main` is current and merge it into `codex/main` before editing.
 2. Capture current desktop and mobile screenshots for the wave's pages.
 3. Write a short per-wave layout contract before changing components.
-4. Implement shared primitives only as required by the first page.
-5. Refine one page at a time and preserve existing behavior and source links.
-6. Add or update focused interaction tests.
-7. Verify English and Thai at desktop (1440x900), tablet (768x1024), and mobile (390x844).
-8. Run web typecheck, tests, and build.
-9. Commit on `codex/main`, fast-forward merge into local `main`, then return to `codex/main`.
+4. Define the page's motion, depth, overlay, icon, and responsive behavior before implementation.
+5. Implement shared primitives only as required by the first page.
+6. Refine one page at a time and preserve existing behavior and source links.
+7. Add or update focused interaction tests.
+8. Verify English and Thai across the required viewports, keyboard focus, reduced motion, and 200% zoom.
+9. Run web typecheck, tests, and build.
+10. Commit on `codex/main`, fast-forward merge into local `main`, then return to `codex/main`.
 
 ## Acceptance Criteria
 
@@ -211,6 +258,10 @@ Every wave follows the same sequence:
 - Dashboard and other summary surfaces remain read-only and link to their owning source records.
 - WorkOrder, AutomationJob, provider, project-context, and approval behavior remains unchanged.
 - Keyboard focus, semantic headings, contrast, reduced motion, loading, empty, and error states are verified.
+- Motion communicates state without replaying on routine refreshes, and all essential behavior remains usable with reduced motion enabled.
+- Drawers, dialogs, popovers, sticky regions, and toasts follow one z-index scale and do not obscure controls or page content.
+- Carousels never contain required decisions, queue items, reports, audit evidence, or the only route to source-of-truth records.
+- Icon-only controls have accessible names and tooltips; mobile touch targets are at least 44px.
 - Focused tests pass, followed by `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web`.
 
 ## Deferred Decisions
