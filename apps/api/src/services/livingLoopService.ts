@@ -5,12 +5,13 @@ import { auditLog, sanitizeMetadata } from "./auditService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { isAutoPatchEligible } from "./livingLoopRiskPolicyService.js";
 import { buildLocalDocsProvenance } from "./automationJobService.js";
-import { buildContextValidationSummary, validateContextForAutomationJob } from "./projectContextBindingService.js";
+import { buildContextValidationSummary, repairWorkOrderContext, validateContextForAutomationJob } from "./projectContextBindingService.js";
 import {
   getLatestLocalDocumentSnapshot,
   listLocalDocumentRoots,
   markLocalSnapshotStale,
   detectLocalDocsChangedSinceSnapshot,
+  scanLocalDocumentRoot,
   LOCAL_DOCS_STALE_HOURS
 } from "./localDocumentAccessService.js";
 
@@ -74,7 +75,23 @@ export type AutoValidationSummary = {
 
 const EMPTY_AUTO_VALIDATION: AutoValidationSummary = { enabled: false, createdJobs: [], skippedReasons: [] };
 
-export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", userId?: string | null): Promise<{ run: LivingLoopRun; candidates: AutomationCandidate[]; autoValidation: AutoValidationSummary; autoSandboxPatch: AutoValidationSummary }> {
+// ── Auto Context Repair (Priority 6) ──────────────────────────────────────────
+// When enabled, the loop repairs MISSING/STALE/changed-docs WorkOrder context
+// bindings itself instead of leaving the King a "Refresh Context" action. This
+// removes a manual gate; it does NOT push code, run patches, or merge anything —
+// it scans local docs (read-only) and rebinds the WorkOrder to the freshest
+// snapshot, exactly what the King's manual "Refresh Context" button already does.
+export type AutoContextRepairSummary = {
+  enabled: boolean;
+  repaired: Array<{ workOrderId: string; candidateId: string; previousStatus: string; newStatus: string | null }>;
+  skippedReasons: string[];
+};
+const EMPTY_AUTO_CONTEXT_REPAIR: AutoContextRepairSummary = { enabled: false, repaired: [], skippedReasons: [] };
+// WORK_ORDER_REVIEW candidate provenance reasons that represent a repairable context binding.
+export const CONTEXT_REPAIR_REASONS = new Set(["context_missing", "context_stale", "local_docs_changed_since_binding"]);
+export const AUTO_CONTEXT_REPAIR_ACTION = "living_loop_auto_context_repair";
+
+export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", userId?: string | null): Promise<{ run: LivingLoopRun; candidates: AutomationCandidate[]; autoContextRepair: AutoContextRepairSummary; autoValidation: AutoValidationSummary; autoSandboxPatch: AutoValidationSummary }> {
   const skipReasons: string[] = [];
   let run: LivingLoopRun | null = null;
   try {
@@ -83,7 +100,7 @@ export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", use
       if (!enabled) {
         run = await prisma.livingLoopRun.create({ data: { status: "SKIPPED", triggerType, completedAt: new Date(), summary: "Living loop is disabled." } });
         await auditLog({ userId, action: "living_loop_run_skipped", resourceType: "living_loop_run", resourceId: run.id, metadata: toMeta({ triggerType }) });
-        return { run, candidates: [], autoValidation: EMPTY_AUTO_VALIDATION, autoSandboxPatch: EMPTY_AUTO_VALIDATION };
+        return { run, candidates: [], autoContextRepair: EMPTY_AUTO_CONTEXT_REPAIR, autoValidation: EMPTY_AUTO_VALIDATION, autoSandboxPatch: EMPTY_AUTO_VALIDATION };
       }
     }
     run = await prisma.livingLoopRun.create({ data: { status: "STARTED", triggerType, startedAt: new Date() } });
@@ -95,7 +112,7 @@ export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", use
     const todayCount = await prisma.automationCandidate.count({ where: { createdAt: { gte: today } } });
     if (todayCount >= maxDailyCandidates) {
       run = await prisma.livingLoopRun.update({ where: { id: run.id }, data: { status: "SKIPPED", completedAt: new Date(), summary: "Daily candidate limit reached", skippedReasons: ["Daily limit reached"] as Prisma.InputJsonValue } });
-      return { run, candidates: [], autoValidation: EMPTY_AUTO_VALIDATION, autoSandboxPatch: EMPTY_AUTO_VALIDATION };
+      return { run, candidates: [], autoContextRepair: EMPTY_AUTO_CONTEXT_REPAIR, autoValidation: EMPTY_AUTO_VALIDATION, autoSandboxPatch: EMPTY_AUTO_VALIDATION };
     }
     const observation = await observeKingdomState();
     const observedCounts = { workOrdersNeedingReview: observation.workOrdersNeedingReview.length, staleWorkOrders: observation.staleWorkOrders.length, failedJobs: observation.failedJobs.length, needsReviewJobs: observation.needsReviewJobs.length, staleJobs: observation.staleJobs.length, patchesPendingReview: observation.patchesPendingReview.length, staleRunners: observation.staleRunners.length, providerIssues: observation.providerIssues.length, staleInboxItems: observation.staleInboxItems.length, mattersAwaitingDecision: observation.mattersAwaitingDecision.length, reportsWithRemainingWork: observation.reportsWithRemainingWork.length };
@@ -108,14 +125,18 @@ export async function runLivingLoopOnce(triggerType: "MANUAL" | "SCHEDULED", use
       const result = await createCandidate(candidate, run.id, minConfidence, skipReasons);
       if (result) createdCandidates.push(result); else skippedCount++;
     }
+    // Auto context repair runs BEFORE the job stages so a repaired (now FRESH)
+    // work order can be picked up by validation/patch on a subsequent tick.
+    const autoContextRepair = await autoRepairContext(run.id, createdCandidates, userId);
     const autoValidation = await autoCreateValidationJobs(run.id, createdCandidates, userId);
     const autoSandboxPatch = await autoCreateSandboxPatchJobs(run.id, createdCandidates, userId);
+    for (const reason of autoContextRepair.skippedReasons) skipReasons.push(`AutoContextRepair: ${reason}`);
     for (const reason of autoValidation.skippedReasons) skipReasons.push(`AutoValidation: ${reason}`);
     for (const reason of autoSandboxPatch.skippedReasons) skipReasons.push(`${reason}`);
     await summarizeLivingLoopRun(run.id);
     run = await prisma.livingLoopRun.update({ where: { id: run.id }, data: { skippedCandidates: skippedCount, skippedReasons: skipReasons as Prisma.InputJsonValue, createdJobs: autoValidation.createdJobs.length + autoSandboxPatch.createdJobs.length } });
-    await auditLog({ userId, action: "living_loop_run_completed", resourceType: "living_loop_run", resourceId: run.id, metadata: toMeta({ triggerType, proposedCandidates: createdCandidates.length, skippedCandidates: skippedCount, autoValidationJobsCreated: autoValidation.createdJobs.length, autoSandboxPatchJobsCreated: autoSandboxPatch.createdJobs.length }) });
-    return { run, candidates: createdCandidates, autoValidation, autoSandboxPatch };
+    await auditLog({ userId, action: "living_loop_run_completed", resourceType: "living_loop_run", resourceId: run.id, metadata: toMeta({ triggerType, proposedCandidates: createdCandidates.length, skippedCandidates: skippedCount, autoContextRepairs: autoContextRepair.repaired.length, autoValidationJobsCreated: autoValidation.createdJobs.length, autoSandboxPatchJobsCreated: autoSandboxPatch.createdJobs.length }) });
+    return { run, candidates: createdCandidates, autoContextRepair, autoValidation, autoSandboxPatch };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     try { if (run) await prisma.livingLoopRun.update({ where: { id: run.id }, data: { status: "FAILED", completedAt: new Date(), error: msg } }); } catch { /* ignore */ }
@@ -486,6 +507,86 @@ export async function hasOnlineRunner(): Promise<boolean> {
   return runner !== null;
 }
 
+export async function countAutoContextRepairsToday(): Promise<number> {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return prisma.auditLog.count({ where: { action: AUTO_CONTEXT_REPAIR_ACTION, createdAt: { gte: today } } });
+}
+
+/**
+ * Auto Context Repair (Priority 6). For each PENDING context-binding candidate
+ * (kind WORK_ORDER_REVIEW with a context_* provenance reason), scan the project's
+ * local docs once per tick and rebind the work order to the freshest snapshot —
+ * the same safe action the King's manual "Refresh Context" button performs.
+ *
+ * Gated by `LIVING_LOOP_AUTO_CONTEXT_REPAIR` (opt-in, default off). Throttled by a
+ * daily cap and a per-work-order cooldown keyed on the repair audit entry (NOT on
+ * `contextBoundAt`, which is bumped on every bind — including the best-effort
+ * MISSING bind at WO creation — and would otherwise skip exactly the WOs that need
+ * a repair). Never pushes code, runs patches, or merges anything.
+ */
+export async function autoRepairContext(loopRunId: string, candidates: AutomationCandidate[], userId?: string | null): Promise<AutoContextRepairSummary> {
+  const repairCandidates = candidates.filter((c) =>
+    c.kind === "WORK_ORDER_REVIEW" &&
+    c.status === "PENDING" &&
+    !!c.workOrderId &&
+    CONTEXT_REPAIR_REASONS.has((c.provenance as { reason?: string } | null)?.reason ?? "")
+  );
+  const enabled = await getBooleanSetting("LIVING_LOOP_AUTO_CONTEXT_REPAIR", false);
+  const summary: AutoContextRepairSummary = { enabled, repaired: [], skippedReasons: [] };
+  if (repairCandidates.length === 0) return summary;
+  if (!enabled) {
+    summary.skippedReasons.push("Auto context repair disabled");
+    await auditLog({ userId, action: "living_loop_auto_context_repair_skipped", resourceType: "living_loop_run", resourceId: loopRunId, metadata: toMeta({ reason: "disabled", candidateCount: repairCandidates.length }) });
+    return summary;
+  }
+
+  const [maxDaily, cooldownMinutes] = await Promise.all([
+    getNumberSetting("LIVING_LOOP_MAX_DAILY_CONTEXT_REPAIRS", 20),
+    getNumberSetting("LIVING_LOOP_CONTEXT_REPAIR_COOLDOWN_MINUTES", 30)
+  ]);
+  let todayCount = await countAutoContextRepairsToday();
+  const cooldownCutoff = new Date(Date.now() - cooldownMinutes * 60000);
+  // Scan each project's roots at most once per tick (avoids N full re-scans when
+  // many work orders in the same project need repair).
+  const scannedProjects = new Set<string>();
+
+  const skip = async (candidate: AutomationCandidate, reason: string, action = "living_loop_auto_context_repair_skipped") => {
+    summary.skippedReasons.push(`${reason} (${candidate.workOrderId ?? candidate.sourceId})`);
+    await auditLog({ userId, action, resourceType: "automation_candidate", resourceId: candidate.id, metadata: toMeta({ reason, workOrderId: candidate.workOrderId, loopRunId }) });
+  };
+
+  for (const candidate of repairCandidates) {
+    if (todayCount >= maxDaily) { await skip(candidate, "Daily context repair limit reached", "context_repair_daily_limit_blocked"); continue; }
+
+    const workOrder = await prisma.workOrder.findUnique({ where: { id: candidate.workOrderId! }, select: { id: true, projectId: true } });
+    if (!workOrder) { await skip(candidate, "Work order not found"); continue; }
+    if (!workOrder.projectId) { await skip(candidate, "Work order has no linked project"); continue; }
+
+    // Cooldown keyed on the repair audit entry for this work order (see fn docstring).
+    const recentRepair = await prisma.auditLog.findFirst({ where: { action: AUTO_CONTEXT_REPAIR_ACTION, resourceId: workOrder.id, createdAt: { gte: cooldownCutoff } }, select: { id: true } });
+    if (recentRepair) { await skip(candidate, `Context repaired within ${cooldownMinutes}m cooldown`, "context_repair_cooldown_blocked"); continue; }
+
+    // Scan the project's active roots once, then rebind (rebind-only, no re-scan).
+    if (!scannedProjects.has(workOrder.projectId)) {
+      scannedProjects.add(workOrder.projectId);
+      const roots = await listLocalDocumentRoots(workOrder.projectId);
+      for (const root of roots.filter((r) => r.isActive)) {
+        try { await scanLocalDocumentRoot(root.id); } catch { /* scan failure surfaces as a non-FRESH rebind below */ }
+      }
+    }
+
+    const result = await repairWorkOrderContext(workOrder.id, { userId });
+    if (result.status === "SKIPPED") { await skip(candidate, `Repair skipped: ${result.skipReason ?? "unknown"}`); continue; }
+
+    todayCount++;
+    summary.repaired.push({ workOrderId: workOrder.id, candidateId: candidate.id, previousStatus: result.previousStatus, newStatus: result.newStatus });
+    await prisma.automationCandidate.update({ where: { id: candidate.id }, data: { status: "APPLIED", reviewedAt: new Date() } });
+    await auditLog({ userId, action: AUTO_CONTEXT_REPAIR_ACTION, resourceType: "work_order", resourceId: workOrder.id, metadata: toMeta({ candidateId: candidate.id, loopRunId, previousStatus: result.previousStatus, newStatus: result.newStatus }) });
+  }
+
+  return summary;
+}
+
 export async function autoCreateValidationJobs(loopRunId: string, candidates: AutomationCandidate[], userId?: string | null): Promise<AutoValidationSummary> {
   const validationCandidates = candidates.filter((c) => c.kind === "VALIDATION_JOB" && c.status === "PENDING" && c.workOrderId);
   const enabled = await getBooleanSetting("LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", false);
@@ -696,12 +797,19 @@ export type AutoValidationStatus = {
   jobsCreatedLastRun: number;
   validationFailuresNeedingReview: number;
 };
+export type AutoContextRepairStatus = {
+  enabled: boolean;
+  dailyCount: number;
+  dailyLimit: number;
+  cooldownMinutes: number;
+  repairedLastRun: number;
+};
 
-export async function getLivingLoopStatus(): Promise<{ enabled: boolean; lastRun: LivingLoopRun | null; lastResult: string | null; todayCandidates: number; pendingCandidates: number; highCriticalCandidates: number; runnerIssues: number; providerIssues: number; patchesPendingReview: number; autoValidation: AutoValidationStatus; autoSandboxPatch: AutoSandboxPatchStatus }> {
+export async function getLivingLoopStatus(): Promise<{ enabled: boolean; lastRun: LivingLoopRun | null; lastResult: string | null; todayCandidates: number; pendingCandidates: number; highCriticalCandidates: number; runnerIssues: number; providerIssues: number; patchesPendingReview: number; autoContextRepair: AutoContextRepairStatus; autoValidation: AutoValidationStatus; autoSandboxPatch: AutoSandboxPatchStatus }> {
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const [enabled, lastRun, todayCandidates, pendingCandidates, highCriticalCandidates] = await Promise.all([getBooleanSetting("LIVING_LOOP_ENABLED", false), prisma.livingLoopRun.findFirst({ orderBy: { createdAt: "desc" } }), prisma.automationCandidate.count({ where: { createdAt: { gte: today } } }), prisma.automationCandidate.count({ where: { status: "PENDING" } }), prisma.automationCandidate.count({ where: { status: "PENDING", priority: { in: ["HIGH", "CRITICAL"] } } })]);
   const [runnerIssues, providerIssues, patchesPendingReview] = await Promise.all([prisma.automationCandidate.count({ where: { kind: "RUNNER_REVIEW", status: "PENDING" } }), prisma.automationCandidate.count({ where: { kind: "PROVIDER_REVIEW", status: "PENDING" } }), prisma.patchArtifact.count({ where: { validationStatus: "PENDING" } })]);
-  const [autoValidationEnabled, dailyLimit, cooldownMinutes, dailyCount, validationFailuresNeedingReview, spEnabled, spDailyLimit, spCooldownMinutes, spMinConfidence, spDailyCount] = await Promise.all([
+  const [autoValidationEnabled, dailyLimit, cooldownMinutes, dailyCount, validationFailuresNeedingReview, spEnabled, spDailyLimit, spCooldownMinutes, spMinConfidence, spDailyCount, crEnabled, crDailyLimit, crCooldownMinutes, crDailyCount] = await Promise.all([
     getBooleanSetting("LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", false),
     getNumberSetting("LIVING_LOOP_MAX_DAILY_VALIDATION_JOBS", 10),
     getNumberSetting("LIVING_LOOP_VALIDATION_JOB_COOLDOWN_MINUTES", 60),
@@ -711,18 +819,25 @@ export async function getLivingLoopStatus(): Promise<{ enabled: boolean; lastRun
     getNumberSetting("LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS", 3),
     getNumberSetting("LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES", 120),
     getNumberSetting("LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", 85),
-    countAutoSandboxPatchJobsToday()
+    countAutoSandboxPatchJobsToday(),
+    getBooleanSetting("LIVING_LOOP_AUTO_CONTEXT_REPAIR", false),
+    getNumberSetting("LIVING_LOOP_MAX_DAILY_CONTEXT_REPAIRS", 20),
+    getNumberSetting("LIVING_LOOP_CONTEXT_REPAIR_COOLDOWN_MINUTES", 30),
+    countAutoContextRepairsToday()
   ]);
   let validationJobsCreatedLastRun = 0;
   let sandboxPatchJobsCreatedLastRun = 0;
+  let contextRepairsLastRun = 0;
   if (lastRun) {
-    [validationJobsCreatedLastRun, sandboxPatchJobsCreatedLastRun] = await Promise.all([
+    [validationJobsCreatedLastRun, sandboxPatchJobsCreatedLastRun, contextRepairsLastRun] = await Promise.all([
       prisma.automationJob.count({ where: { mode: "VALIDATION_ONLY", provenance: { path: ["loopRunId"], equals: lastRun.id } } }),
-      prisma.automationJob.count({ where: { mode: "SANDBOX_PATCH", provenance: { path: ["loopRunId"], equals: lastRun.id } } })
+      prisma.automationJob.count({ where: { mode: "SANDBOX_PATCH", provenance: { path: ["loopRunId"], equals: lastRun.id } } }),
+      prisma.auditLog.count({ where: { action: AUTO_CONTEXT_REPAIR_ACTION, metadata: { path: ["loopRunId"], equals: lastRun.id } } })
     ]);
   }
   return {
     enabled, lastRun, lastResult: lastRun?.status ?? null, todayCandidates, pendingCandidates, highCriticalCandidates, runnerIssues, providerIssues, patchesPendingReview,
+    autoContextRepair: { enabled: crEnabled, dailyCount: crDailyCount, dailyLimit: crDailyLimit, cooldownMinutes: crCooldownMinutes, repairedLastRun: contextRepairsLastRun },
     autoValidation: { enabled: autoValidationEnabled, dailyCount, dailyLimit, cooldownMinutes, jobsCreatedLastRun: validationJobsCreatedLastRun, validationFailuresNeedingReview },
     autoSandboxPatch: { enabled: spEnabled, dailyCount: spDailyCount, dailyLimit: spDailyLimit, cooldownMinutes: spCooldownMinutes, minConfidence: spMinConfidence, jobsCreatedLastRun: sandboxPatchJobsCreatedLastRun }
   };

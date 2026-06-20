@@ -6,17 +6,19 @@
 - Codex archive branch is fully merged (Thai i18n + "Streamline king command workflow"); `I18nProvider` is wired in `main.tsx`, the language toggle is live in `AppLayout`, and the codex branch + merge scaffolding (`merge-resolved/`, `apply-codex-merge.sh`, `MERGE_NOTES.md`) have been removed.
 - `feat/external-agent-bridge` is merged: the Throne Room "Execute with external agent" bridge now runs Claude Code end-to-end, routes code work to the Royal Architect as steward, and reports the outcome back to the King as a Kingdom Memory (LESSON).
 - Completed milestones through **M19** (Autonomous Kingdom Loop / background scheduler). M17E-2 (Repository Snapshot + WorkOrder Context Binding) is **complete** — the previous "in progress" note here was stale.
+- **M20 Phase 1 nav consolidation is done** (2026-06-20): the five overlapping summary surfaces (`/dashboard`, `/inbox`, `/kingdom/operations`, `/royal-brief`, `/living-loop`) now live in one **Mission Control** nav group; the previously orphaned `/royal-brief` is reachable again; remaining routes regrouped into Command / Work / Knowledge / Agents & Models / System. Verified green (web typecheck + 129 tests + build). See PROJECT_STATUS.md "M20 Phase 1".
+- **M21 Auto Context Repair is done** (2026-06-20, Priority 6): new opt-in Living Loop stage `autoRepairContext` auto-rebinds MISSING/STALE WorkOrder context (read-only scan + rebind, scan deduped per project per tick) so the King no longer has to click "Refresh Context". Gated by `LIVING_LOOP_AUTO_CONTEXT_REPAIR` (default off), throttled by daily cap + per-WO cooldown (keyed on the repair audit entry, not `contextBoundAt`). Opt-in via `npm run autonomy:enable -- --with-context-repair`; deliberately **not** in the default chain because it removes the FRESH-context gate before auto-patch. 5 new DB tests. **Remaining:** surface `getLivingLoopStatus().autoContextRepair` on the Living Loop/Dashboard cards (web types + UI). See PROJECT_STATUS.md "M21".
 
-## M20: Mission Control Consolidation — Phase 1 (next)
+## M20: Mission Control Consolidation — what was done vs. what remains
 
-Goal: turn the scattered operational pages into one read-only Mission Control command center that links to owning records, without changing lifecycle semantics or creating a duplicate data store. Grounded in `docs/KINGDOM_INFORMATION_ARCHITECTURE_AUDIT.md` (2026-06-19), which was written as preparation for exactly this work.
+Goal: turn the scattered operational pages into one read-only Mission Control command center that links to owning records, without changing lifecycle semantics or creating a duplicate data store. Grounded in `docs/KINGDOM_INFORMATION_ARCHITECTURE_AUDIT.md` (2026-06-19).
 
-### Scope (Phase 1 — labels, grouping, and a read-only command surface only)
+### Phase 1 status
 
-1. **Top recommended action**: surface `/api/next-actions` `topAction` at the top of Mission Control with source chips (entity type, short id/title, owning route, freshness timestamp) and a single primary action route.
-2. **Nav restructure (relabel + regroup, no route renames yet)**: collapse the overlapping summaries — `/dashboard`, `/inbox`, `/kingdom/operations`, plus the summary parts of `/royal-brief` and `/living-loop` — under a single **Mission Control** group with Overview / Action Queue / Operations / Health views. Keep durable-record routes (Tasks & Councils, Work Orders, Execution, Agents, Providers & Models, Reviews & Knowledge, Projects, Strategy, Administration) as their owning groups.
-3. **Source-of-truth discipline**: Mission Control only *displays* live state from `/api/mission-control`, `/api/next-actions`, and `/api/kingdom/*`. It may trigger a safe aggregator action (e.g. refresh work-order context) only where the owning route already supports it. No new lifecycle semantics, no editing of durable records on the command surface.
-4. **Provenance everywhere**: every summary card carries a "Why am I seeing this?" line (from next-action `why` / Royal Brief provenance / activity-stream source) and a link to the owning record.
+1. ✅ **Top recommended action** — already shipped: `DashboardPage` ("Mission Control") renders `/api/mission-control` `topAction` with source chips and `ProvenanceLinks`.
+2. ✅ **Nav restructure (relabel + regroup, no route renames)** — done in `AppLayout.tsx`: Mission Control group (Overview / Action Queue / Operations / Royal Brief / Living Loop) + owning groups. No route renames.
+3. ✅ **Source-of-truth discipline** — Mission Control surface remains read-only; it only displays `/api/mission-control`, `/api/next-actions`, `/api/kingdom/*` and triggers only the already-supported safe context-refresh action.
+4. ◻️ **Provenance everywhere (remaining)** — Dashboard cards already carry provenance; still to do: add the same "Why am I seeing this?" line + owning-record link discipline to the standalone `InboxPage` and `KingdomOperationsPage` cards where it is not yet uniform.
 5. **i18n hygiene as you touch each page**: replace raw enum strings with semantic label maps (e.g. `workOrders.status.ready`), keep raw enum in tooltips/details, and verify Thai-length labels do not clip in sidebar pills, status badges, and cards. Build a per-page translation-key inventory incrementally — no global i18n migration.
 
 ### Constraints

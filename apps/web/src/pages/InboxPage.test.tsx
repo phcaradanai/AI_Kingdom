@@ -357,7 +357,7 @@ describe("InboxPage", () => {
     renderLayout();
 
     await waitFor(() => {
-      const inboxLinks = screen.getAllByRole("link", { name: /Kingdom Inbox/i });
+      const inboxLinks = screen.getAllByRole("link", { name: /Action Queue/i });
       expect(inboxLinks.some((link) => link.textContent?.includes("2"))).toBe(true);
     });
   });

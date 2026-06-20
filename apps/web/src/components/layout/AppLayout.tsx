@@ -12,15 +12,30 @@ import type { UserRole } from "@/types/api";
 // Navigation is grouped by PURPOSE (what the King is trying to do), not by internal
 // data model. Every `to` path and `roles` array is preserved from the prior nav — only
 // the grouping and group names changed — so all existing routes keep working.
+//
+// M20 Phase 1 (Mission Control Consolidation): the five overlapping summary surfaces the
+// IA audit flagged — /dashboard, /inbox, /kingdom/operations, /royal-brief, /living-loop —
+// are collapsed into one read-only "Mission Control" group (Overview / Action Queue /
+// Operations / Royal Brief / Living Loop). This also surfaces /royal-brief, which existed
+// as a route but was unreachable from the sidebar. Durable-record routes keep their owning
+// groups. No route renames here — those are deferred to Phase 2.
 const navCategories = [
   {
-    name: "Kingdom",
+    name: "Mission Control",
     items: [
-      { to: "/dashboard", label: "Dashboard", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/dashboard", label: "Overview", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
+      { to: "/inbox", label: "Action Queue", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
+      { to: "/kingdom/operations", label: "Operations", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
+      { to: "/royal-brief", label: "Royal Brief", icon: ScrollText, roles: ["KING", "CROWN_PRINCE"] },
+      { to: "/living-loop", label: "Living Loop", icon: Sparkles, roles: ["KING"] },
+    ]
+  },
+  {
+    name: "Command",
+    items: [
       { to: "/throne-room", label: "Throne Room", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
-      { to: "/kingdom/operations", label: "Operations Center", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
+      { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
       { to: "/strategy", label: "Strategy Ledger", icon: LineChart, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
-      { to: "/inbox", label: "Kingdom Inbox", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
     ]
   },
   {
@@ -37,7 +52,6 @@ const navCategories = [
     name: "Knowledge",
     items: [
       { to: "/memory", label: "Memory", icon: Vault, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
-      { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
       { to: "/agent-chat", label: "Agent Chat", icon: MessageSquare, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/knowledge-lab", label: "Knowledge Lab", icon: Brain, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
       { to: "/charter", label: "Charter", icon: BookOpen, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
@@ -46,7 +60,7 @@ const navCategories = [
     ]
   },
   {
-    name: "Agents",
+    name: "Agents & Models",
     items: [
       { to: "/agents", label: "Agents", icon: Shield, roles: ["KING"] },
       { to: "/external-agents", label: "External Agents", icon: Bot, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
@@ -58,7 +72,6 @@ const navCategories = [
     name: "System",
     items: [
       { to: "/automation-jobs", label: "Automation Jobs", icon: Activity, roles: ["KING"] },
-      { to: "/living-loop", label: "Living Loop", icon: Activity, roles: ["KING"] },
       { to: "/treasury", label: "Treasury", icon: Coins, roles: ["KING"] },
       { to: "/audit", label: "Audit Log", icon: ClipboardList, roles: ["KING"] },
       { to: "/settings", label: "Settings", icon: Settings, roles: ["KING"] },
