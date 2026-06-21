@@ -323,7 +323,8 @@ function WorkOrderSourceLinks({ order }: { order: WorkOrderDto }) {
     { label: tk("workOrders.source.project"), to: projectTo, description: tk("workOrders.source.projectDescription") },
     { label: tk("workOrders.source.reports"), to: "#work-order-history", description: tk("workOrders.source.reportsDescription") },
     { label: tk("workOrders.source.automation"), to: "/automation-jobs", description: tk("workOrders.source.automationDescription") },
-    { label: tk("workOrders.source.agent"), to: "/external-agents", description: tk("workOrders.source.agentDescription") }
+    { label: tk("workOrders.source.agent"), to: "/external-agents", description: tk("workOrders.source.agentDescription") },
+    { label: tk("workOrders.source.lineage"), to: `/decree-lineage/${order.id}`, description: tk("workOrders.source.lineageDescription") }
   ];
   return (
     <Card className="p-4">

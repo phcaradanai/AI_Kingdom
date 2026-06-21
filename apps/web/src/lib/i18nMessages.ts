@@ -573,6 +573,8 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "automationJobs.sourceProject": "Owning Project",
     "automationJobs.sourceLivingLoop": "Living Loop Source",
     "automationJobs.openSource": "Open source",
+    "automationJobs.sourceLineage": "Decree Lineage",
+    "automationJobs.openLineage": "View full trace",
     "automationJobs.indexAria": "Automation job sections",
     "automationJobs.index.overview": "Overview",
     "automationJobs.index.execution": "Execution",
@@ -714,7 +716,9 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "workOrders.source.projectDescription": "Project docs, routing, and context binding.",
     "workOrders.source.reportsDescription": "Implementation reports and review history for this work order.",
     "workOrders.source.automationDescription": "Runner execution and patch review source.",
-    "workOrders.source.agentDescription": "Agent registry and assignment context."
+    "workOrders.source.agentDescription": "Agent registry and assignment context.",
+    "workOrders.source.lineage": "Decree Lineage",
+    "workOrders.source.lineageDescription": "Ordered trace: decree → council → prompt → result → review → summary."
   },
   th: {
     // ── Shared: provenance row labels ────────────────────────────────────────
@@ -1268,6 +1272,8 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "automationJobs.sourceProject": "โปรเจกต์เจ้าของงาน",
     "automationJobs.sourceLivingLoop": "ต้นทาง Living Loop",
     "automationJobs.openSource": "เปิดแหล่งข้อมูล",
+    "automationJobs.sourceLineage": "สายลำดับพระราชโองการ",
+    "automationJobs.openLineage": "ดูลำดับทั้งหมด",
     "automationJobs.indexAria": "ส่วนของงานอัตโนมัติ",
     "automationJobs.index.overview": "ภาพรวม",
     "automationJobs.index.execution": "การดำเนินงาน",
@@ -1409,7 +1415,9 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "workOrders.source.projectDescription": "เอกสาร การกำหนดเส้นทาง และการผูกบริบทของโปรเจกต์",
     "workOrders.source.reportsDescription": "รายงานการพัฒนาและประวัติการตรวจของใบสั่งงานนี้",
     "workOrders.source.automationDescription": "แหล่งข้อมูลการทำงานของ Runner และการตรวจแพตช์",
-    "workOrders.source.agentDescription": "ทะเบียนเอเจนต์และบริบทการมอบหมาย"
+    "workOrders.source.agentDescription": "ทะเบียนเอเจนต์และบริบทการมอบหมาย",
+    "workOrders.source.lineage": "สายลำดับพระราชโองการ",
+    "workOrders.source.lineageDescription": "ลำดับทั้งหมด: คำสั่ง → สภา → prompt → ผลลัพธ์ → ตรวจ → สรุป"
   }
 };
 

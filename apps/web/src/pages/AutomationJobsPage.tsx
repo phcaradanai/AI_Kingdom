@@ -529,6 +529,10 @@ export function AutomationJobsPage() {
                     <p className="mt-1 text-sm font-semibold text-foreground">{tk("automationJobs.openSource")}</p>
                   </Link>
                 ) : null}
+                <Link to={`/decree-lineage/${selectedJob.workOrderId}`} className="rounded-md border border-border bg-muted/15 p-3 transition-colors hover:border-primary/50 hover:bg-primary/5">
+                  <p className="text-xs font-medium text-muted-foreground">{tk("automationJobs.sourceLineage")}</p>
+                  <p className="mt-1 text-sm font-semibold text-foreground">{tk("automationJobs.openLineage")}</p>
+                </Link>
               </section>
 
               <nav className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2" aria-label={tk("automationJobs.indexAria")}>
