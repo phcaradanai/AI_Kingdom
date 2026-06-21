@@ -128,6 +128,9 @@ export function CouncilPage() {
 
 function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; linkedReport: ReportLike | null }) {
   const tk = useTk();
+  const synthesisAgent = session.responses.find((response) =>
+    response.agent.slug === "grand-vizier" || response.role === "Grand Vizier"
+  )?.agent ?? null;
   const [plannerResult, setPlannerResult] = useState<PlannerResultDto | null>(null);
   const [plannerError, setPlannerError] = useState<string | null>(null);
   const [isPlanning, setIsPlanning] = useState(false);
@@ -223,7 +226,13 @@ function CouncilDetail({ session, linkedReport }: { session: CouncilSessionDto; 
           <section className="relative overflow-hidden rounded-lg border border-primary/30 bg-primary/10 p-5 sm:p-6">
             <span className="absolute inset-y-0 left-0 w-1 bg-primary/70" />
             <div className="mb-4 flex items-center gap-3">
-              <AgentPortrait agent={{ name: "Aurelian", title: "Grand Vizier" }} size="md" status="SUMMARIZING" />
+              {synthesisAgent ? (
+                <AgentPortrait agent={synthesisAgent} size="md" status="SUMMARIZING" />
+              ) : (
+                <div aria-label="Council synthesis" className="flex h-[72px] w-[72px] shrink-0 items-center justify-center rounded-xl border border-primary/30 bg-primary/10 text-primary">
+                  <Sparkles className="h-7 w-7" />
+                </div>
+              )}
               <h3 className="flex items-center gap-2 text-base font-semibold text-primary">
                 <Sparkles className="h-4 w-4" />
                 {tk("council.detail.synthesis")}

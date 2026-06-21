@@ -7,17 +7,19 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { ProvenanceLinks } from "@/components/ProvenanceLinks";
 import { KingdomActivityFeed } from "@/components/kingdom/KingdomActivityFeed";
 import { KingdomHealthStrip } from "@/components/kingdom/KingdomHealthStrip";
-import { initials, STATE_COLORS, STATE_DOT } from "@/components/kingdom/agentPresence";
+import { STATE_COLORS, STATE_DOT } from "@/components/kingdom/agentPresence";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { api } from "@/lib/api";
+import { getAgentDisplayName, getAgentDisplayTitle } from "@/lib/agentPortraits";
 import { useTk } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import type {
@@ -31,7 +33,8 @@ import type {
 
 function AgentCard({ agent }: { agent: AgentPresenceDto }) {
   const tk = useTk();
-  const displayName = agent.displayName ?? agent.name;
+  const displayName = getAgentDisplayName(agent);
+  const displayTitle = getAgentDisplayTitle(agent) || agent.role;
   const stateColor = STATE_COLORS[agent.state];
   const dot = STATE_DOT[agent.state];
   const stateLabel = tk(`presence.state.${agent.state}`);
@@ -45,13 +48,7 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
       )}
     >
       <div className="flex items-start gap-3">
-        {/* Avatar */}
-        <div className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full border text-xs font-bold",
-          isActive ? "border-primary/30 bg-primary/10 text-primary" : "border-border bg-muted text-muted-foreground"
-        )}>
-          {initials(displayName)}
-        </div>
+        <AgentPortrait agent={agent} size="xs" showStatusRing={false} />
 
         {/* Info */}
         <div className="min-w-0 flex-1">
@@ -69,7 +66,7 @@ function AgentCard({ agent }: { agent: AgentPresenceDto }) {
             </span>
           </div>
 
-          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{agent.role}</div>
+          <div className="mt-0.5 truncate text-[11px] text-muted-foreground">{displayTitle}</div>
 
           {agent.currentTask && (
             <div className="mt-1.5 truncate text-xs text-foreground/80">{agent.currentTask}</div>

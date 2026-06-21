@@ -461,6 +461,7 @@ async function buildLivingAgentActivityDigest(since: Date): Promise<LivingAgentD
       displayTitle: activity?.agent.displayTitle ?? agent.title,
       role: agent.role,
       avatarUrl: activity?.agent.avatarUrl ?? null,
+      avatarVersion: activity?.agent.avatarVersion ?? 1,
       actionsProposed: candidateMap.get(agent.id) ?? 0,
       jobsExecuted: jobMap.get(agent.id) ?? 0,
       reportsProduced: reportMap.get(agent.id) ?? 0,

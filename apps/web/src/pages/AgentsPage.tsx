@@ -9,6 +9,7 @@ import { FormField } from "@/components/ui/FormField";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { getProviderDisplayName } from "@/lib/providerDisplay";
+import { resolveAvatarUrl } from "@/lib/agentPortraits";
 import { cn } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
 import type { AgentDto, AgentPayload, AgentRoutingPreviewDto, DisplayProfilePayload, ProviderModelsDto, ParameterMode, ModelParameters, EffectiveRequestPreviewDto } from "@/types/api";
@@ -578,7 +579,7 @@ export function AgentsPage() {
             <div>
               <h2 className="font-display text-2xl">{selected ? `Edit ${selected.title}` : "Create Agent"}</h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-                {selected ? selected.specialty : "Portrait preview uses known agent names or title fallbacks. Custom agents use initials until an asset is added."}
+                {selected ? selected.specialty : "Portraits use the saved display profile. Legacy core agents retain bundled defaults; custom agents use initials until a portrait is saved."}
               </p>
             </div>
           </div>
@@ -1482,7 +1483,7 @@ export function AgentsPage() {
                       type="button"
                       className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
                       onClick={() => {
-                        const portrait = selected.avatarUrl;
+                        const portrait = resolveAvatarUrl(selected.avatarUrl, selected.avatarVersion);
                         if (portrait) window.open(portrait, "_blank", "noopener");
                       }}
                       disabled={!selected.avatarUrl}

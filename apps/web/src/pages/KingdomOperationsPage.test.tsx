@@ -10,9 +10,14 @@ const observedAt = new Date().toISOString();
 
 const mockAgent: AgentPresenceDto = {
   id: "agent-1",
+  slug: "grand-vizier",
   name: "Grand Vizier",
+  title: "Grand Vizier",
   role: "ORCHESTRATOR",
   displayName: "Grand Vizier",
+  displayTitle: "Royal Coordinator",
+  avatarUrl: "/uploads/agents/vizier.png",
+  avatarVersion: 3,
   state: "IDLE",
   currentTask: null,
   currentWorkOrder: null,
@@ -102,6 +107,10 @@ describe("KingdomOperationsPage", () => {
 
     // Agent card (name appears in agent card and possibly activity actor)
     expect(screen.getAllByText("Grand Vizier").length).toBeGreaterThan(0);
+    expect(screen.getByRole("img", { name: "Grand Vizier, Royal Coordinator portrait" })).toHaveAttribute(
+      "src",
+      "http://localhost:4000/uploads/agents/vizier.png?v=3"
+    );
 
     // Activity item
     expect(screen.getByText(mockActivityItem.summary)).toBeInTheDocument();

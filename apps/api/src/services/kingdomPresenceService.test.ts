@@ -21,9 +21,28 @@ async function createTestAgent(suffix = randomUUID()) {
 test("getKingdomPresence: agent with no activity appears IDLE", async () => {
   const agent = await createTestAgent();
   try {
+    await prisma.agent.update({
+      where: { id: agent.id },
+      data: {
+        config: {
+          displayProfile: {
+            displayName: "Presence Display Name",
+            displayTitle: "Presence Display Title",
+            avatarUrl: "/uploads/agents/presence.png",
+            avatarVersion: 5
+          }
+        }
+      }
+    });
     const dto = await getKingdomPresence();
     const found = dto.agents.find(a => a.id === agent.id);
     assert.ok(found, "Agent should appear in presence list");
+    assert.equal(found.slug, agent.slug);
+    assert.equal(found.title, agent.title);
+    assert.equal(found.displayName, "Presence Display Name");
+    assert.equal(found.displayTitle, "Presence Display Title");
+    assert.equal(found.avatarUrl, "/uploads/agents/presence.png");
+    assert.equal(found.avatarVersion, 5);
     assert.equal(found.state, "IDLE");
     assert.equal(found.currentTask, null);
     assert.equal(found.blockingReason, null);

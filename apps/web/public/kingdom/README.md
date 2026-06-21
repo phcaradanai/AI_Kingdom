@@ -41,20 +41,16 @@ in the box the figures stand.
 
 ## Characters
 
-Each agent stands in the scene as a **pixel-art sprite** in `sprites/<name>.png` —
-a palette-reduced, cropped version of its portrait (`/agents/<name>.png`) rendered with
-`image-rendering: pixelated` so it matches the pixel map. A state ring + name plate sit
+Each agent uses the portrait returned by Kingdom Presence from the owning
+`Agent.config.displayProfile`. Uploaded portraits and their `avatarVersion` therefore
+match `/agents`, Living Agents, Operations, Council, Royal Brief, and the Throne Room.
+Legacy core agents without a saved portrait use the shared bundled `/agents/<name>.png`
+fallback; custom agents without a portrait use initials. A state ring and name plate sit
 on top; active agents bob, idle agents are static.
 
-Regenerate the sprites after adding or replacing a portrait:
-
-```bash
-python3 scripts/generate-agent-sprites.py   # requires Pillow
-```
-
-Tune `SPRITE` (pixel resolution) / `COLORS` (palette size) in that script for a chunkier
-or finer look. Agents without a bundled `/agents/` portrait fall back to the raw avatar
-or initials.
+The old `sprites/` assets remain for historical reference but are not derived at runtime.
+Do not infer a sprite path from an agent name because a matching file may not exist and it
+would bypass the saved display profile.
 
 ## Licensing note
 

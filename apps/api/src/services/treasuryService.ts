@@ -1,26 +1,7 @@
 import { prisma } from "../db/prisma.js";
+import { extractAgentDisplayProfile } from "./agentDisplayProfileService.js";
 import { getSettingValue } from "./settingsService.js";
 import { listAIProviders } from "./aiProviderRegistry.js";
-
-function extractDisplayProfile(config: unknown): {
-  displayName: string | null;
-  displayTitle: string | null;
-  avatarUrl: string | null;
-  avatarVersion: number;
-} {
-  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
-  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
-    ? raw.displayProfile as Record<string, unknown>
-    : {};
-  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
-  const n = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
-  return {
-    displayName: s(dp.displayName),
-    displayTitle: s(dp.displayTitle),
-    avatarUrl: s(dp.avatarUrl),
-    avatarVersion: n(dp.avatarVersion, 1)
-  };
-}
 import { getModelPricing } from "./modelPricingService.js";
 import {
   getDeepSeekBalanceDelta,
@@ -148,7 +129,7 @@ export async function getTreasuryByAgent() {
 
   return groups.map((g) => {
     const raw = g.agentId ? (agentMap.get(g.agentId) ?? null) : null;
-    const agent = raw ? { id: raw.id, name: raw.name, title: raw.title, slug: raw.slug, ...extractDisplayProfile(raw.config) } : null;
+    const agent = raw ? { id: raw.id, name: raw.name, title: raw.title, slug: raw.slug, ...extractAgentDisplayProfile(raw.config) } : null;
     return {
       agentId: g.agentId,
       agent,
@@ -199,7 +180,7 @@ export async function getTreasuryUsage(limit = 100) {
   return records.map((record) => {
     const rawAgent = record.agent;
     const agent = rawAgent
-      ? { name: rawAgent.name, title: rawAgent.title, slug: rawAgent.slug, ...extractDisplayProfile(rawAgent.config) }
+      ? { name: rawAgent.name, title: rawAgent.title, slug: rawAgent.slug, ...extractAgentDisplayProfile(rawAgent.config) }
       : null;
     return {
       ...record,

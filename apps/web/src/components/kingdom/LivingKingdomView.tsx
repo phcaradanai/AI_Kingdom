@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SectionCard } from "@/components/ui/SectionCard";
-import { getAgentPortrait } from "@/lib/agentPortraits";
+import { getAgentDisplayName, getAgentDisplayTitle, getAgentPortrait } from "@/lib/agentPortraits";
 import { api } from "@/lib/api";
 import { cn, timeAgo } from "@/lib/utils";
 import type { AgentPresenceDto, KingdomActivityStreamDto, KingdomPresenceDto } from "@/types/api";
@@ -44,8 +44,9 @@ function GlanceChip({ label, count, tone }: { label: string; count: number; tone
 // ── Agent detail (Phase 4 + 6: real work + provenance) ──────────────────────────
 
 function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () => void }) {
-  const displayName = agent.displayName ?? agent.name;
-  const portrait = getAgentPortrait({ name: displayName, title: agent.role });
+  const displayName = getAgentDisplayName(agent);
+  const displayTitle = getAgentDisplayTitle(agent) || agent.role || "Royal agent";
+  const portrait = getAgentPortrait(agent);
 
   return (
     <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
@@ -56,7 +57,7 @@ function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () 
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate font-display text-base font-semibold">{displayName}</div>
-          <div className="truncate text-xs text-muted-foreground">{agent.role || "Royal agent"}</div>
+          <div className="truncate text-xs text-muted-foreground">{displayTitle}</div>
         </div>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[agent.state])} />
@@ -88,6 +89,12 @@ function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () 
 
       {/* Provenance — where this work comes from */}
       <div className="mt-3 space-y-1 border-t border-border/40 pt-2">
+        <div className="flex items-baseline gap-2">
+          <span className="w-20 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Profile</span>
+          <Link to={`/living-agents/${agent.id}`} className="min-w-0 flex-1 truncate text-xs font-semibold text-primary underline-offset-2 hover:underline">
+            Open source profile
+          </Link>
+        </div>
         {agent.currentWorkOrder && (
           <div className="flex items-baseline gap-2">
             <span className="w-20 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Source</span>

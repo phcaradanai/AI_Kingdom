@@ -1,4 +1,5 @@
 import { prisma } from "../db/prisma.js";
+import { extractAgentDisplayProfile } from "./agentDisplayProfileService.js";
 
 export type AgentPresenceState =
   | "IDLE"
@@ -12,9 +13,14 @@ export type AgentPresenceState =
 
 export type AgentPresenceDto = {
   id: string;
+  slug: string;
   name: string;
+  title: string;
   role: string;
   displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarVersion: number;
   state: AgentPresenceState;
   currentTask: string | null;
   currentWorkOrder: { id: string; title: string } | null;
@@ -39,17 +45,6 @@ const WORKING_STATUSES = new Set(["RESPONDING", "SUMMARIZING", "EXTRACTING_MEMOR
 // Stale window: an activity that ended > 15 min ago is no longer ERROR
 const ERROR_WINDOW_MS = 15 * 60 * 1000;
 
-function extractDisplayName(config: unknown): string | null {
-  const raw = config && typeof config === "object" && !Array.isArray(config)
-    ? (config as Record<string, unknown>)
-    : {};
-  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
-    ? (raw.displayProfile as Record<string, unknown>)
-    : {};
-  const v = dp.displayName;
-  return typeof v === "string" && v ? v : null;
-}
-
 export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
   const computedAt = new Date().toISOString();
 
@@ -57,7 +52,7 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
     prisma.agent.findMany({
       where: { isActive: true },
       orderBy: [{ priority: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, title: true, role: true, config: true }
+      select: { id: true, slug: true, name: true, title: true, role: true, config: true }
     }),
     prisma.agentActivity.findMany({
       orderBy: [{ heartbeatAt: "desc" }, { startedAt: "desc" }],
@@ -124,7 +119,18 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
   }
 
   const agentDtos: AgentPresenceDto[] = agents.map(agent => {
-    const displayName = extractDisplayName(agent.config);
+    const displayProfile = extractAgentDisplayProfile(agent.config);
+    const identity = {
+      id: agent.id,
+      slug: agent.slug,
+      name: agent.name,
+      title: agent.title,
+      role: agent.role,
+      displayName: displayProfile.displayName,
+      displayTitle: displayProfile.displayTitle,
+      avatarUrl: displayProfile.avatarUrl,
+      avatarVersion: displayProfile.avatarVersion
+    };
     const acts = activityByAgent.get(agent.id) ?? [];
     const jobs = jobsByAgent.get(agent.id) ?? [];
 
@@ -158,7 +164,7 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
       state = "ERROR";
       currentTask = freshFailedAct.title;
       blockingReason = freshFailedAct.errorMessage ?? "Activity failed";
-      return { id: agent.id, name: agent.name, role: agent.role, displayName, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
+      return { ...identity, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
     }
 
     // Check BLOCKED: a job for this agent failed
@@ -167,7 +173,7 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
       state = "BLOCKED";
       currentWorkOrder = failedJob.workOrder ? { id: failedJob.workOrder.id, title: failedJob.workOrder.title } : null;
       blockingReason = "Automation job failed";
-      return { id: agent.id, name: agent.name, role: agent.role, displayName, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
+      return { ...identity, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
     }
 
     // Check RUNNING: job is CLAIMED or RUNNING
@@ -180,7 +186,7 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
         const totalSteps = stepCountMap.get(runningJob.id) ?? lastStep.sequence;
         progress = `step ${lastStep.sequence}/${totalSteps}`;
       }
-      return { id: agent.id, name: agent.name, role: agent.role, displayName, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
+      return { ...identity, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
     }
 
     // Check WAITING_REVIEW: job is in NEEDS_REVIEW
@@ -188,7 +194,7 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
     if (reviewJob) {
       state = "WAITING_REVIEW";
       currentWorkOrder = reviewJob.workOrder ? { id: reviewJob.workOrder.id, title: reviewJob.workOrder.title } : null;
-      return { id: agent.id, name: agent.name, role: agent.role, displayName, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
+      return { ...identity, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
     }
 
     // Check activity-derived states
@@ -201,7 +207,7 @@ export async function getKingdomPresence(): Promise<KingdomPresenceDto> {
       }
     }
 
-    return { id: agent.id, name: agent.name, role: agent.role, displayName, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
+    return { ...identity, state, currentTask, currentWorkOrder, progress, blockingReason, lastActivityAt };
   });
 
   return { computedAt, agents: agentDtos };
