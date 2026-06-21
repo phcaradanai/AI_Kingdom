@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Activity, AlertTriangle, Bot, CheckCircle, Clipboard, Clock, FileCode, GitBranch, Play, RefreshCw, Shield, Upload, X, XCircle, AlertCircle, Eye, Cpu, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowRight, Bot, CheckCircle, ChevronDown, Clipboard, Clock, FileCode, Filter, GitBranch, ListChecks, Play, RefreshCw, Server, Shield, Upload, X, XCircle, AlertCircle, Eye, Zap } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
 import { ValidationOutput } from "@/components/ValidationOutput";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { api } from "@/lib/api";
+import { useTk } from "@/lib/i18n";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
 import type { AgentReviewSummaryDto, AgentRunnerDto, AutomationJobDto, AutomationJobStatus, PatchArtifactDto } from "@/types/api";
@@ -58,6 +59,24 @@ function modeLabel(mode: string): string {
 }
 
 type AutoValidationProvenance = { source?: string; loopRunId?: string; candidateId?: string };
+type QueueView = "REVIEW" | "ACTIVE" | "FAILED" | "HISTORY" | "ALL";
+
+const ACTIVE_JOB_STATUSES: AutomationJobStatus[] = ["QUEUED", "APPROVED", "CLAIMED", "RUNNING"];
+
+function matchesQueueView(job: AutomationJobDto, view: QueueView): boolean {
+  if (view === "REVIEW") return job.status === "NEEDS_REVIEW";
+  if (view === "ACTIVE") return ACTIVE_JOB_STATUSES.includes(job.status);
+  if (view === "FAILED") return job.status === "FAILED";
+  if (view === "HISTORY") return ["COMPLETED", "CANCELLED"].includes(job.status);
+  return true;
+}
+
+function queuePriority(job: AutomationJobDto): number {
+  if (job.status === "NEEDS_REVIEW") return 0;
+  if (ACTIVE_JOB_STATUSES.includes(job.status)) return 1;
+  if (job.status === "FAILED") return 2;
+  return 3;
+}
 
 function autoValidationProvenance(job: AutomationJobDto): AutoValidationProvenance | null {
   const p = job.provenance as AutoValidationProvenance | null | undefined;
@@ -120,6 +139,7 @@ function AutoSandboxPatchBadge() {
 }
 
 export function AutomationJobsPage() {
+  const tk = useTk();
   const { user } = useAuthStore();
   const [jobs, setJobs] = useState<AutomationJobDto[]>([]);
   const [runners, setRunners] = useState<AgentRunnerDto[]>([]);
@@ -130,6 +150,7 @@ export function AutomationJobsPage() {
   const [selectedJob, setSelectedJob] = useState<AutomationJobDto | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>("");
+  const [queueView, setQueueView] = useState<QueueView>("ALL");
   const [patchArtifacts, setPatchArtifacts] = useState<PatchArtifactDto[]>([]);
   const [patchActionId, setPatchActionId] = useState<string | null>(null);
   const [importPatchJobId, setImportPatchJobId] = useState<string | null>(null);
@@ -143,10 +164,7 @@ export function AutomationJobsPage() {
     setLoading(true);
     setError(null);
     try {
-      const [jobsData, runnersData] = await Promise.all([
-        api.automationJobs(statusFilter ? { status: statusFilter } : undefined),
-        api.runners()
-      ]);
+      const [jobsData, runnersData] = await Promise.all([api.automationJobs(), api.runners()]);
       setJobs(jobsData);
       setRunners(runnersData);
     } catch (err) {
@@ -156,7 +174,7 @@ export function AutomationJobsPage() {
     }
   }
 
-  useEffect(() => { load(); }, [statusFilter]);
+  useEffect(() => { load(); }, []);
 
   async function handleApprove(jobId: string) {
     setActionJobId(jobId);
@@ -197,6 +215,11 @@ export function AutomationJobsPage() {
       setSelectedJob(job);
       setPatchArtifacts(patches);
       setAgentReview(reviewResponse.agentReview);
+      if (window.matchMedia?.("(max-width: 1023px)").matches) {
+        window.requestAnimationFrame(() => {
+          document.getElementById("automation-job-detail-pane")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        });
+      }
     } finally {
       setDetailLoading(false);
     }
@@ -271,7 +294,7 @@ export function AutomationJobsPage() {
     setActionError(null);
     try {
       await api.pushPatchBranch(artifactId);
-      setJobs(await api.automationJobs(statusFilter ? { status: statusFilter } : undefined));
+      setJobs(await api.automationJobs());
       if (selectedJob) {
         setPatchArtifacts(await api.patchArtifacts({ automationJobId: selectedJob.id }));
       }
@@ -300,196 +323,252 @@ export function AutomationJobsPage() {
   }
 
   const onlineRunners = runners.filter((r) => r.status === "ONLINE");
-  const activeJobs = jobs.filter((j) => ["QUEUED", "APPROVED", "CLAIMED", "RUNNING"].includes(j.status));
+  const activeJobs = jobs.filter((j) => ACTIVE_JOB_STATUSES.includes(j.status));
   const reviewJobs = jobs.filter((j) => j.status === "NEEDS_REVIEW");
+  const failedJobs = jobs.filter((j) => j.status === "FAILED");
+  const historyJobs = jobs.filter((j) => ["COMPLETED", "CANCELLED"].includes(j.status));
+  const visibleJobs = jobs
+    .filter((job) => matchesQueueView(job, queueView))
+    .filter((job) => !statusFilter || job.status === statusFilter)
+    .sort((a, b) => queuePriority(a) - queuePriority(b) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
 
-  const selectCls = "h-9 rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary";
+  const selectCls = "h-11 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none focus:ring-2 focus:ring-primary";
 
   return (
-    <div className="space-y-6 p-6">
+    <>
       <PageHeader
-        eyebrow="Living Agents"
-        title="Automation Jobs"
-        description="Sandboxed autonomous execution jobs for the Living Agent Runner"
+        eyebrow={tk("automationJobs.eyebrow")}
+        title={tk("automationJobs.title")}
+        description={tk("automationJobs.description")}
         action={
-          <Button variant="outline" onClick={load}>
-            <RefreshCw className="h-4 w-4 mr-2" />
-            Refresh
+          <Button variant="outline" className="h-11" onClick={load}>
+            <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            {tk("automationJobs.refresh")}
           </Button>
         }
       />
 
-      {/* Summary cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Online Runners</p>
-          <p className={cn("text-2xl font-bold mt-1", onlineRunners.length > 0 ? "text-green-600" : "text-gray-500")}>
-            {onlineRunners.length}
-          </p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Active Jobs</p>
-          <p className="text-2xl font-bold mt-1 text-orange-600">{activeJobs.length}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Needs Review</p>
-          <p className="text-2xl font-bold mt-1 text-purple-600">{reviewJobs.length}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-sm text-muted-foreground">Total Jobs</p>
-          <p className="text-2xl font-bold mt-1">{jobs.length}</p>
-        </Card>
-      </div>
-
-      {/* Runners section */}
-      {runners.length > 0 && (
-        <div>
-          <h3 className="text-sm font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
-            <Cpu className="h-4 w-4" /> Registered Runners
-          </h3>
-          <div className="flex flex-wrap gap-2">
-            {runners.map((r) => (
-              <span
-                key={r.id}
-                className={cn("inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border", runnerStatusColor(r.status))}
-              >
-                <span className={cn("h-1.5 w-1.5 rounded-full", r.status === "ONLINE" ? "bg-green-500" : "bg-gray-400")} />
-                {r.name}
-                {r.hostname && <span className="opacity-70">({r.hostname})</span>}
-                {r.lastHeartbeatAt && (
-                  <span className="opacity-60">· {formatDate(r.lastHeartbeatAt)}</span>
-                )}
-              </span>
-            ))}
+      <section className="mb-6 grid grid-cols-2 border-y border-border bg-muted/10 md:grid-cols-4" aria-label={tk("automationJobs.metricsAria")}>
+        {[
+          { label: tk("automationJobs.metric.review"), value: reviewJobs.length, tone: "text-purple-500" },
+          { label: tk("automationJobs.metric.active"), value: activeJobs.length, tone: "text-orange-500" },
+          { label: tk("automationJobs.metric.runners"), value: onlineRunners.length, tone: onlineRunners.length > 0 ? "text-green-500" : "text-muted-foreground" },
+          { label: tk("automationJobs.metric.total"), value: jobs.length, tone: "text-foreground" }
+        ].map((metric) => (
+          <div key={metric.label} className="min-w-0 border-b border-r border-border px-4 py-3 last:border-r-0 md:border-b-0">
+            <p className="text-xs font-medium text-muted-foreground">{metric.label}</p>
+            <p className={cn("mt-1 font-mono text-2xl font-semibold tabular-nums", metric.tone)}>{metric.value}</p>
           </div>
-        </div>
-      )}
+        ))}
+      </section>
 
       {actionError && (
-        <div className="rounded-md border border-destructive/20 bg-destructive/5 px-4 py-2 text-sm text-destructive">
+        <div className="mb-5 rounded-md border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           {actionError}
         </div>
       )}
 
-      {/* Jobs list */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-            <Bot className="h-4 w-4" /> Jobs
-          </h3>
-          <select
-            className={selectCls}
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-          >
-            <option value="">All statuses</option>
-            {(["QUEUED", "APPROVED", "CLAIMED", "RUNNING", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED"] as AutomationJobStatus[]).map((s) => (
-              <option key={s} value={s}>{s}</option>
-            ))}
-          </select>
-        </div>
+      <div className="grid min-w-0 gap-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]" data-testid="automation-jobs-workspace">
+        <aside className="min-w-0 self-start overflow-hidden rounded-lg border border-border bg-card lg:sticky lg:top-4" aria-label={tk("automationJobs.queueAria")}>
+          <div className="flex min-h-14 items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <div className="flex items-center gap-2">
+              <ListChecks className="h-4 w-4 text-primary" />
+              <div>
+                <h2 className="text-sm font-semibold text-foreground">{tk("automationJobs.queueTitle")}</h2>
+                <p className="mt-0.5 text-xs text-muted-foreground">{tk("automationJobs.queueDescription")}</p>
+              </div>
+            </div>
+            <span className="rounded-md border border-border bg-muted/20 px-2 py-1 font-mono text-xs tabular-nums text-muted-foreground">{visibleJobs.length}</span>
+          </div>
 
-        {loading ? (
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        ) : error ? (
-          <p className="text-sm text-destructive">{error}</p>
-        ) : jobs.length === 0 ? (
-          <Card className="p-8 text-center">
-            <Bot className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm text-muted-foreground">No automation jobs yet.</p>
-            <p className="text-xs text-muted-foreground mt-1">Create one from a Work Order page.</p>
-          </Card>
-        ) : (
-          <div className="space-y-2">
-            {jobs.map((job) => (
-              <Card
-                key={job.id}
-                className={cn("p-4 cursor-pointer transition-colors hover:bg-accent/40", selectedJob?.id === job.id && "ring-1 ring-primary")}
-                onClick={() => loadDetail(job.id)}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={cn("inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium border", statusColor(job.status))}>
-                        {statusIcon(job.status)}
-                        {job.status}
-                      </span>
-                      <ModeBadge mode={job.mode} />
-                      <ContextBadge status={job.contextValidationStatus} />
-                      {autoValidationProvenance(job) && <LivingLoopSourceBadge />}
-                      {autoSandboxPatchProvenance(job) && <AutoSandboxPatchBadge />}
-                      {job.runner && (
-                        <span className="text-xs text-muted-foreground">Runner: {job.runner.name}</span>
-                      )}
+          <div className="border-b border-border p-4">
+            <div className="grid grid-cols-2 gap-2">
+              {([
+                ["REVIEW", tk("automationJobs.quick.review"), reviewJobs.length],
+                ["ACTIVE", tk("automationJobs.quick.active"), activeJobs.length],
+                ["FAILED", tk("automationJobs.quick.failed"), failedJobs.length],
+                ["HISTORY", tk("automationJobs.quick.history"), historyJobs.length],
+                ["ALL", tk("automationJobs.quick.all"), jobs.length]
+              ] as Array<[QueueView, string, number]>).map(([value, label, count]) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={queueView === value}
+                  onClick={() => { setQueueView(value); setStatusFilter(""); }}
+                  className={cn("min-h-12 rounded-md border px-3 py-2 text-left text-xs transition-colors", queueView === value ? "border-primary/60 bg-primary/10 text-foreground" : "border-border bg-muted/20 text-muted-foreground hover:text-foreground")}
+                >
+                  <span className="block font-semibold">{label}</span>
+                  <span className="font-mono tabular-nums">{count}</span>
+                </button>
+              ))}
+            </div>
+
+            <details className="group mt-3 rounded-lg border border-border bg-background/25">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2"><Filter className="h-4 w-4 text-primary" />{tk("automationJobs.advancedFilter")}</span>
+                <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+              </summary>
+              <div className="border-t border-border p-3">
+                <label htmlFor="automation-status-filter" className="mb-1.5 block text-xs font-medium text-muted-foreground">{tk("automationJobs.statusFilter")}</label>
+                <select id="automation-status-filter" className={selectCls} value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                  <option value="">{tk("automationJobs.allStatuses")}</option>
+                  {(["QUEUED", "APPROVED", "CLAIMED", "RUNNING", "NEEDS_REVIEW", "COMPLETED", "FAILED", "CANCELLED"] as AutomationJobStatus[]).map((status) => (
+                    <option key={status} value={status}>{status}</option>
+                  ))}
+                </select>
+              </div>
+            </details>
+
+            {runners.length > 0 && (
+              <details className="group mt-3 rounded-lg border border-border bg-background/25">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+                  <span className="flex items-center gap-2"><Server className="h-4 w-4 text-primary" />{tk("automationJobs.runnersTitle")}</span>
+                  <span className="flex items-center gap-2"><span className="font-mono text-xs text-muted-foreground">{onlineRunners.length}/{runners.length}</span><ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" /></span>
+                </summary>
+                <div className="space-y-2 border-t border-border p-3">
+                  {runners.map((runner) => (
+                    <div key={runner.id} className="rounded-md border border-border bg-muted/15 p-2.5 text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("h-2 w-2 rounded-full", runner.status === "ONLINE" ? "bg-green-500" : "bg-gray-400")} />
+                        <span className="min-w-0 flex-1 truncate font-semibold">{runner.name}</span>
+                        <span className={cn("rounded-md border px-1.5 py-0.5 font-mono text-[10px]", runnerStatusColor(runner.status))}>{runner.status}</span>
+                      </div>
+                      {runner.hostname && <p className="mt-1 truncate text-muted-foreground">{runner.hostname}</p>}
+                      {runner.lastHeartbeatAt && <p className="mt-0.5 text-muted-foreground">{tk("automationJobs.lastHeartbeat", { date: formatDate(runner.lastHeartbeatAt) })}</p>}
                     </div>
-                    <p className="text-sm font-medium mt-1 truncate">{job.workOrder.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      {job.agent && <span>Agent: {job.agent.name}</span>}
-                      {job.project && <span>Project: {job.project.name}</span>}
-                      <span>{formatDate(job.createdAt)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {job.status === "QUEUED" && (
-                      <Button
-                        className="h-8 text-xs px-3"
-                        variant="outline"
-                        disabled={actionJobId === job.id}
-                        onClick={(e) => { e.stopPropagation(); handleApprove(job.id); }}
-                      >
-                        <Play className="h-3 w-3 mr-1" />
-                        Approve
-                      </Button>
-                    )}
-                    {!["COMPLETED", "CANCELLED", "FAILED"].includes(job.status) && (
-                      <Button
-                        className="h-8 text-xs px-3 text-destructive hover:text-destructive"
-                        variant="ghost"
-                        disabled={actionJobId === job.id}
-                        onClick={(e) => { e.stopPropagation(); handleCancel(job.id); }}
-                      >
-                        <X className="h-3 w-3 mr-1" />
-                        Cancel
-                      </Button>
-                    )}
-                  </div>
+                  ))}
                 </div>
+              </details>
+            )}
+          </div>
 
-                {/* Patch summary / logs preview */}
-                {job.patchSummary && (
-                  <p className="mt-2 text-xs text-muted-foreground border-t pt-2 line-clamp-2">{job.patchSummary}</p>
-                )}
-              </Card>
+          {loading && jobs.length === 0 ? <div className="p-4 text-sm text-muted-foreground">{tk("automationJobs.loading")}</div> : null}
+          {error ? <div className="border-b border-destructive/20 bg-destructive/5 p-4 text-sm text-destructive">{error}</div> : null}
+          {!loading && !error && visibleJobs.length === 0 ? (
+            <div className="p-6 text-center">
+              <Bot className="mx-auto h-7 w-7 text-muted-foreground" />
+              <p className="mt-2 text-sm font-semibold">{tk("automationJobs.emptyTitle")}</p>
+              <p className="mt-1 text-xs text-muted-foreground">{tk("automationJobs.emptyDescription")}</p>
+            </div>
+          ) : null}
+
+          <div className="max-h-[680px] overflow-y-auto overscroll-contain lg:max-h-[calc(100vh-18rem)]">
+            {visibleJobs.map((job) => (
+              <button
+                key={job.id}
+                type="button"
+                aria-pressed={selectedJob?.id === job.id}
+                onClick={() => void loadDetail(job.id)}
+                className={cn("group relative min-h-[126px] w-full border-t border-border p-4 text-left transition-colors hover:bg-muted/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary", selectedJob?.id === job.id && "bg-primary/10")}
+              >
+                <span className={cn("absolute inset-y-0 left-0 w-0.5 bg-primary transition-opacity", selectedJob?.id === job.id ? "opacity-100" : "opacity-0")} />
+                <div className="flex items-start justify-between gap-3">
+                  <h3 className="min-w-0 break-words text-sm font-semibold leading-5 text-foreground group-hover:text-primary">{job.workOrder.title}</h3>
+                  <ArrowRight className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+                </div>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <span className={cn("inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium", statusColor(job.status))} title={job.status}>{statusIcon(job.status)}{job.status}</span>
+                  <ModeBadge mode={job.mode} />
+                  <ContextBadge status={job.contextValidationStatus} />
+                  {autoValidationProvenance(job) && <LivingLoopSourceBadge />}
+                  {autoSandboxPatchProvenance(job) && <AutoSandboxPatchBadge />}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 border-t border-border/60 pt-2 text-xs text-muted-foreground">
+                  {job.project && <span>{job.project.name}</span>}
+                  {job.runner && <span>{job.runner.name}</span>}
+                  <span>{formatDate(job.createdAt)}</span>
+                </div>
+                {job.patchSummary && <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{job.patchSummary}</p>}
+              </button>
             ))}
           </div>
-        )}
-      </div>
+        </aside>
 
-      {/* Detail panel */}
-      {selectedJob && (
-        <Card className="p-5 space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold">Job Detail: {selectedJob.workOrder.title}</h3>
-            <Button variant="ghost" className="h-8 text-xs px-3" onClick={() => setSelectedJob(null)}>
+        <main id="automation-job-detail-pane" className="min-w-0 scroll-mt-20 space-y-5" data-testid="automation-job-detail-pane">
+          {!selectedJob ? (
+            <Card className="flex min-h-[420px] items-center justify-center border-dashed bg-muted/5 text-center">
+              <div className="max-w-sm px-5">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-muted/20 text-primary"><Clipboard className="h-6 w-6" /></div>
+                <h2 className="mt-4 text-lg font-semibold text-foreground">{tk("automationJobs.selectTitle")}</h2>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{tk("automationJobs.selectDescription")}</p>
+              </div>
+            </Card>
+          ) : (
+            <>
+              <section className="rounded-lg border border-border bg-card p-4" data-testid="automation-job-decision-summary">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase text-primary">{tk("automationJobs.nextSafeAction")}</p>
+                    <h2 className="mt-1 break-words text-lg font-semibold text-foreground">{tk("automationJobs.decisionTitle", { title: selectedJob.workOrder.title })}</h2>
+                  </div>
+                  <span className={cn("inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-semibold", statusColor(selectedJob.status))} title={selectedJob.status}>{statusIcon(selectedJob.status)}{selectedJob.status}</span>
+                </div>
+                <p className="mt-3 text-sm leading-6 text-foreground/90">
+                  {tk(`automationJobs.next.${selectedJob.status}`)}
+                </p>
+                <div className="mt-3 flex items-start gap-2 rounded-md border border-primary/25 bg-primary/5 p-3 text-xs text-muted-foreground">
+                  <Shield className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <span>{tk("automationJobs.approvalBoundary")}</span>
+                </div>
+              </section>
+
+              <section className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label={tk("automationJobs.sourcesAria")}>
+                <Link to={`/work-orders?focus=${selectedJob.workOrderId}`} className="rounded-md border border-border bg-muted/15 p-3 transition-colors hover:border-primary/50 hover:bg-primary/5">
+                  <p className="text-xs font-medium text-muted-foreground">{tk("automationJobs.sourceWorkOrder")}</p>
+                  <p className="mt-1 break-words text-sm font-semibold text-foreground">{tk("automationJobs.sourceTitle", { title: selectedJob.workOrder.title })}</p>
+                </Link>
+                {selectedJob.project ? (
+                  <Link to={`/projects/${selectedJob.project.id}`} className="rounded-md border border-border bg-muted/15 p-3 transition-colors hover:border-primary/50 hover:bg-primary/5">
+                    <p className="text-xs font-medium text-muted-foreground">{tk("automationJobs.sourceProject")}</p>
+                    <p className="mt-1 break-words text-sm font-semibold text-foreground">{selectedJob.project.name}</p>
+                  </Link>
+                ) : null}
+                {(autoValidationProvenance(selectedJob) || autoSandboxPatchProvenance(selectedJob)) ? (
+                  <Link to="/living-loop" className="rounded-md border border-border bg-muted/15 p-3 transition-colors hover:border-primary/50 hover:bg-primary/5">
+                    <p className="text-xs font-medium text-muted-foreground">{tk("automationJobs.sourceLivingLoop")}</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{tk("automationJobs.openSource")}</p>
+                  </Link>
+                ) : null}
+              </section>
+
+              <nav className="flex gap-2 overflow-x-auto rounded-lg border border-border bg-card p-2" aria-label={tk("automationJobs.indexAria")}>
+                {[
+                  ["#automation-overview", tk("automationJobs.index.overview")],
+                  ["#automation-execution", tk("automationJobs.index.execution")],
+                  ["#automation-agent-review", tk("automationJobs.index.agentReview")],
+                  ...(patchArtifacts.length > 0 ? [["#automation-patch-review", tk("automationJobs.index.patchReview")]] : []),
+                  ["#automation-history", tk("automationJobs.index.history")]
+                ].map(([href, label]) => (
+                  <a key={href} href={href} className="inline-flex min-h-10 shrink-0 items-center rounded-md px-3 text-xs font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">{label}</a>
+                ))}
+              </nav>
+
+              <Card id="automation-overview" className="p-5 space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground">{tk("automationJobs.detailEyebrow")}</p>
+              <h3 className="mt-0.5 break-words text-base font-semibold">{tk("automationJobs.detailTitle", { title: selectedJob.workOrder.title })}</h3>
+            </div>
+            <Button variant="ghost" className="h-11 w-11 shrink-0 p-0" aria-label={tk("automationJobs.closeDetail")} onClick={() => setSelectedJob(null)}>
               <X className="h-4 w-4" />
             </Button>
           </div>
 
           {detailLoading ? (
-            <p className="text-sm text-muted-foreground">Loading detail...</p>
+            <p className="text-sm text-muted-foreground">{tk("automationJobs.loadingDetail")}</p>
           ) : (
             <>
               <dl className="grid grid-cols-2 md:grid-cols-4 gap-3 text-xs">
                 <div>
-                  <dt className="text-muted-foreground">Status</dt>
+                  <dt className="text-muted-foreground">{tk("automationJobs.field.status")}</dt>
                   <dd className={cn("inline-flex items-center gap-1 mt-0.5 px-2 py-0.5 rounded-full border", statusColor(selectedJob.status))}>
                     {statusIcon(selectedJob.status)} {selectedJob.status}
                   </dd>
                 </div>
-                <div><dt className="text-muted-foreground">Mode</dt><dd className="mt-0.5 font-medium">{modeLabel(selectedJob.mode)}</dd></div>
+                <div><dt className="text-muted-foreground">{tk("automationJobs.field.mode")}</dt><dd className="mt-0.5 font-medium">{modeLabel(selectedJob.mode)}</dd></div>
                 {autoValidationProvenance(selectedJob) && (
                   <div>
-                    <dt className="text-muted-foreground">Source</dt>
+                    <dt className="text-muted-foreground">{tk("automationJobs.field.source")}</dt>
                     <dd className="mt-0.5 space-y-1">
                       <LivingLoopSourceBadge />
                       <Link to="/living-loop" className="block text-primary hover:underline">
@@ -500,7 +579,7 @@ export function AutomationJobsPage() {
                 )}
                 {autoSandboxPatchProvenance(selectedJob) && (
                   <div>
-                    <dt className="text-muted-foreground">Source</dt>
+                    <dt className="text-muted-foreground">{tk("automationJobs.field.source")}</dt>
                     <dd className="mt-0.5 space-y-1">
                       <AutoSandboxPatchBadge />
                       <Link to="/living-loop" className="block text-primary hover:underline">
@@ -513,19 +592,25 @@ export function AutomationJobsPage() {
                     </dd>
                   </div>
                 )}
-                <div><dt className="text-muted-foreground">Created</dt><dd className="mt-0.5">{formatDate(selectedJob.createdAt)}</dd></div>
-                {selectedJob.startedAt && <div><dt className="text-muted-foreground">Started</dt><dd className="mt-0.5">{formatDate(selectedJob.startedAt)}</dd></div>}
-                {selectedJob.completedAt && <div><dt className="text-muted-foreground">Completed</dt><dd className="mt-0.5">{formatDate(selectedJob.completedAt)}</dd></div>}
-                {selectedJob.agent && <div><dt className="text-muted-foreground">Planner Agent</dt><dd className="mt-0.5 font-medium">{selectedJob.agent.name}</dd></div>}
-                {selectedJob.runner && <div><dt className="text-muted-foreground">Runner</dt><dd className="mt-0.5">{selectedJob.runner.name}</dd></div>}
-                {selectedJob.approvedByUser && <div><dt className="text-muted-foreground">Approved By</dt><dd className="mt-0.5">{selectedJob.approvedByUser.displayName}</dd></div>}
+                <div><dt className="text-muted-foreground">{tk("automationJobs.field.created")}</dt><dd className="mt-0.5">{formatDate(selectedJob.createdAt)}</dd></div>
+                {selectedJob.startedAt && <div><dt className="text-muted-foreground">{tk("automationJobs.field.started")}</dt><dd className="mt-0.5">{formatDate(selectedJob.startedAt)}</dd></div>}
+                {selectedJob.completedAt && <div><dt className="text-muted-foreground">{tk("automationJobs.field.completed")}</dt><dd className="mt-0.5">{formatDate(selectedJob.completedAt)}</dd></div>}
+                {selectedJob.agent && <div><dt className="text-muted-foreground">{tk("automationJobs.field.planner")}</dt><dd className="mt-0.5 font-medium">{selectedJob.agent.name}</dd></div>}
+                {selectedJob.runner && <div><dt className="text-muted-foreground">{tk("automationJobs.field.runner")}</dt><dd className="mt-0.5">{selectedJob.runner.name}</dd></div>}
+                {selectedJob.approvedByUser && <div><dt className="text-muted-foreground">{tk("automationJobs.field.approvedBy")}</dt><dd className="mt-0.5">{selectedJob.approvedByUser.displayName}</dd></div>}
               </dl>
+
+              <section id="automation-execution" className="scroll-mt-4 space-y-4 border-t border-border pt-4">
+                <div className="flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />
+                  <h4 className="text-sm font-semibold text-foreground">{tk("automationJobs.executionEvidence")}</h4>
+                </div>
 
               {/* M17E-2: Context binding */}
               {(selectedJob.contextValidationStatus && selectedJob.contextValidationStatus !== "NOT_REQUIRED") || selectedJob.localDocumentSnapshotId ? (
                 <div className="rounded border border-border bg-muted/20 p-3 space-y-1.5">
                   <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <Shield className="h-3.5 w-3.5" /> Context Binding
+                    <Shield className="h-3.5 w-3.5" /> {tk("automationJobs.contextBinding")}
                   </h4>
                   <div className="flex flex-wrap items-center gap-2">
                     <ContextBadge status={selectedJob.contextValidationStatus} />
@@ -541,7 +626,7 @@ export function AutomationJobsPage() {
                     <div>Local docs snapshot: {selectedJob.localDocumentSnapshotId ?? "—"}</div>
                     <div>Repository snapshot: {selectedJob.repositorySnapshotId ?? "—"}</div>
                   </div>
-                  {selectedJob.contextValidationSummary ? (
+                  {Boolean(selectedJob.contextValidationSummary) ? (
                     <details className="text-xs text-muted-foreground">
                       <summary className="cursor-pointer hover:underline">Context provenance</summary>
                       <pre className="mt-1 bg-muted rounded p-2 overflow-auto max-h-32 font-mono whitespace-pre-wrap">
@@ -555,7 +640,7 @@ export function AutomationJobsPage() {
               {/* Step timeline */}
               {selectedJob.steps && selectedJob.steps.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">Step Timeline</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">{tk("automationJobs.stepTimeline")}</h4>
                   <div className="space-y-1.5">
                     {selectedJob.steps.map((step) => (
                       <div key={step.id} className="space-y-1">
@@ -602,9 +687,9 @@ export function AutomationJobsPage() {
               )}
 
               {/* Execution plan */}
-              {selectedJob.planJson && (
+              {Boolean(selectedJob.planJson) && (
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">Execution Plan</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">{tk("automationJobs.executionPlan")}</h4>
                   <pre className="text-xs bg-muted/50 rounded p-3 overflow-auto max-h-48 whitespace-pre-wrap">
                     {JSON.stringify(selectedJob.planJson, null, 2)}
                   </pre>
@@ -614,7 +699,7 @@ export function AutomationJobsPage() {
               {/* Logs preview */}
               {selectedJob.logsPreview && (
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">Logs Preview</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">{tk("automationJobs.logsPreview")}</h4>
                   <pre className="text-xs bg-muted/50 rounded p-3 overflow-auto max-h-32 whitespace-pre-wrap font-mono">
                     {selectedJob.logsPreview}
                   </pre>
@@ -625,7 +710,7 @@ export function AutomationJobsPage() {
               {selectedJob.importedPatchStatus && (
                 <div className="rounded border border-border bg-muted/20 p-3 space-y-1">
                   <h4 className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
-                    <FileCode className="h-3.5 w-3.5" /> Imported Patch
+                    <FileCode className="h-3.5 w-3.5" /> {tk("automationJobs.importedPatch")}
                   </h4>
                   <ImportedPatchStatusBadge status={selectedJob.importedPatchStatus} />
                 </div>
@@ -634,7 +719,7 @@ export function AutomationJobsPage() {
               {/* Patch summary */}
               {selectedJob.patchSummary && (
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">Patch Summary</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-1">{tk("automationJobs.patchSummary")}</h4>
                   <p className="text-xs text-foreground">{selectedJob.patchSummary}</p>
                 </div>
               )}
@@ -642,7 +727,7 @@ export function AutomationJobsPage() {
               {/* Implementation reports */}
               {selectedJob.implementationReports && selectedJob.implementationReports.length > 0 && (
                 <div>
-                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">Implementation Reports</h4>
+                  <h4 className="text-xs font-semibold text-muted-foreground mb-2">{tk("automationJobs.implementationReports")}</h4>
                   {selectedJob.implementationReports.map((report) => (
                     <div key={report.id} className="text-xs border rounded p-3 space-y-1">
                       <p className="font-medium">{report.summary}</p>
@@ -653,18 +738,21 @@ export function AutomationJobsPage() {
                   ))}
                 </div>
               )}
+              </section>
 
-              <AgentReviewCard
-                review={agentReview}
-                isKing={user?.role === "KING"}
-                canRegenerate={selectedJob.status === "NEEDS_REVIEW"}
-                isLoading={agentReviewLoading}
-                onRegenerate={() => void regenerateAgentReview()}
-              />
+              <section id="automation-agent-review" className="scroll-mt-4">
+                <AgentReviewCard
+                  review={agentReview}
+                  isKing={user?.role === "KING"}
+                  canRegenerate={selectedJob.status === "NEEDS_REVIEW"}
+                  isLoading={agentReviewLoading}
+                  onRegenerate={() => void regenerateAgentReview()}
+                />
+              </section>
 
               {/* Patch Review panel */}
               {patchArtifacts.length > 0 && (
-                <div>
+                <div id="automation-patch-review" className="scroll-mt-4">
                   <h4 className="text-xs font-semibold text-muted-foreground mb-2 flex items-center gap-1.5">
                     <Eye className="h-3.5 w-3.5" /> Patch Review ({patchArtifacts.length})
                   </h4>
@@ -687,34 +775,37 @@ export function AutomationJobsPage() {
               )}
 
               {/* Actions in detail view */}
-              <div className="flex flex-wrap gap-2 pt-2 border-t">
+              <div id="automation-history" className="flex scroll-mt-4 flex-wrap gap-2 border-t pt-4">
                 {selectedJob.status === "QUEUED" && (
-                  <Button className="h-8 text-xs px-3" onClick={() => handleApprove(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
+                  <Button className="h-11 text-xs px-3" onClick={() => handleApprove(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
                     <Play className="h-3.5 w-3.5 mr-1.5" />
-                    Approve for Execution
+                    {tk("automationJobs.approveExecution")}
                   </Button>
                 )}
                 {selectedJob.status === "QUEUED" && (
                   <Button
                     variant="outline"
-                    className="h-8 text-xs px-3"
+                    className="h-11 text-xs px-3"
                     onClick={() => { setImportPatchJobId(selectedJob.id); setImportPatchText(""); setImportPatchError(null); }}
                   >
                     <Upload className="h-3.5 w-3.5 mr-1.5" />
-                    Import Patch
+                    {tk("automationJobs.importPatch")}
                   </Button>
                 )}
                 {!["COMPLETED", "CANCELLED", "FAILED"].includes(selectedJob.status) && (
-                  <Button className="h-8 text-xs px-3 text-destructive border-destructive/30" variant="outline" onClick={() => handleCancel(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
+                  <Button className="h-11 text-xs px-3 text-destructive border-destructive/30" variant="outline" onClick={() => handleCancel(selectedJob.id)} disabled={actionJobId === selectedJob.id}>
                     <X className="h-3.5 w-3.5 mr-1.5" />
-                    Cancel
+                    {tk("automationJobs.cancel")}
                   </Button>
                 )}
               </div>
             </>
           )}
-        </Card>
-      )}
+              </Card>
+            </>
+          )}
+        </main>
+      </div>
 
       {/* Import Patch dialog */}
       {importPatchJobId && (
@@ -763,7 +854,7 @@ export function AutomationJobsPage() {
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
 

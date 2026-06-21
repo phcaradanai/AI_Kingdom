@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { AutomationJobDto } from "@/types/api";
 import { AutomationJobsPage } from "./AutomationJobsPage";
 
@@ -56,6 +57,7 @@ vi.mock("@/stores/authStore", () => ({
 
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.removeItem(LANGUAGE_STORAGE_KEY);
 });
 
 beforeEach(() => {
@@ -97,5 +99,37 @@ describe("AutomationJobsPage", () => {
 
     const link = await screen.findByRole("link", { name: /Candidate cand-123 · Run run-1234/ });
     expect(link).toHaveAttribute("href", "/living-loop");
+  });
+
+  it("keeps execution actions in the selected detail instead of the queue", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const queuedJob = { ...baseJob, status: "QUEUED" as const, mode: "SANDBOX_PATCH" as const, provenance: null };
+    apiMocks.automationJobs.mockResolvedValue([queuedJob]);
+    apiMocks.runners.mockResolvedValue([]);
+    apiMocks.automationJob.mockResolvedValue(queuedJob);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+
+    expect(await screen.findByTestId("automation-jobs-workspace")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Approve for Execution/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByText("Validate feature X"));
+
+    expect(await screen.findByTestId("automation-job-decision-summary")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Approve for Execution/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Work Order: Validate feature X/i })).toHaveAttribute("href", "/work-orders?focus=wo-1");
+  });
+
+  it("renders the execution queue chrome in Thai", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    apiMocks.automationJobs.mockResolvedValue([]);
+    apiMocks.runners.mockResolvedValue([]);
+
+    render(<MemoryRouter><AutomationJobsPage /></MemoryRouter>);
+
+    expect(await screen.findByRole("heading", { name: "งานอัตโนมัติ" })).toBeInTheDocument();
+    expect(screen.getByText("คิวดำเนินงาน")).toBeInTheDocument();
+    expect(screen.getByText("ตัวกรองขั้นสูง")).toBeInTheDocument();
+    expect(screen.getByText("ไม่มีงานตรงกับมุมมองนี้")).toBeInTheDocument();
   });
 });

@@ -176,7 +176,7 @@ Wave 1 semantic i18n is complete for Operations, Royal Brief, Living Loop, Kingd
 
 ### Wave 2: Command-to-Execution Lifecycle
 
-Progress: **Wave 2A and Wave 2B complete** - Throne Room command hierarchy, Council archive refinement, and the Work Orders queue-and-detail workspace are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Automation Jobs and Reports remain in the next slices.
+Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hierarchy, Council archive refinement, Work Orders queue-and-detail, and Automation Jobs execution/review workspaces are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Reports remains in the next slice.
 
 ### Wave 2A Layout Contract
 
@@ -197,6 +197,17 @@ Progress: **Wave 2A and Wave 2B complete** - Throne Room command hierarchy, Coun
 - Existing `?focus=` selection, editable source fields, bulk actions, context refresh/stale controls, external-agent assignment, handoff/prompt/report flows, automation jobs, patch review, archive confirmation, RBAC, and API behavior remain unchanged.
 - Mobile composes as queue first and selected detail second. Controls keep 44px touch targets, translated labels wrap inside stable regions, and no sticky element covers actions or the last queue row.
 - Motion is limited to selection, disclosure, focus, hover, and press feedback. Required decisions, context warnings, reports, patch evidence, and source links remain in document flow and never move into a carousel.
+
+### Wave 2C Automation Jobs Layout Contract
+
+- Automation Jobs uses an execution queue and focused review workspace. The left rail owns review priority, status filtering, runner availability, and job selection; the right pane owns execution evidence and every mutating action.
+- Summary metrics form one compact status strip instead of four detached cards. Runner health remains visible near the queue, but host and heartbeat metadata stay secondary to jobs that require attention.
+- `NEEDS_REVIEW`, active, failed, and historical jobs remain available through stable quick filters. Queue rows expose status, mode, context, project, runner, and a concise result summary without placing Approve or Cancel actions in the browsing rail.
+- A selected job keeps status, mode, context freshness, work-order source, King recommendation, and the next safe action above logs or raw execution output. A compact section index links to Overview, Execution, Agent Review, Patch Review, and History.
+- King approval remains explicit and detail-scoped. Approve execution, cancel, import patch, patch approve/reject/revision, branch push, and PR creation keep their current RBAC and lifecycle gates; the UI does not imply that review, branch push, merge, or deploy is automatic.
+- Plans, logs, provenance JSON, command output, full diffs, snapshot ids, and low-level timing remain available through disclosures or bounded code surfaces. Failed validation summaries stay visible before raw stdout/stderr.
+- Mobile composes as queue first and selected detail second. Metrics, quick filters, badges, runner metadata, and action groups wrap inside the viewport with 44px touch targets and no horizontal page scroll.
+- Motion is limited to queue selection, disclosure, focus, hover, press, and status feedback. Required approvals, failures, provenance, patch evidence, and source links remain in normal document flow and never move into a carousel.
 
 | Route | Primary refinement |
 | --- | --- |
