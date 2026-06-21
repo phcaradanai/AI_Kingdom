@@ -235,7 +235,7 @@ Progress: **Wave 2 complete** - Throne Room, Council, Work Orders, Automation Jo
 
 ### Wave 3: Projects and Strategy
 
-Progress: **Wave 3A next** - begin with the project portfolio and project detail because they own context freshness, local documents, active work, artifacts, and export relationships used by later Project Inbox, Artifacts, and Strategy refinement.
+Progress: **Wave 3A complete; Wave 3B next** - Projects now owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Continue with Project Inbox and Artifacts so routing uncertainty and generated evidence inherit the same source-of-truth hierarchy.
 
 ### Wave 3A Projects Layout Contract
 
@@ -245,6 +245,16 @@ Progress: **Wave 3A next** - begin with the project portfolio and project detail
 - Use real context and scan state for status motion. Never animate a scan, repair, or repository refresh unless the API reports that operation as active.
 - Mobile shows the portfolio before project detail and keeps every source/action control at least 44px. Thai labels, long project names, hashes, and repository metadata must wrap or own overflow without widening the page.
 - No project-routing, Prisma, context-binding, local-doc safety, artifact ownership, or export contract changes are part of this slice.
+
+Wave 3A implementation keeps route files thin and separates page orchestration, controller hooks, domain helpers, and presentation sections. `ProjectsPage.tsx` and `ProjectDetailPage.tsx` are below 70 lines, and every new project module is below 220 lines.
+
+### Wave 3B Project Inbox and Artifacts Layout Contract
+
+- Project Inbox uses a compact triage queue plus selected routing evidence. Confidence, deterministic reason, suggested project, source record, and assignment safety stay visible before secondary metadata.
+- Artifacts uses an archive list plus selected evidence detail. Type, project, source ownership, provenance, duplicate state, and source navigation stay visible before long content.
+- Existing deterministic routing, confidence thresholds, single/bulk assignment, artifact mutations, provenance, RBAC, and safe-path behavior remain unchanged.
+- Mobile composes as queue/list first and selected evidence second. Required controls remain at least 44px, translated labels wrap, and long evidence owns overflow without widening the page.
+- Motion is limited to real selection, filtering, disclosure, mutation feedback, hover, press, and focus state. Required routing decisions, confidence evidence, artifact provenance, and source links never move into a carousel.
 
 | Route | Primary refinement |
 | --- | --- |

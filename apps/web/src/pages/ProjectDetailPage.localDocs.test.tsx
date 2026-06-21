@@ -154,7 +154,7 @@ describe("ProjectDetailPage — Local Docs", () => {
 
     renderPage();
 
-    expect(await screen.findByText("Local Docs")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Local Docs" })).toBeInTheDocument();
     expect(screen.getByText("No local docs snapshot yet.")).toBeInTheDocument();
     expect(screen.getByText("No local document roots configured.")).toBeInTheDocument();
   });
@@ -170,7 +170,7 @@ describe("ProjectDetailPage — Local Docs", () => {
     expect(screen.getByText("- dev: vite")).toBeInTheDocument();
     expect(screen.getByText("Express, TypeScript")).toBeInTheDocument();
     expect(screen.getByText(/authService\.ts \(HIGH\)/)).toBeInTheDocument();
-    expect(screen.getByText("12 files scanned (34567 bytes).")).toBeInTheDocument();
+    expect(screen.getAllByText("12 files scanned (34567 bytes).").length).toBeGreaterThan(0);
   });
 
   it("flags a stale snapshot in the status line", async () => {
@@ -212,7 +212,7 @@ describe("ProjectDetailPage — Local Docs", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Scan Now/ }));
 
     await waitFor(() => expect(apiMocks.scanProjectLocalDocumentRoot).toHaveBeenCalledWith("proj-1", "root-1"));
-    expect(await screen.findByText("12 files scanned (34567 bytes).")).toBeInTheDocument();
+    expect((await screen.findAllByText("12 files scanned (34567 bytes).")).length).toBeGreaterThan(0);
   });
 
   it("hides Add Local Root, Scan Now, and file preview from non-privileged roles", async () => {
@@ -221,7 +221,7 @@ describe("ProjectDetailPage — Local Docs", () => {
 
     renderPage();
 
-    expect(await screen.findByText("main-repo")).toBeInTheDocument();
+    expect((await screen.findAllByText("main-repo")).length).toBeGreaterThan(0);
     expect(screen.queryByRole("button", { name: "Add Local Root" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Scan Now/ })).not.toBeInTheDocument();
     expect(screen.queryByText("Preview File (King only)")).not.toBeInTheDocument();
@@ -323,7 +323,32 @@ describe("ProjectDetailPage — Local Docs", () => {
 
     renderPage();
 
-    expect(await screen.findByText("main-repo")).toBeInTheDocument();
+    expect((await screen.findAllByText("main-repo")).length).toBeGreaterThan(0);
     expect(screen.queryByText("Preview File (King only)")).not.toBeInTheDocument();
+  });
+
+  it("exposes the six source-of-truth sections through stable navigation", async () => {
+    setUser("KING");
+    mockBaseApi({ roots: [mockRoot], snapshot: mockSnapshot });
+
+    renderPage();
+
+    expect(await screen.findByRole("navigation", { name: "Project workspace sections" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("href", "#overview");
+    expect(screen.getByRole("link", { name: "Work" })).toHaveAttribute("href", "#work");
+    expect(screen.getByRole("link", { name: "Local Docs" })).toHaveAttribute("href", "#local-docs");
+    expect(screen.getByRole("link", { name: "Repository" })).toHaveAttribute("href", "#repository");
+    expect(screen.getByRole("link", { name: "Artifacts" })).toHaveAttribute("href", "#artifacts");
+    expect(screen.getByRole("link", { name: "Export" })).toHaveAttribute("href", "#export");
+  });
+
+  it("keeps raw local root paths out of the normal project evidence view", async () => {
+    setUser("KING");
+    mockBaseApi({ roots: [{ ...mockRoot, rootPath: "/Users/king/private/castle" }], snapshot: mockSnapshot });
+
+    renderPage();
+
+    expect((await screen.findAllByText("main-repo")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("/Users/king/private/castle")).not.toBeInTheDocument();
   });
 });
