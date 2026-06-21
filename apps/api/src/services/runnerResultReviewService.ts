@@ -19,8 +19,18 @@ export const KING_RECOMMENDATIONS = ["APPROVE", "REJECT", "REQUEST_REVISION", "R
 export type KingRecommendation = typeof KING_RECOMMENDATIONS[number];
 
 type ReviewAutomationJob = AutomationJob & {
-  workOrder?: Pick<WorkOrder, "id" | "title"> | null;
+  workOrder?: Pick<WorkOrder, "id" | "title" | "acceptanceCriteria"> | null;
   steps?: AgentRunStep[];
+};
+
+// M24 Phase C: the AI reviewer assesses whether each decree-specific acceptance
+// criterion (from M24 Phase A) is actually met by the result. This is the reviewer's
+// semantic-verification authority — it can only make the verdict MORE conservative
+// (downgrade a mechanically-passing result), never upgrade a failure to a pass.
+export type AcceptanceCriterionAssessment = {
+  criterion: string;
+  met: boolean;
+  note?: string;
 };
 
 type PatchValidationResultLike = {
@@ -61,6 +71,11 @@ export type ReviewDraft = {
   riskNotes: string[];
   nextActions: string[];
   externalAgentPrompt: string | null;
+  // M24 Phase C: per-criterion semantic assessment from the AI reviewer (in-memory only;
+  // not persisted as a column — unmet criteria are folded into whatFailed/nextActions and
+  // can downgrade the verdict). Absent on the deterministic-only path.
+  acceptanceCriteriaAssessment?: AcceptanceCriterionAssessment[];
+  acceptanceCriteriaDowngraded?: boolean;
   rawModelOutput?: string | null;
 };
 
@@ -117,7 +132,7 @@ export async function createOrUpdateAgentReviewForJob(jobId: string, options: Ge
   const job = await prisma.automationJob.findUnique({
     where: { id: jobId },
     include: {
-      workOrder: { select: { id: true, title: true, assignedAgent: { select: { id: true, isActive: true } } } },
+      workOrder: { select: { id: true, title: true, acceptanceCriteria: true, assignedAgent: { select: { id: true, isActive: true } } } },
       steps: { orderBy: { sequence: "asc" } }
     }
   });
@@ -285,7 +300,8 @@ export function parseAiReviewJson(raw: string): Partial<ReviewDraft> | null {
         whatFailed: stringArrayOrUndefined(parsed.whatFailed),
         riskNotes: stringArrayOrUndefined(parsed.riskNotes),
         nextActions: stringArrayOrUndefined(parsed.nextActions),
-        externalAgentPrompt: stringOrNullOrUndefined(parsed.externalAgentPrompt)
+        externalAgentPrompt: stringOrNullOrUndefined(parsed.externalAgentPrompt),
+        acceptanceCriteriaAssessment: assessmentArrayOrUndefined(parsed.acceptanceCriteriaAssessment)
       };
     } catch {
       // Try the next candidate.
@@ -302,10 +318,31 @@ function mergeAiReview(deterministic: ReviewDraft, ai: Partial<ReviewDraft>, raw
     whatFailed: sanitizeReviewArray(ai.whatFailed, deterministic.whatFailed),
     riskNotes: sanitizeReviewArray(ai.riskNotes, deterministic.riskNotes),
     nextActions: sanitizeReviewArray(ai.nextActions, deterministic.nextActions),
+    acceptanceCriteriaAssessment: ai.acceptanceCriteriaAssessment,
     rawModelOutput: raw.slice(0, 10_000)
   };
+
+  // M24 Phase C: semantic downgrade. When the result mechanically PASSED but the reviewer
+  // found acceptance criteria the work does not actually satisfy, the result does not meet
+  // the King's decree — flip it to NEEDS_FIX / REQUEST_REVISION. This only ever makes the
+  // verdict MORE conservative: it fires solely from a deterministic PASS and never upgrades.
+  const unmet = (ai.acceptanceCriteriaAssessment ?? []).filter((item) => item.met === false);
+  if (deterministic.verdict === "PASS" && unmet.length > 0) {
+    merged.verdict = "NEEDS_FIX";
+    merged.kingRecommendation = "REQUEST_REVISION";
+    merged.acceptanceCriteriaDowngraded = true;
+    const unmetNotes = unmet.map((item) =>
+      `Acceptance criterion not met: ${item.criterion}${item.note ? ` (${item.note})` : ""}`
+    );
+    merged.whatFailed = sanitizeReviewArray([...unmetNotes, ...merged.whatFailed], merged.whatFailed);
+    merged.nextActions = sanitizeReviewArray(
+      ["Request a revision that satisfies the unmet acceptance criteria above.", ...merged.nextActions],
+      merged.nextActions
+    );
+  }
+
   merged.externalAgentPrompt = shouldGenerateExternalPrompt(merged)
-    ? sanitizeReviewText(ai.externalAgentPrompt ?? undefined, 8000) ?? deterministic.externalAgentPrompt
+    ? sanitizeReviewText(ai.externalAgentPrompt ?? undefined, 8000) ?? buildExternalAgentPromptFromDraft(merged, null)
     : null;
   return merged;
 }
@@ -431,8 +468,10 @@ async function findReviewerAgent(): Promise<Agent | null> {
 function buildAiReviewPrompt(input: ReviewInput, deterministic: ReviewDraft): string {
   const report = input.report;
   const patch = input.patchArtifact;
+  const acceptanceCriteria = input.automationJob.workOrder?.acceptanceCriteria ?? [];
   const payload = {
     workOrderTitle: input.automationJob.workOrder?.title ?? input.automationJob.workOrderId,
+    acceptanceCriteria,
     importedPatchStatus: input.automationJob.importedPatchStatus,
     testResult: report?.testResult ?? null,
     failedCommands: deterministic.failedCommands.map((cmd) => ({
@@ -461,9 +500,10 @@ Rules:
 - Do not apply patches.
 - Do not approve patches automatically.
 - Do not push branches, create PRs, merge, or deploy.
-- Return only JSON with keys: summary, whatPassed, whatFailed, riskNotes, nextActions, externalAgentPrompt.
+- Return only JSON with keys: summary, whatPassed, whatFailed, riskNotes, nextActions, externalAgentPrompt, acceptanceCriteriaAssessment.
 - Do not include secrets. Do not include raw local root paths.
-- Preserve the deterministic verdict and King recommendation as the controlling decision.
+- The deterministic verdict and King recommendation are the controlling decision and you cannot make a result look BETTER than it is. You can only flag it as worse.
+- Semantic check: for EACH acceptance criterion, judge from the diff, files changed, and report whether it is actually satisfied. Return acceptanceCriteriaAssessment as an array of { "criterion": <verbatim criterion>, "met": true|false, "note": <short evidence> }. Mark met:false only when the result clearly does not satisfy it; if you genuinely cannot tell from the evidence, mark met:true (do not penalize on uncertainty). When a criterion is unmet, also state it plainly in whatFailed.
 
 Structured runner result:
 ${JSON.stringify(payload, null, 2)}`;
@@ -665,6 +705,23 @@ function stringOrNullOrUndefined(value: unknown): string | null | undefined {
 function stringArrayOrUndefined(value: unknown): string[] | undefined {
   if (!Array.isArray(value)) return undefined;
   return value.filter((item): item is string => typeof item === "string");
+}
+
+function assessmentArrayOrUndefined(value: unknown): AcceptanceCriterionAssessment[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const assessments: AcceptanceCriterionAssessment[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const obj = item as Record<string, unknown>;
+    const criterion = typeof obj.criterion === "string" ? obj.criterion.trim() : "";
+    if (!criterion) continue;
+    // Only an explicit boolean false counts as unmet; anything else is treated as met
+    // so the reviewer never penalizes a result on ambiguity (safe, conservative downgrade).
+    const met = obj.met === false ? false : true;
+    const note = typeof obj.note === "string" && obj.note.trim() ? obj.note.trim().slice(0, 500) : undefined;
+    assessments.push({ criterion: criterion.slice(0, 500), met, ...(note ? { note } : {}) });
+  }
+  return assessments;
 }
 
 function safeString(value: unknown): string | null {
