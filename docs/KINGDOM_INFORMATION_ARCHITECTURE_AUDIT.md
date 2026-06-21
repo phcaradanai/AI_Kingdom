@@ -1,6 +1,6 @@
 # Kingdom Information Architecture Audit
 
-Date: 2026-06-19
+Date: 2026-06-19 (route inventory refreshed 2026-06-21)
 
 Scope: current `apps/web` route surface, information architecture, duplicated command surfaces, source-of-truth usage, and i18n readiness before further Mission Control work.
 
@@ -8,7 +8,7 @@ This is an audit only. It does not redesign the UI, delete pages, rename routes,
 
 ## Executive Summary
 
-The web app currently exposes 37 authenticated routes plus `/login` and the wildcard redirect to `/dashboard`. The current navigation is grouped by broad purpose, but several pages now function as partial command centers over the same operational data:
+The web app currently exposes 38 authenticated routes plus `/login` and the wildcard redirect to `/dashboard`. The current navigation is grouped by broad purpose, but several pages now function as partial command centers over the same operational data:
 
 - `/dashboard`, `/inbox`, `/kingdom/operations`, `/royal-brief`, and `/living-loop` all summarize operational state.
 - `/throne-room`, `/council`, `/work-orders`, `/automation-jobs`, and `/reports` all show parts of the same decree-to-execution lifecycle.
@@ -34,11 +34,11 @@ Routes are defined in `apps/web/src/main.tsx`; nav labels and role visibility ar
 | Route | Component file | Current nav group | Title or page name | Page type |
 | --- | --- | --- | --- | --- |
 | `/login` | `apps/web/src/pages/LoginPage.tsx` | outside app shell | Login | action page |
-| `/dashboard` | `apps/web/src/pages/DashboardPage.tsx` | Kingdom | The Kingdom at a Glance / Mission Control | dashboard |
-| `/throne-room` | `apps/web/src/pages/ThroneRoomPage.tsx` | Kingdom | Live Kingdom / Issue a royal decree | action page |
-| `/kingdom/operations` | `apps/web/src/pages/KingdomOperationsPage.tsx` | Kingdom | Kingdom Operations | dashboard |
-| `/strategy` | `apps/web/src/pages/StrategyPage.tsx` | Kingdom | Strategy Ledger | action/config page |
-| `/inbox` | `apps/web/src/pages/InboxPage.tsx` | Kingdom | What should the King do next? | review dashboard |
+| `/dashboard` | `apps/web/src/pages/DashboardPage.tsx` | Mission Control | The Kingdom at a Glance / Mission Control | dashboard |
+| `/throne-room` | `apps/web/src/pages/ThroneRoomPage.tsx` | Command | Live Kingdom / Issue a royal decree | action page |
+| `/kingdom/operations` | `apps/web/src/pages/KingdomOperationsPage.tsx` | Mission Control | Kingdom Operations | dashboard |
+| `/strategy` | `apps/web/src/pages/StrategyPage.tsx` | Command | Strategy Ledger | action/config page |
+| `/inbox` | `apps/web/src/pages/InboxPage.tsx` | Mission Control | What should the King do next? | review dashboard |
 | `/projects` | `apps/web/src/pages/ProjectsPage.tsx` | Work | Projects | action/config page |
 | `/projects/:id` | `apps/web/src/pages/ProjectDetailPage.tsx` | Work | Project workspace | detail/action page |
 | `/work-orders` | `apps/web/src/pages/WorkOrdersPage.tsx` | Work | Work Orders | action/review page |
@@ -46,7 +46,7 @@ Routes are defined in `apps/web/src/main.tsx`; nav labels and role visibility ar
 | `/artifacts` | `apps/web/src/pages/ArtifactsPage.tsx` | Work | Artifacts | archive/action page |
 | `/reports` | `apps/web/src/pages/ReportsPage.tsx` | Work | Royal Reports | archive/action page |
 | `/memory` | `apps/web/src/pages/MemoryPage.tsx` | Knowledge | Institutional memory | archive/action page |
-| `/council` | `apps/web/src/pages/CouncilPage.tsx` | Knowledge | Council Records | review/action page |
+| `/council` | `apps/web/src/pages/CouncilPage.tsx` | Command | Council Records | review/action page |
 | `/agent-chat` | `apps/web/src/pages/AgentChatPage.tsx` | Knowledge | Agent Chat | action page |
 | `/knowledge-lab` | `apps/web/src/pages/KnowledgeLabPage.tsx` | Knowledge | Knowledge Lab | index page |
 | `/knowledge-lab/candidates` | `apps/web/src/pages/KnowledgeCandidatesPage.tsx` | Knowledge | Knowledge Candidates | review/action page |
@@ -55,12 +55,14 @@ Routes are defined in `apps/web/src/main.tsx`; nav labels and role visibility ar
 | `/vision` | `apps/web/src/pages/VisionPage.tsx` | Knowledge | Kingdom Vision | config/reference page |
 | `/living-agents` | `apps/web/src/pages/LivingAgentsPage.tsx` | Knowledge | Living Agents | dashboard/list page |
 | `/living-agents/:agentId` | `apps/web/src/pages/LivingAgentProfilePage.tsx` | detail route | Living Agent profile | detail dashboard |
-| `/agents` | `apps/web/src/pages/AgentsPage.tsx` | Agents | Agents | config page |
-| `/external-agents` | `apps/web/src/pages/ExternalAgentsPage.tsx` | Agents | External app agents | config page |
-| `/providers` | `apps/web/src/pages/ProvidersPage.tsx` | Agents | AI providers | config page |
-| `/routing` | `apps/web/src/pages/RoutingPage.tsx` | Agents | Routing | config page |
+| `/agents` | `apps/web/src/pages/AgentsPage.tsx` | Agents & Models | Agents | config page |
+| `/external-agents` | `apps/web/src/pages/ExternalAgentsPage.tsx` | Agents & Models | External app agents | config page |
+| `/providers` | `apps/web/src/pages/ProvidersPage.tsx` | Agents & Models | AI providers | config page |
+| `/routing` | `apps/web/src/pages/RoutingPage.tsx` | Agents & Models | Routing | config page |
 | `/automation-jobs` | `apps/web/src/pages/AutomationJobsPage.tsx` | System | Automation Jobs | execution/review page |
-| `/living-loop` | `apps/web/src/pages/LivingLoopPage.tsx` | System | Living Loop | automation review page |
+| `/decree-lineage/:workOrderId` | `apps/web/src/pages/DecreeLineagePage.tsx` | detail route | Decree Lineage | read-only evidence detail |
+| `/living-loop` | `apps/web/src/pages/LivingLoopPage.tsx` | Mission Control | Living Loop | automation review page |
+| `/royal-brief` | `apps/web/src/pages/RoyalBriefPage.tsx` | Mission Control | Royal Brief | generated review document |
 | `/treasury` | `apps/web/src/pages/TreasuryPage.tsx` | System | Treasury | dashboard/config page |
 | `/audit` | `apps/web/src/pages/AuditPage.tsx` | System | Audit Log | read-only review page |
 | `/settings` | `apps/web/src/pages/SettingsPage.tsx` | System | Kingdom configuration | config page |
@@ -109,6 +111,7 @@ Routes are defined in `apps/web/src/main.tsx`; nav labels and role visibility ar
 | `/profile` | Current account identity. | Auth store. | User. | Read-only. | No IA conflict. |
 | `/security` | Session and permissions overview. | Auth store. | User/session. | Logout/session review. | No IA conflict. |
 | `/automation-jobs` | Runner/external execution queue and patch/review detail. | `automationJobs`, `automationJob`, `runners`, `patchArtifacts`, `automationJobAgentReview`, approve/cancel/import/review/push/PR APIs. | AutomationJob, AgentRunner, PatchArtifact, AgentReviewSummary, ExternalAgentRun. | Approve/cancel job, import patch, regenerate review, approve/reject/request revision, push branch, create PR. | Correct owner for execution status and patch review; Work Orders should summarize and link. |
+| `/decree-lineage/:workOrderId` | Show one ordered read-only trace from decree to secretary summary. | `getDecreeLineage` / `GET /api/decree-lineage`; route work-order id plus optional task id. | Task, CouncilSession, AgentResponse, WorkOrder, external prompt/result, PatchArtifact, AgentReviewSummary, AgentKnowledgeCandidate, secretary summary. | Expand evidence details and read the lifecycle trace. | Computed evidence view only; must not become a duplicate lifecycle store or mutation surface. |
 | `/living-loop` | Automation candidate queue, scheduler status, auto-validation settings, run history. | `livingLoopStatus`, `livingLoopRuns`, `automationCandidates`, `settings`, `updateSetting`, candidate approve/reject/archive/apply APIs. | LivingLoopRun, AutomationCandidate, Setting, AutomationJob candidates. | Run loop once, approve/reject/archive/apply candidates, update settings. | Overlaps with Dashboard/Royal Brief/Automation Jobs; should be automation governance detail. |
 | `/royal-brief` | Generated daily summary of activity, blockers, decisions, context health, patch queue, provider status, provenance. | `latestRoyalBrief`, `generateRoyalBrief`, `rebindWorkOrderContext`, `reconcileContextWarnings`. | RoyalBrief, WorkOrder context, PatchArtifact, Provider/Treasury status, LivingLoop status. | Generate brief, rebind contexts, reconcile warnings. | Generated summary; must link back to source pages and avoid direct ownership. |
 | `/inbox` | Live next-action queue across source pages. | `getNextActions`, `refreshWorkOrderContext`. | NextActionItem, WorkOrder context, AutomationJob, Council output, reports. | Filter, refresh context for action, navigate to source. | Very close to Mission Control; likely should be a Mission Control tab or the primary action queue. |

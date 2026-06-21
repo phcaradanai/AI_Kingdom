@@ -19,7 +19,7 @@ The King should be able to answer these questions without hunting:
 
 ## Current Baseline
 
-- 38 user-facing routes: 37 authenticated routes plus `/login`.
+- 39 user-facing routes: 38 authenticated routes plus `/login`.
 - Six sidebar groups with up to 32 visible links for a King account.
 - Desktop shell uses a persistent 256px navigation panel that can collapse to an 80px icon rail; the preference is stored locally per browser.
 - Mobile navigation uses a full-height drawer and keeps the current domain and page visible in the mobile header.
@@ -29,7 +29,7 @@ The King should be able to answer these questions without hunting:
 - The largest pages are difficult to keep visually coherent: Work Orders (1,873 lines), Agents (1,739), Treasury (1,326), Automation Jobs (1,105), and Throne Room (944).
 - All five Mission Control pages and their shared Health/Activity components use semantic English/Thai keys for static chrome; server-provided prose remains source data.
 
-Visual browser inspection was unavailable in the planning session because the in-app browser could not initialize. HTTP smoke checks passed for the web app at port 5174 and the API health endpoint at port 4000. Each implementation wave therefore requires fresh rendered screenshots before acceptance.
+Rendered verification is available. The responsive shell has been checked at 1440x900 and 430x932, including expanded/collapsed desktop navigation, the mobile drawer, and horizontal-overflow checks. The current development endpoints are the web app at port 5173 and API health at port 4000. Each implementation wave still requires fresh rendered checks before acceptance.
 
 ## Visual Direction
 
@@ -181,7 +181,7 @@ Wave 1 semantic i18n is complete for Operations, Royal Brief, Living Loop, Kingd
 
 ### Wave 2: Command-to-Execution Lifecycle
 
-Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hierarchy, Council archive refinement, Work Orders queue-and-detail, and Automation Jobs execution/review workspaces are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Reports remains in the next slice.
+Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hierarchy, Council archive refinement, Work Orders queue-and-detail, and Automation Jobs execution/review workspaces are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Wave 2D (Reports and Decree Lineage) is next.
 
 ### Wave 2A Layout Contract
 
@@ -214,6 +214,16 @@ Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hiera
 - Mobile composes as queue first and selected detail second. Metrics, quick filters, badges, runner metadata, and action groups wrap inside the viewport with 44px touch targets and no horizontal page scroll.
 - Motion is limited to queue selection, disclosure, focus, hover, press, and status feedback. Required approvals, failures, provenance, patch evidence, and source links remain in normal document flow and never move into a carousel.
 
+### Wave 2D Reports and Decree Lineage Layout Contract
+
+- Reports becomes a restrained archive workspace: searchable/filterable document rail, selected report reading pane, and a compact provenance/action rail. Search and selection stay visible without surrounding every section in a separate card.
+- Report editing remains an explicit secondary mode. Delete stays destructive and confirmation-gated; normal browsing must not expose mutation controls as the dominant visual action.
+- Decree Lineage remains read-only and linkable. Recompose its seven stages into one consistent evidence timeline with compact stage geometry, bounded disclosures for long council/prompt/result content, and direct links back to owning Task, Council, Work Order, Automation Job/Patch, Review, Knowledge, and Report records where contracts already provide identifiers.
+- Timeline motion may acknowledge newly available real stages but must not imply progress that the API did not return. Completed, missing, blocked, and review-required states must combine icon, text, and semantic color.
+- Replace hardcoded page chrome on both routes with semantic English/Thai keys while preserving server-provided titles, commands, responses, summaries, identifiers, and raw enums as source data.
+- Wide desktop may use master-detail composition; tablet and mobile must become list/timeline then reading detail with no horizontal page scroll. Required evidence and source links stay in document flow, not a carousel or modal.
+- Existing report search/edit/delete behavior and Decree Lineage API behavior remain unchanged. This slice adds no backend contract, lifecycle, runner, autonomy, or approval changes.
+
 | Route | Primary refinement |
 | --- | --- |
 | `/throne-room` | Make decree entry the first task, latest council result the second, and live Kingdom visualization supporting context. Keep advanced execution handoff actions in a clearly bounded result area. |
@@ -221,6 +231,7 @@ Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hiera
 | `/work-orders` | Split the large surface into queue, focused detail, context/safety, handoff, and execution summary tabs or panels. Keep WorkOrder status and next safe action permanently visible. |
 | `/automation-jobs` | Use execution queue plus focused job detail. Separate runner steps, validation output, patch, and review into explicit tabs with a persistent approval boundary. |
 | `/reports` | Convert to a restrained archive with search/filter toolbar, document list, and reading pane. Preserve Task/Council/trace provenance. |
+| `/decree-lineage/:workOrderId` | Refine the read-only lifecycle evidence timeline, add source navigation and semantic English/Thai chrome, and keep long prompt/result evidence in bounded disclosures. |
 
 ### Wave 3: Projects and Strategy
 
@@ -287,7 +298,7 @@ Every wave follows the same sequence:
 
 ## Acceptance Criteria
 
-- All 38 routes use the same shell, spacing rhythm, typography roles, surface hierarchy, and state patterns.
+- All 39 routes use the same shell, spacing rhythm, typography roles, surface hierarchy, and state patterns.
 - Desktop layouts are symmetric and aligned without forcing unrelated panels to equal visual weight.
 - Mobile navigation does not require scrolling through every route horizontally.
 - No nested decorative cards, oversized tool headings, gradient-orb decoration, or one-color page hierarchy.

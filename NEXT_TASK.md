@@ -1,62 +1,52 @@
 # Next Task
 
-## Premium UX Wave 2: Command-to-Execution Lifecycle
+## Premium UX Wave 2D: Reports and Decree Lineage
 
-Status: **in progress - Wave 2A, Wave 2B, and Wave 2C complete**
+Status: **planned - ready to implement**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 
 ### Goal
 
-Apply the premium visual and interaction system to the command-to-execution lifecycle so the King can issue intent, inspect council evidence, track executable work, review runner results, and read reports without losing source ownership or approval boundaries.
-
-Wave 1 Mission Control foundation and semantic English/Thai migration are complete. Wave 2 must apply purposeful motion, controlled depth, richer color/shape hierarchy, micro-interactions, consistent overlays, Lucide iconography, disciplined typography/spacing, and breakpoint-specific responsive composition.
+Complete the evidence-reading end of the command-to-execution lifecycle. The King should be able to find a report, read it, verify where it came from, inspect the full decree lineage, and return to each owning source without losing context.
 
 ### Scope
 
-- `/throne-room`: decree-first command surface with advanced controls secondary.
-- `/council`: master-detail archive for sessions, role responses, evidence, and reports.
-- `/work-orders`: queue, focused detail, context/safety, handoff, and execution summary hierarchy.
-- `/automation-jobs`: execution queue plus runner, validation, patch, and review detail.
-- `/reports`: searchable archive with document list, reading pane, and provenance.
-- Shared lifecycle patterns: status timeline, source links, detail rail, action boundary, responsive filter drawer, and accessible feedback states.
+- `/reports`: searchable archive, compact document list, selected reading pane, provenance, explicit edit mode, and confirmation-gated delete.
+- `/decree-lineage/:workOrderId`: read-only seven-stage evidence timeline from decree through council, work ownership, external execution, review/knowledge, and Royal Secretary summary.
+- Shared lifecycle patterns: source links, selected state, bounded disclosures, semantic status, empty/loading/error states, and responsive master-detail composition.
+- Semantic English/Thai keys for static chrome only. Server-provided prose and raw audit evidence remain unchanged source data.
 
 ### Constraints
 
-- No route rename, redirect, backend, Prisma, WorkOrder lifecycle, runner, or autonomy changes.
-- Preserve Task, CouncilSession, WorkOrder, AutomationJob, AgentReviewSummary, and Report source ownership.
-- Preserve all existing `?focus=` behavior, APIs, RBAC, context binding, runner policies, and lifecycle transitions.
-- Do not modify server-provided prose or remove raw enum audit evidence.
-- Avoid nested cards, radius above 8px for panels, decorative gradient/orb effects, and mobile all-route pill navigation.
-- Do not put required decisions, queues, reports, audit evidence, or source links inside carousels. Carousels remain optional and bounded.
-- Respect reduced motion, keyboard interaction, accessible overlay focus, 44px mobile touch targets, and the shared z-index scale.
-- Add shared abstractions only when the first migrated page proves the need.
+- No route rename, backend, Prisma, lifecycle, runner, autonomy, or approval changes.
+- Reports remain the final archived counsel source; Decree Lineage remains a computed read-only evidence view.
+- Preserve report search/edit/delete behavior and all current Decree Lineage API parameters.
+- Keep required evidence and source links in normal document flow. Do not hide reports, stages, decisions, or provenance in a carousel.
+- Use real-state motion only, respect reduced motion, maintain keyboard operation, and keep mobile touch targets at least 44px.
+- Avoid nested decorative cards, radius above 8px for panels, accidental empty columns, and horizontal page overflow.
 
 ### Delivery Order
 
-1. Completed: capture desktop/tablet/mobile baselines for the first slice and write the Wave 2A layout contract.
-2. Completed: refine `/throne-room` and `/council` as command and evidence surfaces without duplicating ownership.
-3. Completed: refine `/work-orders` while preserving context gates and safe/blocked action semantics.
-4. Completed: refine `/automation-jobs` with a persistent King approval boundary.
-5. Next: refine `/reports`, then verify the full command-to-execution path in English and Thai.
+1. Capture current Reports and Decree Lineage baselines at 1440px, 1024px, and 430px in English and Thai.
+2. Add focused tests for existing report actions, lineage stage order, source ownership, and mobile-safe rendering.
+3. Refine `/reports` into archive list plus reading pane while preserving mutations and source links.
+4. Refine `/decree-lineage/:workOrderId` into a bounded evidence timeline with source navigation and semantic i18n.
+5. Verify the full path: Throne Room -> Council -> Work Order -> Automation Job -> Decree Lineage -> Report.
+6. Run web typecheck, full web tests, production build, reduced-motion checks, and desktop/mobile screenshots.
 
 ### Acceptance
 
-- The five pages share one lifecycle hierarchy, spacing, typography, panel, toolbar, status, and responsive system.
-- The King can identify the owning record, current state, next safe action, actor, and report trail without scanning duplicate summaries.
-- Thai and English labels do not overlap, clip, or resize fixed controls.
-- Motion and micro-interactions provide state feedback without replaying during routine refreshes, and reduced-motion mode remains fully usable.
-- Drawers, dialogs, tooltips, sticky regions, and responsive view changes preserve focus, provenance, and source navigation.
-- Source links, provenance, filters, `?focus=` behavior, status tooltips, context gates, and lifecycle actions remain intact.
-- Focused page tests cover both languages and critical source links.
-- `npm run typecheck`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web` pass.
+- The King can identify report ownership, current lifecycle stage, actor, next safe action, and evidence source without scanning duplicate summaries.
+- Reports and Decree Lineage use the same spacing, typography, panel, status, disclosure, and responsive system as Waves 2A-2C.
+- Thai and English labels do not overlap, clip, or widen the page.
+- Report edit/delete actions remain explicit and correctly gated; Decree Lineage has no mutation controls.
+- Source links, raw enum evidence, search/filter state, route parameters, and API behavior remain intact.
+- Focused page tests pass, followed by `npm run typecheck --workspace @ai-kingdom/web`, `npm run test --workspace @ai-kingdom/web`, and `npm run build --workspace @ai-kingdom/web`.
 
 ### Baseline
 
-- Runtime baseline: Wave 2C completion is ready to align on `codex/main` and local `main`.
-- Web app responds at `http://127.0.0.1:5174`; API health responds at `http://127.0.0.1:4000/health` in the current local session.
-- Latest recorded web suite: 155/155 passing; root typecheck and web build passing.
-- Full route plan: 38 routes across six implementation waves in `docs/UX_UI_REFINEMENT_PLAN.md`.
-- Wave 1 validation covers all five Mission Control pages in English/Thai and Operations, Royal Brief, and Living Loop at desktop, tablet, and mobile widths. The existing >500 kB bundle warning remains.
-- Wave 2A validation covers Throne Room and Council in English/Thai at 1440px, 1024px, 430px, and 200% zoom. Decree entry, mode disclosure, master-detail selection, evidence disclosure, source links, and explicit work-order creation have focused test coverage.
-- Wave 2B validation covers the Work Orders queue-and-detail workspace in English/Thai at desktop, mobile, and 200% zoom. Explicit creation, quick and advanced filters, section navigation, source-field disclosure, source links, and `?focus=` selection have focused test coverage.
-- Wave 2C validation covers the Automation Jobs execution queue and focused review workspace in English/Thai at desktop, mobile, and 200% zoom. Quick filters, mobile detail handoff, Work Order source links, approval-boundary placement, and runner/patch review preservation have focused test coverage.
+- Branch baseline: `main`, `origin/main`, and `codex/main` aligned at `57bd71d` before this documentation update.
+- Current frontend: 39 routes (38 authenticated plus `/login`) across six UX waves.
+- Latest web validation: 156/156 tests, web typecheck, and production build pass; the existing >500 kB chunk warning remains.
+- Live shell verification passes at 1440x900 and 430x932 with no Dashboard horizontal overflow.
+- Current local endpoints: web `http://localhost:5173`; API health `http://localhost:4000/health`.
