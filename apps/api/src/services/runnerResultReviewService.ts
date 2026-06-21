@@ -342,7 +342,12 @@ function mergeAiReview(deterministic: ReviewDraft, ai: Partial<ReviewDraft>, raw
   }
 
   merged.externalAgentPrompt = shouldGenerateExternalPrompt(merged)
-    ? sanitizeReviewText(ai.externalAgentPrompt ?? undefined, 8000) ?? buildExternalAgentPromptFromDraft(merged, null)
+    // Prefer the model's prompt; else the deterministic one (built with full input context);
+    // else synthesize from the merged draft — the last covers the PASS→NEEDS_FIX downgrade
+    // case where the deterministic prompt was null.
+    ? sanitizeReviewText(ai.externalAgentPrompt ?? undefined, 8000)
+      ?? deterministic.externalAgentPrompt
+      ?? buildExternalAgentPromptFromDraft(merged, null)
     : null;
   return merged;
 }
