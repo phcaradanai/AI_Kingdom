@@ -220,12 +220,17 @@ export function buildProviderRequestBody(params: {
   if (effective.reasoning) {
     const r = effective.reasoning;
     const reasoning: Record<string, unknown> = { exclude: r.exclude };
-    if (r.enabled) {
-      reasoning.effort = r.effort === "none" ? undefined : r.effort;
-    } else {
-      reasoning.effort = "none";
+    // OpenRouter rejects requests that specify BOTH reasoning.effort and
+    // reasoning.max_tokens ("Only one of ... can be specified", 400). They are
+    // mutually exclusive: effort takes precedence; max_tokens is sent only when no
+    // effort is in play (effort explicitly "none"/disabled). A stored agent
+    // modelParameters config carrying both must never reach the provider.
+    const effortValue = r.enabled ? (r.effort === "none" ? undefined : r.effort) : "none";
+    if (effortValue !== undefined) {
+      reasoning.effort = effortValue;
+    } else if (r.max_tokens !== null) {
+      reasoning.max_tokens = r.max_tokens;
     }
-    if (r.max_tokens !== null) reasoning.max_tokens = r.max_tokens;
     // Remove undefined values
     for (const k of Object.keys(reasoning)) {
       if (reasoning[k] === undefined) delete reasoning[k];

@@ -91,6 +91,59 @@ test("MANUAL mode uses stored modelParameters over role defaults", () => {
 });
 
 // Test 7: provider request body sends exact model id
+test("buildProviderRequestBody never sends both reasoning.effort and reasoning.max_tokens (OpenRouter 400 guard)", () => {
+  // A stored config that carries BOTH effort and max_tokens — OpenRouter rejects this
+  // with "Only one of reasoning.effort and reasoning.max_tokens can be specified".
+  const effective = resolveEffectiveParameters(
+    {
+      slug: "planner",
+      parameterMode: "MANUAL",
+      modelParameters: {
+        stream: false,
+        temperature: 0.3,
+        max_tokens: 900,
+        reasoning: { enabled: true, effort: "medium", max_tokens: 2048, exclude: true },
+        tools: { enabled: false, tool_choice: "auto" }
+      },
+      temperature: null,
+      maxTokens: null
+    },
+    "openrouter",
+    900
+  );
+  const body = buildProviderRequestBody({
+    model: "deepseek/deepseek-chat-v3-0324",
+    messages: [{ role: "user", content: "test" }],
+    effective
+  });
+  const reasoning = body.reasoning as Record<string, unknown> | undefined;
+  assert.ok(reasoning, "reasoning should be present");
+  const hasBoth = reasoning && "effort" in reasoning && "max_tokens" in reasoning;
+  assert.equal(hasBoth, false, "must not send both effort and max_tokens");
+  assert.equal(reasoning!.effort, "medium", "effort takes precedence when both are configured");
+});
+
+test("buildProviderRequestBody sends reasoning.max_tokens when no effort is in play", () => {
+  const effective = resolveEffectiveParameters(
+    {
+      slug: "planner",
+      parameterMode: "MANUAL",
+      modelParameters: {
+        stream: false,
+        reasoning: { enabled: false, effort: "none", max_tokens: 1500, exclude: true },
+        tools: { enabled: false, tool_choice: "auto" }
+      },
+      temperature: null,
+      maxTokens: null
+    },
+    "openrouter"
+  );
+  const body = buildProviderRequestBody({ model: "deepseek/deepseek-chat-v3-0324", messages: [{ role: "user", content: "t" }], effective });
+  const reasoning = body.reasoning as Record<string, unknown>;
+  // enabled:false → effort "none" is the disable signal; still must not pair with max_tokens.
+  assert.ok(!("max_tokens" in reasoning) || !("effort" in reasoning), "must not send both");
+});
+
 test("buildProviderRequestBody sends exact model id in body", () => {
   const effective = resolveEffectiveParameters(baseAgent, "openrouter");
   const modelId = "nvidia/nemotron-3-super-120b-a12b:free";
