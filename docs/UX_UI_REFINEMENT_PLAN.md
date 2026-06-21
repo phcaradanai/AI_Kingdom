@@ -235,7 +235,7 @@ Progress: **Wave 2 complete** - Throne Room, Council, Work Orders, Automation Jo
 
 ### Wave 3: Projects and Strategy
 
-Progress: **Wave 3A complete; Wave 3B next** - Projects now owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Continue with Project Inbox and Artifacts so routing uncertainty and generated evidence inherit the same source-of-truth hierarchy.
+Progress: **Waves 3A and 3B complete; Wave 3C Strategy next** - Projects owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Project Inbox and Artifacts now apply the same source-of-truth hierarchy to routing uncertainty and generated evidence. Continue with Strategy Ledger composition.
 
 ### Wave 3A Projects Layout Contract
 
@@ -255,6 +255,14 @@ Wave 3A implementation keeps route files thin and separates page orchestration, 
 - Existing deterministic routing, confidence thresholds, single/bulk assignment, artifact mutations, provenance, RBAC, and safe-path behavior remain unchanged.
 - Mobile composes as queue/list first and selected evidence second. Required controls remain at least 44px, translated labels wrap, and long evidence owns overflow without widening the page.
 - Motion is limited to real selection, filtering, disclosure, mutation feedback, hover, press, and focus state. Required routing decisions, confidence evidence, artifact provenance, and source links never move into a carousel.
+
+Wave 3B implementation keeps both route files thin and splits API/state controllers, pure display models, filters, queue/archive lists, selected evidence detail, and mutation dialogs. `ProjectInboxPage.tsx` is 40 lines, `ArtifactsPage.tsx` is 27 lines, and every new Wave 3B module is below 150 lines. Project Inbox retains deterministic confidence and assignment behavior; Artifacts mirrors backend RBAC by separating create, edit, and delete permissions. Provenance shows field names without rendering arbitrary raw values or local paths.
+
+### Wave 3C Strategy Layout Contract
+
+- `/strategy` becomes a decision workspace with one compact strategic overview and clear Objectives, Opportunities, Assets, and Revenue views. The page must not show all creation forms at once.
+- Creation and editing move into explicit dialogs or drawers, while source ownership, project links, confidence, and current status remain visible in normal document flow.
+- Existing strategy intake, mutation, RBAC, source-link, and project ownership contracts remain unchanged. Long strategic prose and Thai labels must wrap without widening the viewport.
 
 | Route | Primary refinement |
 | --- | --- |
