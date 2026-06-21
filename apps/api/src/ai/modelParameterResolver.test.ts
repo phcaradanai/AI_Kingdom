@@ -144,6 +144,23 @@ test("buildProviderRequestBody sends reasoning.max_tokens when no effort is in p
   assert.ok(!("max_tokens" in reasoning) || !("effort" in reasoning), "must not send both");
 });
 
+test("buildProviderRequestBody adds reasoning headroom to max_tokens so reasoning never starves content", () => {
+  // grand-vizier role → reasoning effort high; requested content budget 900.
+  const effective = resolveEffectiveParameters(baseAgent, "openrouter", 900);
+  assert.equal(effective.reasoning?.enabled, true);
+  assert.equal(effective.reasoning?.effort, "high");
+  const body = buildProviderRequestBody({ model: "deepseek/deepseek-v4-pro", messages: [{ role: "user", content: "t" }], effective });
+  // 900 content + 3072 high-effort reserve
+  assert.equal(body.max_tokens, 900 + 3072);
+});
+
+test("buildProviderRequestBody adds no reasoning headroom when reasoning is off (non-openrouter)", () => {
+  const effective = resolveEffectiveParameters(baseAgent, "openai", 900);
+  assert.equal(effective.reasoning, null);
+  const body = buildProviderRequestBody({ model: "gpt-4o-mini", messages: [{ role: "user", content: "t" }], effective });
+  assert.equal(body.max_tokens, 900);
+});
+
 test("buildProviderRequestBody sends exact model id in body", () => {
   const effective = resolveEffectiveParameters(baseAgent, "openrouter");
   const modelId = "nvidia/nemotron-3-super-120b-a12b:free";
@@ -233,7 +250,8 @@ test("advanced params omit null values", () => {
     "openrouter"
   );
   const body = buildProviderRequestBody({ model: "openrouter/owl-alpha", messages: [{ role: "user", content: "test" }], effective });
-  assert.equal(body.max_tokens, 1000);
+  // reasoning enabled (effort medium) adds 2048 headroom on top of the 1000 content budget
+  assert.equal(body.max_tokens, 1000 + 2048);
   assert.ok(!("frequency_penalty" in body));
   assert.ok(!("presence_penalty" in body));
   assert.ok(!("response_format" in body));

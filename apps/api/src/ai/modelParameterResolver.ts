@@ -186,6 +186,19 @@ export function resolveEffectiveParameters(
 }
 
 // Builds the sanitized request body for the provider (omits nulls and unsupported params)
+// Extra completion-token headroom granted to reasoning so it does not consume the
+// caller's requested content budget. Keyed to effort; 0 when reasoning is off. Generous
+// on purpose — the model still stops when done, so a higher ceiling only avoids truncation.
+function reasoningTokenReserve(reasoning: ReasoningConfig | null): number {
+  if (!reasoning || !reasoning.enabled || reasoning.effort === "none") return 0;
+  switch (reasoning.effort) {
+    case "high": return 3072;
+    case "low": return 1024;
+    case "medium":
+    default: return 2048;
+  }
+}
+
 export function buildProviderRequestBody(params: {
   model: string;
   messages: Array<{ role: string; content: string }>;
@@ -196,7 +209,16 @@ export function buildProviderRequestBody(params: {
 
   body.stream = effective.stream;
 
-  if (effective.max_tokens !== null) body.max_tokens = effective.max_tokens;
+  if (effective.max_tokens !== null) {
+    // Reasoning tokens are billed against the SAME max_tokens budget as the visible
+    // answer (OpenRouter/OpenAI o-series). With a tight max_tokens and reasoning enabled,
+    // a heavy reasoner (e.g. deepseek-v4) spends the budget thinking and the actual answer
+    // is truncated (finish_reason=length) → malformed JSON → "no valid drafts". So when
+    // reasoning is active we ADD headroom on top of the requested content budget. Raising
+    // the ceiling never forces longer output (the model still stops when done), it only
+    // prevents the answer from being starved.
+    body.max_tokens = effective.max_tokens + reasoningTokenReserve(effective.reasoning);
+  }
   if (effective.temperature !== null) body.temperature = effective.temperature;
   if (effective.top_p !== null) body.top_p = effective.top_p;
   if (effective.seed !== null) body.seed = effective.seed;
