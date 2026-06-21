@@ -57,6 +57,58 @@ test("report errors produce NEEDS_FIX / REQUEST_REVISION", () => {
   assert.equal(review.kingRecommendation, "REQUEST_REVISION");
 });
 
+test("M24 Phase C: AI downgrades a mechanically-PASS result when an acceptance criterion is unmet", async () => {
+  const review = await generateAgentReviewDraft(
+    input({ importedPatchStatus: "VALIDATED", riskLevel: "LOW", testResult: "PASSED", acceptanceCriteria: ["GET /api/health/version returns the build version"] }),
+    {
+      useAi: true,
+      aiGenerate: async () => JSON.stringify({
+        summary: "Tests pass but the version field was not added.",
+        acceptanceCriteriaAssessment: [
+          { criterion: "GET /api/health/version returns the build version", met: false, note: "No version field in the diff" }
+        ]
+      })
+    }
+  );
+  assert.equal(review.verdict, "NEEDS_FIX");
+  assert.equal(review.kingRecommendation, "REQUEST_REVISION");
+  assert.equal(review.acceptanceCriteriaDowngraded, true);
+  assert.ok(review.whatFailed.some((item) => /Acceptance criterion not met/.test(item)));
+  // A revision prompt must be available now that the result is no longer APPROVE.
+  assert.ok(review.externalAgentPrompt && review.externalAgentPrompt.length > 0);
+});
+
+test("M24 Phase C: AI keeps PASS when all acceptance criteria are met", async () => {
+  const review = await generateAgentReviewDraft(
+    input({ importedPatchStatus: "VALIDATED", riskLevel: "LOW", testResult: "PASSED", acceptanceCriteria: ["Endpoint returns version"] }),
+    {
+      useAi: true,
+      aiGenerate: async () => JSON.stringify({
+        summary: "Version field added and tests pass.",
+        acceptanceCriteriaAssessment: [{ criterion: "Endpoint returns version", met: true }]
+      })
+    }
+  );
+  assert.equal(review.verdict, "PASS");
+  assert.equal(review.kingRecommendation, "APPROVE");
+  assert.notEqual(review.acceptanceCriteriaDowngraded, true);
+});
+
+test("M24 Phase C: ambiguous (met omitted) does not downgrade a PASS", async () => {
+  const review = await generateAgentReviewDraft(
+    input({ importedPatchStatus: "VALIDATED", riskLevel: "LOW", testResult: "PASSED", acceptanceCriteria: ["Endpoint returns version"] }),
+    {
+      useAi: true,
+      aiGenerate: async () => JSON.stringify({
+        summary: "Cannot confirm from the diff.",
+        acceptanceCriteriaAssessment: [{ criterion: "Endpoint returns version" }]
+      })
+    }
+  );
+  assert.equal(review.verdict, "PASS");
+  assert.equal(review.kingRecommendation, "APPROVE");
+});
+
 test("deterministic fallback works when AI output is invalid", async () => {
   const review = await generateAgentReviewDraft(
     input({ importedPatchStatus: "VALIDATED", riskLevel: "LOW", testResult: "PASSED" }),
@@ -118,6 +170,7 @@ function input(opts: {
   riskLevel?: string;
   testResult?: "NOT_RUN" | "PASSED" | "FAILED" | "PARTIAL";
   errors?: string[];
+  acceptanceCriteria?: string[];
 }): ReviewInput {
   const now = new Date();
   const automationJob = {
@@ -147,7 +200,7 @@ function input(opts: {
     completedAt: now,
     createdAt: now,
     updatedAt: now,
-    workOrder: { id: "wo-test", title: "Test work order" },
+    workOrder: { id: "wo-test", title: "Test work order", acceptanceCriteria: opts.acceptanceCriteria ?? [] },
     steps: []
   } as ReviewInput["automationJob"];
   const report = {
