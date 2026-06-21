@@ -80,6 +80,44 @@ test("create work order and build prompt includes required sections without secr
   }
 });
 
+test("build prompt surfaces planner fileHints from provenance instead of keyword guess", async () => {
+  const { user } = await createUser("KING");
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CLAUDE_CODE" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "Add health version field",
+      objective: "Return the build version from the health endpoint",
+      context: "Backend work order context",
+      instructions: "Update the route and tests.",
+      constraints: "Do not expose secrets.",
+      acceptanceCriteria: ["Endpoint returns version"],
+      validationCommands: ["npm run typecheck"],
+      assignedExternalAgentId: externalAgent.id,
+      createdByUserId: user.id,
+      status: "READY",
+      provenance: {
+        executionMetadata: {
+          riskLevel: "LOW",
+          fileHints: ["apps/api/src/routes/health.ts", "apps/api/src/services/healthService.ts"]
+        }
+      }
+    }
+  });
+
+  try {
+    const prompt = await buildExternalAgentPrompt(workOrder.id, externalAgent.id);
+    assert.match(prompt, /## Files Likely Involved/);
+    assert.match(prompt, /apps\/api\/src\/routes\/health\.ts/);
+    assert.match(prompt, /apps\/api\/src\/services\/healthService\.ts/);
+    // The naive keyword fallback would have emitted the generic "Inspect the repository"
+    // line; concrete hints must replace it.
+    assert.equal(prompt.includes("Inspect the repository to identify the smallest relevant file set."), false);
+  } finally {
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
 test("generate work order from task", async () => {
   const { user } = await createUser("KING");
   const task = await prisma.task.create({

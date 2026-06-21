@@ -88,6 +88,32 @@ test("parsePlannerResponse drops invalid riskLevel and non-array fileHints witho
   assert.equal(result[0]!.fileHints, undefined);
 });
 
+test("parsePlannerResponse captures decree-specific acceptanceCriteria (trimmed + blanks dropped)", () => {
+  const response = JSON.stringify([
+    {
+      title: "Add version endpoint",
+      objective: "Add GET /api/health/version",
+      rationale: "Council execution decision",
+      acceptanceCriteria: ["GET /api/health/version returns 200 with { version }", "", "  health.test.ts passes  "]
+    }
+  ]);
+  const result = parsePlannerResponse(response);
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0]!.acceptanceCriteria, [
+    "GET /api/health/version returns 200 with { version }",
+    "health.test.ts passes"
+  ]);
+});
+
+test("parsePlannerResponse drops non-array acceptanceCriteria without throwing", () => {
+  const response = JSON.stringify([
+    { title: "T", objective: "O", rationale: "R", acceptanceCriteria: "do the thing" }
+  ]);
+  const result = parsePlannerResponse(response);
+  assert.equal(result.length, 1);
+  assert.equal(result[0]!.acceptanceCriteria, undefined);
+});
+
 test("parsePlannerResponse returns empty array on invalid JSON", () => {
   const result = parsePlannerResponse("This is not JSON at all");
   assert.deepEqual(result, []);

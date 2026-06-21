@@ -233,7 +233,7 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     "## Existing Decisions",
     formatList(decisions.length ? decisions : ["No prior implementation decisions are recorded for this work order."]),
     "## Files Likely Involved",
-    inferLikelyFiles(workOrder),
+    resolveLikelyFiles(workOrder),
     "## Constraints",
     formatList(splitLines(workOrder.constraints).concat(SAFETY_WARNINGS)),
     "## Instructions",
@@ -538,6 +538,30 @@ async function createDecisionMemories(report: ImplementationReport) {
       }
     });
   }
+}
+
+/**
+ * M24 Phase A: prefer the concrete file paths the council/planner already identified
+ * (carried in provenance.executionMetadata.fileHints) over the naive keyword guess.
+ * The council understood the task; that understanding should reach the executor instead
+ * of dying in provenance. Falls back to keyword inference when no hints were emitted.
+ */
+function resolveLikelyFiles(workOrder: WorkOrderWithRelations): string {
+  const hints = extractFileHints(workOrder.provenance);
+  if (hints.length > 0) return formatList(hints);
+  return inferLikelyFiles(workOrder);
+}
+
+function extractFileHints(provenance: unknown): string[] {
+  if (!provenance || typeof provenance !== "object" || Array.isArray(provenance)) return [];
+  const executionMetadata = (provenance as Record<string, unknown>).executionMetadata;
+  if (!executionMetadata || typeof executionMetadata !== "object" || Array.isArray(executionMetadata)) return [];
+  const fileHints = (executionMetadata as Record<string, unknown>).fileHints;
+  if (!Array.isArray(fileHints)) return [];
+  return fileHints
+    .filter((hint): hint is string => typeof hint === "string" && hint.trim().length > 0)
+    .map((hint) => hint.trim().slice(0, 200))
+    .slice(0, 20);
 }
 
 function inferLikelyFiles(workOrder: WorkOrderWithRelations): string {
