@@ -34,6 +34,10 @@ export interface PlannerDraft {
   // auto-executed as a sandbox patch, while anything higher pauses for King approval.
   riskLevel?: PlannerRiskLevel;
   fileHints?: string[];
+  // M24 Phase A: concrete, decree-specific acceptance criteria the council derived
+  // for THIS work — replaces the generic boilerplate so the external-agent prompt and
+  // the reviewer have real, checkable criteria. Optional/tolerant; absent ⇒ boilerplate.
+  acceptanceCriteria?: string[];
 }
 
 const PLANNER_RISK_LEVELS: readonly PlannerRiskLevel[] = ["LOW", "MEDIUM", "HIGH", "CRITICAL"];
@@ -318,7 +322,7 @@ async function callPlannerLLM(opts: {
       providerCalls,
       {
         command: task.mode === "BUILD"
-          ? "Review the BUILD council session and Kingdom context below. Generate 0-3 execution-ready draft work orders as a JSON array. Each object must include: title, objective, rationale, riskLevel (one of LOW/MEDIUM/HIGH/CRITICAL based on the council's Execution Decision), and fileHints (array of repo-relative file paths the work expects to touch). Use LOW only for small, well-scoped, low-blast-radius changes. Return only the JSON array."
+          ? "Review the BUILD council session and Kingdom context below. Generate 0-3 execution-ready draft work orders as a JSON array. Each object must include: title, objective, rationale, riskLevel (one of LOW/MEDIUM/HIGH/CRITICAL based on the council's Execution Decision), fileHints (array of repo-relative file paths the work expects to touch), and acceptanceCriteria (array of 2-5 concrete, verifiable conditions specific to THIS decree that prove the work is done correctly — e.g. exact behavior, the file/function changed, the test that must pass; avoid generic boilerplate like 'no secrets exposed'). Use LOW only for small, well-scoped, low-blast-radius changes. Return only the JSON array."
           : "Review the council session and Kingdom context below. Generate 0-3 draft work orders as a JSON array. Return only the JSON array.",
         mode: "PLAN",
         agentName: plannerAgent.name,
@@ -433,13 +437,20 @@ function validateDrafts(parsed: unknown): PlannerDraft[] {
           .map((h) => h.trim().slice(0, 200))
           .slice(0, 20)
       : undefined;
+    const acceptanceCriteria = Array.isArray(obj.acceptanceCriteria)
+      ? obj.acceptanceCriteria
+          .filter((c): c is string => typeof c === "string" && c.trim().length > 0)
+          .map((c) => c.trim().slice(0, 500))
+          .slice(0, 10)
+      : undefined;
 
     drafts.push({
       title,
       objective,
       rationale,
       ...(riskLevel ? { riskLevel } : {}),
-      ...(fileHints && fileHints.length > 0 ? { fileHints } : {})
+      ...(fileHints && fileHints.length > 0 ? { fileHints } : {}),
+      ...(acceptanceCriteria && acceptanceCriteria.length > 0 ? { acceptanceCriteria } : {})
     });
   }
 
@@ -490,12 +501,16 @@ export async function createDraftWorkOrders(
         "Do not expose secrets or store raw secret material.",
         "Do not run backend-initiated shell commands or call external agent APIs."
       ].join("\n"),
-      acceptanceCriteria: [
-        "Requested behavior is implemented.",
-        "Existing Kingdom architecture and conventions are preserved.",
-        "No API keys, tokens, passwords, or secrets are exposed.",
-        "Validation commands are run or clearly reported as not run."
-      ],
+      // M24 Phase A: prefer the council's decree-specific criteria; fall back to the
+      // generic baseline only when the planner did not emit any (e.g. advisory modes).
+      acceptanceCriteria: draft.acceptanceCriteria && draft.acceptanceCriteria.length > 0
+        ? draft.acceptanceCriteria
+        : [
+            "Requested behavior is implemented.",
+            "Existing Kingdom architecture and conventions are preserved.",
+            "No API keys, tokens, passwords, or secrets are exposed.",
+            "Validation commands are run or clearly reported as not run."
+          ],
       validationCommands: [
         "npm run typecheck",
         "npm run test --workspace @ai-kingdom/api",
