@@ -66,6 +66,10 @@ const THAI_TRANSLATIONS: Record<string, string> = {
   Thai: "ภาษาไทย",
   Language: "ภาษา",
   "Display language": "ภาษาที่แสดง",
+  "Desktop navigation": "เมนูนำทางเดสก์ท็อป",
+  "Collapse navigation": "ย่อเมนูนำทาง",
+  "Expand navigation": "ขยายเมนูนำทาง",
+  "Live sync": "ซิงก์สด",
   "Kingdom configuration": "การตั้งค่าราชอาณาจักร",
   "Tune AI provider defaults and system behavior. API keys remain server-only in `.env`.":
     "ปรับค่าเริ่มต้นผู้ให้บริการ AI และพฤติกรรมระบบ คีย์ API อยู่ฝั่งเซิร์ฟเวอร์เท่านั้นใน `.env`",

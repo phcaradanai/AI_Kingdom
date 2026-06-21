@@ -1,6 +1,6 @@
 # UX/UI Refinement Plan
 
-Date: 2026-06-20
+Date: 2026-06-21
 
 Scope: visual system, application shell, responsive behavior, and page-by-page refinement for all routes in `apps/web/src/main.tsx`.
 
@@ -21,8 +21,9 @@ The King should be able to answer these questions without hunting:
 
 - 38 user-facing routes: 37 authenticated routes plus `/login`.
 - Six sidebar groups with up to 32 visible links for a King account.
-- Desktop shell uses a fixed 288px sidebar and one `max-w-7xl` content width for every page type.
-- Mobile navigation renders all visible routes as one horizontal pill strip.
+- Desktop shell uses a persistent 256px navigation panel that can collapse to an 80px icon rail; the preference is stored locally per browser.
+- Mobile navigation uses a full-height drawer and keeps the current domain and page visible in the mobile header.
+- Content width is route-aware (`compact`, `standard`, and `wide`) rather than forcing every page into one maximum width.
 - Surface primitives are visually inconsistent: `Card` uses `rounded-lg`, while `SectionCard` and `StatCard` use `rounded-xl`; shadows, borders, and backgrounds also differ.
 - Many compact labels use uppercase plus wide tracking, which is fragile in Thai.
 - The largest pages are difficult to keep visually coherent: Work Orders (1,873 lines), Agents (1,739), Treasury (1,326), Automation Jobs (1,105), and Throne Room (944).
@@ -42,6 +43,8 @@ Visual browser inspection was unavailable in the planning session because the in
 - Use a spacing rhythm of 4, 8, 12, 16, 24, 32, and 48px. Avoid one-off margins.
 - Keep repeated metric and queue rows at stable heights. Dynamic labels must wrap inside their own region without shifting adjacent controls.
 - Use 8px or smaller radii for cards and panels. Pills remain reserved for status, compact filters, and counts.
+- Treat empty space as intentional structure. In a shared row, related panels must use matched grid tracks and equal visual height, or recompose into a dominant main area plus a deliberately sized rail. Do not leave one long panel beside an unrelated short box with accidental dead space below it.
+- Prefer one strong content region and one supporting region over several uneven boxes. When content lengths differ substantially, stack sections or give each region independent scroll ownership instead of forcing a visually broken side-by-side composition.
 
 ### Surface hierarchy
 
@@ -69,6 +72,8 @@ Visual browser inspection was unavailable in the planning session because the in
 - Use icon buttons with Lucide icons for familiar tools such as refresh, edit, archive, copy, close, and expand; include tooltips where meaning is not obvious.
 - Standardize loading, empty, error, disabled, selected, hover, focus-visible, and stale-data states.
 - Keep all source/provenance links visible and preserve raw enum values in tooltips where audit evidence requires them.
+- Desktop navigation must remain collapsible to an icon rail with accessible names, native tooltips, visible active state, and a persistent user preference. The collapsed state must never remove a route or change RBAC visibility.
+- Real-time cues must be tied to real state. Polling badges, activity pulses, progress, and event insertion motion may show fresh data, but decorative animation must never imply an agent is working when no such state exists.
 
 ### Expressive premium system
 

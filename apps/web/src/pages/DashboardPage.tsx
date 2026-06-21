@@ -89,7 +89,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
       action={<Link to="/inbox" className="text-xs font-semibold text-primary hover:underline">{tk("dashboard.actionInbox")}</Link>}
     >
       <div className="space-y-6">
-        <div className="rounded-lg border border-border border-l-2 border-l-primary bg-card p-5">
+        <div className="min-w-0 overflow-hidden rounded-lg border border-border border-l-2 border-l-primary bg-card p-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{tk("dashboard.whatNext")}</span>
             <span title={action.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
@@ -192,7 +192,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
 function MissionMetric({ label, value, to, source }: { label: string; value: number; to: string; source: string }) {
   const tk = useTk();
   return (
-    <Link to={to} className="min-h-24 rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/45">
+    <Link to={to} className="min-h-24 min-w-0 overflow-hidden rounded-lg border border-border bg-card p-4 transition-colors hover:border-primary/45">
       <div className="text-2xl font-semibold tabular-nums text-foreground">{value}</div>
       <div className="mt-1 text-sm font-semibold text-foreground">{label}</div>
       <div className="mt-2 text-xs text-muted-foreground">{tk("dashboard.sourcePrefix")} {source}</div>
@@ -220,7 +220,7 @@ function MissionSection({ title, icon: Icon, sourceTo, sourceLabel, children }: 
 
 function MissionCardShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border bg-card p-4">
       {children}
     </div>
   );

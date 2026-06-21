@@ -1,4 +1,4 @@
-import { Activity, Archive, Bell, BookOpen, Bot, Brain, ChevronDown, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, Languages, LineChart, LogOut, Menu, MessageSquare, MonitorPlay, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault, X, Zap } from "lucide-react";
+import { Activity, Archive, Bell, BookOpen, Bot, Brain, ChevronDown, ClipboardList, Coins, Cpu, Crown, Eye, FolderKanban, Inbox, Landmark, Languages, LineChart, LogOut, Menu, MessageSquare, MonitorPlay, PanelLeftClose, PanelLeftOpen, Scroll, ScrollText, Settings, Shield, Sparkles, UserCircle, Users, UsersRound, Vault, X, Zap } from "lucide-react";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ import type { UserRole } from "@/types/api";
 const navCategories = [
   {
     name: "Mission Control",
+    icon: Crown,
     items: [
       { to: "/dashboard", label: "Overview", icon: Crown, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/inbox", label: "Action Queue", icon: Zap, roles: ["KING", "CROWN_PRINCE"] },
@@ -32,6 +33,7 @@ const navCategories = [
   },
   {
     name: "Command",
+    icon: Scroll,
     items: [
       { to: "/throne-room", label: "Throne Room", icon: Scroll, roles: ["KING", "CROWN_PRINCE", "MINISTER"] },
       { to: "/council", label: "Council", icon: UsersRound, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
@@ -40,6 +42,7 @@ const navCategories = [
   },
   {
     name: "Work",
+    icon: FolderKanban,
     items: [
       { to: "/projects", label: "Projects", icon: FolderKanban, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
       { to: "/work-orders", label: "Work Orders", icon: ClipboardList, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
@@ -50,6 +53,7 @@ const navCategories = [
   },
   {
     name: "Knowledge",
+    icon: Brain,
     items: [
       { to: "/memory", label: "Memory", icon: Vault, roles: ["KING", "CROWN_PRINCE", "SCRIBE"] },
       { to: "/agent-chat", label: "Agent Chat", icon: MessageSquare, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
@@ -61,6 +65,7 @@ const navCategories = [
   },
   {
     name: "Agents & Models",
+    icon: Bot,
     items: [
       { to: "/agents", label: "Agents", icon: Shield, roles: ["KING"] },
       { to: "/external-agents", label: "External Agents", icon: Bot, roles: ["KING", "CROWN_PRINCE", "MINISTER", "SCRIBE"] },
@@ -70,6 +75,7 @@ const navCategories = [
   },
   {
     name: "System",
+    icon: Settings,
     items: [
       { to: "/automation-jobs", label: "Automation Jobs", icon: Activity, roles: ["KING"] },
       { to: "/treasury", label: "Treasury", icon: Coins, roles: ["KING"] },
@@ -86,6 +92,8 @@ const navCategories = [
 
 const WIDE_ROUTES = ["/dashboard", "/inbox", "/kingdom/operations", "/royal-brief", "/living-loop", "/work-orders", "/automation-jobs", "/agents", "/treasury"];
 const COMPACT_ROUTES = ["/profile", "/security", "/charter", "/vision"];
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "ai-kingdom-sidebar-collapsed";
+const INBOX_POLL_INTERVAL_MS = 30_000;
 
 function routeMatches(pathname: string, route: string) {
   return pathname === route || pathname.startsWith(`${route}/`);
@@ -107,6 +115,9 @@ export function AppLayout() {
   const location = useLocation();
   const [inboxPriorityCount, setInboxPriorityCount] = useState(0);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [desktopNavigationCollapsed, setDesktopNavigationCollapsed] = useState(
+    () => globalThis.localStorage?.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY) === "true"
+  );
   const { language, setLanguage, t } = useI18n();
 
   const visibleCategories = navCategories
@@ -136,18 +147,34 @@ export function AppLayout() {
       return;
     }
 
-    api.getNextActions({ limit: 1 })
-      .then((result) => {
-        if (!cancelled) setInboxPriorityCount(result.summary.criticalCount + result.summary.highCount);
-      })
-      .catch(() => {
-        if (!cancelled) setInboxPriorityCount(0);
-      });
+    const loadPriorityCount = () => {
+      api.getNextActions({ limit: 1 })
+        .then((result) => {
+          if (!cancelled) setInboxPriorityCount(result.summary.criticalCount + result.summary.highCount);
+        })
+        .catch(() => {
+          if (!cancelled) setInboxPriorityCount(0);
+        });
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") loadPriorityCount();
+    };
+
+    loadPriorityCount();
+    const intervalId = window.setInterval(loadPriorityCount, INBOX_POLL_INTERVAL_MS);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
 
     return () => {
       cancelled = true;
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
     };
   }, [user?.role]);
+
+  useEffect(() => {
+    globalThis.localStorage?.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(desktopNavigationCollapsed));
+  }, [desktopNavigationCollapsed]);
 
   useEffect(() => {
     const expire = () => {
@@ -195,16 +222,35 @@ export function AppLayout() {
 
   return (
     <div className="flex min-h-screen bg-background">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-border bg-card lg:flex">
-        <Brand t={t} />
+      <aside
+        aria-label={t("Desktop navigation")}
+        className={cn(
+          "fixed inset-y-0 left-0 z-40 hidden flex-col border-r border-border bg-card shadow-[12px_0_32px_rgba(0,0,0,0.12)] transition-[width] duration-200 motion-reduce:transition-none lg:flex",
+          desktopNavigationCollapsed ? "w-20" : "w-64"
+        )}
+        data-collapsed={desktopNavigationCollapsed}
+      >
+        <Brand t={t} collapsed={desktopNavigationCollapsed} />
+        <button
+          type="button"
+          className="absolute right-[-14px] top-6 z-10 flex h-7 w-7 items-center justify-center rounded-md border border-border bg-card text-muted-foreground shadow-md transition-[border-color,color,transform] duration-150 hover:border-primary/50 hover:text-primary active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background motion-reduce:transition-none"
+          aria-label={t(desktopNavigationCollapsed ? "Expand navigation" : "Collapse navigation")}
+          aria-expanded={!desktopNavigationCollapsed}
+          title={t(desktopNavigationCollapsed ? "Expand navigation" : "Collapse navigation")}
+          onClick={() => setDesktopNavigationCollapsed((current) => !current)}
+        >
+          {desktopNavigationCollapsed ? <PanelLeftOpen className="h-3.5 w-3.5" /> : <PanelLeftClose className="h-3.5 w-3.5" />}
+        </button>
         <NavigationGroups
           categories={visibleCategories}
+          collapsed={desktopNavigationCollapsed}
           inboxPriorityCount={inboxPriorityCount}
           openCategories={openCategories}
           onToggle={toggleCategory}
           t={t}
         />
         <AccountControls
+          collapsed={desktopNavigationCollapsed}
           displayName={user?.displayName}
           email={user?.email}
           role={user?.role}
@@ -250,7 +296,10 @@ export function AppLayout() {
         </div>
       )}
 
-      <main className="flex min-h-screen flex-1 flex-col lg:pl-64">
+      <main className={cn(
+        "flex min-h-screen min-w-0 flex-1 flex-col transition-[padding] duration-200 motion-reduce:transition-none",
+        desktopNavigationCollapsed ? "lg:pl-20" : "lg:pl-64"
+      )}>
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/95 px-4 lg:hidden">
           <div className="min-w-0">
             <div className="truncate text-xs font-medium text-muted-foreground">{t(activeCategory?.name ?? "Mission Control")}</div>
@@ -276,16 +325,21 @@ export function AppLayout() {
 
 type VisibleCategory = {
   name: string;
+  icon: typeof navCategories[number]["icon"];
   items: typeof navCategories[number]["items"];
 };
 
-function Brand({ t, compact = false }: { t: (text: string) => string; compact?: boolean }) {
+function Brand({ t, compact = false, collapsed = false }: { t: (text: string) => string; compact?: boolean; collapsed?: boolean }) {
   return (
-    <div className={cn("flex shrink-0 items-center gap-3", compact ? "px-4 py-4" : "border-b border-border px-5 py-5")}>
-      <div className="flex h-10 w-10 items-center justify-center rounded-md border border-primary/35 bg-primary/10">
+    <div className={cn(
+      "flex shrink-0 items-center border-b border-border",
+      compact ? "gap-3 border-b-0 px-4 py-4" : collapsed ? "justify-center px-3 py-5" : "gap-3 px-5 py-5 pr-10"
+    )}>
+      <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-primary/35 bg-primary/10 transition-[border-color,background-color,transform] duration-150 hover:border-primary/55 hover:bg-primary/15 motion-reduce:transition-none">
         <Crown className="h-5 w-5 text-primary" />
+        <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full border-2 border-card bg-emerald-400 motion-safe:animate-pulse" title={t("Live sync")} />
       </div>
-      <div className="min-w-0">
+      <div className={cn("min-w-0", collapsed && "sr-only")}>
         <div className="truncate font-display text-base font-bold text-primary">{t("AI Kingdom")}</div>
         <div className="truncate text-[11px] font-medium text-muted-foreground">{t("Royal Command")}</div>
       </div>
@@ -293,23 +347,28 @@ function Brand({ t, compact = false }: { t: (text: string) => string; compact?: 
   );
 }
 
-function NavigationGroups({ categories, inboxPriorityCount, openCategories, onToggle, t }: { categories: VisibleCategory[]; inboxPriorityCount: number; openCategories: Set<string>; onToggle: (name: string) => void; t: (text: string) => string }) {
+function NavigationGroups({ categories, collapsed = false, inboxPriorityCount, openCategories, onToggle, t }: { categories: VisibleCategory[]; collapsed?: boolean; inboxPriorityCount: number; openCategories: Set<string>; onToggle: (name: string) => void; t: (text: string) => string }) {
   return (
-    <nav className="flex-1 overflow-y-auto px-3 py-3" aria-label="Primary navigation">
+    <nav className={cn("flex-1 overflow-y-auto py-3", collapsed ? "px-2" : "px-3")} aria-label="Primary navigation">
       <div className="space-y-1">
         {categories.map((category) => {
           const open = openCategories.has(category.name);
+          const CategoryIcon = category.icon;
           return (
             <div key={category.name} className="border-b border-border/60 py-1 last:border-b-0">
               <button
                 type="button"
-                className="flex h-9 w-full items-center justify-between rounded-md px-2 text-left text-xs font-semibold text-muted-foreground hover:bg-muted/60 hover:text-foreground"
+                className={cn(
+                  "flex w-full items-center rounded-md text-xs font-semibold text-muted-foreground transition-[background-color,color,transform] duration-150 hover:bg-muted/60 hover:text-foreground active:scale-[0.98] motion-reduce:transition-none",
+                  collapsed ? "h-7 justify-center px-0" : "h-9 justify-between px-2 text-left"
+                )}
                 aria-expanded={open}
                 aria-label={`${t(category.name)} navigation`}
+                title={collapsed ? t(category.name) : undefined}
                 onClick={() => onToggle(category.name)}
               >
-                <span className="min-w-0 truncate">{t(category.name)}</span>
-                <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-180")} />
+                {collapsed ? <CategoryIcon className="h-3 w-3 opacity-60" /> : <span className="min-w-0 truncate">{t(category.name)}</span>}
+                {!collapsed && <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-180")} />}
               </button>
               {open && (
                 <div className="space-y-0.5 pb-2 pt-1">
@@ -317,18 +376,27 @@ function NavigationGroups({ categories, inboxPriorityCount, openCategories, onTo
                     <NavLink
                       key={item.to}
                       to={item.to}
+                      aria-label={t(item.label)}
+                      title={collapsed ? t(item.label) : undefined}
                       className={({ isActive }) => cn(
-                        "flex min-h-9 items-center gap-3 rounded-md px-2.5 py-2 text-sm font-medium transition-colors",
+                        "relative flex min-h-9 items-center rounded-md py-2 text-sm font-medium transition-[background-color,color,transform] duration-150 active:scale-[0.98] motion-reduce:transition-none",
+                        collapsed ? "justify-center px-0 hover:scale-[1.04]" : "gap-3 px-2.5",
                         isActive
                           ? "bg-primary/10 text-primary shadow-[inset_2px_0_0_0_hsl(var(--primary))]"
                           : "text-muted-foreground hover:bg-muted/60 hover:text-foreground"
                       )}
                     >
-                      <item.icon className="h-4 w-4 shrink-0 opacity-80" />
-                      <span className="min-w-0 flex-1 leading-5">{t(item.label)}</span>
+                      <item.icon className="h-[18px] w-[18px] shrink-0 opacity-80" />
+                      <span className={collapsed ? "sr-only" : "min-w-0 flex-1 leading-5"}>{t(item.label)}</span>
                       {item.to === "/inbox" && inboxPriorityCount > 0 && (
-                        <span className="ml-auto rounded-full border border-amber-500/35 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold leading-none text-amber-300">
-                          {inboxPriorityCount}
+                        <span
+                          className={cn(
+                            "border border-amber-500/35 bg-amber-500/10 text-[10px] font-semibold leading-none text-amber-300",
+                            collapsed ? "absolute right-0.5 top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full px-1" : "ml-auto rounded-full px-2 py-0.5"
+                          )}
+                          aria-live="polite"
+                        >
+                          {inboxPriorityCount > 99 ? "99+" : inboxPriorityCount}
                         </span>
                       )}
                     </NavLink>
@@ -343,7 +411,26 @@ function NavigationGroups({ categories, inboxPriorityCount, openCategories, onTo
   );
 }
 
-function AccountControls({ displayName, email, role, language, onLanguageChange, onSignOut, t }: { displayName?: string; email?: string; role?: string; language: LanguageCode; onLanguageChange: (value: LanguageCode) => void; onSignOut: () => Promise<void>; t: (text: string) => string }) {
+function AccountControls({ collapsed = false, displayName, email, role, language, onLanguageChange, onSignOut, t }: { collapsed?: boolean; displayName?: string; email?: string; role?: string; language: LanguageCode; onLanguageChange: (value: LanguageCode) => void; onSignOut: () => Promise<void>; t: (text: string) => string }) {
+  if (collapsed) {
+    const initial = displayName?.trim().charAt(0).toUpperCase() || "K";
+    return (
+      <div className="flex shrink-0 flex-col items-center gap-2 border-t border-border bg-background/50 p-2">
+        <div
+          className="flex h-10 w-10 items-center justify-center rounded-md border border-primary/25 bg-primary/10 text-sm font-bold text-primary"
+          title={[displayName, email, t(formatRole(role))].filter(Boolean).join(" · ")}
+          aria-label={[displayName, t(formatRole(role))].filter(Boolean).join(", ")}
+        >
+          {initial}
+        </div>
+        <LanguageSelect compact value={language} label={t("Display language")} onChange={onLanguageChange} />
+        <Button className="h-10 w-10 px-0" variant="ghost" onClick={() => void onSignOut()} aria-label={t("Sign out")} title={t("Sign out")}>
+          <LogOut className="h-4 w-4" />
+        </Button>
+      </div>
+    );
+  }
+
   return (
     <div className="shrink-0 border-t border-border bg-background/50 p-4">
       <div className="min-w-0">
@@ -367,7 +454,25 @@ function formatRole(role?: string) {
   return role ? role.replace("_", " ") : "Unknown";
 }
 
-function LanguageSelect({ value, label, onChange }: { value: LanguageCode; label: string; onChange: (value: LanguageCode) => void }) {
+function LanguageSelect({ value, label, onChange, compact = false }: { value: LanguageCode; label: string; onChange: (value: LanguageCode) => void; compact?: boolean }) {
+  if (compact) {
+    return (
+      <label className="relative flex h-10 w-10 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary" title={label}>
+        <Languages className="h-4 w-4" />
+        <select
+          className="absolute inset-0 cursor-pointer opacity-0"
+          aria-label={label}
+          value={value}
+          onChange={(event) => onChange(normalizeLanguage(event.target.value))}
+        >
+          {SUPPORTED_LANGUAGES.map((language) => (
+            <option key={language.code} value={language.code}>{language.nativeLabel}</option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
   return (
     <label className="mt-3 flex w-full items-center gap-2 rounded-md border border-border bg-background px-2.5 py-2 text-xs text-muted-foreground">
       <Languages className="h-3.5 w-3.5 shrink-0 text-primary" />

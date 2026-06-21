@@ -84,4 +84,21 @@ describe("AppLayout navigation", () => {
     fireEvent.click(closeButtons.at(-1)!);
     expect(screen.queryByRole("dialog", { name: "Application navigation" })).not.toBeInTheDocument();
   });
+
+  it("collapses the desktop navigation to an accessible icon rail and remembers the preference", () => {
+    const { unmount } = renderLayout();
+    const desktopNavigation = screen.getByLabelText("Desktop navigation");
+
+    expect(desktopNavigation).toHaveAttribute("data-collapsed", "false");
+    fireEvent.click(screen.getByRole("button", { name: "Collapse navigation" }));
+
+    expect(desktopNavigation).toHaveAttribute("data-collapsed", "true");
+    expect(screen.getByRole("link", { name: "Overview" })).toHaveAttribute("title", "Overview");
+    expect(localStorage.getItem("ai-kingdom-sidebar-collapsed")).toBe("true");
+
+    unmount();
+    renderLayout();
+    expect(screen.getByLabelText("Desktop navigation")).toHaveAttribute("data-collapsed", "true");
+    expect(screen.getByRole("button", { name: "Expand navigation" })).toHaveAttribute("aria-expanded", "false");
+  });
 });
