@@ -16,6 +16,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { getNumberSetting, getSettingValue } from "./settingsService.js";
 import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
+import { maybeAutoExecuteBuildWorkOrder } from "./buildDecreeAutoExecutionService.js";
 import { createWorkOrder } from "./externalAgentWorkOrderService.js";
 import { getWorkOrderRecommendations } from "./externalAgentRecommendationService.js";
 import { auditLog } from "./auditService.js";
@@ -563,6 +564,26 @@ export async function createDraftWorkOrders(
         }
       }).catch(() => undefined);
       drafted++;
+
+      // M23 C-2: for a LOW-risk BUILD work order with fresh context, auto-dispatch to
+      // the external-agent (Claude Code) bridge so the King's decree runs end-to-end.
+      // Gated + guardrailed inside the service; never throws, only traces its outcome.
+      const autoExec = await maybeAutoExecuteBuildWorkOrder({
+        workOrderId: result.workOrder.id,
+        taskMode: task.mode,
+        riskLevel: draft.riskLevel,
+        fileHints: draft.fileHints,
+        projectId: task.projectId,
+        userId
+      });
+      traceCouncilWorkOrderStep(traceId, "Auto Execute", {
+        sessionId: session.id,
+        workOrderId: result.workOrder.id,
+        executed: autoExec.executed,
+        jobId: autoExec.jobId ?? null,
+        skipReason: autoExec.skipReason ?? null
+      });
+
       if (limitToOne) break;
     } else {
       skipped++;

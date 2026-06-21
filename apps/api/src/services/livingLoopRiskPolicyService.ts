@@ -21,10 +21,23 @@ export type RiskPolicyResult = {
   auditAction?: string;
 };
 
-const BLOCKED_PATHS = [
+export const BLOCKED_PATHS = [
   "auth", "rbac", "provider", "runner", "policy", "secret", "migration",
   "prisma/schema.prisma", "deploy", "docker", ".github", "package.json", "package-lock.json", ".env", "config"
 ];
+
+/**
+ * Returns the first file hint that touches a sensitive/blocked path, or null when
+ * every hint is safe. Shared by the Living Loop auto-patch gate and the M23
+ * decree→execution auto-router so both refuse to auto-touch high-blast-radius areas.
+ */
+export function findBlockedPathHint(hints: readonly string[]): string | null {
+  for (const hint of hints) {
+    const lower = hint.toLowerCase();
+    if (BLOCKED_PATHS.some((b) => lower.includes(b))) return hint;
+  }
+  return null;
+}
 
 export function isAutoPatchEligible(ctx: RiskPolicyContext): RiskPolicyResult {
   if (ctx.todayJobCount >= ctx.maxDailyJobs) {

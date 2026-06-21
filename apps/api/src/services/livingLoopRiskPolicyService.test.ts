@@ -1,6 +1,24 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { isAutoPatchEligible, RiskPolicyContext } from "./livingLoopRiskPolicyService.js";
+import { findBlockedPathHint, isAutoPatchEligible, RiskPolicyContext } from "./livingLoopRiskPolicyService.js";
+
+describe("findBlockedPathHint", () => {
+  it("returns null when every hint is safe", () => {
+    assert.strictEqual(findBlockedPathHint(["apps/api/src/routes/health.ts", "apps/web/src/pages/Foo.tsx"]), null);
+  });
+  it("returns null for empty hints", () => {
+    assert.strictEqual(findBlockedPathHint([]), null);
+  });
+  it("flags a blocked path (auth)", () => {
+    assert.strictEqual(findBlockedPathHint(["apps/api/src/middleware/auth.ts"]), "apps/api/src/middleware/auth.ts");
+  });
+  it("flags prisma schema / migrations / secrets / package.json", () => {
+    assert.ok(findBlockedPathHint(["prisma/schema.prisma"]));
+    assert.ok(findBlockedPathHint(["package.json"]));
+    assert.ok(findBlockedPathHint(["apps/api/.env"]));
+    assert.ok(findBlockedPathHint(["src/secretStore.ts"]));
+  });
+});
 
 describe("M17D-3: Living Loop Risk Policy Service", () => {
   const baseCtx: RiskPolicyContext = {
