@@ -181,7 +181,7 @@ Wave 1 semantic i18n is complete for Operations, Royal Brief, Living Loop, Kingd
 
 ### Wave 2: Command-to-Execution Lifecycle
 
-Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hierarchy, Council archive refinement, Work Orders queue-and-detail, and Automation Jobs execution/review workspaces are complete with semantic English/Thai chrome, focused interaction coverage, and responsive live verification. Wave 2D (Reports and Decree Lineage) is next.
+Progress: **Wave 2 complete** - Throne Room, Council, Work Orders, Automation Jobs, Reports, and Decree Lineage now share the premium command-to-evidence hierarchy, semantic English/Thai chrome, explicit source ownership, focused interaction coverage, and responsive live verification.
 
 ### Wave 2A Layout Contract
 
@@ -234,6 +234,17 @@ Progress: **Wave 2A, Wave 2B, and Wave 2C complete** - Throne Room command hiera
 | `/decree-lineage/:workOrderId` | Refine the read-only lifecycle evidence timeline, add source navigation and semantic English/Thai chrome, and keep long prompt/result evidence in bounded disclosures. |
 
 ### Wave 3: Projects and Strategy
+
+Progress: **Wave 3A next** - begin with the project portfolio and project detail because they own context freshness, local documents, active work, artifacts, and export relationships used by later Project Inbox, Artifacts, and Strategy refinement.
+
+### Wave 3A Projects Layout Contract
+
+- `/projects` becomes a compact portfolio workspace. Each row must expose project status, priority, context freshness, active work, and the next safe project action without expanding into oversized cards.
+- `/projects/:id` keeps the project as the owning source for routing, local document roots, snapshots, repository context, related work, artifacts, and export. Recompose the page around a stable project header, health/status strip, and bounded Overview, Work, Local Docs, Repository, Artifacts, and Export sections.
+- Creation and edit remain explicit role-gated actions. Local-doc scan, context repair, root management, and export keep their existing API, RBAC, safe-path, and no-raw-root/no-secret boundaries.
+- Use real context and scan state for status motion. Never animate a scan, repair, or repository refresh unless the API reports that operation as active.
+- Mobile shows the portfolio before project detail and keeps every source/action control at least 44px. Thai labels, long project names, hashes, and repository metadata must wrap or own overflow without widening the page.
+- No project-routing, Prisma, context-binding, local-doc safety, artifact ownership, or export contract changes are part of this slice.
 
 | Route | Primary refinement |
 | --- | --- |
