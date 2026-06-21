@@ -45,6 +45,7 @@ import workSessionsRouter from "./routes/workSessions.js";
 import routeChainsRouter from "./routes/routeChains.js";
 import runnersRouter from "./routes/runners.js";
 import automationJobsRouter from "./routes/automationJobs.js";
+import decreeLineageRouter from "./routes/decreeLineage.js";
 import runnerJobsRouter from "./routes/runnerJobs.js";
 import patchArtifactsRouter from "./routes/patchArtifacts.js";
 import livingLoopRouter from "./routes/livingLoop.js";
@@ -134,6 +135,7 @@ export function createApp() {
   // User-facing (JWT) routes for managing runners and automation jobs
   app.use("/api/runners", requireAuth, runnersRouter);
   app.use("/api/automation-jobs", requireAuth, automationJobsRouter);
+  app.use("/api/decree-lineage", requireAuth, decreeLineageRouter);
   app.use("/api/patch-artifacts", patchArtifactsRouter);
   // Runner-token authenticated routes — NO requireAuth, uses requireRunnerToken inside router
   app.use("/api/runner", runnerJobsRouter);

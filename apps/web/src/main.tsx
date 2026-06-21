@@ -36,6 +36,7 @@ import { KnowledgeCandidatesPage } from "@/pages/KnowledgeCandidatesPage";
 import { KnowledgeMemoriesPage } from "@/pages/KnowledgeMemoriesPage";
 import { RoutingPage } from "@/pages/RoutingPage";
 import { AutomationJobsPage } from "@/pages/AutomationJobsPage";
+import { DecreeLineagePage } from "@/pages/DecreeLineagePage";
 import { LivingLoopPage } from "@/pages/LivingLoopPage";
 import { RoyalBriefPage } from "@/pages/RoyalBriefPage";
 import { InboxPage } from "@/pages/InboxPage";
@@ -89,6 +90,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/profile" element={<ProfilePage />} />
             <Route path="/security" element={<SecurityPage />} />
             <Route path="/automation-jobs" element={<AutomationJobsPage />} />
+            <Route path="/decree-lineage/:workOrderId" element={<DecreeLineagePage />} />
             <Route path="/living-loop" element={<LivingLoopPage />} />
             <Route path="/royal-brief" element={<RoyalBriefPage />} />
             <Route path="/inbox" element={<InboxPage />} />

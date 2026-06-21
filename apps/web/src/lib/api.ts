@@ -104,6 +104,7 @@ import type {
   KingdomActivityStreamDto,
   KingdomAssetDto,
   KingdomHealthDto,
+  DecreeLineageDto,
   KingdomObjectiveDto,
   KingdomOpportunityDto,
   OpportunityExperimentDto,
@@ -769,6 +770,14 @@ export const api = {
   getKingdomPresence: () => apiRequest<KingdomPresenceDto>("/kingdom/presence"),
   getKingdomActivity: (limit = 50) => apiRequest<KingdomActivityStreamDto>(`/kingdom/activity?limit=${limit}`),
   getKingdomHealth: () => apiRequest<KingdomHealthDto>("/kingdom/health"),
+
+  // ── M23: Decree Lineage (ordered King-facing trace) ──────────────────────────
+  getDecreeLineage: (params: { workOrderId?: string; taskId?: string }) => {
+    const q = new URLSearchParams();
+    if (params.workOrderId) q.set("workOrderId", params.workOrderId);
+    if (params.taskId) q.set("taskId", params.taskId);
+    return apiRequest<{ lineage: DecreeLineageDto }>(`/decree-lineage?${q.toString()}`);
+  },
 
   // ── M20: Kingdom Strategy Ledger ─────────────────────────────────────────────
   getStrategyOverview: () => apiRequest<{ overview: StrategyOverviewDto }>("/strategy/overview"),

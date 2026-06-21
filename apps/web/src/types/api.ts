@@ -2655,3 +2655,77 @@ export type StrategyExperimentPayload = Partial<Omit<OpportunityExperimentDto, "
   opportunityId: string;
   title: string;
 };
+
+// ── M23: Decree Lineage (ordered King-facing trace) ──────────────────────────
+export type LineageAgentRef = { id: string; name: string; title: string | null } | null;
+
+export interface DecreeLineageDto {
+  anchor: { workOrderId: string | null; taskId: string | null; sessionId: string | null };
+  decree: {
+    id: string;
+    title: string;
+    command: string;
+    mode: string;
+    createdAt: string;
+    createdByName: string | null;
+  } | null;
+  council: {
+    id: string;
+    finalSummary: string | null;
+    fallbackNotice: string | null;
+    createdAt: string;
+    responses: Array<{ role: string; agent: LineageAgentRef; response: string }>;
+  } | null;
+  owner: {
+    workOrderId: string;
+    title: string;
+    status: string;
+    contextBindingStatus: string | null;
+    executionTarget: string | null;
+    assignedAgent: LineageAgentRef;
+    assignedAgentReason: string | null;
+    assignedExternalAgentName: string | null;
+  } | null;
+  externalPrompt: {
+    runId: string;
+    externalAgentName: string | null;
+    inputPrompt: string;
+  } | null;
+  externalResult: {
+    runId: string;
+    status: string;
+    exitCode: number | null;
+    outputText: string | null;
+    completedAt: string | null;
+    patches: Array<{
+      id: string;
+      validationStatus: string | null;
+      riskLevel: string | null;
+      filesChanged: string[];
+      diffStat: string | null;
+    }>;
+  } | null;
+  review: {
+    reviewerAgent: LineageAgentRef;
+    verdict: string;
+    confidence: string;
+    kingRecommendation: string;
+    summary: string;
+    createdAt: string;
+    knowledge: Array<{
+      id: string;
+      title: string;
+      summary: string | null;
+      status: string;
+      category: string | null;
+      proposedByAgent: LineageAgentRef;
+    }>;
+  } | null;
+  secretarySummary: {
+    id: string | null;
+    title: string;
+    summary: string;
+    createdAt: string | null;
+    synthesized: boolean;
+  } | null;
+}
