@@ -1,7 +1,9 @@
-type AgentPortraitInput = {
+export type AgentPortraitInput = {
   slug?: string | null;
   name?: string | null;
   title?: string | null;
+  displayName?: string | null;
+  displayTitle?: string | null;
   avatarUrl?: string | null;
   avatarVersion?: number | null;
 };
@@ -48,7 +50,7 @@ export function getAgentPortrait(agent?: AgentPortraitInput | null): string | nu
   const resolved = resolveAvatarUrl(agent.avatarUrl, agent.avatarVersion);
   if (resolved) return resolved;
 
-  const keys = [agent.slug, agent.name, agent.title].flatMap((value) => {
+  const keys = [agent.slug, agent.name, agent.title, agent.displayName, agent.displayTitle].flatMap((value) => {
     const normalized = normalizeKey(value);
     if (!normalized) return [];
     return [normalized, normalized.replaceAll("-", "")];
@@ -63,7 +65,7 @@ export function getAgentPortrait(agent?: AgentPortraitInput | null): string | nu
 }
 
 export function getAgentInitials(agent?: AgentPortraitInput | null): string {
-  const source = agent?.name || agent?.title || agent?.slug || "Agent";
+  const source = getAgentDisplayName(agent);
   const words = source
     .replace(/[_-]/g, " ")
     .split(/\s+/)
@@ -73,6 +75,14 @@ export function getAgentInitials(agent?: AgentPortraitInput | null): string {
   if (words.length === 0) return "AI";
   if (words.length === 1) return words[0]?.slice(0, 2).toUpperCase() ?? "AI";
   return `${words[0]?.[0] ?? ""}${words[1]?.[0] ?? ""}`.toUpperCase();
+}
+
+export function getAgentDisplayName(agent?: AgentPortraitInput | null): string {
+  return agent?.displayName || agent?.name || agent?.displayTitle || agent?.title || agent?.slug || "AI agent";
+}
+
+export function getAgentDisplayTitle(agent?: AgentPortraitInput | null): string {
+  return agent?.displayTitle || agent?.title || "";
 }
 
 function normalizeKey(value?: string | null): string | null {

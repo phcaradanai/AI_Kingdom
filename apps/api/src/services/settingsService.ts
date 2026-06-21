@@ -10,7 +10,7 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "AUTO_SAVE_MEMORY", value: "true", category: "SYSTEM", description: "Automatically save concise memories after council completion." },
   { key: "AUTO_GENERATE_REPORTS", value: "true", category: "SYSTEM", description: "Automatically generate Royal Reports after council completion." },
   { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "OFF", category: "SYSTEM", description: "Controls whether the Planner Agent auto-creates work orders after council completion. OFF = disabled; DRAFT = create draft work orders for King review; READY = create work orders ready for agent assignment." },
-  { key: "COUNCIL_AUTO_EXECUTE_LOW_RISK", value: "false", category: "SYSTEM", description: "M23: when a BUILD decree's planner produces a LOW-risk work order with fresh project context, auto-dispatch it to the external-agent (Claude Code) bridge and approve it so it executes in the sandbox. Result always lands in NEEDS_REVIEW — never auto push/merge/deploy. MEDIUM/HIGH/CRITICAL risk or non-fresh context pauses for King approval. Requires EXTERNAL_AGENT_BRIDGE_ENABLED and an online runner. Disabled by default." },
+  { key: "COUNCIL_AUTO_EXECUTE_LOW_RISK", value: "false", category: "SYSTEM", description: "When a BUILD decree's planner produces a LOW-risk work order with fresh project context, auto-dispatch it to the external-agent (Claude Code) bridge and approve it so it executes in the sandbox. Results always land in NEEDS_REVIEW and never auto push, merge, or deploy. MEDIUM, HIGH, or CRITICAL risk and non-fresh context pause for King approval. Requires EXTERNAL_AGENT_BRIDGE_ENABLED and an online runner. Disabled by default." },
   { key: "AUTO_ASSIGN_WORK_ORDERS", value: "true", category: "SYSTEM", description: "Automatically assign a suitable internal agent to planner-created draft work orders based on skill and specialty matching." },
   { key: "ROUTING_DEBUG_MODE", value: "false", category: "SYSTEM", description: "When enabled, low-confidence and debug-only routing decisions are stored as inbox items (hidden by default) for admin review." },
   { key: "ALLOW_PRODUCTION_FALLBACK_IN_SANDBOX", value: "false", category: "SYSTEM", description: "Allow production provider calls when running outside production mode. Keep disabled unless actively testing production routes." },
@@ -37,16 +37,16 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "LIVING_LOOP_MIN_CONFIDENCE", value: "70", category: "SYSTEM", description: "Minimum confidence score (0-100) for a candidate to be proposed." },
   { key: "LIVING_LOOP_MAX_CANDIDATES_PER_RUN", value: "10", category: "SYSTEM", description: "Maximum number of automation candidates created per loop run." },
   { key: "LIVING_LOOP_MAX_DAILY_CANDIDATES", value: "50", category: "SYSTEM", description: "Maximum number of automation candidates per day." },
-  { key: "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", value: "false", category: "SYSTEM", description: "Auto-create and run VALIDATION_ONLY automation jobs from high-confidence VALIDATION_JOB candidates (M17D-2)." },
+  { key: "LIVING_LOOP_AUTO_CREATE_VALIDATION_JOBS", value: "false", category: "SYSTEM", description: "Auto-create and run read-only VALIDATION_ONLY jobs from high-confidence validation candidates." },
   { key: "LIVING_LOOP_MAX_DAILY_VALIDATION_JOBS", value: "10", category: "SYSTEM", description: "Maximum number of auto-created VALIDATION_ONLY jobs per day." },
   { key: "LIVING_LOOP_VALIDATION_JOB_COOLDOWN_MINUTES", value: "60", category: "SYSTEM", description: "Minimum minutes between validation jobs for the same work order." },
-  { key: "LIVING_LOOP_AUTO_SANDBOX_PATCH", value: "false", category: "SYSTEM", description: "Auto-run SANDBOX_PATCH jobs. Disabled in M17D-1." },
+  { key: "LIVING_LOOP_AUTO_SANDBOX_PATCH", value: "false", category: "SYSTEM", description: "Auto-create gated SANDBOX_PATCH jobs for eligible low-risk candidates. Results remain in NEEDS_REVIEW." },
   { key: "LIVING_LOOP_MAX_DAILY_SANDBOX_PATCH_JOBS", value: "3", category: "SYSTEM", description: "Maximum number of auto-created SANDBOX_PATCH jobs per day." },
   { key: "LIVING_LOOP_SANDBOX_PATCH_COOLDOWN_MINUTES", value: "120", category: "SYSTEM", description: "Minimum minutes between auto patch jobs for the same work order." },
   { key: "LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", value: "85", category: "SYSTEM", description: "Minimum confidence score (0-100) for a candidate to be auto-patched." },
-  { key: "LIVING_LOOP_ALLOW_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Allow automatic branch push. Disabled in M17D-1." },
-  { key: "LIVING_LOOP_ALLOW_PR_CREATE", value: "false", category: "SYSTEM", description: "Allow automatic PR creation. Disabled in M17D-1." },
-  { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Allow loop to use paid providers for observations. Disabled in M17D-1." }
+  { key: "LIVING_LOOP_ALLOW_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Reserved guardrail. Automatic branch push remains disabled." },
+  { key: "LIVING_LOOP_ALLOW_PR_CREATE", value: "false", category: "SYSTEM", description: "Reserved guardrail. Automatic pull request creation remains disabled." },
+  { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Reserved guardrail. Paid providers remain disabled for Living Loop observations." }
 ];
 
 // Keys that were removed from active settings and should be cleaned up from existing databases.
@@ -56,7 +56,7 @@ export async function ensureDefaultSettings() {
   for (const setting of DEFAULT_SETTINGS) {
     await prisma.setting.upsert({
       where: { key: setting.key },
-      update: {},
+      update: { category: setting.category, description: setting.description },
       create: setting
     });
   }

@@ -1,31 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
-
-function extractDisplayProfile(config: unknown): {
-  displayName: string | null;
-  displayTitle: string | null;
-  avatarUrl: string | null;
-  avatarVersion: number;
-  canonicalName: string | null;
-  canonicalTitle: string | null;
-  coreSlug: string | null;
-} {
-  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
-  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
-    ? raw.displayProfile as Record<string, unknown>
-    : {};
-  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
-  const n = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
-  return {
-    displayName: s(dp.displayName),
-    displayTitle: s(dp.displayTitle),
-    avatarUrl: s(dp.avatarUrl),
-    avatarVersion: n(dp.avatarVersion, 1),
-    canonicalName: s(dp.canonicalName),
-    canonicalTitle: s(dp.canonicalTitle),
-    coreSlug: s(dp.coreSlug)
-  };
-}
+import { extractAgentDisplayProfile } from "./agentDisplayProfileService.js";
 
 export type LivingAgentSummaryDto = {
   id: string;
@@ -317,7 +292,7 @@ export async function getLivingAgents(): Promise<LivingAgentSummaryDto[]> {
       priority: agent.priority,
       preferredProviderId: agent.preferredProviderId,
       defaultModel: agent.defaultModel,
-      ...extractDisplayProfile(agent.config),
+      ...extractAgentDisplayProfile(agent.config),
       createdAt: agent.createdAt.toISOString(),
       updatedAt: agent.updatedAt.toISOString(),
       currentStatus,
@@ -523,7 +498,7 @@ export async function getLivingAgentProfile(agentId: string): Promise<LivingAgen
     priority: agent.priority,
     preferredProviderId: agent.preferredProviderId,
     defaultModel: agent.defaultModel,
-    ...extractDisplayProfile(agent.config),
+    ...extractAgentDisplayProfile(agent.config),
     createdAt: agent.createdAt.toISOString(),
     updatedAt: agent.updatedAt.toISOString(),
     currentStatus,

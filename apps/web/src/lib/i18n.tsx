@@ -56,6 +56,7 @@ const THAI_TRANSLATIONS: Record<string, string> = {
   Matters: "เรื่อง",
   Security: "ความปลอดภัย",
   Profile: "โปรไฟล์",
+  "Open source profile": "เปิดโปรไฟล์ต้นทาง",
   "Sign out": "ออกจากระบบ",
   Unknown: "ไม่ทราบ",
   KING: "กษัตริย์",

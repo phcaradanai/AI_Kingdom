@@ -7,6 +7,7 @@ import fs from "node:fs";
 import { fileURLToPath } from "node:url";
 import { prisma } from "../db/prisma.js";
 import { auditLog } from "../services/auditService.js";
+import { extractAgentDisplayProfile } from "../services/agentDisplayProfileService.js";
 import { describeFallbackProviderReadiness, isSandboxFallbackModeActive, selectAIProviderRoute } from "../services/aiProviderRouter.js";
 import { listAIProviders } from "../services/aiProviderRegistry.js";
 import { planProviderAttempts } from "../ai/providerCallPlanner.js";
@@ -681,7 +682,6 @@ function normalizeAgentProfile(config: unknown) {
   const identity = asRecord(raw.royalIdentity);
   const authority = asRecord(raw.authority);
   const memoryPolicy = asRecord(raw.memoryPolicy);
-  const dp = asRecord(raw.displayProfile);
   return {
     identity: {
       personalDetail: stringValue(identity.personalDetail),
@@ -702,18 +702,7 @@ function normalizeAgentProfile(config: unknown) {
       allowedMemoryCategories: stringArray(memoryPolicy.allowedMemoryCategories),
       retentionPolicy: stringValue(memoryPolicy.retentionPolicy, DEFAULT_MEMORY_POLICY.retentionPolicy)
     },
-    displayProfile: {
-      displayName: stringOrNull(dp.displayName),
-      displayTitle: stringOrNull(dp.displayTitle),
-      avatarUrl: stringOrNull(dp.avatarUrl),
-      avatarPrompt: stringOrNull(dp.avatarPrompt),
-      avatarStyle: stringOrNull(dp.avatarStyle),
-      avatarVersion: numberValue(dp.avatarVersion, 1),
-      avatarUpdatedAt: stringOrNull(dp.avatarUpdatedAt),
-      canonicalName: stringOrNull(dp.canonicalName),
-      canonicalTitle: stringOrNull(dp.canonicalTitle),
-      coreSlug: stringOrNull(dp.coreSlug)
-    }
+    displayProfile: extractAgentDisplayProfile(config)
   };
 }
 

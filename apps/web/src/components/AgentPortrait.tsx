@@ -1,16 +1,8 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getAgentInitials, getAgentPortrait } from "@/lib/agentPortraits";
+import { getAgentDisplayName, getAgentDisplayTitle, getAgentInitials, getAgentPortrait, type AgentPortraitInput } from "@/lib/agentPortraits";
 import type { AgentActivityStatus } from "@/types/api";
-
-type AgentPortraitInput = {
-  slug?: string | null;
-  name?: string | null;
-  title?: string | null;
-  avatarUrl?: string | null;
-  avatarVersion?: number | null;
-};
 
 type AgentPortraitProps = {
   agent?: AgentPortraitInput | null;
@@ -173,8 +165,8 @@ export function AgentPortrait({
   const [modalOpen, setModalOpen] = useState(false);
   const portrait = getAgentPortrait(agent);
   const initials = getAgentInitials(agent);
-  const displayName = agent?.name ?? agent?.title ?? "AI agent";
-  const displayTitle = agent?.title ?? "";
+  const displayName = getAgentDisplayName(agent);
+  const displayTitle = getAgentDisplayTitle(agent);
   const alt = `${displayName}${displayTitle ? `, ${displayTitle}` : ""} portrait`;
   const label = statusLabel[status];
 
@@ -237,8 +229,8 @@ export function AgentPortrait({
         <PortraitModal
           src={portrait}
           alt={alt}
-          name={agent?.name}
-          title={agent?.title}
+          name={displayName}
+          title={displayTitle}
           onClose={() => setModalOpen(false)}
         />
       )}

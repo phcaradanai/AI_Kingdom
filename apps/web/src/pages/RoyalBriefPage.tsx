@@ -74,7 +74,7 @@ function AgentDigestCard({ entry }: { entry: LivingAgentDigestEntryDto }) {
   const tk = useTk();
   return (
     <div className="flex items-center gap-4 rounded-lg border border-border bg-muted/10 p-4">
-      <AgentPortrait agent={{ slug: entry.slug, name: entry.displayName, title: entry.displayTitle, avatarUrl: entry.avatarUrl }} size="sm" />
+      <AgentPortrait agent={{ slug: entry.slug, name: entry.displayName, title: entry.displayTitle, avatarUrl: entry.avatarUrl, avatarVersion: entry.avatarVersion }} size="sm" />
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <h4 className="truncate text-sm font-semibold text-foreground">{entry.displayName}</h4>

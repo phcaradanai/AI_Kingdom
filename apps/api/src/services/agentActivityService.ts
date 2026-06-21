@@ -1,5 +1,6 @@
 import type { AgentActivity, Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { extractAgentDisplayProfile } from "./agentDisplayProfileService.js";
 import { sanitizeJsonForStorage, sanitizePreview } from "./usageAttributionService.js";
 
 export type AgentActivityStatus =
@@ -43,26 +44,6 @@ type AgentActivityUpdateInput = Partial<Omit<AgentActivityInput, "agentId">> & {
   status?: AgentActivityStatus;
   errorMessage?: string | null;
 };
-
-function extractDisplayProfile(config: unknown): {
-  displayName: string | null;
-  displayTitle: string | null;
-  avatarUrl: string | null;
-  avatarVersion: number;
-} {
-  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
-  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
-    ? raw.displayProfile as Record<string, unknown>
-    : {};
-  const s = (v: unknown) => (typeof v === "string" && v ? v : null);
-  const n = (v: unknown, fallback: number) => (typeof v === "number" && isFinite(v) ? v : fallback);
-  return {
-    displayName: s(dp.displayName),
-    displayTitle: s(dp.displayTitle),
-    avatarUrl: s(dp.avatarUrl),
-    avatarVersion: n(dp.avatarVersion, 1)
-  };
-}
 
 export type CurrentAgentActivityDto = {
   id: string;
@@ -206,7 +187,7 @@ export async function getCurrentAgentActivities(): Promise<CurrentAgentActivityD
 
   return agents.map((rawAgent) => {
     const { config, ...agentBase } = rawAgent;
-    const agent: CurrentAgentActivityDto["agent"] = { ...agentBase, ...extractDisplayProfile(config) };
+    const agent: CurrentAgentActivityDto["agent"] = { ...agentBase, ...extractAgentDisplayProfile(config) };
     const activity = activeByAgent.get(agent.id) ?? latestByAgent.get(agent.id);
     if (!activity) return syntheticIdleActivity(agent);
     return toCurrentActivityDto(agent, activity);

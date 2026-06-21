@@ -3,6 +3,7 @@ import { buildAIProviderCallsFromRoute } from "../ai/providerCallPlanner.js";
 import { generateWithFallback } from "../ai/generateWithFallback.js";
 import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
 import { prisma } from "../db/prisma.js";
+import { extractAgentDisplayProfile } from "./agentDisplayProfileService.js";
 import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getKingdomContext } from "./kingdomComplianceService.js";
@@ -663,7 +664,7 @@ function toMessageDto(message: any) {
 }
 
 function toDirectAgentDto(agent: Agent) {
-  const displayProfile = extractDisplayProfile(agent.config);
+  const displayProfile = extractAgentDisplayProfile(agent.config);
   return {
     id: agent.id,
     slug: agent.slug,
@@ -678,18 +679,5 @@ function toDirectAgentDto(agent: Agent) {
     displayTitle: displayProfile.displayTitle,
     avatarUrl: displayProfile.avatarUrl,
     avatarVersion: displayProfile.avatarVersion
-  };
-}
-
-function extractDisplayProfile(config: unknown) {
-  const raw = config && typeof config === "object" && !Array.isArray(config) ? config as Record<string, unknown> : {};
-  const dp = raw.displayProfile && typeof raw.displayProfile === "object" && !Array.isArray(raw.displayProfile)
-    ? raw.displayProfile as Record<string, unknown>
-    : {};
-  return {
-    displayName: typeof dp.displayName === "string" && dp.displayName ? dp.displayName : null,
-    displayTitle: typeof dp.displayTitle === "string" && dp.displayTitle ? dp.displayTitle : null,
-    avatarUrl: typeof dp.avatarUrl === "string" && dp.avatarUrl ? dp.avatarUrl : null,
-    avatarVersion: typeof dp.avatarVersion === "number" ? dp.avatarVersion : 1
   };
 }

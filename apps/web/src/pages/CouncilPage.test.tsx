@@ -137,6 +137,39 @@ describe("CouncilPage", () => {
     expect(await screen.findByText("1 work order created")).toBeInTheDocument();
   });
 
+  it("uses the recorded synthesis agent profile instead of a hardcoded portrait", () => {
+    const session = makeSession("session-1", "Build the launch plan", "Prepare a launch implementation plan.");
+    session.responses.push({
+      id: "response-vizier",
+      sessionId: session.id,
+      agentId: "agent-vizier",
+      role: "Grand Vizier",
+      response: "Recorded synthesis evidence.",
+      traceId: "trace-vizier",
+      createdAt: nowIso,
+      agent: {
+        id: "agent-vizier",
+        slug: "grand-vizier",
+        name: "Canonical Vizier",
+        title: "Grand Vizier",
+        displayName: "Actual Vizier",
+        displayTitle: "Chief Orchestrator",
+        avatarUrl: "/uploads/agents/actual-vizier.png",
+        avatarVersion: 7,
+        specialty: "Council synthesis"
+      } as never
+    });
+
+    renderPage([session]);
+
+    const portraits = screen.getAllByRole("img", { name: "Actual Vizier, Chief Orchestrator portrait" });
+    expect(portraits).toHaveLength(2);
+    for (const portrait of portraits) {
+      expect(portrait).toHaveAttribute("src", "http://localhost:4000/uploads/agents/actual-vizier.png?v=7");
+    }
+    expect(screen.queryByAltText("Aurelian, Grand Vizier portrait")).not.toBeInTheDocument();
+  });
+
   it("links the empty archive back to command entry", () => {
     renderPage([]);
 

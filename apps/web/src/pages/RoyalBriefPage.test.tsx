@@ -14,6 +14,7 @@ const mockDigestEntry: LivingAgentDigestEntryDto = {
   displayTitle: "Royal Coordinator",
   role: "VIZIER",
   avatarUrl: null,
+  avatarVersion: 1,
   actionsProposed: 2,
   jobsExecuted: 1,
   reportsProduced: 1,

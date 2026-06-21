@@ -1987,6 +1987,7 @@ export type LivingAgentDigestEntryDto = {
   displayTitle: string;
   role: string;
   avatarUrl: string | null;
+  avatarVersion: number;
   actionsProposed: number;
   jobsExecuted: number;
   reportsProduced: number;
@@ -2250,9 +2251,14 @@ export type AgentPresenceState =
 
 export type AgentPresenceDto = {
   id: string;
+  slug: string;
   name: string;
+  title: string;
   role: string;
   displayName: string | null;
+  displayTitle: string | null;
+  avatarUrl: string | null;
+  avatarVersion: number;
   state: AgentPresenceState;
   currentTask: string | null;
   currentWorkOrder: { id: string; title: string } | null;

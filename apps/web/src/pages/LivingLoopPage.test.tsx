@@ -139,6 +139,8 @@ describe("LivingLoopPage", () => {
     render(<LivingLoopPage />);
 
     expect(await screen.findByText("Living Loop")).toBeInTheDocument();
+    expect(screen.getByText("Autonomous Operations")).toBeInTheDocument();
+    expect(screen.queryByText("M21")).not.toBeInTheDocument();
     expect(await screen.findByText("Loop Status")).toBeInTheDocument();
     expect(await screen.findByText("Run History")).toBeInTheDocument();
     expect(screen.getByTestId("living-loop-overview")).toBeInTheDocument();
@@ -181,6 +183,8 @@ describe("LivingLoopPage", () => {
     render(<MemoryRouter><LivingLoopPage /></MemoryRouter>);
 
     expect(await screen.findByRole("heading", { level: 1, name: "ลูปมีชีวิต" })).toBeInTheDocument();
+    expect(screen.getByText("ปฏิบัติการอัตโนมัติ")).toBeInTheDocument();
+    expect(screen.queryByText("M21")).not.toBeInTheDocument();
     expect(screen.getByText("ขั้นตอนระบบอัตโนมัติ")).toBeInTheDocument();
     expect(screen.getByText("ซ่อมบริบทอัตโนมัติ")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "รันครั้งเดียว" })).toBeInTheDocument();

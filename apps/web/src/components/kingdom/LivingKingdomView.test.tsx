@@ -18,9 +18,14 @@ vi.mock("@/lib/api", () => ({ api: apiMocks }));
 function agent(overrides: Partial<AgentPresenceDto>): AgentPresenceDto {
   return {
     id: "a1",
+    slug: "agent",
     name: "Agent",
+    title: "Royal Agent",
     role: "",
     displayName: null,
+    displayTitle: null,
+    avatarUrl: null,
+    avatarVersion: 1,
     state: "IDLE",
     currentTask: null,
     currentWorkOrder: null,
@@ -86,6 +91,32 @@ describe("LivingKingdomView", () => {
     expect((await screen.findAllByText(STATE_LABEL.WAITING_REVIEW)).length).toBeGreaterThan(0);
     expect(screen.queryByText(/HANDOFF/i)).toBeNull();
     expect(screen.queryByText(/RETURNING/i)).toBeNull();
+  });
+
+  it("uses the saved display profile portrait and links to its owning profile", async () => {
+    setPresence([
+      agent({
+        id: "profile-agent",
+        slug: "planner",
+        name: "Melody",
+        title: "Royal Planner",
+        displayName: "Melody Prime",
+        displayTitle: "Planning Steward",
+        avatarUrl: "/uploads/agents/melody-profile.png",
+        avatarVersion: 4
+      })
+    ]);
+    renderView();
+
+    const sceneAgent = await screen.findByRole("button", { name: "Melody Prime — Resting" });
+    expect(sceneAgent.querySelector("img")).toHaveAttribute(
+      "src",
+      "http://localhost:4000/uploads/agents/melody-profile.png?v=4"
+    );
+
+    await userEvent.click(sceneAgent);
+    expect(screen.getByText("Planning Steward")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Open source profile" })).toHaveAttribute("href", "/living-agents/profile-agent");
   });
 
   it("shows a calm ambience when every agent is idle", async () => {

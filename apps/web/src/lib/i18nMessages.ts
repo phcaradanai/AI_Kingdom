@@ -359,7 +359,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "royalBrief.provenanceDesc": "This brief is generated from {count} data sources covering the {hours}-hour window ending {date}. Click \"Show Details\" to view raw provenance metadata.",
 
     // ── Living Loop (`/living-loop`) ─────────────────────────────────────────
-    "livingLoop.eyebrow": "M21",
+    "livingLoop.eyebrow": "Autonomous Operations",
     "livingLoop.title": "Living Loop",
     "livingLoop.description": "Observe, repair context, propose work, and run gated automation with visible limits and review boundaries.",
     "livingLoop.loading": "Awakening the living loop...",
@@ -423,7 +423,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "livingLoop.asp.unavailable": "Auto sandbox patch status unavailable.",
     "livingLoop.settings.loading": "Loading settings...",
     "livingLoop.settings.kingOnly": "Only the King may edit Living Loop settings.",
-    "livingLoop.settings.boundaryNote": "Auto patch, branch push, and PR creation remain disabled in M17D-1 regardless of these settings.",
+    "livingLoop.settings.boundaryNote": "Automatic patch approval, branch push, and PR creation remain disabled regardless of these settings.",
     "livingLoop.notAutoCreated": "Not auto-created: {reason}",
     "livingLoop.skip.validationDisabled": "auto validation is disabled",
     "livingLoop.skip.validationLimit": "daily validation job limit reached",
@@ -1509,7 +1509,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "royalBrief.provenanceDesc": "สรุปนี้สร้างจากแหล่งข้อมูล {count} แหล่ง ครอบคลุมช่วงเวลา {hours} ชั่วโมงสิ้นสุด {date} คลิก \"แสดงรายละเอียด\" เพื่อดูข้อมูลแหล่งที่มาแบบดิบ",
 
     // ── Living Loop ──────────────────────────────────────────────────────────
-    "livingLoop.eyebrow": "M21",
+    "livingLoop.eyebrow": "ปฏิบัติการอัตโนมัติ",
     "livingLoop.title": "ลูปมีชีวิต",
     "livingLoop.description": "สังเกต ซ่อมบริบท เสนองาน และรันระบบอัตโนมัติที่มีการควบคุม พร้อมขีดจำกัดและขอบเขตการตรวจที่มองเห็นได้",
     "livingLoop.loading": "กำลังปลุกลูปมีชีวิต...",
@@ -1573,7 +1573,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "livingLoop.asp.unavailable": "สถานะแพตช์แซนด์บ็อกซ์อัตโนมัติไม่พร้อมใช้งาน",
     "livingLoop.settings.loading": "กำลังโหลดการตั้งค่า...",
     "livingLoop.settings.kingOnly": "เฉพาะกษัตริย์เท่านั้นที่แก้ไขการตั้งค่าลูปมีชีวิตได้",
-    "livingLoop.settings.boundaryNote": "การแพตช์อัตโนมัติ การ push branch และการสร้าง PR ยังคงปิดใช้งานใน M17D-1 ไม่ว่าการตั้งค่าเหล่านี้จะเป็นอย่างไร",
+    "livingLoop.settings.boundaryNote": "การอนุมัติแพตช์ การ push branch และการสร้าง PR โดยอัตโนมัติยังคงปิดใช้งาน ไม่ว่าการตั้งค่าเหล่านี้จะเป็นอย่างไร",
     "livingLoop.notAutoCreated": "ไม่ได้สร้างอัตโนมัติ: {reason}",
     "livingLoop.skip.validationDisabled": "การตรวจสอบอัตโนมัติถูกปิดใช้งาน",
     "livingLoop.skip.validationLimit": "ถึงขีดจำกัดงานตรวจสอบรายวันแล้ว",
