@@ -156,4 +156,38 @@ describe("ProjectsPage", () => {
     expect(screen.getByText("Project API failed")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Retry/i })).toBeInTheDocument();
   });
+
+  it("keeps project mutation behind explicit create and edit dialogs", async () => {
+    setUser("KING");
+    apiMocks.projects.mockResolvedValue({ projects: [project] });
+    apiMocks.projectWorkOrders.mockResolvedValue({ workOrders: [activeWorkOrder] });
+    apiMocks.getProjectContextHealth.mockResolvedValue(staleHealth);
+
+    renderPage();
+
+    expect((await screen.findAllByText("Castle Keep")).length).toBeGreaterThan(0);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Edit project" }));
+    expect(screen.getByRole("dialog", { name: "Edit project" })).toBeInTheDocument();
+    expect(screen.getByDisplayValue("Castle Keep")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Close project editor" }));
+    await userEvent.click(screen.getByRole("button", { name: "Create Project" }));
+    expect(screen.getByRole("dialog", { name: "Create project" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Project" })).toBeInTheDocument();
+  });
+
+  it("presents a compact portfolio summary before the selected project workspace", async () => {
+    setUser("KING");
+    apiMocks.projects.mockResolvedValue({ projects: [project] });
+    apiMocks.projectWorkOrders.mockResolvedValue({ workOrders: [activeWorkOrder] });
+    apiMocks.getProjectContextHealth.mockResolvedValue(staleHealth);
+
+    renderPage();
+
+    expect(await screen.findByRole("region", { name: "Project portfolio" })).toBeInTheDocument();
+    expect(screen.getByText("Needs attention")).toBeInTheDocument();
+    expect((await screen.findAllByRole("link", { name: "Open project workspace" })).some((link) => link.getAttribute("href") === "/projects/proj-1")).toBe(true);
+  });
 });
