@@ -235,7 +235,7 @@ Progress: **Wave 2 complete** - Throne Room, Council, Work Orders, Automation Jo
 
 ### Wave 3: Projects and Strategy
 
-Progress: **Waves 3A and 3B complete; Wave 3C Strategy next** - Projects owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Project Inbox and Artifacts now apply the same source-of-truth hierarchy to routing uncertainty and generated evidence. Continue with Strategy Ledger composition.
+Progress: **Waves 3A, 3B, and 3C complete; Wave 4 Agents next** - Projects owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Project Inbox, Artifacts, and Strategy now apply the same source-of-truth hierarchy to routing uncertainty, generated evidence, and strategic decisions.
 
 ### Wave 3A Projects Layout Contract
 
@@ -263,6 +263,8 @@ Wave 3B implementation keeps both route files thin and splits API/state controll
 - `/strategy` becomes a decision workspace with one compact strategic overview and clear Objectives, Opportunities, Assets, and Revenue views. The page must not show all creation forms at once.
 - Creation and editing move into explicit dialogs or drawers, while source ownership, project links, confidence, and current status remain visible in normal document flow.
 - Existing strategy intake, mutation, RBAC, source-link, and project ownership contracts remain unchanged. Long strategic prose and Thai labels must wrap without widening the viewport.
+
+Wave 3C implementation replaces simultaneous forms with a compact overview, stable section navigation, filtered collection views, and explicit create/edit dialogs. `StrategyPage.tsx` is 16 lines, and every new controller, model, workspace, collection, dialog, and translation module is below 560 lines. Strategy records retain direct Project, Artifact/Report, Usage Trace, and Work Order ownership links.
 
 | Route | Primary refinement |
 | --- | --- |
