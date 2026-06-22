@@ -26,7 +26,7 @@ type ChatCompletionUsage = {
 
 type ChatCompletionResponse = {
   model?: string;
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
   usage?: ChatCompletionUsage;
 };
 
@@ -130,6 +130,7 @@ export class OpenAICompatibleProvider implements AIProvider {
 
       const payload = (await response.json()) as ChatCompletionResponse;
       const content = payload.choices?.[0]?.message?.content?.trim();
+      const finishReason = payload.choices?.[0]?.finish_reason ?? null;
 
       if (!content) {
         throw new Error(`${this.name} provider returned an empty response`);
@@ -167,7 +168,8 @@ export class OpenAICompatibleProvider implements AIProvider {
       return {
         response: content,
         usage: { promptTokens, completionTokens, totalTokens, inputCacheHitTokens, inputCacheMissTokens, reasoningTokens },
-        responseModel: payload.model ?? null
+        responseModel: payload.model ?? null,
+        finishReason
       };
     } catch (error) {
       if ((error as any).errorCode === "PROVIDER_TIMEOUT") throw error;

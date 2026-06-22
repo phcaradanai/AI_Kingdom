@@ -34,6 +34,9 @@ export type AgentResponseResult = {
   response: string;
   usage: TokenUsage;
   responseModel?: string | null;
+  // "stop" | "length" | "max_tokens" | ... — "length"/"max_tokens" mean the model hit
+  // the max_tokens cap (output truncated), the signal that more budget was needed.
+  finishReason?: string | null;
 };
 
 export type KnownAIProviderType =

@@ -37,6 +37,10 @@ export type GenerateWithFallbackResult = {
   configuredModel?: string;
   actualSentModel?: string;
   responseModel?: string | null;
+  // Completion reason of the winning provider ("length"/"max_tokens" = truncated).
+  finishReason?: string | null;
+  // Resolved provider type of the winner ("sandbox" when it fell to mock).
+  finalProviderType?: string;
 };
 
 const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
@@ -214,7 +218,9 @@ export async function generateWithFallback(
         errorMessage,
         configuredModel,
         actualSentModel,
-        responseModel: result.responseModel ?? null
+        responseModel: result.responseModel ?? null,
+        finishReason: result.finishReason ?? null,
+        finalProviderType: meta.providerType
       };
     } catch (error) {
       const errorCodeRaw = (error as any).errorCode as string | undefined;

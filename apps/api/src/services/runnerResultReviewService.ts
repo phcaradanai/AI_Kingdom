@@ -8,6 +8,7 @@ import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { assessExecutionComplexity, escalationFor } from "./complexityAssessor.js";
+import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { sanitizeLogOutput } from "./secretRedactorService.js";
 
 export const AGENT_REVIEW_VERDICTS = ["PASS", "NEEDS_FIX", "PATCH_FAILED", "NO_CHANGES", "RISK_REVIEW", "VALIDATION_FAILED", "UNKNOWN"] as const;
@@ -475,6 +476,17 @@ async function generateAiReviewText(input: ReviewInput, prompt: string, determin
     model: generated.modelUsed,
     providerId: generated.providerId ?? generated.providerName
   });
+
+  // Self-growing budget: grow the reviewer's max_tokens if a real provider truncated.
+  await maybeGrowAgentMaxTokens({
+    agentId: agent.id,
+    agentSlug: agent.slug,
+    contentBudgetUsed: effectiveParams.max_tokens,
+    finishReason: generated.finishReason,
+    providerType: generated.finalProviderType,
+    model: generated.modelUsed
+  }).catch(() => undefined);
+
   return generated.response;
 }
 

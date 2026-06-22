@@ -33,7 +33,8 @@ export class MockAIProvider implements AIProvider {
 
     return {
       response,
-      usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens }
+      usage: { promptTokens, completionTokens, totalTokens: promptTokens + completionTokens },
+      finishReason: "stop"
     };
   }
 }

@@ -11,6 +11,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { assessDecreeComplexity, escalationFor } from "./complexityAssessor.js";
+import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { runPlannerAgent } from "./plannerAgentService.js";
 import { refreshCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
@@ -329,6 +330,17 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           metadata: { providerUsed: generated.providerName, modelUsed: generated.modelUsed }
         });
 
+        // Self-growing budget: grow this agent's max_tokens if a real provider truncated.
+        await maybeGrowAgentMaxTokens({
+          agentId: agent.id,
+          agentSlug: agent.slug,
+          contentBudgetUsed: effectiveParams.max_tokens,
+          finishReason: generated.finishReason,
+          providerType: generated.finalProviderType,
+          model: generated.modelUsed,
+          userId
+        }).catch(() => undefined);
+
         await updateAgentActivity(activityId, {
           status: "RESPONDING",
           providerId: generated.providerId ?? generated.providerName,
@@ -595,6 +607,17 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       tokensUsed: generatedSummary.usage.totalTokens,
       metadata: { providerUsed: generatedSummary.providerName, modelUsed: generatedSummary.modelUsed }
     });
+
+    // Self-growing budget: grow the Grand Vizier's max_tokens if the synthesis truncated.
+    await maybeGrowAgentMaxTokens({
+      agentId: grandVizier.id,
+      agentSlug: grandVizier.slug,
+      contentBudgetUsed: summaryEffectiveParams.max_tokens,
+      finishReason: generatedSummary.finishReason,
+      providerType: generatedSummary.finalProviderType,
+      model: generatedSummary.modelUsed,
+      userId
+    }).catch(() => undefined);
 
     if (generatedSummary.fallbackNotice) {
       fallbackNotices.push(generatedSummary.fallbackNotice);

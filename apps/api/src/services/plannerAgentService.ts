@@ -16,6 +16,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { getBooleanSetting, getNumberSetting, getSettingValue } from "./settingsService.js";
 import { assessDecreeComplexity, escalationFor } from "./complexityAssessor.js";
+import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
 import { maybeAutoExecuteBuildWorkOrder } from "./buildDecreeAutoExecutionService.js";
 import { createWorkOrder } from "./externalAgentWorkOrderService.js";
@@ -359,6 +360,18 @@ async function callPlannerLLM(opts: {
   }
 
   const cost = await calculateCostUSDFromRegistry(generated.providerId ?? generated.providerName, generated.modelUsed, generated.usage);
+
+  // Self-growing budget: if a real provider truncated the plan, grow the planner's
+  // stored max_tokens so the next run has room (content budget = effectiveParams.max_tokens).
+  await maybeGrowAgentMaxTokens({
+    agentId: plannerAgent.id,
+    agentSlug: plannerAgent.slug,
+    contentBudgetUsed: effectiveParams.max_tokens,
+    finishReason: generated.finishReason,
+    providerType: generated.finalProviderType,
+    model: generated.modelUsed,
+    userId
+  }).catch(() => undefined);
 
   await prisma.usageRecord.create({
     data: {
