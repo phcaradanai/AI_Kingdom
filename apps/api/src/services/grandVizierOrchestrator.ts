@@ -10,6 +10,7 @@ import { autoSaveMemories, findRelevantMemories, formatMemoryContext } from "./m
 import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { assessDecreeComplexity, escalationFor } from "./complexityAssessor.js";
 import { runPlannerAgent } from "./plannerAgentService.js";
 import { refreshCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
@@ -158,6 +159,12 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
 
   try {
     const defaultMaxTokens = await getNumberSetting("AI_MAX_TOKENS", 700);
+    // Adaptive reasoning: assessed once from the decree. Applied ONLY to the Grand
+    // Vizier's final synthesis (the agent responsible for the council's verdict) —
+    // not blanket across all council agents, to contain cost and instability.
+    const adaptiveReasoning = await getBooleanSetting("ADAPTIVE_REASONING_ENABLED", true);
+    const decreeComplexity = assessDecreeComplexity({ text: task.command, mode: task.mode });
+    const synthesisEscalation = adaptiveReasoning ? escalationFor(decreeComplexity.level) : undefined;
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
     const kingdomContext = await getKingdomContext();
@@ -474,7 +481,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       throw new Error("Grand Vizier is not available");
     }
     const summaryRoute = await selectAIProviderRoute({ agent: grandVizier, taskMode: task.mode, requiredCapabilities: { chat: true } });
-    const summaryEffectiveParams = resolveEffectiveParameters(grandVizier, summaryRoute.provider.type, defaultMaxTokens);
+    const summaryEffectiveParams = resolveEffectiveParameters(grandVizier, summaryRoute.provider.type, defaultMaxTokens, synthesisEscalation);
     const summaryProviderCalls = buildAIProviderCallsFromRoute(summaryRoute, grandVizier);
     const summaryTrace = await createAIUsageTrace({
       actorUserId: userId,
@@ -499,6 +506,9 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         taskMode: task.mode,
         agentSlug: grandVizier.slug,
         modelParametersUsed: summaryEffectiveParams,
+        complexityLevel: decreeComplexity.level,
+        complexitySignals: decreeComplexity.signals,
+        reasoningEscalated: !!synthesisEscalation?.reasoning,
         reasoningEnabled: summaryEffectiveParams.reasoning?.enabled ?? false,
         reasoningEffort: summaryEffectiveParams.reasoning?.effort ?? null,
         reasoningExcluded: summaryEffectiveParams.reasoning?.exclude ?? true,

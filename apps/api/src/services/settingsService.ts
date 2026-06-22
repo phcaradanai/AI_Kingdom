@@ -46,7 +46,8 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "LIVING_LOOP_AUTO_PATCH_MIN_CONFIDENCE", value: "85", category: "SYSTEM", description: "Minimum confidence score (0-100) for a candidate to be auto-patched." },
   { key: "LIVING_LOOP_ALLOW_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Reserved guardrail. Automatic branch push remains disabled." },
   { key: "LIVING_LOOP_ALLOW_PR_CREATE", value: "false", category: "SYSTEM", description: "Reserved guardrail. Automatic pull request creation remains disabled." },
-  { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Reserved guardrail. Paid providers remain disabled for Living Loop observations." }
+  { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Reserved guardrail. Paid providers remain disabled for Living Loop observations." },
+  { key: "ADAPTIVE_REASONING_ENABLED", value: "true", category: "SYSTEM", description: "Let the responsible Kingdom agent (planner, council synthesis, reviewer) think harder — reasoning ON at high effort — when a decree or work order is assessed as complex. Kill-switch: set false to keep reasoning at the agent's stored config for every task." }
 ];
 
 // Keys that were removed from active settings and should be cleaned up from existing databases.

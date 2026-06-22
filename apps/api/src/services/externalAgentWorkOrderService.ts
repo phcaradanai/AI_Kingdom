@@ -8,6 +8,8 @@ import { buildProjectContext } from "./projectContextService.js";
 import { buildContextSourceTrace, formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
 import { createArtifact } from "./projectService.js";
 import { evaluateRecordValue } from "./dataValueGateService.js";
+import { getBooleanSetting } from "./settingsService.js";
+import { assessExecutionComplexity } from "./complexityAssessor.js";
 import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
 import { createNotice } from "./royalSecretaryService.js";
 
@@ -210,6 +212,26 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
   ]);
   const decisions = workOrder.implementationReports.flatMap((report) => report.decisionsMade).filter(Boolean);
 
+  // Adaptive thinking effort for the external coder (King's directive: complex
+  // code fix / big-system bug analysis → think harder). Structured signals only:
+  // work-order priority, whether this is a retry after a prior failure, and the
+  // number of acceptance criteria. When complex (and the kill-switch is on) we
+  // inject an extended-thinking directive — Claude Code/Codex scale their thinking
+  // budget on phrases like "think hard"/"ultrathink".
+  const adaptiveReasoning = await getBooleanSetting("ADAPTIVE_REASONING_ENABLED", true);
+  const coderComplexity = assessExecutionComplexity({
+    riskLevel: workOrder.priority,
+    verdict: workOrder.autoRetryCount > 0 ? "NEEDS_FIX" : undefined,
+    acceptanceCriteriaCount: workOrder.acceptanceCriteria.length
+  });
+  const thinkingDirective = adaptiveReasoning && coderComplexity.level === "COMPLEX"
+    ? [
+        "## Thinking Effort",
+        "This work order is assessed as COMPLEX (" + coderComplexity.signals.join(", ") + ").",
+        "Think hard before editing: map the affected code paths, reason about edge cases and failure modes, and form a plan before changing anything. Prefer a correct, minimal change over a fast one. If the task is genuinely large, think harder still (ultrathink) and outline your reasoning before patching."
+      ].join("\n\n")
+    : "";
+
   return redact([
     `# Work Order: ${workOrder.title}`,
     "## Role",
@@ -218,6 +240,7 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     "Do not redefine the product vision.",
     "Do not change architecture unless explicitly instructed.",
     "Follow the Work Order exactly.",
+    thinkingDirective,
     "## Kingdom Context",
     driftContext.kingdomContext,
     "## Project Context",
@@ -253,7 +276,7 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     "7. Issues found",
     "8. Remaining work",
     "9. Recommended next step"
-  ].join("\n\n"));
+  ].filter(Boolean).join("\n\n"));
 }
 
 /**

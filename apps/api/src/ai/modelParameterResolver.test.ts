@@ -172,6 +172,60 @@ test("buildProviderRequestBody sends exact model id in body", () => {
   assert.equal(body.model, modelId, "model id should be sent exactly as provided");
 });
 
+test("escalation forces reasoning ON at high effort even when stored config disables it", () => {
+  const agent = {
+    slug: "planner",
+    parameterMode: "MANUAL",
+    modelParameters: {
+      reasoning: { enabled: false, effort: "none", max_tokens: null, exclude: true }
+    },
+    temperature: null,
+    maxTokens: 8000
+  };
+  // Without escalation: reasoning stays off
+  const base = resolveEffectiveParameters(agent, "openrouter", 8000);
+  assert.equal(base.reasoning?.enabled, false);
+  assert.equal(base.reasoning?.effort, "none");
+  // With escalation: forced on at high effort
+  const escalated = resolveEffectiveParameters(agent, "openrouter", 8000, { reasoning: true, reasoningEffort: "high" });
+  assert.equal(escalated.reasoning?.enabled, true);
+  assert.equal(escalated.reasoning?.effort, "high");
+});
+
+test("escalation is a no-op for providers that do not support reasoning (sandbox/openai)", () => {
+  const agent = { slug: "planner", parameterMode: "MANUAL", modelParameters: null, temperature: null, maxTokens: 8000 };
+  const effective = resolveEffectiveParameters(agent, "openai", 8000, { reasoning: true, reasoningEffort: "high" });
+  assert.equal(effective.reasoning, null, "escalation must not invent reasoning on unsupported providers");
+});
+
+test("escalation with reasoning:false leaves config untouched", () => {
+  const agent = {
+    slug: "planner",
+    parameterMode: "MANUAL",
+    modelParameters: { reasoning: { enabled: false, effort: "none", max_tokens: null, exclude: true } },
+    temperature: null,
+    maxTokens: 8000
+  };
+  const effective = resolveEffectiveParameters(agent, "openrouter", 8000, { reasoning: false });
+  assert.equal(effective.reasoning?.enabled, false);
+});
+
+test("escalated reasoning produces a valid request body with effort and headroom", () => {
+  const agent = {
+    slug: "planner",
+    parameterMode: "MANUAL",
+    modelParameters: { reasoning: { enabled: false, effort: "none", max_tokens: null, exclude: true } },
+    temperature: null,
+    maxTokens: 8000
+  };
+  const effective = resolveEffectiveParameters(agent, "openrouter", 8000, { reasoning: true, reasoningEffort: "high" });
+  const body = buildProviderRequestBody({ model: "deepseek/deepseek-v4-flash", messages: [{ role: "user", content: "t" }], effective });
+  const reasoning = body.reasoning as Record<string, unknown>;
+  assert.equal(reasoning.effort, "high");
+  assert.equal(reasoning.max_tokens, undefined, "must not send both effort and max_tokens");
+  assert.equal(body.max_tokens, 8000 + 3072, "high-effort reasoning adds 3072 headroom");
+});
+
 // Test 8: PROVIDER_DEFAULT mode produces minimal request
 test("PROVIDER_DEFAULT mode excludes reasoning and extra params", () => {
   const effective = resolveEffectiveParameters(

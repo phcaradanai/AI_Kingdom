@@ -14,7 +14,8 @@ import { buildUsageAttribution } from "./usageAttributionService.js";
 import { prisma } from "../db/prisma.js";
 import { buildProjectContext } from "./projectContextService.js";
 import { formatRepositoryContextSection, getLatestSnapshot } from "./repositoryScanService.js";
-import { getNumberSetting, getSettingValue } from "./settingsService.js";
+import { getBooleanSetting, getNumberSetting, getSettingValue } from "./settingsService.js";
+import { assessDecreeComplexity, escalationFor } from "./complexityAssessor.js";
 import { assignWorkOrderAgent } from "./workOrderAssignmentService.js";
 import { maybeAutoExecuteBuildWorkOrder } from "./buildDecreeAutoExecutionService.js";
 import { createWorkOrder } from "./externalAgentWorkOrderService.js";
@@ -273,10 +274,17 @@ async function callPlannerLLM(opts: {
     taskMode: "PLAN",
     requiredCapabilities: { chat: true }
   });
+  // Adaptive reasoning: a complex BUILD decree deserves a deeper plan. Assess the
+  // decree text + mode; when complex and the kill-switch is on, the planner thinks
+  // harder. No-op on providers that don't support reasoning (e.g. sandbox fallback).
+  const adaptiveReasoning = await getBooleanSetting("ADAPTIVE_REASONING_ENABLED", true);
+  const complexity = assessDecreeComplexity({ text: task.command, mode: task.mode });
+  const escalation = adaptiveReasoning ? escalationFor(complexity.level) : undefined;
   const effectiveParams = resolveEffectiveParameters(
     plannerAgent as Parameters<typeof resolveEffectiveParameters>[0],
     route.provider.type,
-    defaultMaxTokens
+    defaultMaxTokens,
+    escalation
   );
   // plannerAgent uses a narrowed select without routing fields; the route already encodes
   // the full ordered attempts (primary + fallbacks + sandbox), so no agent override is needed.
@@ -302,7 +310,15 @@ async function callPlannerLLM(opts: {
     providerName: route.provider.name,
     model: route.model,
     prompt: planningContext,
-    metadata: { agentSlug: plannerAgent.slug, taskMode: "PLAN" },
+    metadata: {
+      agentSlug: plannerAgent.slug,
+      taskMode: "PLAN",
+      complexityLevel: complexity.level,
+      complexitySignals: complexity.signals,
+      reasoningEscalated: !!escalation?.reasoning,
+      reasoningEnabled: effectiveParams.reasoning?.enabled ?? false,
+      reasoningEffort: effectiveParams.reasoning?.effort ?? null
+    },
     attributionStatus: "TRUSTED"
   });
 
