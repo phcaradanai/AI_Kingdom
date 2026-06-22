@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { I18nProvider, LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
 import type { AgentPresenceDto, KingdomActivityStreamDto, KingdomPresenceDto } from "@/types/api";
 import { LivingKingdomView } from "./LivingKingdomView";
 import { resolveLocation, STATE_LABEL } from "./agentPresence";
@@ -47,13 +48,16 @@ function setPresence(agents: AgentPresenceDto[]) {
 function renderView() {
   return render(
     <MemoryRouter>
-      <LivingKingdomView />
+      <I18nProvider>
+        <LivingKingdomView />
+      </I18nProvider>
     </MemoryRouter>
   );
 }
 
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
 
 describe("resolveLocation", () => {
@@ -123,7 +127,7 @@ describe("LivingKingdomView", () => {
     setPresence([agent({ id: "i1", name: "Elowen", role: "Analyst", state: "IDLE" })]);
     renderView();
 
-    expect(await screen.findByText(/The kingdom rests/i)).toBeInTheDocument();
+    expect(await screen.findByText(/The court is at rest/i)).toBeInTheDocument();
   });
 
   it("opens agent detail with a work-order source link on click", async () => {
@@ -144,6 +148,16 @@ describe("LivingKingdomView", () => {
     await userEvent.click(await screen.findByRole("button", { name: /Cassian/i }));
 
     const sourceLink = await screen.findByRole("link", { name: /Provider routing fix/i });
-    expect(sourceLink).toHaveAttribute("href", "/work-orders");
+    expect(sourceLink).toHaveAttribute("href", "/work-orders?focus=wo-9");
+  });
+
+  it("renders semantic Thai chrome while preserving source data", async () => {
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, "th");
+    setPresence([agent({ id: "thai-agent", name: "Elowen", role: "Analyst", state: "IDLE" })]);
+    renderView();
+
+    expect(await screen.findByRole("heading", { name: "ราชอาณาจักรมีชีวิต" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Elowen — พัก" })).toBeInTheDocument();
+    expect(screen.getByText(/การเคลื่อนไหวรอบฉากไม่ได้หมายถึงงานที่กำลังดำเนินการ/)).toBeInTheDocument();
   });
 });

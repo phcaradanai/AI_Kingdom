@@ -3,13 +3,14 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { KingdomActivityFeed } from "@/components/kingdom/KingdomActivityFeed";
 import { KingdomScene } from "@/components/kingdom/KingdomScene";
-import { initials, STATE_DOT, STATE_LABEL } from "@/components/kingdom/agentPresence";
+import { initials, STATE_DOT } from "@/components/kingdom/agentPresence";
 import { Button } from "@/components/ui/button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { LoadingState } from "@/components/ui/LoadingState";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { getAgentDisplayName, getAgentDisplayTitle, getAgentPortrait } from "@/lib/agentPortraits";
 import { api } from "@/lib/api";
+import { useTk } from "@/lib/i18n";
 import { cn, timeAgo } from "@/lib/utils";
 import type { AgentPresenceDto, KingdomActivityStreamDto, KingdomPresenceDto } from "@/types/api";
 
@@ -44,6 +45,7 @@ function GlanceChip({ label, count, tone }: { label: string; count: number; tone
 // ── Agent detail (Phase 4 + 6: real work + provenance) ──────────────────────────
 
 function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () => void }) {
+  const tk = useTk();
   const displayName = getAgentDisplayName(agent);
   const displayTitle = getAgentDisplayTitle(agent) || agent.role || "Royal agent";
   const portrait = getAgentPortrait(agent);
@@ -61,27 +63,27 @@ function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () 
         </div>
         <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-border bg-muted/30 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
           <span className={cn("h-1.5 w-1.5 rounded-full", STATE_DOT[agent.state])} />
-          {STATE_LABEL[agent.state]}
+          {tk(`presence.state.${agent.state}`)}
         </span>
-        <button type="button" onClick={onClose} aria-label="Close agent detail" className="shrink-0 text-muted-foreground hover:text-foreground">
+        <button type="button" onClick={onClose} aria-label={tk("livingKingdom.detail.close")} className="shrink-0 text-muted-foreground hover:text-foreground">
           <X className="h-4 w-4" />
         </button>
       </div>
 
       <dl className="space-y-2 text-sm">
         <div>
-          <dt className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Current task</dt>
-          <dd className="text-foreground/85">{agent.currentTask ?? "Idle — no active task"}</dd>
+          <dt className="text-[10px] font-bold text-muted-foreground">{tk("livingKingdom.detail.currentTask")}</dt>
+          <dd className="text-foreground/85">{agent.currentTask ?? tk("livingKingdom.detail.idleTask")}</dd>
         </div>
         {agent.progress && (
           <div>
-            <dt className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Progress</dt>
+            <dt className="text-[10px] font-bold text-muted-foreground">{tk("livingKingdom.detail.progress")}</dt>
             <dd className="text-foreground/85">{agent.progress}</dd>
           </div>
         )}
         {agent.blockingReason && (
           <div>
-            <dt className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Blocker</dt>
+            <dt className="text-[10px] font-bold text-muted-foreground">{tk("livingKingdom.detail.blocker")}</dt>
             <dd className="text-destructive">{agent.blockingReason}</dd>
           </div>
         )}
@@ -90,22 +92,22 @@ function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () 
       {/* Provenance — where this work comes from */}
       <div className="mt-3 space-y-1 border-t border-border/40 pt-2">
         <div className="flex items-baseline gap-2">
-          <span className="w-20 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Profile</span>
+          <span className="w-20 shrink-0 text-[10px] font-bold text-muted-foreground/70">{tk("livingKingdom.detail.profile")}</span>
           <Link to={`/living-agents/${agent.id}`} className="min-w-0 flex-1 truncate text-xs font-semibold text-primary underline-offset-2 hover:underline">
-            Open source profile
+            {tk("livingKingdom.detail.openProfile")}
           </Link>
         </div>
         {agent.currentWorkOrder && (
           <div className="flex items-baseline gap-2">
-            <span className="w-20 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Source</span>
-            <Link to="/work-orders" className="min-w-0 flex-1 truncate text-xs font-semibold text-primary underline-offset-2 hover:underline">
+            <span className="w-20 shrink-0 text-[10px] font-bold text-muted-foreground/70">{tk("livingKingdom.detail.source")}</span>
+            <Link to={`/work-orders?focus=${agent.currentWorkOrder.id}`} className="min-w-0 flex-1 truncate text-xs font-semibold text-primary underline-offset-2 hover:underline">
               {agent.currentWorkOrder.title}
             </Link>
           </div>
         )}
         {agent.lastActivityAt && (
           <div className="flex items-baseline gap-2">
-            <span className="w-20 shrink-0 text-[10px] font-bold uppercase tracking-wider text-muted-foreground/70">Updated</span>
+            <span className="w-20 shrink-0 text-[10px] font-bold text-muted-foreground/70">{tk("livingKingdom.detail.updated")}</span>
             <span className="text-xs text-foreground/85">{timeAgo(agent.lastActivityAt)}</span>
           </div>
         )}
@@ -117,6 +119,7 @@ function AgentDetail({ agent, onClose }: { agent: AgentPresenceDto; onClose: () 
 // ── Main view ───────────────────────────────────────────────────────────────────
 
 export function LivingKingdomView() {
+  const tk = useTk();
   const [presence, setPresence] = useState<KingdomPresenceDto | null>(null);
   const [activity, setActivity] = useState<KingdomActivityStreamDto | null>(null);
   const [loading, setLoading] = useState(true);
@@ -141,14 +144,14 @@ export function LivingKingdomView() {
       setLastUpdated(new Date());
       setRefreshError(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to load the living kingdom";
+      const msg = err instanceof Error ? err.message : tk("livingKingdom.errorLoad");
       if (isRefresh) setRefreshError(msg);
       else setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [tk]);
 
   useEffect(() => {
     void load();
@@ -165,42 +168,42 @@ export function LivingKingdomView() {
   const allIdle = agents.length > 0 && stats.working === 0 && stats.awaiting === 0 && stats.blocked === 0;
   const selectedAgent = selectedId ? agents.find((a) => a.id === selectedId) ?? null : null;
 
-  if (loading) return <LoadingState message="Summoning the kingdom..." />;
-  if (error) return <ErrorState title="Unable to load the living kingdom." message={error} onRetry={() => void load()} />;
+  if (loading) return <LoadingState message={tk("livingKingdom.loading")} />;
+  if (error) return <ErrorState title={tk("livingKingdom.errorTitle")} message={error} onRetry={() => void load()} />;
 
   return (
     <div className="space-y-5">
       {/* Header row */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h2 className="font-display text-xl">The Living Kingdom</h2>
-          <p className="text-sm text-muted-foreground">Who is working, idle, or blocked — at a glance. Every motion reflects real activity.</p>
+          <h2 className="font-display text-xl">{tk("livingKingdom.title")}</h2>
+          <p className="text-sm text-muted-foreground">{tk("livingKingdom.subtitle")}</p>
         </div>
-        <Button variant="outline" onClick={() => void load(true)} disabled={refreshing} className="gap-2">
+        <Button variant="outline" onClick={() => void load(true)} disabled={refreshing} className="min-h-11 gap-2">
           <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-          {refreshing ? "Refreshing…" : "Refresh"}
+          {refreshing ? tk("livingKingdom.refreshing") : tk("livingKingdom.refresh")}
         </Button>
       </div>
 
       {refreshError && (
         <div className="flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-2.5 text-sm text-amber-300">
           <AlertTriangle className="h-4 w-4 shrink-0" />
-          <span className="flex-1">Refresh failed: {refreshError}. Showing last-known state.</span>
-          <button type="button" onClick={() => void load(true)} className="shrink-0 text-xs underline">Retry</button>
+          <span className="flex-1">{tk("livingKingdom.refreshFailed", { message: refreshError })}</span>
+          <button type="button" onClick={() => void load(true)} className="shrink-0 text-xs underline">{tk("livingKingdom.retry")}</button>
         </div>
       )}
 
       {/* At-a-glance counts */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <GlanceChip label="Working" count={stats.working} tone="text-emerald-400" />
-        <GlanceChip label="Awaiting Review" count={stats.awaiting} tone="text-amber-400" />
-        <GlanceChip label="Blocked" count={stats.blocked} tone="text-destructive" />
-        <GlanceChip label="Resting" count={stats.idle} tone="text-muted-foreground" />
+        <GlanceChip label={tk("livingKingdom.summary.working")} count={stats.working} tone="text-emerald-400" />
+        <GlanceChip label={tk("livingKingdom.summary.awaitingReview")} count={stats.awaiting} tone="text-amber-400" />
+        <GlanceChip label={tk("livingKingdom.summary.blocked")} count={stats.blocked} tone="text-destructive" />
+        <GlanceChip label={tk("livingKingdom.summary.resting")} count={stats.idle} tone="text-muted-foreground" />
       </div>
 
       {allIdle && (
         <div className="rounded-lg border border-border/50 bg-muted/10 px-4 py-3 text-center text-sm text-muted-foreground">
-          The kingdom rests — no active operations. Issue a decree from the Command view to set the court in motion.
+          {tk("livingKingdom.restingMessage")}
         </div>
       )}
 
@@ -212,16 +215,16 @@ export function LivingKingdomView() {
         </div>
 
         {/* Kingdom Herald — real events (Phase 5) */}
-        <SectionCard title="Kingdom Herald" icon={Activity} contentClassName="p-3 max-h-[640px] overflow-y-auto">
+        <SectionCard title={tk("livingKingdom.herald")} icon={Activity} contentClassName="p-3 max-h-[640px] overflow-y-auto">
           <KingdomActivityFeed activities={activity?.activities ?? []} limit={HERALD_LIMIT} />
         </SectionCard>
       </div>
 
       {lastUpdated && (
         <p className="text-center text-[11px] text-muted-foreground">
-          Updated {timeAgo(lastUpdated.toISOString())}
-          {refreshing ? " · Refreshing…" : " · Auto-refreshes every 30s"}
-          {" · "}Live data from AgentActivity, AutomationJobs, CouncilSessions
+          {tk("livingKingdom.updated", { time: timeAgo(lastUpdated.toISOString()) })}
+          {refreshing ? ` · ${tk("livingKingdom.updating")}` : ` · ${tk("livingKingdom.autoRefresh")}`}
+          {` · ${tk("livingKingdom.dataSource")}`}
         </p>
       )}
     </div>

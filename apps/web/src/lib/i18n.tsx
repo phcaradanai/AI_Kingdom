@@ -199,8 +199,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
 export function useI18n() {
   const context = useContext(I18nContext);
   const [fallbackLanguage, setFallbackLanguage] = useState<LanguageCode>(() => readStoredLanguage());
-  if (context) return context;
-  return {
+  const fallback = useMemo<I18nContextValue>(() => ({
     language: fallbackLanguage,
     setLanguage: (nextLanguage: LanguageCode, options?: { persist?: boolean }) => {
       setFallbackLanguage(nextLanguage);
@@ -208,7 +207,8 @@ export function useI18n() {
     },
     t: (text: string) => translateText(text, fallbackLanguage),
     tk: (key: string, vars?: TranslationVars) => resolveMessage(key, fallbackLanguage, vars)
-  };
+  }), [fallbackLanguage]);
+  return context ?? fallback;
 }
 
 export function hasStoredLanguagePreference() {

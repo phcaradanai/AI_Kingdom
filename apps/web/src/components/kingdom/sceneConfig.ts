@@ -15,9 +15,8 @@ export const SCENE_BACKGROUND = "/kingdom/scene.png";
 // Aspect ratio of the background image (width / height). The reference covers are ~16:10.
 export const SCENE_ASPECT = "16 / 10";
 
-// A rectangular region (percent of the stage) where each hall's residents stand.
-// x/y = top-left corner, w/h = size, all 0–100. Agents are spread along the lower
-// part of their box. Tune these to your background so figures sit in the right room.
+// A rectangular region (percent of the stage) that contains each hall's safe
+// movement waypoints. x/y = top-left corner, w/h = size, all 0–100.
 export type SceneZone = { x: number; y: number; w: number; h: number };
 
 export const SCENE_ZONES: Record<LocationKey, SceneZone> = {
@@ -28,7 +27,3 @@ export const SCENE_ZONES: Record<LocationKey, SceneZone> = {
   archive: { x: 36, y: 52, w: 28, h: 40 },
   treasury: { x: 68, y: 52, w: 28, h: 40 }
 };
-
-// Where a resident stands inside its zone box (fraction of the box). Lower = nearer
-// the "floor"; residents fan out horizontally when a hall has several.
-export const ZONE_FLOOR_Y = 0.7;

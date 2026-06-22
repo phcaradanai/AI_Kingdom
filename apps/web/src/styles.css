@@ -193,6 +193,50 @@ textarea {
   animation: kingdom-bob 1.4s ease-in-out infinite;
 }
 
+.kingdom-character-frame {
+  clip-path: polygon(5px 0, calc(100% - 5px) 0, 100% 5px, 100% calc(100% - 5px), calc(100% - 5px) 100%, 5px 100%, 0 calc(100% - 5px), 0 5px);
+  transition: filter 180ms ease, transform 180ms ease;
+}
+
+.kingdom-character-walk {
+  animation: kingdom-character-walk 360ms steps(2, end) infinite;
+}
+
+.kingdom-character-active {
+  animation: kingdom-character-active 2.2s ease-in-out infinite;
+}
+
+.kingdom-facing-left .kingdom-character-frame {
+  transform: rotate(-1deg);
+}
+
+.kingdom-ground-shadow {
+  transition: opacity 180ms ease, transform 180ms ease;
+}
+
+.kingdom-ground-shadow-moving {
+  opacity: 0.65;
+  transform: translateX(-50%) scaleX(0.78);
+}
+
+@keyframes kingdom-character-walk {
+  0%, 100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(1deg);
+  }
+}
+
+@keyframes kingdom-character-active {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2px);
+  }
+}
+
 @keyframes kingdom-bob {
   0%, 100% {
     transform: translateY(0);
@@ -303,7 +347,11 @@ textarea {
   .living-pulse-amber,
   .living-shimmer,
   .kingdom-bob,
-  .kingdom-bob-fast {
+  .kingdom-bob-fast,
+  .kingdom-character-walk,
+  .kingdom-character-active,
+  .kingdom-character-frame,
+  .kingdom-ground-shadow {
     animation: none !important;
     transition: none !important;
   }

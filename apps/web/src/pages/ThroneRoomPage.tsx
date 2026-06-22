@@ -51,7 +51,7 @@ export function ThroneRoomPage() {
           aria-pressed={view === "live"}
           onClick={() => setView("live")}
           className={cn(
-            "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
+            "flex min-h-11 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
             view === "live" ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
           )}
         >
@@ -63,7 +63,7 @@ export function ThroneRoomPage() {
           aria-pressed={view === "command"}
           onClick={() => setView("command")}
           className={cn(
-            "flex items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
+            "flex min-h-11 items-center gap-2 rounded-md px-4 py-2 text-sm font-semibold transition",
             view === "command" ? "bg-primary/15 text-primary shadow-sm" : "text-muted-foreground hover:text-foreground"
           )}
         >

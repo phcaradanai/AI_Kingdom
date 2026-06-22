@@ -307,7 +307,7 @@ export function AppLayout() {
           </div>
           <button
             type="button"
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:border-primary/50 hover:text-primary"
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md border border-border bg-card text-foreground hover:border-primary/50 hover:text-primary"
             aria-label="Open navigation"
             aria-expanded={mobileNavigationOpen}
             onClick={() => setMobileNavigationOpen(true)}

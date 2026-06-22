@@ -185,6 +185,7 @@ Progress: **Wave 2 complete** - Throne Room, Council, Work Orders, Automation Jo
 
 ### Wave 2A Layout Contract
 
+- Live Kingdom motion enhancement is complete. The scene now uses a lightweight deterministic movement loop with role-owned room bounds, real-state activity signals, reduced-motion freeze, canonical portraits, and semantic English/Thai chrome. Ambient idle walking is presentation only; `Kingdom Presence` remains the source of truth and no new execution or lifecycle state was introduced.
 - Throne Room keeps Live Kingdom and Command as separate views. Command intent links still open `?view=command`; the Command view puts decree entry and its single `Issue Decree` action above mode configuration and historical output.
 - `BUILD` is the durable default command mode. ASK, PLAN, RESEARCH, and BUILD remain available in a compact advanced disclosure with visible descriptions; changing mode never submits or mutates data.
 - The latest council result is a bounded operational area ordered as progress, final recommendation, next safe action, source-of-truth links, context warning, and role evidence. Existing execution, handoff, report, trace, project, and work-order behavior remains unchanged.
