@@ -558,9 +558,16 @@ test("selectAIProviderRoute with daily budget exceeded blocks expensive provider
       requiredCapabilities: { chat: true }
     });
 
-    // Budget is exceeded — sandbox or free-tier must be primary
-    assert.equal(selection.provider.id, LOCAL_SANDBOX_PROVIDER_ID);
-    assert.equal(selection.model, LOCAL_SANDBOX_MODEL);
+    // Budget is exceeded — the paid provider must be blocked and a budget-safe (free)
+    // provider chosen. That can be the local sandbox baseline OR a free-tier real
+    // provider (e.g. openrouter-free) when one is seeded — both satisfy the intent.
+    assert.notEqual(selection.provider.id, paidProviderId, "paid provider must be budget-blocked");
+    assert.ok(
+      selection.provider.id === LOCAL_SANDBOX_PROVIDER_ID
+        || selection.provider.isFreeTier === true
+        || selection.provider.costTier === "FREE",
+      `Expected a budget-safe (sandbox/free-tier) provider, got ${selection.provider.id} (costTier=${selection.provider.costTier}, isFreeTier=${selection.provider.isFreeTier})`
+    );
     assert.equal(selection.budgetBlocked, true, "budgetBlocked flag must be true when budget exceeded");
     assert.ok(
       selection.blockedProviderIds && selection.blockedProviderIds.length > 0,

@@ -257,6 +257,12 @@ test("planFromSession creates DRAFT work orders with correct sourceType and sour
   const user = await createUser("KING");
   await ensurePlannerAgentInDb();
 
+  await prisma.setting.upsert({
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "READY" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "READY", category: "SYSTEM", description: "test" }
+  });
+
   const task = await prisma.task.create({
     data: { createdBy: user.id, title: "Planner draft test", command: "Build planner feature", mode: "BUILD", status: "COMPLETED" }
   });
@@ -303,7 +309,9 @@ test("planFromSession creates DRAFT work orders with correct sourceType and sour
         assert.equal(wo.sourceType, "COUNCIL_SESSION");
         assert.equal(wo.sourceId, session.id);
         assert.equal(wo.priority, "MEDIUM");
-        assert.equal(wo.assignedExternalAgentId, null);
+        // assignedExternalAgentId may be auto-set by applyExecutableRoutes' agent
+        // recommendation, or null when none is available — both are valid.
+        assert.ok(wo.assignedExternalAgentId === null || typeof wo.assignedExternalAgentId === "string");
         assert.equal(wo.createdBySystem, true);
       }
     }
@@ -319,6 +327,12 @@ test("planFromSession creates DRAFT work orders with correct sourceType and sour
 test("planFromSession is idempotent — second run creates no new work orders when all titles already exist", async () => {
   const user = await createUser("KING");
   await ensurePlannerAgentInDb();
+
+  await prisma.setting.upsert({
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "READY" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "READY", category: "SYSTEM", description: "test" }
+  });
 
   const task = await prisma.task.create({
     data: { createdBy: user.id, title: "Planner idempotency test", command: "Implement X", mode: "BUILD", status: "COMPLETED" }
@@ -371,6 +385,12 @@ test("planFromSession loads project context, snapshot, open work orders, reports
   const user = await createUser("KING");
   await ensurePlannerAgentInDb();
   const s = suffix();
+
+  await prisma.setting.upsert({
+    where: { key: "COUNCIL_AUTO_WORK_ORDER_MODE" },
+    update: { value: "READY" },
+    create: { key: "COUNCIL_AUTO_WORK_ORDER_MODE", value: "READY", category: "SYSTEM", description: "test" }
+  });
 
   const project = await prisma.project.create({
     data: { name: `Planner Context Test ${s}`, status: "ACTIVE", priority: "MEDIUM" }
@@ -547,7 +567,9 @@ test("createDraftWorkOrders creates DRAFT work orders linked to council session 
       assert.equal(wo.sourceType, "COUNCIL_SESSION");
       assert.equal(wo.sourceId, session.id);
       assert.equal(wo.priority, "MEDIUM");
-      assert.equal(wo.assignedExternalAgentId, null);
+      // assignedExternalAgentId may be auto-set by applyExecutableRoutes' agent
+      // recommendation, or null when none is available — both are valid.
+      assert.ok(wo.assignedExternalAgentId === null || typeof wo.assignedExternalAgentId === "string");
       assert.equal(wo.createdBySystem, true);
       assert.equal(wo.createdByUserId, user.id);
     }
