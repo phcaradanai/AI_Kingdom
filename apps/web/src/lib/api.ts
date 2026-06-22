@@ -250,6 +250,8 @@ export const api = {
       body: JSON.stringify(payload)
     }),
   externalAgents: () => apiRequest<{ externalAgents: ExternalAgentDto[] }>("/external-agents"),
+  externalAgentReadiness: () =>
+    apiRequest<import("@/types/api").ExternalAgentReadinessReportDto>("/external-agents/readiness"),
   createExternalAgent: (payload: ExternalAgentPayload) =>
     apiRequest<{ externalAgent: ExternalAgentDto }>("/external-agents", { method: "POST", body: JSON.stringify(payload) }),
   updateExternalAgent: (id: string, payload: Partial<ExternalAgentPayload>) =>

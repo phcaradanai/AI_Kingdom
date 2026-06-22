@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js";
 import { auditLog } from "./auditService.js";
 import { createAutomationJob } from "./automationJobService.js";
 import { buildExternalAgentPrompt } from "./externalAgentWorkOrderService.js";
+import { resolveExternalAgentChoiceMatter } from "./externalAgentReadinessService.js";
 import { getBooleanSetting, getNumberSetting, getSettingValue } from "./settingsService.js";
 
 type WorkOrderForBridge = WorkOrder & { assignedExternalAgent?: ExternalAgent | null };
@@ -40,6 +41,9 @@ export async function createExternalAgentBridgeJob(input: {
       blockedReason: null
     }
   });
+
+  // The agent for this work order is now decided — close any open King-choice Matter.
+  await resolveExternalAgentChoiceMatter(workOrder.id).catch(() => undefined);
 
   const prompt = await buildExternalAgentPrompt(workOrder.id, externalAgent.id);
   const job = await createAutomationJob({
@@ -188,6 +192,12 @@ async function resolveExternalAgent(workOrder: WorkOrderForBridge, requestedId?:
     return agent;
   }
 
+  // King's choice gate: when on, never auto-select — the King must pick the agent
+  // (some agents are offline at any moment). The auto-exec path raises a decision
+  // Matter; here we refuse so the manual execute path can't silently auto-select.
+  if (await getBooleanSetting("REQUIRE_KING_EXTERNAL_AGENT_CHOICE", true)) {
+    throw namedError("ConflictError", "No external agent chosen. The King must select an external agent before execution (REQUIRE_KING_EXTERNAL_AGENT_CHOICE is enabled).");
+  }
   if (!autoSelect) throw namedError("ConflictError", "No external agent is assigned and AUTO_SELECT_EXTERNAL_AGENT is disabled.");
   const agent = await prisma.externalAgent.findFirst({
     where: { isActive: true, bridgeEnabled: true, command: { not: null } },

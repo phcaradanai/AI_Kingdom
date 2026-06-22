@@ -4,13 +4,14 @@ import { prisma } from "../db/prisma.js";
 import { requireRole } from "../middleware/rbac.js";
 import { auditLog } from "../services/auditService.js";
 import { ensureDefaultExternalAgents } from "../services/externalAgentWorkOrderService.js";
+import { getExternalAgentReadiness } from "../services/externalAgentReadinessService.js";
 import { getBooleanSetting } from "../services/settingsService.js";
 
 const router = Router();
 
 const externalAgentSchema = z.object({
   name: z.string().trim().min(1).max(120),
-  type: z.enum(["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "GENERIC_CLI", "MANUAL_ONLY", "CUSTOM"]),
+  type: z.enum(["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "CURSOR", "DEVIN", "GENERIC_CLI", "MANUAL_ONLY", "CUSTOM"]),
   roleTitle: z.string().trim().min(1).max(160),
   description: z.string().trim().max(1200).default(""),
   capabilities: z.array(z.string().trim().min(1).max(100)).max(30).default([]),
@@ -32,6 +33,18 @@ router.get("/", async (_req, res, next) => {
       orderBy: [{ isActive: "desc" }, { name: "asc" }]
     });
     res.json({ externalAgents });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Readiness: which external agents can the King pick right now (config + live runner probe).
+// Declared before "/:id" so it is not shadowed by the param route.
+router.get("/readiness", async (_req, res, next) => {
+  try {
+    await ensureDefaultExternalAgents();
+    const readiness = await getExternalAgentReadiness();
+    res.json(readiness);
   } catch (error) {
     next(error);
   }

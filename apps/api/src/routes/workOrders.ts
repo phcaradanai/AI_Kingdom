@@ -26,6 +26,7 @@ import {
 import { reconcileContextWarnings } from "../services/workOrderLifecycleReconcileService.js";
 import { refreshWorkOrderContext } from "../services/refreshWorkOrderContextService.js";
 import { createExternalAgentBridgeJob } from "../services/externalAgentBridgeService.js";
+import { resolveExternalAgentChoiceMatter } from "../services/externalAgentReadinessService.js";
 
 const router = Router();
 
@@ -530,6 +531,11 @@ router.post("/:id/assign-external-agent", requireRole("KING", "CROWN_PRINCE"), a
       data: { assignedExternalAgentId: externalAgentId },
       include
     });
+    // The King has made the agent decision — close any open external-agent-choice
+    // Matter so it stops nagging in the decision queue.
+    if (externalAgentId) {
+      await resolveExternalAgentChoiceMatter(id).catch(() => undefined);
+    }
     await auditLog({
       userId: req.user?.id,
       action: "assign_external_agent",

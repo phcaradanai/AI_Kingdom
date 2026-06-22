@@ -1163,7 +1163,24 @@ export type SecretaryBriefDto = {
   vision: { content: string } | null;
 };
 
-export type ExternalAgentType = "CLAUDE_CODE" | "CODEX" | "CLINE" | "KILO" | "ANTIGRAVITY" | "HERMES" | "OPENCODE" | "GENERIC_CLI" | "MANUAL_ONLY" | "CUSTOM";
+export type ExternalAgentType = "CLAUDE_CODE" | "CODEX" | "CLINE" | "KILO" | "ANTIGRAVITY" | "HERMES" | "OPENCODE" | "CURSOR" | "DEVIN" | "GENERIC_CLI" | "MANUAL_ONLY" | "CUSTOM";
+
+export type ExternalAgentReadinessDto = {
+  agentId: string;
+  name: string;
+  type: ExternalAgentType;
+  ready: boolean;
+  configReady: boolean;
+  runnerAvailable: boolean;
+  lastRunStatus: string | null;
+  reason: string;
+};
+
+export type ExternalAgentReadinessReportDto = {
+  runnerOnline: boolean;
+  capabilitiesUpdatedAt: string | null;
+  agents: ExternalAgentReadinessDto[];
+};
 export type ExternalAgentExecutionMode = "MANUAL_COPY_PASTE" | "CLI_MANUAL" | "API" | "FUTURE_AUTOMATED";
 export type ExternalAgentSafetyLevel = "LOW_RISK" | "MEDIUM_RISK" | "HIGH_RISK";
 export type WorkOrderExecutionTarget = "AUTO" | "INTERNAL_AGENT" | "RUNNER_VALIDATION" | "RUNNER_PATCH" | "EXTERNAL_AGENT";

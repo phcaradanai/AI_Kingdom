@@ -497,14 +497,18 @@ async function notifyKingExternalAgentReport(input: {
   }).catch(() => undefined);
 }
 
-export async function heartbeat(runnerId: string, meta?: { version?: string; hostname?: string }) {
+export async function heartbeat(runnerId: string, meta?: { version?: string; hostname?: string; agentCapabilities?: unknown }) {
+  const hasCapabilities = Array.isArray(meta?.agentCapabilities);
   const runner = await prisma.agentRunner.update({
     where: { id: runnerId },
     data: {
       status: "ONLINE",
       lastHeartbeatAt: new Date(),
       ...(meta?.version ? { version: meta.version } : {}),
-      ...(meta?.hostname ? { hostname: meta.hostname } : {})
+      ...(meta?.hostname ? { hostname: meta.hostname } : {}),
+      ...(hasCapabilities
+        ? { agentCapabilities: meta!.agentCapabilities as Prisma.InputJsonValue, capabilitiesUpdatedAt: new Date() }
+        : {})
     }
   });
 

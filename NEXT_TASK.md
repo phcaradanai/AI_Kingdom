@@ -37,5 +37,5 @@ Turn `/external-agents` into a focused manual-handoff registry. The King should 
 
 - Premium UX Waves 1, 2, 3, and 4A are complete.
 - `/external-agents` is currently 218 lines and has no focused page test.
-- Latest validation: root typecheck, root production build, and 191/191 web tests pass.
+- Latest validation: root typecheck, root production build, and 193/193 web tests pass.
 - Wave 4A live checks pass at 1440x900, 1024x768, and 430x932 in English/Thai without horizontal overflow.
