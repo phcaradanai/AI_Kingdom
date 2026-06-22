@@ -5,6 +5,7 @@ import { approveJob } from "./automationJobService.js";
 import { assertExternalAgentBridgeEnabled, createExternalAgentBridgeJob } from "./externalAgentBridgeService.js";
 import { findBlockedPathHint } from "./livingLoopRiskPolicyService.js";
 import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
+import { requestKingExternalAgentChoice } from "./externalAgentReadinessService.js";
 import { getBooleanSetting } from "./settingsService.js";
 
 /**
@@ -70,6 +71,30 @@ export async function maybeAutoExecuteBuildWorkOrder(input: {
     const { workOrder: bound } = await bindFreshContextToWorkOrder(input.workOrderId, { userId: input.userId });
     if (bound.contextBindingStatus !== "FRESH") {
       return skip(`context is ${bound.contextBindingStatus} after binding — awaiting King review`);
+    }
+
+    // King's external-agent choice gate: when enabled and the work order has no
+    // explicit agent assignment, do NOT auto-select an agent. Raise a King-decision
+    // Matter listing the agents that are ready right now and pause. Auto-exec fires
+    // once (after the planner creates the WO) and is not re-invoked, so the King then
+    // picks an agent and dispatches manually — the manual execute path finds the
+    // assignment and proceeds; assigning resolves this choice Matter.
+    if (await getBooleanSetting("REQUIRE_KING_EXTERNAL_AGENT_CHOICE", true)) {
+      if (!bound.assignedExternalAgentId) {
+        const choice = await requestKingExternalAgentChoice({
+          workOrderId: input.workOrderId,
+          workOrderTitle: bound.title,
+          projectId: input.projectId
+        });
+        await auditLog({
+          userId: input.userId,
+          action: "external_agent_choice_requested",
+          resourceType: "WorkOrder",
+          resourceId: input.workOrderId,
+          metadata: { matterId: choice.matterId, created: choice.created, readyAgents: choice.readyAgentNames }
+        }).catch(() => undefined);
+        return skip("awaiting King external-agent choice");
+      }
     }
 
     await assertExternalAgentBridgeEnabled();

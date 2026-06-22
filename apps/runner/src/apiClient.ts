@@ -72,7 +72,7 @@ export class ApiClient {
     return response.json() as Promise<T>;
   }
 
-  async heartbeat(meta?: { version?: string; hostname?: string }): Promise<void> {
+  async heartbeat(meta?: { version?: string; hostname?: string; agentCapabilities?: unknown }): Promise<void> {
     await this.request("POST", "/api/runner/heartbeat", meta ?? {});
   }
 

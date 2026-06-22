@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/lib/api";
 import { useAuthStore } from "@/stores/authStore";
-import type { ExternalAgentDto, ExternalAgentPayload, ExternalAgentTestResultDto, ExternalAgentType } from "@/types/api";
+import type { ExternalAgentDto, ExternalAgentPayload, ExternalAgentReadinessDto, ExternalAgentTestResultDto, ExternalAgentType } from "@/types/api";
 
 const blankAgent: ExternalAgentPayload = {
   name: "",
@@ -26,12 +26,14 @@ const blankAgent: ExternalAgentPayload = {
   safetyLevel: "MEDIUM_RISK"
 };
 
-const types: ExternalAgentType[] = ["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "GENERIC_CLI", "MANUAL_ONLY", "CUSTOM"];
+const types: ExternalAgentType[] = ["CLAUDE_CODE", "CODEX", "CLINE", "KILO", "ANTIGRAVITY", "HERMES", "OPENCODE", "CURSOR", "DEVIN", "GENERIC_CLI", "MANUAL_ONLY", "CUSTOM"];
 
 export function ExternalAgentsPage() {
   const user = useAuthStore((state) => state.user);
   const isKing = user?.role === "KING";
   const [externalAgents, setExternalAgents] = useState<ExternalAgentDto[]>([]);
+  const [readiness, setReadiness] = useState<Record<string, ExternalAgentReadinessDto>>({});
+  const [runnerOnline, setRunnerOnline] = useState<boolean>(false);
   const [selected, setSelected] = useState<ExternalAgentDto | null>(null);
   const [draft, setDraft] = useState<ExternalAgentPayload>(blankAgent);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,13 @@ export function ExternalAgentsPage() {
   async function load() {
     const response = await api.externalAgents();
     setExternalAgents(response.externalAgents);
+    try {
+      const report = await api.externalAgentReadiness();
+      setRunnerOnline(report.runnerOnline);
+      setReadiness(Object.fromEntries(report.agents.map((a) => [a.agentId, a])));
+    } catch {
+      // readiness is advisory; never block the page if it fails
+    }
   }
 
   useEffect(() => {
@@ -102,6 +111,11 @@ export function ExternalAgentsPage() {
       />
       <div className="grid gap-5 xl:grid-cols-[420px_1fr]">
         <div className="space-y-4">
+          <p className="text-xs text-muted-foreground" data-testid="runner-readiness">
+            {runnerOnline
+              ? "Runner online — readiness reflects which agent CLIs are installed on the runner host right now."
+              : "No online runner — external agents cannot execute until a runner is online. Readiness shown as unavailable."}
+          </p>
           {isKing ? <Button className="w-full" onClick={() => select(null)}>Create External Agent</Button> : null}
           {externalAgents.map((agent) => (
             <Card key={agent.id}>
@@ -118,6 +132,7 @@ export function ExternalAgentsPage() {
                   <span className="rounded-full border border-border px-2 py-1">{agent.executionMode}</span>
                   <span className="rounded-full border border-border px-2 py-1">{agent.safetyLevel}</span>
                   <span className="rounded-full border border-border px-2 py-1">{agent.bridgeEnabled ? "Bridge enabled" : "Manual"}</span>
+                  {renderReadinessBadge(readiness[agent.id])}
                 </div>
               </button>
               {isKing ? (
@@ -215,4 +230,21 @@ function toPayload(agent: ExternalAgentDto): ExternalAgentPayload {
 
 function csv(value: string): string[] {
   return value.split(",").map((item) => item.trim()).filter(Boolean);
+}
+
+function renderReadinessBadge(readiness: ExternalAgentReadinessDto | undefined) {
+  if (!readiness) return null;
+  const ready = readiness.ready;
+  return (
+    <span
+      title={readiness.reason}
+      className={
+        ready
+          ? "rounded-full border border-emerald-500/40 bg-emerald-500/10 px-2 py-1 text-emerald-600"
+          : "rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-amber-600"
+      }
+    >
+      {ready ? "Ready" : `Offline — ${readiness.reason}`}
+    </span>
+  );
 }

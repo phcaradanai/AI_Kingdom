@@ -47,7 +47,8 @@ export const DEFAULT_SETTINGS: Array<{ key: string; value: string; category: Set
   { key: "LIVING_LOOP_ALLOW_BRANCH_PUSH", value: "false", category: "SYSTEM", description: "Reserved guardrail. Automatic branch push remains disabled." },
   { key: "LIVING_LOOP_ALLOW_PR_CREATE", value: "false", category: "SYSTEM", description: "Reserved guardrail. Automatic pull request creation remains disabled." },
   { key: "LIVING_LOOP_ALLOW_PAID_PROVIDERS", value: "false", category: "SYSTEM", description: "Reserved guardrail. Paid providers remain disabled for Living Loop observations." },
-  { key: "ADAPTIVE_REASONING_ENABLED", value: "true", category: "SYSTEM", description: "Let the responsible Kingdom agent (planner, council synthesis, reviewer) think harder — reasoning ON at high effort — when a decree or work order is assessed as complex. Kill-switch: set false to keep reasoning at the agent's stored config for every task." }
+  { key: "ADAPTIVE_REASONING_ENABLED", value: "true", category: "SYSTEM", description: "Let the responsible Kingdom agent (planner, council synthesis, reviewer) think harder — reasoning ON at high effort — when a decree or work order is assessed as complex. Kill-switch: set false to keep reasoning at the agent's stored config for every task." },
+  { key: "REQUIRE_KING_EXTERNAL_AGENT_CHOICE", value: "true", category: "SYSTEM", description: "When the Kingdom would otherwise auto-select an external agent (codex, claude-code, cline, hermes, antigravity, devin, cursor, ...) for execution, pause instead and ask the King to choose among the agents that are ready right now (some may be offline). The King's explicit assignment proceeds normally; only system auto-selection is gated." }
 ];
 
 // Keys that were removed from active settings and should be cleaned up from existing databases.

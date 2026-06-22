@@ -28,6 +28,7 @@ import { PREVALIDATION_FAILURE_PREFIX, getPreValidationConfig, runPreValidationC
 import { buildValidationChildEnv, formatForwardedValidationEnvNames, validateValidationDatabaseEnv } from "./validationEnv.js";
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 import { resolveAgentCliConfig, runAgentCli } from "./agentCliRunner.js";
+import { probeAgentCapabilities } from "./agentCapabilityProbe.js";
 import { getExternalAgentAdapter } from "./externalAgents/index.js";
 
 dotenv.config({ path: "../../.env" });
@@ -105,7 +106,10 @@ async function main() {
 
 async function sendHeartbeat() {
   try {
-    await api.heartbeat({ version: VERSION, hostname: HOSTNAME });
+    // Probe which external-agent CLIs are actually runnable on this host so the
+    // Kingdom only ever offers the King agents it can really execute right now.
+    const agentCapabilities = probeAgentCapabilities();
+    await api.heartbeat({ version: VERSION, hostname: HOSTNAME, agentCapabilities });
     console.log("[Runner] Heartbeat sent");
   } catch (err) {
     console.warn("[Runner] Heartbeat failed:", err instanceof Error ? err.message : String(err));

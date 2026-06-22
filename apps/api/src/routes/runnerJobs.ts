@@ -21,7 +21,7 @@ router.use(requireRunnerToken);
 router.post("/heartbeat", async (req, res, next) => {
   try {
     const runner = req.runner!;
-    const meta = req.body as { version?: string; hostname?: string } | undefined;
+    const meta = req.body as { version?: string; hostname?: string; agentCapabilities?: unknown } | undefined;
     const updated = await heartbeat(runner.id, meta);
     const { tokenHash: _hash, ...safe } = updated;
     res.json(safe);
