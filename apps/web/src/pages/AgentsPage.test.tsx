@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -162,7 +162,15 @@ function renderPage() {
 
 afterEach(() => {
   vi.clearAllMocks();
+  localStorage.clear();
 });
+
+async function openFallbackEditor() {
+  await userEvent.click(await screen.findByRole("button", { name: "Edit configuration" }));
+  const dialog = await screen.findByRole("dialog", { name: "Edit Royal Tester" });
+  await userEvent.click(within(dialog).getByRole("button", { name: "Fallbacks" }));
+  return dialog;
+}
 
 describe("AgentsPage fallback model validation", () => {
   it("auto-checks fallback models on load", async () => {
@@ -173,17 +181,18 @@ describe("AgentsPage fallback model validation", () => {
     apiMocks.validateProviderModels.mockReturnValueOnce(deferred.promise);
 
     renderPage();
+    const dialog = await openFallbackEditor();
 
     await waitFor(() => {
       expect(apiMocks.validateProviderModels).toHaveBeenCalledWith("openrouter-free", ["openrouter/owl-alpha"]);
     });
-    expect(await screen.findByText("Checking")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Checking")).toBeInTheDocument();
 
     deferred.resolve({
       results: [{ modelId: "openrouter/owl-alpha", status: "VALID", checkedAt: nowIso }]
     });
 
-    expect(await screen.findByText("Valid")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Valid")).toBeInTheDocument();
   }, 10_000);
 
   it("debounces validation after editing a fallback model", async () => {
@@ -197,10 +206,11 @@ describe("AgentsPage fallback model validation", () => {
       });
 
     renderPage();
-    expect(await screen.findByText("Valid")).toBeInTheDocument();
+    const dialog = await openFallbackEditor();
+    expect(await within(dialog).findByText("Valid")).toBeInTheDocument();
     apiMocks.validateProviderModels.mockClear();
 
-    const input = await screen.findByLabelText("Fallback model 1");
+    const input = await within(dialog).findByLabelText("Fallback model 1");
     fireEvent.change(input, { target: { value: "missing/model" } });
 
     await waitFor(
@@ -211,8 +221,8 @@ describe("AgentsPage fallback model validation", () => {
       { timeout: 2500 }
     );
 
-    expect(await screen.findByText("Invalid")).toBeInTheDocument();
-    expect(screen.getByText("Model is not present.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("Invalid")).toBeInTheDocument();
+    expect(within(dialog).getByText("Model is not present.")).toBeInTheDocument();
   }, 10_000);
 
   it("renders repeated OpenRouter fallback attempts without duplicate-key warnings", async () => {
@@ -263,8 +273,10 @@ describe("AgentsPage fallback model validation", () => {
 
     renderPage();
 
+    await userEvent.click(await screen.findByRole("button", { name: "Routing" }));
+
     await waitFor(() => {
-      expect(screen.getByText("Fallback chain:")).toBeInTheDocument();
+      expect(screen.getAllByText("Fallback chain:").length).toBeGreaterThan(0);
     });
 
     const duplicateKeyWarning = consoleError.mock.calls.some((call) =>
@@ -273,4 +285,50 @@ describe("AgentsPage fallback model validation", () => {
     expect(duplicateKeyWarning).toBe(false);
     consoleError.mockRestore();
   }, 10_000);
+});
+
+describe("AgentsPage registry workspace", () => {
+  it("keeps creation explicit and exposes focused source-owned sections", async () => {
+    setup();
+    apiMocks.validateProviderModels.mockResolvedValue({ results: [{ modelId: "openrouter/owl-alpha", status: "VALID", checkedAt: nowIso }] });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "Royal agent command registry" })).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Living Agent profile" })).toHaveAttribute("href", "/living-agents/agent-1");
+    expect(screen.getByRole("link", { name: "Provider registry" })).toHaveAttribute("href", "/providers");
+    expect(screen.getByRole("navigation", { name: "Agent configuration sections" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Create agent" }));
+    const dialog = await screen.findByRole("dialog", { name: "Create royal agent" });
+    expect(within(dialog).getByRole("button", { name: "Identity" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Prompt" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Skills" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Routing" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Fallbacks" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Preview" })).toBeInTheDocument();
+  });
+
+  it("renders saved display identity while retaining canonical identity evidence", async () => {
+    setup();
+    storeState.agents = [{ ...agent, displayName: "Astra", displayTitle: "Royal Quality Marshal", canonicalName: "royal-tester", canonicalTitle: "Royal Tester" }];
+    apiMocks.validateProviderModels.mockResolvedValue({ results: [{ modelId: "openrouter/owl-alpha", status: "VALID", checkedAt: nowIso }] });
+    renderPage();
+
+    expect((await screen.findAllByRole("heading", { name: "Royal Quality Marshal" })).length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Astra").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("royal-tester").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Royal Tester").length).toBeGreaterThan(0);
+  });
+
+  it("uses semantic Thai chrome without translating source data", async () => {
+    localStorage.setItem("ai-kingdom-ui-language", "th");
+    setup();
+    apiMocks.validateProviderModels.mockResolvedValue({ results: [{ modelId: "openrouter/owl-alpha", status: "VALID", checkedAt: nowIso }] });
+    renderPage();
+
+    expect(await screen.findByRole("heading", { name: "ศูนย์ควบคุมเอเจนต์หลวง" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "สร้างเอเจนต์" })).toBeInTheDocument();
+    expect(screen.getAllByText("Royal Tester").length).toBeGreaterThan(0);
+  });
 });

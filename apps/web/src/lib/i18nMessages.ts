@@ -1,4 +1,5 @@
 import type { LanguageCode } from "./i18n";
+import { AGENTS_MESSAGES } from "./agentsMessages";
 import { STRATEGY_MESSAGES } from "./strategyMessages";
 
 /**
@@ -22,6 +23,7 @@ import { STRATEGY_MESSAGES } from "./strategyMessages";
  */
 export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
   en: {
+    ...AGENTS_MESSAGES.en,
     ...STRATEGY_MESSAGES.en,
     // ── Shared: provenance row labels (ProvenanceLinks) ──────────────────────
     "provenance.source": "Source",
@@ -1175,6 +1177,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "workOrders.source.lineageDescription": "Ordered trace: decree → council → prompt → result → review → summary."
   },
   th: {
+    ...AGENTS_MESSAGES.th,
     ...STRATEGY_MESSAGES.th,
     // ── Shared: provenance row labels ────────────────────────────────────────
     "provenance.source": "แหล่งที่มา",
