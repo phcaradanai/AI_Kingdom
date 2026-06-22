@@ -132,13 +132,23 @@ export async function updateTraceSource(traceId: string, source: { sourceType?: 
 }
 
 export async function completeAIUsageTrace(traceId: string, responsePreview?: unknown, metadata?: unknown) {
+  // Merge completion metadata into the metadata recorded at trace creation rather
+  // than replacing it, so diagnostic fields set up-front (e.g. complexityLevel,
+  // reasoningEscalated, agentSlug) survive completion. Completion keys win on conflict.
+  let mergedMetadata: unknown = metadata;
+  if (metadata !== undefined) {
+    const existing = await prisma.aIUsageTrace.findUnique({ where: { traceId }, select: { metadata: true } });
+    if (isPlainObject(existing?.metadata) && isPlainObject(metadata)) {
+      mergedMetadata = { ...(existing!.metadata as Record<string, unknown>), ...(metadata as Record<string, unknown>) };
+    }
+  }
   return prisma.aIUsageTrace.update({
     where: { traceId },
     data: {
       status: "COMPLETED",
       completedAt: new Date(),
       responsePreview: sanitizePreview(responsePreview),
-      ...(metadata === undefined ? {} : { metadata: sanitizeJsonForStorage(metadata) })
+      ...(metadata === undefined ? {} : { metadata: sanitizeJsonForStorage(mergedMetadata) })
     }
   });
 }

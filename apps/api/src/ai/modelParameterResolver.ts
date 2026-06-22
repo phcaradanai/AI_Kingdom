@@ -65,6 +65,36 @@ type AgentForResolver = {
   maxTokens?: number | null;
 };
 
+// Adaptive escalation requested by a caller for a complex task. When
+// `reasoning` is true and the provider supports reasoning, the resolver forces
+// reasoning ON at the requested effort even if the agent's stored config has it
+// disabled. It is always safe to pass: a no-op when reasoning is false or the
+// provider does not support reasoning.
+export type ParameterEscalation = {
+  reasoning?: boolean;
+  reasoningEffort?: ReasoningConfig["effort"];
+};
+
+// Applies an escalation on top of a resolved reasoning config. Returns the
+// config unchanged when escalation is absent/off or the provider can't reason.
+function applyReasoningEscalation(
+  reasoning: ReasoningConfig | null,
+  escalation: ParameterEscalation | undefined,
+  supportsReasoning: boolean
+): ReasoningConfig | null {
+  if (!escalation?.reasoning || !supportsReasoning || reasoning === null) return reasoning;
+  // Never escalate to "none" — pick the requested effort, else keep a meaningful
+  // existing effort, else default to "high".
+  const requested = escalation.reasoningEffort;
+  const effort: ReasoningConfig["effort"] =
+    requested && requested !== "none"
+      ? requested
+      : reasoning.effort !== "none"
+        ? reasoning.effort
+        : "high";
+  return { ...reasoning, enabled: true, effort };
+}
+
 const DEFAULT_REASONING: ReasoningConfig = {
   enabled: true,
   effort: "medium",
@@ -105,7 +135,8 @@ const REASONING_SUPPORTED_PROVIDERS = new Set(["openrouter", "openrouter-free"])
 export function resolveEffectiveParameters(
   agent: AgentForResolver,
   providerType: string,
-  defaultMaxTokens?: number
+  defaultMaxTokens?: number,
+  escalation?: ParameterEscalation
 ): EffectiveParameters {
   const raw = agent.parameterMode ?? "ROLE_DEFAULT";
   const mode: ParameterMode = raw === "MANUAL" || raw === "PROVIDER_DEFAULT" ? raw : "ROLE_DEFAULT";
@@ -153,7 +184,11 @@ export function resolveEffectiveParameters(
       openrouter_route: stored?.openrouter_route ?? null,
       openrouter_provider_preferences: stored?.openrouter_provider_preferences ?? null,
       plugins: stored?.plugins ?? null,
-      reasoning: supportsReasoning ? (stored?.reasoning ?? DEFAULT_REASONING) : null,
+      reasoning: applyReasoningEscalation(
+        supportsReasoning ? (stored?.reasoning ?? DEFAULT_REASONING) : null,
+        escalation,
+        supportsReasoning
+      ),
       tools: stored?.tools ?? DEFAULT_TOOLS,
       mode
     };
@@ -179,7 +214,11 @@ export function resolveEffectiveParameters(
     openrouter_route: stored?.openrouter_route ?? null,
     openrouter_provider_preferences: stored?.openrouter_provider_preferences ?? null,
     plugins: stored?.plugins ?? null,
-    reasoning: supportsReasoning ? (stored?.reasoning ?? roleDefaults.reasoning) : null,
+    reasoning: applyReasoningEscalation(
+      supportsReasoning ? (stored?.reasoning ?? roleDefaults.reasoning) : null,
+      escalation,
+      supportsReasoning
+    ),
     tools: DEFAULT_TOOLS,
     mode
   };

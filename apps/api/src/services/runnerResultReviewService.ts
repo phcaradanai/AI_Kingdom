@@ -6,7 +6,8 @@ import { resolveEffectiveParameters } from "../ai/modelParameterResolver.js";
 import { buildTraceContext, completeAIUsageTrace, createAIUsageTrace, failAIUsageTrace } from "./aiUsageTraceService.js";
 import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
-import { getNumberSetting } from "./settingsService.js";
+import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { assessExecutionComplexity, escalationFor } from "./complexityAssessor.js";
 import { sanitizeLogOutput } from "./secretRedactorService.js";
 
 export const AGENT_REVIEW_VERDICTS = ["PASS", "NEEDS_FIX", "PATCH_FAILED", "NO_CHANGES", "RISK_REVIEW", "VALIDATION_FAILED", "UNKNOWN"] as const;
@@ -189,7 +190,7 @@ export async function generateAgentReviewDraft(input: ReviewInput, options: Gene
     const prompt = buildAiReviewPrompt(input, deterministic);
     const raw = options.aiGenerate
       ? await options.aiGenerate({ prompt, deterministicReview: deterministic })
-      : await generateAiReviewText(input, prompt);
+      : await generateAiReviewText(input, prompt, deterministic.verdict);
     const parsed = parseAiReviewJson(raw);
     if (!parsed) return { ...deterministic, rawModelOutput: raw.slice(0, 10_000) };
     return mergeAiReview(deterministic, parsed, raw);
@@ -352,7 +353,7 @@ function mergeAiReview(deterministic: ReviewDraft, ai: Partial<ReviewDraft>, raw
   return merged;
 }
 
-async function generateAiReviewText(input: ReviewInput, prompt: string): Promise<string> {
+async function generateAiReviewText(input: ReviewInput, prompt: string, deterministicVerdict?: string): Promise<string> {
   const agent = await findReviewerAgent();
   if (!agent) throw new Error("No active Grand Vizier or Royal Architect reviewer agent is available");
 
@@ -362,10 +363,20 @@ async function generateAiReviewText(input: ReviewInput, prompt: string): Promise
     taskMode: "PLAN",
     requiredCapabilities: { chat: true, jsonMode: true }
   });
+  // Adaptive reasoning: bug analysis of a failed or high-risk patch needs deeper
+  // thought. Use the structured signals (patch risk + deterministic verdict), not
+  // text heuristics. No-op when the kill-switch is off or the provider can't reason.
+  const adaptiveReasoning = await getBooleanSetting("ADAPTIVE_REASONING_ENABLED", true);
+  const complexity = assessExecutionComplexity({
+    riskLevel: input.patchArtifact?.riskLevel,
+    verdict: deterministicVerdict
+  });
+  const escalation = adaptiveReasoning ? escalationFor(complexity.level) : undefined;
   const effectiveParams = resolveEffectiveParameters(
     agent as Parameters<typeof resolveEffectiveParameters>[0],
     route.provider.type,
-    defaultMaxTokens
+    defaultMaxTokens,
+    escalation
   );
   const providerCalls = [{ provider: route.provider, model: route.model }, ...route.fallbackAttempts]
     .map(({ provider, model }) => {
@@ -394,7 +405,14 @@ async function generateAiReviewText(input: ReviewInput, prompt: string): Promise
     providerName: route.provider.name,
     model: route.model,
     prompt,
-    metadata: { agentSlug: agent.slug },
+    metadata: {
+      agentSlug: agent.slug,
+      complexityLevel: complexity.level,
+      complexitySignals: complexity.signals,
+      reasoningEscalated: !!escalation?.reasoning,
+      reasoningEnabled: effectiveParams.reasoning?.enabled ?? false,
+      reasoningEffort: effectiveParams.reasoning?.effort ?? null
+    },
     attributionStatus: "TRUSTED"
   });
   const traceContext = buildTraceContext({
