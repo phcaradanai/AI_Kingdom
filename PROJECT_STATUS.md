@@ -2,13 +2,13 @@
 
 ## Current State
 
-AI Kingdom is implemented through M24 Phase C (kingdom-agent delegation grounding + semantic acceptance-criteria review), M24 adaptive reasoning (complexity-aware reasoning/budget escalation for the responsible agent), M24 King-selects-external-agent readiness gate (the King chooses among agents the runner reports as ready, instead of auto-select), and M24 self-growing max_tokens (the budget auto-grows and persists when a real provider truncates, up to a safe ceiling), with Premium UX Waves 1, 2, 3, 4A, and 4B complete. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
+AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, and M24 self-growing max_tokens, with Premium UX Waves 1, 2, 3, 4A, and 4B complete. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
 ## Active Work
 
-No Codex UX slice is currently active. The completed Wave 4B ownership record and collision-avoidance history are recorded in `docs/ACTIVE_WORK.md`.
+Premium UX Wave 4C planning for `/agent-chat` is reserved to Codex on `codex/main`, based on `main` at `dfa9201`. Implementation has not started. Team ownership is recorded in `WORK_IN_PROGRESS.md`; source ownership, expected files, delivery order, and collision boundaries are detailed in `docs/ACTIVE_WORK.md`.
 
 ## Implemented Milestones
 
@@ -115,7 +115,7 @@ Wave 1, the full command-to-execution Wave 2, Wave 3 Projects/Strategy, and Wave
 
 ## Verification
 
-Latest frontend validation after External Agents Registry refinement (2026-06-23):
+Latest validation after merging M24 Phase B and reserving Premium UX Wave 4C (2026-06-23):
 
 - `npm run typecheck` — pass across API, runner, and web
 - `npm run test --workspace @ai-kingdom/web` — 199/199 pass; shared Vitest setup now provides deterministic in-memory `localStorage` instead of depending on Node's experimental web-storage flag
