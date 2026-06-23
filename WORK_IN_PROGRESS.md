@@ -16,10 +16,11 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Claude - `claude/main`
 
-- **Cross-task learning** (✅ merged to `main`) — `crossTaskLearningService.ts` + planner. Relevance-ranked, outcome-gated lessons from past review outcomes (what worked / what to avoid) injected into the planner's context, behind setting `PLANNER_CROSS_TASK_LEARNING` (**default OFF**). Deterministic, no extra AI call, reuses `AgentReviewSummary`. Backend-only.
-- **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS` (**default OFF**). Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
+- **Cross-task learning** (✅ merged to `main`) — `crossTaskLearningService.ts`. Relevance-ranked, outcome-gated lessons (what worked / what to avoid) from past review outcomes, injected into both the **planner** (`PLANNER_CROSS_TASK_LEARNING`) and the **council** (`COUNCIL_CROSS_TASK_LEARNING`, reaches all specialists + synthesis via `kingdomMemoryContext`). Deterministic, no extra AI call. Backend-only.
+- **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS`. Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
 - M24 Phase B supervised auto-retry merged to `main`; details in `PROJECT_STATUS.md`.
-- **Next:** awaiting King — flip any of the new default-OFF intelligence settings on, or pick the next slice (cross-task lessons into the council too / Prisma 7.8.0 / other).
+- **Settings posture:** all intelligence levers ON in dev (`npm run intelligence:enable`). Autonomy mostly ON; King kept `COUNCIL_AUTO_EXECUTE_LOW_RISK` OFF (decree→execute stays manual), enabled `LIVING_LOOP_AUTO_CONTEXT_REPAIR`.
+- **Next:** awaiting King — test the enabled intelligence in action, or pick the next slice (consume M16 curated knowledge in planner/council / Prisma 7.8.0 / other).
 
 ## Collision Watch
 

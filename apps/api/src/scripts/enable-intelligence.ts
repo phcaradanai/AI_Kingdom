@@ -6,6 +6,7 @@ import { prisma } from "../db/prisma.js";
  * no auto-execute, no auto branch push/PR/merge/deploy).
  *
  *   - PLANNER_CROSS_TASK_LEARNING   → planner learns from past review outcomes (what worked / what to avoid)
+ *   - COUNCIL_CROSS_TASK_LEARNING   → the council (all specialists + synthesis) learns from those same outcomes
  *   - COUNCIL_PARALLEL_SPECIALISTS  → council specialists run concurrently (faster; independent opinions)
  *   - SUPERVISED_AUTO_RETRY_ENABLED → mechanical job failures self-fix once before escalating (bounded, NEEDS_REVIEW)
  *   - ADAPTIVE_REASONING_ENABLED    → the responsible agent thinks harder on complex work
@@ -21,6 +22,7 @@ import { prisma } from "../db/prisma.js";
 
 const INTELLIGENCE_SETTINGS = [
   "PLANNER_CROSS_TASK_LEARNING",
+  "COUNCIL_CROSS_TASK_LEARNING",
   "COUNCIL_PARALLEL_SPECIALISTS",
   "SUPERVISED_AUTO_RETRY_ENABLED",
   "ADAPTIVE_REASONING_ENABLED",
