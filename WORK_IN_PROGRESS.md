@@ -18,8 +18,9 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Claude - `claude/main`
 
-- **Next (proposed, awaiting King):** Council parallelization — run the specialist wave concurrently (`grandVizierOrchestrator.ts`), Grand Vizier still synthesizes last. Carries a deliberation-model decision: today specialists see each other's answers via `previousCouncilContext` (sequential round-table); parallel = independent opinions synthesized by the Vizier. So it ships behind a setting **defaulting to current sequential behavior** + an A/B before any default flip. Backend/core only — no overlap with Wave 4C.
-- M24 Phase B supervised auto-retry is merged into `main`; implementation details and validation are recorded in `PROJECT_STATUS.md`.
+- **Council parallelization** (✅ done, integrating to `main`) — `grandVizierOrchestrator.ts`. Specialists can run concurrently behind setting `COUNCIL_PARALLEL_SPECIALISTS` (**default OFF** = current sequential round-table); Grand Vizier still runs last + synthesizes. Returned/displayed responses re-sorted by canonical council order (deterministic under concurrency). Live A/B: ~356s → ~173s (~51% faster), same role order + summary. Backend-only — no overlap with Wave 4C. King decision pending: whether to flip the default to parallel.
+- M24 Phase B supervised auto-retry is merged into `main`; details + validation in `PROJECT_STATUS.md`.
+- **Next:** awaiting King's pick (cross-task learning / flip parallel default / Prisma 7.8.0 / other).
 
 ## Collision Watch
 

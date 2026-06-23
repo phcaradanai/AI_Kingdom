@@ -138,6 +138,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
   });
   const selectedAgents = orderSelectedAgents(task.mode, agents);
 
+  // Council responses are persisted by createdAt, which is non-deterministic when the
+  // specialist wave runs concurrently. Re-sort returned responses by the canonical council
+  // order so display + downstream (memory, learning candidate) order is stable in both the
+  // sequential and parallel modes. No-op for the sequential path (already in this order).
+  const councilOrderIndex = new Map(selectedAgents.map((agent, index) => [agent.id, index]));
+  const sortByCouncilOrder = <T extends { agentId: string }>(rows: T[]): T[] =>
+    [...rows].sort((a, b) => (councilOrderIndex.get(a.agentId) ?? 999) - (councilOrderIndex.get(b.agentId) ?? 999));
+
   if (selectedAgents.length !== AGENTS_BY_MODE[task.mode].length) {
     const error = new Error("Required royal agents are not available");
     error.name = "ConflictError";
@@ -181,7 +189,12 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const usedProviders: string[] = [];
     const usedModels: string[] = [];
 
-    for (const agent of selectedAgents) {
+    type CouncilPassResult = { agent: Agent; response: string; fallbackNotice: string | null; providerName: string; modelUsed: string };
+    // One council-member pass (route → trace → AI call → usage/cost → activity). Extracted
+    // from the loop so it can run either sequentially (round-table) or concurrently. The
+    // peer transcript is a parameter, not read from generatedResponses, so the caller
+    // controls what each agent sees and the ordering of results.
+    const runCouncilAgentPass = async (agent: Agent, previousCouncilContext: string): Promise<CouncilPassResult> => {
       let activityId: string | null = null;
       let traceId: string | null = null;
       try {
@@ -320,7 +333,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           kingdomContext: kingdomContext || undefined,
           projectContext,
           kingdomMemoryContext,
-          previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
+          previousCouncilContext
         }, traceContext);
 
         // ── Timeline: Complete PROVIDER_CALL step ──
@@ -347,12 +360,6 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           providerName: generated.providerName,
           model: generated.modelUsed
         });
-
-        if (generated.fallbackNotice) {
-          fallbackNotices.push(generated.fallbackNotice);
-        }
-        usedProviders.push(generated.providerName);
-        usedModels.push(generated.modelUsed);
 
         const agentResponse = await prisma.agentResponse.create({
           data: {
@@ -480,11 +487,50 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           fallbackNotice: generated.fallbackNotice ?? null
         });
 
-        generatedResponses.push({ agent, response: generated.response });
+        return {
+          agent,
+          response: generated.response,
+          fallbackNotice: generated.fallbackNotice ?? null,
+          providerName: generated.providerName,
+          modelUsed: generated.modelUsed
+        };
       } catch (error) {
         if (activityId) await failAgentActivity(activityId, error).catch(() => undefined);
         if (traceId) await failAIUsageTrace(traceId, error).catch(() => undefined);
         throw error;
+      }
+    };
+
+    const parallelSpecialists = await getBooleanSetting("COUNCIL_PARALLEL_SPECIALISTS", false);
+    const prevContext = () => generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n");
+    const applyPass = (r: CouncilPassResult) => {
+      generatedResponses.push({ agent: r.agent, response: r.response });
+      if (r.fallbackNotice) fallbackNotices.push(r.fallbackNotice);
+      usedProviders.push(r.providerName);
+      usedModels.push(r.modelUsed);
+    };
+
+    if (parallelSpecialists) {
+      // Independent-opinion mode (opt-in): the specialists run concurrently and do NOT see
+      // each other (empty previousCouncilContext) — turning the critical path from a sum of
+      // the calls into the max. The Grand Vizier still runs last with the full transcript and
+      // then synthesizes, so only peer-anchoring between specialists is removed. allSettled
+      // (not all) keeps one specialist's failure from sinking the whole council.
+      const specialists = selectedAgents.filter((a) => a.slug !== "grand-vizier");
+      const vizierPass = selectedAgents.filter((a) => a.slug === "grand-vizier");
+      const settled = await Promise.allSettled(specialists.map((a) => runCouncilAgentPass(a, "")));
+      settled.forEach((s, i) => {
+        if (s.status === "fulfilled") applyPass(s.value);
+        else console.warn(`[Council] specialist ${specialists[i]?.slug} failed (parallel wave):`, s.reason instanceof Error ? s.reason.message : String(s.reason));
+      });
+      if (generatedResponses.length === 0) throw new Error("All council specialists failed to respond.");
+      for (const agent of vizierPass) {
+        applyPass(await runCouncilAgentPass(agent, prevContext()));
+      }
+    } else {
+      // Sequential round-table (default): each agent sees the prior agents' responses.
+      for (const agent of selectedAgents) {
+        applyPass(await runCouncilAgentPass(agent, prevContext()));
       }
     }
 
@@ -732,6 +778,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         }
       }
     });
+    completedSession.responses = sortByCouncilOrder(completedSession.responses);
 
     await prisma.task.update({
       where: { id: task.id },
@@ -801,6 +848,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         }
       }
     });
+    sessionWithMemories.responses = sortByCouncilOrder(sessionWithMemories.responses);
 
     if (autoGenerateReports) {
       const report = await generateRoyalReport({
