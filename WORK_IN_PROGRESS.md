@@ -8,13 +8,13 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- **Premium UX Wave 4C: Agent Chat Workspace** - PLANNING / RESERVED
-- Base: `main` at `1eca7ab`, including M24 Phase B and opt-in council parallelization.
+- **Premium UX Wave 4C: Agent Chat Workspace** - IN PROGRESS
+- Base: `main` at `d305791`, including M24 Phase B, opt-in council parallelization, and the current coordination baseline.
 - Route: `/agent-chat`.
 - Objective: convert the current three competing card columns into a stable sessions/agents rail, focused conversation, and context/source rail with a one-pane mobile flow.
 - Expected edit surface: `apps/web/src/pages/AgentChatPage.tsx`, new modules under `apps/web/src/pages/agent-chat/`, focused page tests, and scoped semantic EN/TH messages.
 - Contract boundary: preserve direct-agent session/message APIs, project binding, save modes, provider routing, Artifact/Knowledge Candidate ownership, RBAC, and secret handling. No Work Order execution, external-agent dispatch, patching, push, PR, merge, or deploy behavior is being added.
-- Implementation has not started. Baseline capture, source mapping, and focused tests come first.
+- Implementation is starting with baseline capture, source mapping, and focused tests before component changes.
 
 ### Claude - `claude/main`
 
@@ -29,4 +29,4 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4C should add a scoped message module and keep the central edit minimal.
 - Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4C's web surface.
 
-Last updated: 2026-06-23 by Codex after synchronizing `codex/main` with `main` at `1eca7ab`.
+Last updated: 2026-06-23 by Codex when Wave 4C implementation started from `main` at `d305791`.

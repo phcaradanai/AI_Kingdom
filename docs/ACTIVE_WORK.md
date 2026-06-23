@@ -6,7 +6,7 @@
 
 | Status | Owner | Branch | Base | Started | Scope |
 | --- | --- | --- | --- | --- | --- |
-| PLANNING / RESERVED | Codex | `codex/main` | `main` at `1eca7ab` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
+| IN PROGRESS | Codex | `codex/main` | `main` at `d305791` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
 
 ## Wave 4C Plan
 

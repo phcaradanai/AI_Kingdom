@@ -2,9 +2,9 @@
 
 ## Premium UX Wave 4C: Agent Chat Workspace
 
-Status: **planned - ready to implement**
+Status: **in progress**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
-Owner: Codex on `codex/main` (planning/reserved; implementation not started)
+Owner: Codex on `codex/main` (implementation started from `main` at `d305791`)
 
 ### Goal
 

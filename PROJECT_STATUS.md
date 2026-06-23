@@ -8,7 +8,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 ## Active Work
 
-Premium UX Wave 4C planning for `/agent-chat` is reserved to Codex on `codex/main`, synchronized with `main` at `1eca7ab`. Implementation has not started. Team ownership is recorded in `WORK_IN_PROGRESS.md`; source ownership, expected files, delivery order, and collision boundaries are detailed in `docs/ACTIVE_WORK.md`.
+Premium UX Wave 4C implementation for `/agent-chat` is in progress on `codex/main`, started from `main` at `d305791`. Team ownership is recorded in `WORK_IN_PROGRESS.md`; source ownership, expected files, delivery order, and collision boundaries are detailed in `docs/ACTIVE_WORK.md`.
 
 ## Implemented Milestones
 
