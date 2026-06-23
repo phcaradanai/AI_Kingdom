@@ -343,6 +343,73 @@ test("buildExternalAgentPrompt includes 'not available' note when no snapshot ex
   }
 });
 
+test("M24 Phase B: retry prompt threads the prior attempt's reviewer feedback", async () => {
+  const { user } = await createUser("KING");
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CODEX" } });
+  // autoRetryCount > 0 marks this as a retry, which triggers the prior-attempt section.
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "M24B retry feedback",
+      objective: "Re-attempt after a failed run",
+      assignedExternalAgentId: externalAgent.id,
+      createdByUserId: user.id,
+      status: "NEEDS_REVIEW",
+      autoRetryCount: 1
+    }
+  });
+  const job = await prisma.automationJob.create({
+    data: { workOrderId: workOrder.id, status: "CANCELLED", mode: "EXTERNAL_AGENT" }
+  });
+  await prisma.agentReviewSummary.create({
+    data: {
+      automationJobId: job.id,
+      workOrderId: workOrder.id,
+      verdict: "VALIDATION_FAILED",
+      confidence: "HIGH",
+      kingRecommendation: "REQUEST_REVISION",
+      summary: "Tests failed on the first attempt.",
+      whatFailed: ["npm run test exited non-zero"],
+      failedCommands: ["npm run test"],
+      externalAgentPrompt: "Fix the failing assertion in foo.test.ts before re-running."
+    }
+  });
+
+  try {
+    const prompt = await buildExternalAgentPrompt(workOrder.id, externalAgent.id);
+    assert.match(prompt, /## Prior Attempt — Fix These Before Retrying/);
+    assert.match(prompt, /verdict: VALIDATION_FAILED/);
+    assert.match(prompt, /npm run test exited non-zero/);
+    assert.match(prompt, /Fix the failing assertion in foo\.test\.ts/);
+  } finally {
+    await prisma.agentReviewSummary.deleteMany({ where: { workOrderId: workOrder.id } });
+    await prisma.automationJob.delete({ where: { id: job.id } });
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
+test("M24 Phase B: a first attempt (autoRetryCount=0) has no prior-attempt section", async () => {
+  const { user } = await createUser("KING");
+  const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CODEX" } });
+  const workOrder = await prisma.workOrder.create({
+    data: {
+      title: "M24B first attempt",
+      objective: "Initial run",
+      assignedExternalAgentId: externalAgent.id,
+      createdByUserId: user.id,
+      status: "READY"
+    }
+  });
+
+  try {
+    const prompt = await buildExternalAgentPrompt(workOrder.id, externalAgent.id);
+    assert.doesNotMatch(prompt, /Prior Attempt/);
+  } finally {
+    await prisma.workOrder.delete({ where: { id: workOrder.id } });
+    await prisma.user.delete({ where: { id: user.id } });
+  }
+});
+
 test("handoff brief includes repository context when snapshot exists", async () => {
   const { user } = await createUser("KING");
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;

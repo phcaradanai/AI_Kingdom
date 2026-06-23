@@ -691,6 +691,8 @@ export const api = {
     apiRequest<{ agentReview: AgentReviewSummaryDto | null }>(`/automation-jobs/${id}/agent-review`),
   regenerateAutomationJobAgentReview: (id: string) =>
     apiRequest<{ agentReview: AgentReviewSummaryDto }>(`/automation-jobs/${id}/agent-review/regenerate`, { method: "POST" }),
+  retryAutomationJob: (id: string) =>
+    apiRequest<{ retried: boolean; attempt: number; job: AutomationJobDto }>(`/automation-jobs/${id}/retry`, { method: "POST" }),
   importPatch: (id: string, patchText: string) =>
     apiRequest<AutomationJobDto>(`/automation-jobs/${id}/import-patch`, {
       method: "POST",

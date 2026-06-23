@@ -370,9 +370,22 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
     metadata: { runnerId, workOrderId: job.workOrderId, reportId: implReport.id, testResult: report.testResult }
   }).catch(() => undefined);
 
-  await createOrUpdateAgentReviewForJob(jobId, { useAi: false }).catch((err) => {
+  const review = await createOrUpdateAgentReviewForJob(jobId, { useAi: false }).catch((err) => {
     console.warn("[AutomationJob] Agent review generation failed; runner report remains submitted:", err instanceof Error ? err.message : String(err));
+    return null;
   });
+
+  // M24 Phase B: supervised auto-retry (opt-in, default OFF). Fire-and-forget so the
+  // runner's response isn't blocked by retry plan generation; all gating is inside the
+  // service (setting, mechanical verdict, LOW priority, cap, online runner). Lazy import
+  // avoids an import cycle through supervisedRetryService.
+  if (review?.verdict) {
+    void import("./supervisedRetryService.js")
+      .then(({ maybeAutoRetry }) =>
+        maybeAutoRetry({ job: { id: job.id, mode: job.mode, createdByUserId: job.createdByUserId }, verdict: review.verdict })
+      )
+      .catch((err) => console.warn("[AutomationJob] Supervised auto-retry failed:", err instanceof Error ? err.message : String(err)));
+  }
 
   if (job.mode === "EXTERNAL_AGENT") {
     await prisma.workOrder.update({

@@ -613,6 +613,8 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "automationJobs.approveExecution": "Approve for Execution",
     "automationJobs.importPatch": "Import Patch",
     "automationJobs.cancel": "Cancel",
+    "automationJobs.retry": "Retry",
+    "automationJobs.retryHint": "Re-dispatch this work with the reviewer's feedback. Capped at the work order's retry limit; the result still lands in review.",
 
     // ── Workspace: Projects ────────────────────────────────────────────────
     "projects.eyebrow": "Project Workspace",
@@ -1768,6 +1770,8 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "automationJobs.approveExecution": "อนุมัติการดำเนินงาน",
     "automationJobs.importPatch": "นำเข้าแพตช์",
     "automationJobs.cancel": "ยกเลิก",
+    "automationJobs.retry": "ลองใหม่",
+    "automationJobs.retryHint": "ส่งงานนี้ไปทำใหม่พร้อมข้อเสนอแนะจากผู้ตรวจ จำกัดจำนวนครั้งตามค่า retry ของ work order และผลลัพธ์ยังเข้าสู่การตรวจทานเสมอ",
 
     // ── Workspace: Projects ────────────────────────────────────────────────
     "projects.eyebrow": "พื้นที่ทำงานโปรเจกต์",

@@ -198,6 +198,43 @@ export async function generateWorkOrderFromMatter(matterId: string, userId?: str
   }, false);
 }
 
+/**
+ * M24 Phase B: format the most recent agent review for a work order into a "fix these"
+ * section for a retry prompt. Returns "" when there is no review or nothing concrete to
+ * report, so the section is omitted rather than rendered empty.
+ */
+async function buildPriorAttemptFeedback(workOrderId: string): Promise<string> {
+  const review = await prisma.agentReviewSummary
+    .findFirst({ where: { workOrderId }, orderBy: { createdAt: "desc" } })
+    .catch(() => null);
+  if (!review) return "";
+
+  const asStringList = (value: unknown): string[] =>
+    Array.isArray(value) ? value.map((item) => String(item)).filter((item) => item.trim().length > 0) : [];
+
+  const whatFailed = asStringList(review.whatFailed);
+  const failedCommands = asStringList(review.failedCommands);
+  const revisionPrompt = (review.externalAgentPrompt ?? "").trim();
+
+  // Nothing actionable recorded (e.g. a bare PASS that was later retried manually) → skip.
+  if (whatFailed.length === 0 && failedCommands.length === 0 && revisionPrompt.length === 0) return "";
+
+  const lines = [
+    "## Prior Attempt — Fix These Before Retrying",
+    `The previous attempt was reviewed and did not pass (verdict: ${review.verdict}). Address the items below; do not repeat the same failure.`
+  ];
+  if (whatFailed.length) {
+    lines.push("What failed:", formatList(whatFailed));
+  }
+  if (failedCommands.length) {
+    lines.push("Commands that failed:", formatList(failedCommands));
+  }
+  if (revisionPrompt.length) {
+    lines.push("Reviewer guidance:", revisionPrompt);
+  }
+  return lines.join("\n\n");
+}
+
 export async function buildExternalAgentPrompt(workOrderId: string, externalAgentId: string): Promise<string> {
   const [workOrder, externalAgent] = await Promise.all([
     prisma.workOrder.findUnique({ where: { id: workOrderId }, include: { implementationReports: { orderBy: { createdAt: "desc" }, take: 3 } } }),
@@ -211,6 +248,13 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     workOrder.projectId ? getLatestSnapshot(workOrder.projectId) : Promise.resolve(null)
   ]);
   const decisions = workOrder.implementationReports.flatMap((report) => report.decisionsMade).filter(Boolean);
+
+  // M24 Phase B (supervised retry): when this work order is being retried after a prior
+  // failure, the reviewer already recorded exactly what to fix. Without threading that
+  // feedback into the prompt the agent retries blind and re-fails the same way, burning the
+  // retry budget. Inject the most recent review's verdict + what failed + the reviewer's
+  // revision prompt so the retry is informed. Runs for both bridge and sandbox retry paths.
+  const priorAttemptSection = workOrder.autoRetryCount > 0 ? await buildPriorAttemptFeedback(workOrderId) : "";
 
   // Adaptive thinking effort for the external coder (King's directive: complex
   // code fix / big-system bug analysis → think harder). Structured signals only:
@@ -241,6 +285,7 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     "Do not change architecture unless explicitly instructed.",
     "Follow the Work Order exactly.",
     thinkingDirective,
+    priorAttemptSection,
     "## Kingdom Context",
     driftContext.kingdomContext,
     "## Project Context",
