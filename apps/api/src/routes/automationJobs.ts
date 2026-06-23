@@ -12,6 +12,7 @@ import { importPatch } from "../services/importedPatchService.js";
 import { getAgentReviewForJob, regenerateAgentReviewForJob } from "../services/runnerResultReviewService.js";
 import type { AutomationJobStatus } from "@prisma/client";
 import { createExternalAgentBridgeJob } from "../services/externalAgentBridgeService.js";
+import { dispatchRetry } from "../services/supervisedRetryService.js";
 
 const router = Router();
 
@@ -190,6 +191,24 @@ router.post("/:id/agent-review/regenerate", requireRole("KING"), async (req, res
     const { id } = req.params as { id: string };
     const agentReview = await regenerateAgentReviewForJob(id, { useAi: true });
     res.json({ agentReview });
+  } catch (err) {
+    jobErrorHandler(err, res, next);
+  }
+});
+
+/** POST /api/automation-jobs/:id/retry — King-triggered supervised retry of a failed job.
+ *  Re-dispatches with the reviewer's feedback threaded in; capped at the work order's
+ *  maxAutoRetries. Returns the new job, or 409 with a reason when retry is not available. */
+router.post("/:id/retry", requireRole("KING"), async (req, res, next) => {
+  try {
+    const { id } = req.params as { id: string };
+    const result = await dispatchRetry({ jobId: id, triggeredBy: "KING", userId: req.user!.id });
+    if (!result.retried) {
+      res.status(409).json({ error: "Retry not available", reason: result.reason });
+      return;
+    }
+    const job = await getJob(result.newJobId);
+    res.status(201).json({ retried: true, attempt: result.attempt, job });
   } catch (err) {
     jobErrorHandler(err, res, next);
   }

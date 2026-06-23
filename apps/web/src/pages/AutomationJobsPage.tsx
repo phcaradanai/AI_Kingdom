@@ -204,6 +204,21 @@ export function AutomationJobsPage() {
     }
   }
 
+  async function handleRetry(jobId: string) {
+    setActionJobId(jobId);
+    setActionError(null);
+    try {
+      const result = await api.retryAutomationJob(jobId);
+      await load();
+      if (result.job?.id) await loadDetail(result.job.id);
+      else setSelectedJob(null);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Retry failed");
+    } finally {
+      setActionJobId(null);
+    }
+  }
+
   async function loadDetail(jobId: string) {
     setDetailLoading(true);
     try {
@@ -794,6 +809,12 @@ export function AutomationJobsPage() {
                   >
                     <Upload className="h-3.5 w-3.5 mr-1.5" />
                     {tk("automationJobs.importPatch")}
+                  </Button>
+                )}
+                {selectedJob.status === "NEEDS_REVIEW" && agentReview && ["PATCH_FAILED", "VALIDATION_FAILED"].includes(agentReview.verdict) && (
+                  <Button className="h-11 text-xs px-3" variant="outline" onClick={() => handleRetry(selectedJob.id)} disabled={actionJobId === selectedJob.id} title={tk("automationJobs.retryHint")}>
+                    <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                    {tk("automationJobs.retry")}
                   </Button>
                 )}
                 {!["COMPLETED", "CANCELLED", "FAILED"].includes(selectedJob.status) && (
