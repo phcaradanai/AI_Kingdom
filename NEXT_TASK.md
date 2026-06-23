@@ -1,39 +1,39 @@
 # Next Task
 
-## Premium UX Wave 4D: Living Agents Roster
+## Premium UX Wave 4E: Living Agent Evidence Profile
 
-Status: **in progress from synchronized base `5cb0cc5`**
+Status: **planned - not reserved**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
-Owner: Codex on `codex/main`
+Owner: Codex candidate on `codex/main`; mark active only after synchronizing the latest `main`
 
 ### Goal
 
-Refine `/living-agents` into a compact operational roster where the King can scan real agent state, active assignment, health, and profile ownership without repeated decorative cards.
+Refine `/living-agents/:agentId` from an 876-line, 12-tab page into a focused evidence profile where identity, current state, work, provenance, usage, relationships, and learned knowledge remain easy to scan and trace to their owners.
 
 ### Scope
 
-- Compact roster with state, current activity, assigned work, health signal, and direct profile navigation.
-- Filters for operational state and role while preserving canonical Agent identity and live activity ownership.
-- Symmetric desktop density and a bounded mobile list/detail flow with English/Thai chrome.
-- Motion only for real state changes, selection, filtering, focus, and reduced-motion-safe feedback.
+- Stable profile header with canonical identity, current activity, operational state, and source ownership.
+- Consolidate the 12 tabs into a smaller evidence hierarchy: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit.
+- Preserve lazy timeline/relation loading, filters, trace/report/project/council/memory/knowledge links, and server-owned data.
+- Responsive one-section-at-a-time mobile flow with semantic English/Thai chrome and 44px controls.
 
 ### Constraints
 
-- Preserve Agent, AgentActivity, WorkOrder, provider usage, health, RBAC, and portrait source-of-truth contracts.
-- Do not infer operational work from ambient animation or presentation state.
-- Keep summary rows read-only and link to the owning Agent, activity, Work Order, trace, or provider records.
-- Split controller, models, roster, detail, filters, and messages below 600 lines where practical.
+- Preserve all Living Agent profile, timeline, and relations APIs and DTO contracts.
+- Do not reinterpret legacy attribution as verified evidence or infer active work from historical records.
+- Keep Agent, AgentActivity, WorkOrder, Project, Council, Report, Memory, Knowledge Candidate, Provider, Usage Trace, and Audit Log ownership explicit.
+- Split controller, models, header, navigation, evidence sections, timeline, relations, messages, and tests below 600 lines.
 
 ### Delivery Order
 
 1. Merge current `main`, record ownership, and capture EN/TH baselines at 1440x900, 1024x768, and 430x932.
-2. Map Agent identity, live state, activity, assignment, health, usage, and profile source ownership.
-3. Add focused tests for filters, selection, source links, state labels, empty/error states, responsive handoff, and Thai chrome.
-4. Implement the compact roster and focused operational detail without changing API contracts.
+2. Map the 12 existing tabs and every link/query to the five-section evidence hierarchy.
+3. Add focused tests for section navigation, lazy loads, filters, source links, legacy attribution, loading/error/empty states, and Thai chrome.
+4. Implement the split profile workspace without backend or DTO changes.
 5. Run focused/full web tests, root typecheck/build, and responsive browser verification.
 
 ### Baseline
 
-- Premium UX Waves 1, 2, 3, 4A, 4B, and 4C are complete.
-- Wave 4C validation: 205/205 web tests, root typecheck, web lint, and root build pass.
-- `/agent-chat` has no horizontal overflow at 1440x900, 1024x768, or 430x932 in English/Thai.
+- Premium UX Waves 1, 2, 3, and 4A-4D are complete.
+- Wave 4D validation: 211/211 web tests, root typecheck, web lint, and root build pass.
+- `/living-agents` has no horizontal overflow at 1440x900, 1024x768, or 430x932 in English/Thai; browser console is error-free.

@@ -277,7 +277,7 @@ Wave 3C implementation replaces simultaneous forms with a compact overview, stab
 
 ### Wave 4: Agents, Providers, and Models
 
-Progress: **Waves 4A, 4B, and 4C complete; Wave 4D Living Agents in progress.** `/agents`, `/external-agents`, and `/agent-chat` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, direct-conversation, save, and review contracts.
+Progress: **Waves 4A-4D complete; Wave 4E Living Agent Evidence Profile next.** `/agents`, `/external-agents`, `/agent-chat`, and `/living-agents` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, presence, direct-conversation, save, and review contracts.
 
 | Route | Primary refinement |
 | --- | --- |
@@ -290,6 +290,8 @@ Progress: **Waves 4A, 4B, and 4C complete; Wave 4D Living Agents in progress.** 
 | `/routing` | Visualize each fallback chain as an ordered vertical sequence with provider/model health and clear drag/reorder or step controls. Keep effective-source explanations visible. |
 | `/treasury` | Build a financial dashboard hierarchy: spend/budget first, trend second, provider/model analysis third, reconciliation/admin tools last. Reduce competing panels. |
 | `/usage-traces/:traceId` | Use an audit timeline with a compact attribution summary, token/cost metrics, provider attempts, and explicit links back to Task/Council/Report/Project. |
+
+Wave 4D implementation replaces repeated Living Agent cards with a compact roster and selected evidence pane. Kingdom Presence is optional, RBAC-safe enrichment for real assignment and blocking evidence; the page remains available from Living Agent summary data when presence access is denied. Desktop panes align, tablet/mobile use explicit roster/detail handoff, and semantic English/Thai chrome wraps without horizontal overflow. The route is 6 lines and every Wave 4D module is below 180 lines.
 
 ### Wave 5: Knowledge and Governance
 

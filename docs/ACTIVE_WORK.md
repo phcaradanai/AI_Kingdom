@@ -4,15 +4,33 @@
 
 ## Active
 
-### Premium UX Wave 4D: Living Agents Roster
+No Codex implementation is currently reserved. Wave 4E `/living-agents/:agentId` is the next candidate and must be synchronized with `main` before it is marked active.
 
-- **Owner / branch:** Codex on `codex/main`
-- **Status:** IN PROGRESS from synchronized base `5cb0cc5`
-- **Objective:** turn `/living-agents` into a compact operational roster with real-state scanning, role/state filters, focused evidence, and canonical source navigation.
-- **Source ownership:** `Agent` owns identity and portrait profile; `AgentActivity` owns recorded activity/status; `WorkOrder` owns executable assignment; usage traces and provider records own cost/model evidence. This page remains read-only.
-- **Expected edits:** `LivingAgentsPage.tsx`, focused modules under `pages/living-agents/`, focused tests, a scoped message module, minimal i18n registration, and completion docs.
-- **Collision boundary:** no API, Prisma, lifecycle, provider-routing, portrait, RBAC, execution, patch, push, PR, merge, or deploy contract changes.
-- **Validation target:** focused/full web tests, root typecheck/build, web lint, and EN/TH browser checks at 1440x900, 1024x768, and 430x932.
+## Completed Wave 4D Contract
+
+### Objective
+
+Refine `/living-agents` into a compact operational roster with real-state scanning, role/state filters, focused evidence, and canonical source navigation.
+
+### Source Ownership
+
+- `Agent` remains the canonical identity and portrait-profile owner; roster rows do not edit it.
+- `AgentActivity` remains the owner of recorded status and attribution counts.
+- Existing Kingdom Presence supplies optional live task, Work Order, progress, and blocking evidence for authorized roles. A denied/unavailable presence response degrades to summary evidence without blocking the roster.
+- `WorkOrder`, Providers, usage, timeline, trace, and relationship records remain in their owning routes. This page links to them and does not copy or mutate them.
+
+### Delivery
+
+1. Replaced repeated three-column cards with a compact roster and selected evidence pane; the 246-line route is now 6 lines.
+2. Split controller, models, toolbar, roster, evidence, workspace, messages, and focused tests; every file is below 180 lines.
+3. Added state and role filters, explicit roster/detail handoff below `xl`, 44px controls, source links, real presence/assignment evidence, and reduced-motion-safe state feedback.
+4. Added semantic English/Thai chrome while preserving server-owned identity, description, activity, provider, model, and error data.
+5. Verified 6/6 focused tests, 211/211 full web tests, root typecheck, web lint, root build, and live EN/TH browser checks at 1440x900, 1024x768, and 430x932.
+
+### Collision Boundaries
+
+- No API, DTO, Prisma, lifecycle, provider-routing, portrait, RBAC, execution, patch, push, PR, merge, or deploy contract changed.
+- Presence enrichment uses the existing endpoint and treats its stricter RBAC as an optional evidence boundary.
 
 ## Completed Wave 4C Contract
 
@@ -55,5 +73,6 @@ Refine `/agent-chat` into a focused direct-agent conversation workspace. Desktop
 
 | Status | Owner | Branch | Completed | Scope |
 | --- | --- | --- | --- | --- |
+| COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4D: Living Agents Roster |
 | COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
 | COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4B: External Agents Registry |

@@ -3,6 +3,7 @@ import { AGENT_CHAT_MESSAGES } from "./agentChatMessages";
 import { AGENTS_MESSAGES } from "./agentsMessages";
 import { EXTERNAL_AGENTS_MESSAGES } from "./externalAgentsMessages";
 import { LIVING_KINGDOM_MESSAGES } from "./livingKingdomMessages";
+import { LIVING_AGENTS_MESSAGES } from "./livingAgentsMessages";
 import { STRATEGY_MESSAGES } from "./strategyMessages";
 
 /**
@@ -30,6 +31,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     ...AGENTS_MESSAGES.en,
     ...EXTERNAL_AGENTS_MESSAGES.en,
     ...LIVING_KINGDOM_MESSAGES.en,
+    ...LIVING_AGENTS_MESSAGES.en,
     ...STRATEGY_MESSAGES.en,
     // ── Shared: provenance row labels (ProvenanceLinks) ──────────────────────
     "provenance.source": "Source",
@@ -1189,6 +1191,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     ...AGENTS_MESSAGES.th,
     ...EXTERNAL_AGENTS_MESSAGES.th,
     ...LIVING_KINGDOM_MESSAGES.th,
+    ...LIVING_AGENTS_MESSAGES.th,
     ...STRATEGY_MESSAGES.th,
     // ── Shared: provenance row labels ────────────────────────────────────────
     "provenance.source": "แหล่งที่มา",
