@@ -25,6 +25,8 @@
     "runner:bootstrap": "npm run runner:bootstrap --workspace @ai-kingdom/api",
     "autonomy:enable": "npm run autonomy:enable --workspace @ai-kingdom/api",
     "autonomy:disable": "npm run autonomy:disable --workspace @ai-kingdom/api",
+    "intelligence:enable": "npm run intelligence:enable --workspace @ai-kingdom/api",
+    "intelligence:disable": "npm run intelligence:disable --workspace @ai-kingdom/api",
     "runner:dev": "concurrently \"npm run dev --workspace @ai-kingdom/runner\"",
     "data:inspect-pollution": "npm run data:inspect-pollution --workspace @ai-kingdom/api",
     "data:cleanup-test-data": "npm run data:cleanup-test-data --workspace @ai-kingdom/api",
