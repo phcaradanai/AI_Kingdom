@@ -1,42 +1,39 @@
 # Next Task
 
-## Premium UX Wave 4C: Agent Chat Workspace
+## Premium UX Wave 4D: Living Agents Roster
 
-Status: **in progress**
+Status: **planned - not reserved**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
-Owner: Codex on `codex/main` (implementation started from `main` at `d305791`)
+Owner: Codex candidate on `codex/main`; mark active only after synchronizing the latest `main`
 
 ### Goal
 
-Turn `/agent-chat` into a stable conversation workspace where the King can choose one internal agent, follow the active conversation, understand project and save-mode context, and review source-owned outputs without scanning three competing card columns.
+Refine `/living-agents` into a compact operational roster where the King can scan real agent state, active assignment, health, and profile ownership without repeated decorative cards.
 
 ### Scope
 
-- Three-pane desktop layout: compact session/agent rail, focused conversation, and context/source rail.
-- One-pane-at-a-time mobile flow with explicit back/navigation controls and preserved draft state.
-- Clear new-conversation flow, request type, project context, save mode, send state, and resulting Artifact/Knowledge ownership.
-- Semantic English/Thai chrome while preserving agent identity, messages, record titles, and server errors as source data.
-- Focused empty, loading, sending, failure, and long-message states with bounded content and 44px controls.
+- Compact roster with state, current activity, assigned work, health signal, and direct profile navigation.
+- Filters for operational state and role while preserving canonical Agent identity and live activity ownership.
+- Symmetric desktop density and a bounded mobile list/detail flow with English/Thai chrome.
+- Motion only for real state changes, selection, filtering, focus, and reduced-motion-safe feedback.
 
 ### Constraints
 
-- Preserve direct-agent APIs, session/message behavior, project binding, save modes, memory review boundaries, provider routing, RBAC, and secret handling.
-- Do not turn direct chat into Work Order execution, external-agent dispatch, auto-patch, auto-push, PR, merge, or deploy.
-- Keep generated Artifact and Knowledge Candidate ownership visible through links to their canonical pages; do not duplicate those records in chat state.
-- Split route orchestration, controller/models, rails, conversation, composer, and dialogs below 600 lines where practical.
+- Preserve Agent, AgentActivity, WorkOrder, provider usage, health, RBAC, and portrait source-of-truth contracts.
+- Do not infer operational work from ambient animation or presentation state.
+- Keep summary rows read-only and link to the owning Agent, activity, Work Order, trace, or provider records.
+- Split controller, models, roster, detail, filters, and messages below 600 lines where practical.
 
 ### Delivery Order
 
-1. Merge current `main`, record Active Work ownership, and capture EN/TH baselines at 1440px, 1024px, and 430px.
-2. Map session, message, project, artifact, knowledge-candidate, provider, and RBAC ownership.
-3. Add focused tests for hierarchy, pane transitions, source links, save boundaries, errors, and Thai chrome.
-4. Refine the page into responsive rails, conversation, context, and composer modules.
+1. Merge current `main`, record ownership, and capture EN/TH baselines at 1440x900, 1024x768, and 430x932.
+2. Map Agent identity, live state, activity, assignment, health, usage, and profile source ownership.
+3. Add focused tests for filters, selection, source links, state labels, empty/error states, responsive handoff, and Thai chrome.
+4. Implement the compact roster and focused operational detail without changing API contracts.
 5. Run focused/full web tests, root typecheck/build, and responsive browser verification.
 
 ### Baseline
 
-- Premium UX Waves 1, 2, 3, 4A, and 4B are complete.
-- `codex/main` is synchronized with `main` at `1eca7ab`, including M24 Phase B supervised auto-retry and opt-in council parallelization.
-- `/agent-chat` is currently about 400 lines and has no focused page test.
-- Latest frontend validation after Wave 4B: root typecheck/build and 199/199 web tests pass.
-- Wave 4B live checks pass at 1440x900, 1024x768, and 430x932 in English/Thai without horizontal overflow.
+- Premium UX Waves 1, 2, 3, 4A, 4B, and 4C are complete.
+- Wave 4C validation: 205/205 web tests, root typecheck, web lint, and root build pass.
+- `/agent-chat` has no horizontal overflow at 1440x900, 1024x768, or 430x932 in English/Thai.

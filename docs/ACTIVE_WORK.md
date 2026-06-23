@@ -4,11 +4,9 @@
 
 ## Active
 
-| Status | Owner | Branch | Base | Started | Scope |
-| --- | --- | --- | --- | --- | --- |
-| IN PROGRESS | Codex | `codex/main` | `main` at `d305791` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
+No Codex implementation is currently reserved. Wave 4D `/living-agents` is the next candidate and must be synchronized with `main` before it is marked active.
 
-## Wave 4C Plan
+## Completed Wave 4C Contract
 
 ### Objective
 
@@ -32,11 +30,11 @@ Refine `/agent-chat` into a focused direct-agent conversation workspace. Desktop
 
 ### Delivery Plan
 
-1. Capture English/Thai baselines at 1440x900, 1024x768, and 430x932; record hierarchy, overflow, touch-target, and console findings.
-2. Add focused tests for loading/error states, agent/session selection, new-session creation, message sending, save-mode ownership, source links, mobile pane transitions, and Thai chrome.
-3. Split route orchestration, pure models, controller, session/agent rail, conversation, composer, context/source rail, and any focused dialog below 600 lines each.
-4. Implement a symmetric desktop workspace and one-pane mobile flow. Preserve long-message readability, draft state, reduced-motion behavior, and 44px controls.
-5. Run focused/full web tests, root typecheck/build, and responsive browser QA; then update status, commit on `codex/main`, and fast-forward into `main`.
+1. Captured English/Thai baselines at 1440x900, 1024x768, and 430x932; the prior mobile layout widened to 564px at a 430px viewport.
+2. Added six focused tests covering error state, agent/session selection, creation, follow-up sending, save-mode payload, source links, pane transitions, and Thai chrome.
+3. Split the 400-line route into a 7-line route plus controller, models, browser rail, conversation, context/source, workspace, and message modules; every module is below 205 lines.
+4. Implemented aligned desktop panes and a one-pane tablet/mobile flow with preserved draft state, 44px controls, reduced-motion-safe feedback, and no horizontal overflow.
+5. Verified 205/205 web tests, root typecheck, web lint, root build, and live EN/TH browser checks at all required viewports.
 
 ### Collision Boundaries
 
@@ -49,4 +47,5 @@ Refine `/agent-chat` into a focused direct-agent conversation workspace. Desktop
 
 | Status | Owner | Branch | Completed | Scope |
 | --- | --- | --- | --- | --- |
+| COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
 | COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4B: External Agents Registry |
