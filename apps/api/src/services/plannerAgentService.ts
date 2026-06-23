@@ -23,6 +23,7 @@ import { createWorkOrder } from "./externalAgentWorkOrderService.js";
 import { getWorkOrderRecommendations } from "./externalAgentRecommendationService.js";
 import { auditLog } from "./auditService.js";
 import { buildNextActionUpdate, computeCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
+import { buildCrossTaskLessons } from "./crossTaskLearningService.js";
 
 export type PlannerRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
@@ -169,6 +170,20 @@ async function executePlanner(
       : Promise.resolve([])
   ]);
 
+  // Cross-task learning (opt-in): inject outcome lessons from similar past work so the
+  // planner reuses what worked and avoids repeating past failures. Default OFF — relevance-
+  // and outcome-gated, deterministic, no extra provider call.
+  const crossTaskLearningEnabled = await getBooleanSetting("PLANNER_CROSS_TASK_LEARNING", false);
+  const crossTaskLessons = crossTaskLearningEnabled
+    ? await buildCrossTaskLessons({
+        decreeText: `${task.title}\n${task.command}\n${session.finalSummary ?? ""}`,
+        projectId: task.projectId
+      }).catch((err) => {
+        console.warn("[PlannerAgent] cross-task lessons failed (continuing without):", err instanceof Error ? err.message : String(err));
+        return "";
+      })
+    : "";
+
   const planningContext = buildPlanningContext({
     session,
     task,
@@ -177,7 +192,8 @@ async function executePlanner(
     openWorkOrders,
     implReports,
     handoffBriefs,
-    artifacts
+    artifacts,
+    crossTaskLessons
   });
 
   const rawResponse = await callPlannerLLM({
@@ -226,8 +242,9 @@ function buildPlanningContext(opts: {
   implReports: Array<{ summary: string; remainingWork: string[]; nextRecommendedAction: string | null }>;
   handoffBriefs: Array<{ title: string; nextSteps: string[]; knownIssues: string[] }>;
   artifacts: Array<{ type: string; title: string }>;
+  crossTaskLessons?: string;
 }): string {
-  const { session, task, projectContext, snapshot, openWorkOrders, implReports, handoffBriefs, artifacts } = opts;
+  const { session, task, projectContext, snapshot, openWorkOrders, implReports, handoffBriefs, artifacts, crossTaskLessons } = opts;
 
   const sections: string[] = [
     `[TASK]\nTitle: ${task.title}\nMode: ${task.mode}\nCommand: ${task.command}`,
@@ -255,6 +272,12 @@ function buildPlanningContext(opts: {
         : "- None."
     }`
   ];
+
+  // Cross-task learning: outcome lessons from similar past work (opt-in). Placed last so it
+  // is the freshest guidance the planner reads before producing drafts.
+  if (crossTaskLessons && crossTaskLessons.trim()) {
+    sections.push(crossTaskLessons);
+  }
 
   return sections.join("\n\n");
 }
