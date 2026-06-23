@@ -6,6 +6,10 @@ AI Kingdom is implemented through M24 Phase C (kingdom-agent delegation groundin
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
+## Active Work
+
+Premium UX Wave 4B for `/external-agents` is in progress on `codex/main`. Ownership, expected edit paths, and collision-avoidance notes are recorded in `docs/ACTIVE_WORK.md`.
+
 ## Implemented Milestones
 
 - Live Kingdom state-driven motion refinement (complete): Upgraded Throne Room `/throne-room` Live Kingdom from fixed portrait markers to a lightweight moving court inspired by Pixel Agents' observable character-state model, without importing its assets or runtime. A pure deterministic motion model keeps every agent inside role-owned room bounds, separates residents into stable lanes, and maps real `AgentPresenceState` values to working/council/review/attention depth while ambient idle walking remains explicitly non-operational. State changes trigger travel, active states expose compact Lucide activity signals, portraits still come from the canonical display profile, and selected Work Order links now focus the owning record directly. Motion freezes under `prefers-reduced-motion`; semantic English/Thai chrome, 44px mobile controls, and a memoized no-provider i18n fallback prevent render loops. Motion/controller/character/message modules are each below 130 lines. Focused Kingdom tests pass 13/13, the merged full web suite passes 193/193, web and root typecheck pass, and the production build passes with the existing large-chunk warning. Live EN/TH checks at 1440x900 and 430x932 show deterministic position changes over time, no horizontal overflow, and only the existing React Router future-flag warnings.
