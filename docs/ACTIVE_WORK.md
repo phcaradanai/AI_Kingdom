@@ -6,7 +6,7 @@
 
 | Status | Owner | Branch | Base | Started | Scope |
 | --- | --- | --- | --- | --- | --- |
-| PLANNING / RESERVED | Codex | `codex/main` | `main` at `dfa9201` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
+| PLANNING / RESERVED | Codex | `codex/main` | `main` at `1eca7ab` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
 
 ## Wave 4C Plan
 
@@ -40,7 +40,7 @@ Refine `/agent-chat` into a focused direct-agent conversation workspace. Desktop
 
 ### Collision Boundaries
 
-- M24 Phase B is already merged. Preserve its `api.ts` and `i18nMessages.ts` additions.
+- M24 Phase B and opt-in council parallelization are already merged. Preserve the Phase B `api.ts` and `i18nMessages.ts` additions; council parallelization is backend-only and does not overlap this web scope.
 - Do not edit API routes, services, Prisma, or duplicated DTO files unless a verified frontend blocker requires team coordination.
 - Do not change direct-chat lifecycle, provider routing, save semantics, memory approval, or project ownership.
 - No auto-execution, filesystem access, patching, push, PR, merge, or deploy path belongs in Wave 4C.
