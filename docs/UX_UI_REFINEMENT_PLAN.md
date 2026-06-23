@@ -236,7 +236,7 @@ Progress: **Wave 2 complete** - Throne Room, Council, Work Orders, Automation Jo
 
 ### Wave 3: Projects and Strategy
 
-Progress: **Waves 3A, 3B, and 3C complete; Wave 4A Agents Registry complete** - Projects owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Project Inbox, Artifacts, and Strategy now apply the same source-of-truth hierarchy to routing uncertainty, generated evidence, and strategic decisions.
+Progress: **Waves 3A, 3B, and 3C complete; Waves 4A and 4B complete** - Projects owns context freshness, local documents, active work, repository evidence, artifacts, and export through a compact portfolio and bounded project workspace. Project Inbox, Artifacts, Strategy, Agents, and External Agents now apply the same source-of-truth hierarchy to routing, execution, and registry evidence.
 
 ### Wave 3A Projects Layout Contract
 
@@ -277,7 +277,7 @@ Wave 3C implementation replaces simultaneous forms with a compact overview, stab
 
 ### Wave 4: Agents, Providers, and Models
 
-Progress: **Wave 4A complete; Wave 4B External Agents next.** `/agents` now uses a compact registry plus selected detail, six stable evidence/configuration sections, explicit editor dialogs, semantic English/Thai chrome, and direct ownership links while preserving all routing-validation and profile-source contracts.
+Progress: **Waves 4A and 4B complete; Wave 4C Agent Chat next.** `/agents` and `/external-agents` now use compact registries plus selected detail, stable evidence/configuration sections, explicit mutation dialogs, semantic English/Thai chrome, and direct ownership links while preserving routing, readiness, runner, profile, and manual-handoff contracts.
 
 | Route | Primary refinement |
 | --- | --- |

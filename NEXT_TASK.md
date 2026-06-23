@@ -1,41 +1,40 @@
 # Next Task
 
-## Premium UX Wave 4B: External Agents Registry
+## Premium UX Wave 4C: Agent Chat Workspace
 
 Status: **planned - ready to implement**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 
 ### Goal
 
-Turn `/external-agents` into a focused manual-handoff registry. The King should compare availability, capabilities, execution mode, test status, and ownership boundaries without scanning repeated forms or mistaking advisory metadata for an executable integration.
+Turn `/agent-chat` into a stable conversation workspace where the King can choose one internal agent, follow the active conversation, understand project and save-mode context, and review source-owned outputs without scanning three competing card columns.
 
 ### Scope
 
-- Compact searchable registry with active state, capabilities, execution mode, test status, and attention signal.
-- Selected external-agent detail with clear Identity, Capabilities, Handoff, Validation, and Source views.
-- Explicit create/edit dialogs and deliberate destructive confirmation.
-- Direct links to Work Orders, Automation Jobs, and source evidence where current contracts provide identifiers.
-- Semantic English/Thai chrome while keeping names, command templates, identifiers, and server validation messages as source data.
+- Three-pane desktop layout: compact session/agent rail, focused conversation, and context/source rail.
+- One-pane-at-a-time mobile flow with explicit back/navigation controls and preserved draft state.
+- Clear new-conversation flow, request type, project context, save mode, send state, and resulting Artifact/Knowledge ownership.
+- Semantic English/Thai chrome while preserving agent identity, messages, record titles, and server errors as source data.
+- Focused empty, loading, sending, failure, and long-message states with bounded content and 44px controls.
 
 ### Constraints
 
-- Preserve manual-handoff-only behavior. Do not add backend command execution, filesystem access, proprietary external-agent API calls, auto-patch, auto-push, PR creation, merge, or deploy.
-- Preserve existing external-agent APIs, environment gates, command templates, lifecycle, RBAC, and secret handling.
-- Do not invent availability or test results; show only stored or computed source data.
-- Keep required safety boundaries and validation evidence in normal document flow.
-- Split route orchestration, controller/models, registry/detail, and dialogs below 600 lines where practical.
+- Preserve direct-agent APIs, session/message behavior, project binding, save modes, memory review boundaries, provider routing, RBAC, and secret handling.
+- Do not turn direct chat into Work Order execution, external-agent dispatch, auto-patch, auto-push, PR, merge, or deploy.
+- Keep generated Artifact and Knowledge Candidate ownership visible through links to their canonical pages; do not duplicate those records in chat state.
+- Split route orchestration, controller/models, rails, conversation, composer, and dialogs below 600 lines where practical.
 
 ### Delivery Order
 
-1. Capture `/external-agents` baselines at 1440px, 1024px, and 430px in English and Thai.
-2. Map registry, capability, execution-mode, validation/test, Work Order, and RBAC ownership.
-3. Add focused tests for hierarchy, manual-only boundaries, source links, explicit mutations, and Thai chrome.
-4. Refine the page into registry plus focused detail and dialog flows.
+1. Merge current `main`, record Active Work ownership, and capture EN/TH baselines at 1440px, 1024px, and 430px.
+2. Map session, message, project, artifact, knowledge-candidate, provider, and RBAC ownership.
+3. Add focused tests for hierarchy, pane transitions, source links, save boundaries, errors, and Thai chrome.
+4. Refine the page into responsive rails, conversation, context, and composer modules.
 5. Run focused/full web tests, root typecheck/build, and responsive browser verification.
 
 ### Baseline
 
-- Premium UX Waves 1, 2, 3, and 4A are complete.
-- `/external-agents` is currently 218 lines and has no focused page test.
-- Latest validation: root typecheck, root production build, and 193/193 web tests pass.
-- Wave 4A live checks pass at 1440x900, 1024x768, and 430x932 in English/Thai without horizontal overflow.
+- Premium UX Waves 1, 2, 3, 4A, and 4B are complete.
+- `/agent-chat` is currently about 400 lines and has no focused page test.
+- Latest frontend validation after Wave 4B: root typecheck/build and 199/199 web tests pass.
+- Wave 4B live checks pass at 1440x900, 1024x768, and 430x932 in English/Thai without horizontal overflow.
