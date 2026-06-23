@@ -1,4 +1,5 @@
 import type { LanguageCode } from "./i18n";
+import { AGENT_CHAT_MESSAGES } from "./agentChatMessages";
 import { AGENTS_MESSAGES } from "./agentsMessages";
 import { EXTERNAL_AGENTS_MESSAGES } from "./externalAgentsMessages";
 import { LIVING_KINGDOM_MESSAGES } from "./livingKingdomMessages";
@@ -25,6 +26,7 @@ import { STRATEGY_MESSAGES } from "./strategyMessages";
  */
 export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
   en: {
+    ...AGENT_CHAT_MESSAGES.en,
     ...AGENTS_MESSAGES.en,
     ...EXTERNAL_AGENTS_MESSAGES.en,
     ...LIVING_KINGDOM_MESSAGES.en,
@@ -1183,6 +1185,7 @@ export const MESSAGES: Record<LanguageCode, Record<string, string>> = {
     "workOrders.source.lineageDescription": "Ordered trace: decree → council → prompt → result → review → summary."
   },
   th: {
+    ...AGENT_CHAT_MESSAGES.th,
     ...AGENTS_MESSAGES.th,
     ...EXTERNAL_AGENTS_MESSAGES.th,
     ...LIVING_KINGDOM_MESSAGES.th,

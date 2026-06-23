@@ -8,17 +8,15 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- **Premium UX Wave 4C: Agent Chat Workspace** - PLANNING / RESERVED
-- Base: `main` at `dfa9201` after merging M24 Phase B.
-- Route: `/agent-chat`.
-- Objective: convert the current three competing card columns into a stable sessions/agents rail, focused conversation, and context/source rail with a one-pane mobile flow.
-- Expected edit surface: `apps/web/src/pages/AgentChatPage.tsx`, new modules under `apps/web/src/pages/agent-chat/`, focused page tests, and scoped semantic EN/TH messages.
-- Contract boundary: preserve direct-agent session/message APIs, project binding, save modes, provider routing, Artifact/Knowledge Candidate ownership, RBAC, and secret handling. No Work Order execution, external-agent dispatch, patching, push, PR, merge, or deploy behavior is being added.
-- Implementation has not started. Baseline capture, source mapping, and focused tests come first.
+- No active implementation reserved.
+- **Premium UX Wave 4C: Agent Chat Workspace** - COMPLETE; merging to `main` with this status update.
+- `/agent-chat` now uses a focused agent/session browser, conversation pane, and context/source pane on desktop, with one pane at a time below `xl`.
+- Direct-agent APIs, project binding, save modes, provider routing, Artifact/Knowledge Candidate ownership, RBAC, secrets, and advisory-only boundaries remain unchanged.
+- Next candidate: Premium UX Wave 4D `/living-agents`; not reserved until work starts from a freshly synchronized `main`.
 
 ### Claude - `claude/main`
 
-- **Cross-task learning** (✅ done, integrating to `main`) — `crossTaskLearningService.ts` + planner. The planner can inject relevance-ranked, outcome-gated lessons from past review outcomes (what worked / what to avoid) into its planning context, behind setting `PLANNER_CROSS_TASK_LEARNING` (**default OFF**). Deterministic, no extra AI call, reuses `AgentReviewSummary`. Backend-only.
+- **Cross-task learning** (✅ merged to `main`) — `crossTaskLearningService.ts` + planner. Relevance-ranked, outcome-gated lessons from past review outcomes (what worked / what to avoid) injected into the planner's context, behind setting `PLANNER_CROSS_TASK_LEARNING` (**default OFF**). Deterministic, no extra AI call, reuses `AgentReviewSummary`. Backend-only.
 - **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS` (**default OFF**). Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
 - M24 Phase B supervised auto-retry merged to `main`; details in `PROJECT_STATUS.md`.
 - **Next:** awaiting King — flip any of the new default-OFF intelligence settings on, or pick the next slice (cross-task lessons into the council too / Prisma 7.8.0 / other).
@@ -30,4 +28,4 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4C should add a scoped message module and keep the central edit minimal.
 - Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4C's web surface.
 
-Last updated: 2026-06-23 by Claude.
+Last updated: 2026-06-23 by Claude (cross-task learning) — Codex completed Wave 4C.
