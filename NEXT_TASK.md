@@ -4,6 +4,7 @@
 
 Status: **planned - ready to implement**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
+Owner: Codex on `codex/main` (planning/reserved; implementation not started)
 
 ### Goal
 
@@ -35,6 +36,7 @@ Turn `/agent-chat` into a stable conversation workspace where the King can choos
 ### Baseline
 
 - Premium UX Waves 1, 2, 3, 4A, and 4B are complete.
+- `codex/main` is synchronized with `main` at `dfa9201`, including M24 Phase B supervised auto-retry.
 - `/agent-chat` is currently about 400 lines and has no focused page test.
 - Latest frontend validation after Wave 4B: root typecheck/build and 199/199 web tests pass.
 - Wave 4B live checks pass at 1440x900, 1024x768, and 430x932 in English/Thai without horizontal overflow.

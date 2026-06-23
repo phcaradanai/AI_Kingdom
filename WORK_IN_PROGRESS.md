@@ -1,30 +1,31 @@
-# Work In Progress — Team Coordination
+# Work In Progress - Team Coordination
 
-> Living "who is doing what, on which branch" board so the two builders (Claude = core/backend, Codex = UX/UI) do not collide.
-> Update your own row when you start, change scope, or finish. Keep it short — detailed history lives in `PROJECT_STATUS.md`.
+This is the canonical board for who is working on what and on which branch. Update your own entry before implementation, when scope changes, and after the work is merged. Detailed Codex scope lives in `docs/ACTIVE_WORK.md`; completed history lives in `PROJECT_STATUS.md`.
 
-Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claude/main`). Integrate via `main`.
+Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claude/main`). Integrate through `main`.
 
----
+## Active Now
 
-## Active now
+### Codex - `codex/main`
 
-### Claude — `claude/main`
-- **Next (proposed, awaiting King):** Council parallelization — run the specialist wave concurrently (Grand Vizier still synthesizes last). Carries a deliberation-model decision (today agents see each other's answers via `previousCouncilContext`; parallel = independent opinions), so it ships behind a setting **defaulting to current sequential behavior** + an A/B before any default flip. Backend/core lane (`grandVizierOrchestrator.ts`) — no overlap with Codex's External Agents UX.
-- **M24 Phase B — Supervised auto-retry** (✅ **merged to `main` `dfa9201`** 2026-06-23)
-  - Closed the last leg of the M24 "Competent Manager" arc (A→C→B). The reviewer emitted a verdict but `WorkOrder.autoRetryCount` / `maxAutoRetries` were recorded and **never acted on** — nothing re-dispatched a failed job. Now wired.
-  - New `apps/api/src/services/supervisedRetryService.ts` (`dispatchRetry` + `maybeAutoRetry`). King-triggered route `POST /api/automation-jobs/:id/retry` + a Retry button on `AutomationJobsPage` (shown only on a `NEEDS_REVIEW` job whose review verdict is `PATCH_FAILED`/`VALIDATION_FAILED`). Auto path fires from `submitReport`, behind setting `SUPERVISED_AUTO_RETRY_ENABLED` (**default OFF**).
-  - The retry threads the reviewer's specific feedback (`whatFailed` / `failedCommands` / revision prompt) into the prompt via `buildExternalAgentPrompt` (new "Prior Attempt — Fix These" section when `autoRetryCount > 0`) — so retries aren't blind. Superseded job → `CANCELLED` (not `FAILED`, which the Living Loop observes). Conservative: mechanical failures only, LOW priority (auto), capped, online-runner required (auto), result always `NEEDS_REVIEW`, never push/PR/merge/deploy. Exhausted → King notified.
-  - No Prisma migration (fields already existed). Touched: `supervisedRetryService.ts` (new), `automationJobService.ts`, `externalAgentWorkOrderService.ts`, `settingsService.ts`, `routes/automationJobs.ts`, web `AutomationJobsPage.tsx` + `lib/api.ts` + `i18nMessages.ts`.
-  - Validation: root typecheck green; new + affected service tests green (supervisedRetry 8, externalAgentWorkOrder 21, runnerResultReview); AutomationJobsPage web tests 21 green.
+- **Premium UX Wave 4C: Agent Chat Workspace** - PLANNING / RESERVED
+- Base: `main` at `dfa9201` after merging M24 Phase B.
+- Route: `/agent-chat`.
+- Objective: convert the current three competing card columns into a stable sessions/agents rail, focused conversation, and context/source rail with a one-pane mobile flow.
+- Expected edit surface: `apps/web/src/pages/AgentChatPage.tsx`, new modules under `apps/web/src/pages/agent-chat/`, focused page tests, and scoped semantic EN/TH messages.
+- Contract boundary: preserve direct-agent session/message APIs, project binding, save modes, provider routing, Artifact/Knowledge Candidate ownership, RBAC, and secret handling. No Work Order execution, external-agent dispatch, patching, push, PR, merge, or deploy behavior is being added.
+- Implementation has not started. Baseline capture, source mapping, and focused tests come first.
 
-### Codex — (UX branch)
-- **Premium UX Wave 4B — External Agents Registry** (`/external-agents`), per `NEXT_TASK.md`. Last commit on this line: `18c493b "Record active external agents UX work"`.
+### Claude - `claude/main`
 
----
+- **Next (proposed, awaiting King):** Council parallelization — run the specialist wave concurrently (`grandVizierOrchestrator.ts`), Grand Vizier still synthesizes last. Carries a deliberation-model decision: today specialists see each other's answers via `previousCouncilContext` (sequential round-table); parallel = independent opinions synthesized by the Vizier. So it ships behind a setting **defaulting to current sequential behavior** + an A/B before any default flip. Backend/core only — no overlap with Wave 4C.
+- M24 Phase B supervised auto-retry is merged into `main`; implementation details and validation are recorded in `PROJECT_STATUS.md`.
 
-## Collision watch
-- Phase B (Claude) and Wave 4B (Codex) touch **different pages/services** — Automation Jobs / review-core vs. External Agents page. Low risk.
-- Shared touch point to watch: `apps/web/src/types/api.ts` ↔ `apps/api/src/types/api.ts` (DTOs are duplicated by design). If Phase B adds a retry DTO and Wave 4B edits external-agent DTOs, merge the two type files carefully.
+## Collision Watch
 
-_Last updated: 2026-06-23 by Claude._
+- M24 Phase B touched `apps/web/src/lib/api.ts`, `apps/web/src/lib/i18nMessages.ts`, and `AutomationJobsPage.tsx`; Codex has merged those changes before Wave 4C planning.
+- Wave 4C should avoid backend/API/type changes unless a verified contract gap blocks the UX. Any contract change must be coordinated before implementation.
+- `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4C should add a scoped message module and keep the central edit minimal.
+- Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4C's web surface.
+
+Last updated: 2026-06-23 by Claude.
