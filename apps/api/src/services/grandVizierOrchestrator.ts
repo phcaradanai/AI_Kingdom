@@ -17,7 +17,7 @@ import { buildCrossTaskLessons } from "./crossTaskLearningService.js";
 import { refreshCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
-import { proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
+import { buildAgentKnowledgeContext, proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
 import {
   addTraceStep,
   attachUsageRecordStep,
@@ -197,6 +197,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         })
       : "";
     const kingdomMemoryContext = [baseMemoryContext, crossTaskLessons].filter((section) => section && section.trim()).join("\n\n");
+    // Curated knowledge (M16): inject each agent's APPROVED knowledge memories into its own
+    // prompt so the council finally USES the lessons the King approved (closing the loop where
+    // knowledge was created but never consumed). Per-agent → computed inside the pass. Opt-in.
+    const knowledgeInContext = await getBooleanSetting("AGENT_KNOWLEDGE_IN_CONTEXT", false);
     const fallbackNotices: string[] = [];
     const generatedResponses: Array<{ agent: Agent; response: string }> = [];
     const usedProviders: string[] = [];
@@ -332,6 +336,11 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           promptPreview: task.command
         });
 
+        const agentKnowledge = knowledgeInContext
+          ? await buildAgentKnowledgeContext(agent.id, task.projectId, task.id).then((r) => r.context).catch(() => "")
+          : "";
+        const agentMemoryContext = [kingdomMemoryContext, agentKnowledge].filter((section) => section && section.trim()).join("\n\n");
+
         const generated = await generateWithFallback(providerCalls, {
           command: task.command,
           mode: task.mode,
@@ -345,7 +354,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           modelParameters: effectiveParams,
           kingdomContext: kingdomContext || undefined,
           projectContext,
-          kingdomMemoryContext,
+          kingdomMemoryContext: agentMemoryContext,
           previousCouncilContext
         }, traceContext);
 
@@ -635,6 +644,11 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       councilSessionId: session.id
     });
 
+    const summaryKnowledge = knowledgeInContext
+      ? await buildAgentKnowledgeContext(grandVizier.id, task.projectId, task.id).then((r) => r.context).catch(() => "")
+      : "";
+    const summaryMemoryContext = [kingdomMemoryContext, summaryKnowledge].filter((section) => section && section.trim()).join("\n\n");
+
     let generatedSummary: Awaited<ReturnType<typeof generateWithFallback>>;
     try {
       generatedSummary = await generateWithFallback(summaryProviderCalls, {
@@ -650,7 +664,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         modelParameters: summaryEffectiveParams,
         kingdomContext: kingdomContext || undefined,
         projectContext,
-        kingdomMemoryContext,
+        kingdomMemoryContext: summaryMemoryContext,
         previousCouncilContext: generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n")
       }, summaryTraceContext);
     } catch (error) {
