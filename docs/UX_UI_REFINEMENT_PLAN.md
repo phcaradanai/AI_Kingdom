@@ -277,7 +277,7 @@ Wave 3C implementation replaces simultaneous forms with a compact overview, stab
 
 ### Wave 4: Agents, Providers, and Models
 
-Progress: **Waves 4A, 4B, and 4C complete; Wave 4D Living Agents next.** `/agents`, `/external-agents`, and `/agent-chat` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, direct-conversation, save, and review contracts.
+Progress: **Waves 4A, 4B, and 4C complete; Wave 4D Living Agents in progress.** `/agents`, `/external-agents`, and `/agent-chat` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, direct-conversation, save, and review contracts.
 
 | Route | Primary refinement |
 | --- | --- |

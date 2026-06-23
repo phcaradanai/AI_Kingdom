@@ -8,11 +8,10 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- No active implementation reserved.
-- **Premium UX Wave 4C: Agent Chat Workspace** - COMPLETE; merging to `main` with this status update.
-- `/agent-chat` now uses a focused agent/session browser, conversation pane, and context/source pane on desktop, with one pane at a time below `xl`.
-- Direct-agent APIs, project binding, save modes, provider routing, Artifact/Knowledge Candidate ownership, RBAC, secrets, and advisory-only boundaries remain unchanged.
-- Next candidate: Premium UX Wave 4D `/living-agents`; not reserved until work starts from a freshly synchronized `main`.
+- **Premium UX Wave 4D: Living Agents Roster** - IN PROGRESS from synchronized base `5cb0cc5`.
+- Scope: refine `/living-agents` into a compact operational roster with real-state and role filters, focused agent evidence, canonical profile/source links, responsive English/Thai chrome, and reduced-motion-safe feedback.
+- Preserve `Agent`, `AgentActivity`, `WorkOrder`, usage/provider evidence, portrait ownership, RBAC, and all existing API contracts. Ambient presentation state must not be presented as real work.
+- Expected web-only edit surface: `LivingAgentsPage.tsx`, focused modules under `pages/living-agents/`, tests, scoped messages, and completion documentation.
 
 ### Claude - `claude/main`
 
@@ -23,8 +22,8 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 ## Collision Watch
 
 - M24 Phase B touched `apps/web/src/lib/api.ts`, `apps/web/src/lib/i18nMessages.ts`, and `AutomationJobsPage.tsx`; Codex has merged those changes before Wave 4C planning.
-- Wave 4C should avoid backend/API/type changes unless a verified contract gap blocks the UX. Any contract change must be coordinated before implementation.
-- `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4C should add a scoped message module and keep the central edit minimal.
-- Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4C's web surface.
+- Wave 4D avoids backend/API/type changes unless a verified contract gap blocks the UX. Any contract change must be coordinated before implementation.
+- `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4D will add a scoped message module and keep central registration minimal.
+- Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4D's web surface.
 
-Last updated: 2026-06-23 by Codex after completing Wave 4C validation.
+Last updated: 2026-06-23 by Codex at Wave 4D start.

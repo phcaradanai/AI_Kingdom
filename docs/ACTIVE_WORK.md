@@ -4,7 +4,15 @@
 
 ## Active
 
-No Codex implementation is currently reserved. Wave 4D `/living-agents` is the next candidate and must be synchronized with `main` before it is marked active.
+### Premium UX Wave 4D: Living Agents Roster
+
+- **Owner / branch:** Codex on `codex/main`
+- **Status:** IN PROGRESS from synchronized base `5cb0cc5`
+- **Objective:** turn `/living-agents` into a compact operational roster with real-state scanning, role/state filters, focused evidence, and canonical source navigation.
+- **Source ownership:** `Agent` owns identity and portrait profile; `AgentActivity` owns recorded activity/status; `WorkOrder` owns executable assignment; usage traces and provider records own cost/model evidence. This page remains read-only.
+- **Expected edits:** `LivingAgentsPage.tsx`, focused modules under `pages/living-agents/`, focused tests, a scoped message module, minimal i18n registration, and completion docs.
+- **Collision boundary:** no API, Prisma, lifecycle, provider-routing, portrait, RBAC, execution, patch, push, PR, merge, or deploy contract changes.
+- **Validation target:** focused/full web tests, root typecheck/build, web lint, and EN/TH browser checks at 1440x900, 1024x768, and 430x932.
 
 ## Completed Wave 4C Contract
 

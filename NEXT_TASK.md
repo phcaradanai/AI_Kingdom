@@ -2,9 +2,9 @@
 
 ## Premium UX Wave 4D: Living Agents Roster
 
-Status: **planned - not reserved**
+Status: **in progress from synchronized base `5cb0cc5`**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
-Owner: Codex candidate on `codex/main`; mark active only after synchronizing the latest `main`
+Owner: Codex on `codex/main`
 
 ### Goal
 

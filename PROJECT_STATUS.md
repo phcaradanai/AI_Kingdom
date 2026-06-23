@@ -8,7 +8,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 ## Active Work
 
-Premium UX Wave 4C for `/agent-chat` is complete on `codex/main`. No Codex implementation is currently reserved; Wave 4D `/living-agents` is the next candidate after synchronizing the latest `main`. Team ownership is recorded in `WORK_IN_PROGRESS.md`; completed scope and collision boundaries are detailed in `docs/ACTIVE_WORK.md`.
+Premium UX Wave 4C for `/agent-chat` is complete. Premium UX Wave 4D for `/living-agents` is now active on `codex/main` from synchronized base `5cb0cc5`, with web-only roster, filtering, focused evidence, responsive English/Thai, and source-link work reserved to Codex. Team ownership and collision boundaries are recorded in `WORK_IN_PROGRESS.md` and `docs/ACTIVE_WORK.md`.
 
 ## Implemented Milestones
 
