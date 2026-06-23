@@ -15,9 +15,10 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Claude - `claude/main`
 
-- **Council parallelization** (complete, merged into `main`) — `grandVizierOrchestrator.ts`. Specialists can run concurrently behind setting `COUNCIL_PARALLEL_SPECIALISTS` (**default OFF** = current sequential round-table); Grand Vizier still runs last + synthesizes. Returned/displayed responses are re-sorted by canonical council order (deterministic under concurrency). Live A/B: ~356s → ~173s (~51% faster), same role order + summary. Backend-only — no overlap with Wave 4C. King decision pending: whether to flip the default to parallel.
-- M24 Phase B supervised auto-retry is merged into `main`; details + validation in `PROJECT_STATUS.md`.
-- **Next:** awaiting King's pick (cross-task learning / flip parallel default / Prisma 7.8.0 / other).
+- **Cross-task learning** (✅ merged to `main`) — `crossTaskLearningService.ts` + planner. Relevance-ranked, outcome-gated lessons from past review outcomes (what worked / what to avoid) injected into the planner's context, behind setting `PLANNER_CROSS_TASK_LEARNING` (**default OFF**). Deterministic, no extra AI call, reuses `AgentReviewSummary`. Backend-only.
+- **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS` (**default OFF**). Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
+- M24 Phase B supervised auto-retry merged to `main`; details in `PROJECT_STATUS.md`.
+- **Next:** awaiting King — flip any of the new default-OFF intelligence settings on, or pick the next slice (cross-task lessons into the council too / Prisma 7.8.0 / other).
 
 ## Collision Watch
 
@@ -26,4 +27,4 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4E should use a scoped message module and keep central registration minimal.
 - Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4E's profile surface.
 
-Last updated: 2026-06-23 by Codex after completing Wave 4D validation.
+Last updated: 2026-06-23 after Claude cross-task learning and Codex Wave 4D completion were integrated.
