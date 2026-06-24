@@ -8,10 +8,10 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- No active implementation reserved.
-- **Premium UX Wave 4D: Living Agents Roster** - COMPLETE; merging to `main` with this status update.
-- `/living-agents` now uses a compact roster and focused evidence pane, optional RBAC-safe Kingdom Presence enrichment, real state/role filters, canonical source links, and semantic English/Thai chrome.
-- Next candidate: Premium UX Wave 4E `/living-agents/:agentId`; not reserved until work starts from a freshly synchronized `main`.
+- **Premium UX Wave 4E: Living Agent Evidence Profile** - IN PROGRESS from synchronized base `712b4bb`.
+- Scope: split `/living-agents/:agentId` from an 876-line, 12-tab page into five source-owned evidence sections with responsive English/Thai navigation and focused loading/error/empty states.
+- Preserve Living Agent profile/timeline/relations APIs, lazy loading, canonical Agent/Activity/Trace/Project/Council/Report/Memory/Knowledge/Provider/Audit ownership, and all RBAC/safety boundaries.
+- Expected web-only edit surface: `LivingAgentProfilePage.tsx`, focused modules under `pages/living-agent-profile/`, tests, scoped messages, and completion documentation.
 
 ### Claude - `claude/main`
 
@@ -29,4 +29,4 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4E should use a scoped message module and keep central registration minimal.
 - Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4E's profile surface.
 
-Last updated: 2026-06-24 after latest council intelligence work and Codex Wave 4D were integrated.
+Last updated: 2026-06-24 by Codex at Wave 4E start after latest council intelligence integration.

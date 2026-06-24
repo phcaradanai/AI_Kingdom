@@ -4,7 +4,15 @@
 
 ## Active
 
-No Codex implementation is currently reserved. Wave 4E `/living-agents/:agentId` is the next candidate and must be synchronized with `main` before it is marked active.
+### Premium UX Wave 4E: Living Agent Evidence Profile
+
+- **Owner / branch:** Codex on `codex/main`
+- **Status:** IN PROGRESS from synchronized base `712b4bb`
+- **Objective:** replace the 876-line, 12-tab profile with five focused evidence sections: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit.
+- **Source ownership:** Agent owns identity; AgentActivity/timeline owns activity and attribution; Project, Task, Council, Report, Memory, Knowledge Candidate, Provider, Usage Trace, and Audit remain linked canonical records.
+- **Expected edits:** `LivingAgentProfilePage.tsx`, focused profile modules, focused tests, scoped messages, minimal central i18n registration, and completion docs.
+- **Collision boundary:** no API, DTO, Prisma, council intelligence, lifecycle, provider-routing, RBAC, execution, patch, push, PR, merge, or deploy contract changes.
+- **Validation target:** focused/full web tests, root typecheck/build, web lint, and EN/TH browser checks at 1440x900, 1024x768, and 430x932.
 
 ## Completed Wave 4D Contract
 

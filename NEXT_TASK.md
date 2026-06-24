@@ -2,9 +2,9 @@
 
 ## Premium UX Wave 4E: Living Agent Evidence Profile
 
-Status: **planned - not reserved**
+Status: **in progress from synchronized base `712b4bb`**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
-Owner: Codex candidate on `codex/main`; mark active only after synchronizing the latest `main`
+Owner: Codex on `codex/main`
 
 ### Goal
 
