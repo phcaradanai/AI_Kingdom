@@ -2,7 +2,7 @@
 
 ## Premium UX Wave 4F: Providers Registry
 
-Status: **planned; discovery not started**
+Status: **in progress from synchronized base `bbfe585`**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 Owner: Codex on `codex/main`
 
@@ -35,4 +35,5 @@ Refine `/providers` into a compact provider and model readiness workspace where 
 
 - Premium UX Waves 1, 2, 3, and 4A-4E are complete.
 - Wave 4E validation: 8/8 focused tests, 219/219 full web tests, web lint, root typecheck, and root build pass.
-- Wave 4E responsive browser verification remains outstanding because the available in-app browser tab was locked on an error document.
+- Wave 4F baseline: 9 providers; page height is 2,921px at 1440x900, 4,591px at 1024x768, and 5,719px at 430x932 with no horizontal overflow.
+- Current provider cards repeat all details, produce asymmetric empty space, expose 20-40px content controls, and leave most page chrome in English under the Thai locale.

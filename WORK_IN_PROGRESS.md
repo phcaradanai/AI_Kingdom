@@ -8,9 +8,10 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- No active implementation after completing **Premium UX Wave 4E: Living Agent Evidence Profile**.
-- Wave 4E split `/living-agents/:agentId` from an 876-line, 12-tab page into five source-owned evidence sections. Focused tests pass 8/8, the full web suite passes 219/219, and root typecheck/build pass.
-- Next reserved candidate: **Premium UX Wave 4F: Providers Registry** on `/providers`; discovery and ownership audit have not started.
+- **Premium UX Wave 4F: Providers Registry** - IN PROGRESS from synchronized base `bbfe585`.
+- Scope: replace the repeated provider-card grid with a compact registry and focused provider evidence/configuration workspace, semantic English/Thai chrome, 44px controls, and explicit Routing/Treasury source links.
+- Preserve Provider registry/config ownership, model validation, health/account/model telemetry, secret-reference safety, KING RBAC, routing, cost, and audit contracts. No API, DTO, Prisma, or secret-handling changes are planned.
+- Expected web-only edit surface: `ProvidersPage.tsx`, focused modules under `pages/providers/`, focused tests, scoped messages, minimal central i18n registration, and completion documentation.
 
 ### Claude - `claude/main`
 
@@ -28,4 +29,4 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Future waves should use scoped message modules and keep central registration minimal.
 - Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with the planned Wave 4F provider surface.
 
-Last updated: 2026-06-24 by Codex after Wave 4E completion; Wave 4F is reserved but not started.
+Last updated: 2026-06-24 by Codex at Wave 4F start from synchronized base `bbfe585`.

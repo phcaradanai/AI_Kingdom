@@ -4,7 +4,16 @@
 
 ## Active
 
-No Codex implementation is active. Premium UX Wave 4F for `/providers` is the next reserved candidate; discovery and ownership audit must be recorded here before edits begin.
+### Premium UX Wave 4F: Providers Registry
+
+- **Owner / branch:** Codex on `codex/main`
+- **Status:** IN PROGRESS from synchronized base `bbfe585`
+- **Objective:** replace the repeated provider-card grid with a compact registry and focused detail/configuration workspace that exposes readiness, credentials reference state, health, default model, pricing coverage, and canonical owner links without exposing secrets.
+- **Source ownership:** Provider registry/config remains owned by `/api/providers` and `aiProviderRegistry`; route chains remain owned by `/routing`; pricing, balances, spend, and telemetry remain owned by `/treasury`; secrets remain server-side environment values and only public readiness booleans/reference names may render.
+- **Baseline:** 9 providers; desktop page height 2,921px, tablet 4,591px, mobile 5,719px. No horizontal overflow, but repeated cards create uneven empty space, content controls are 20-40px high, and most static page chrome remains English when Thai is selected.
+- **Expected edits:** `ProvidersPage.tsx`, focused provider modules, focused tests, scoped messages, minimal central i18n registration, and completion docs.
+- **Collision boundary:** no API, DTO, Prisma, provider registry/router, health telemetry, treasury, credential resolution, RBAC, audit, or secret contract changes.
+- **Validation target:** focused/full web tests, root typecheck/build, web lint, and EN/TH browser checks at 1440x900, 1024x768, and 430x932.
 
 ## Completed Wave 4E Contract
 
