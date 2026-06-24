@@ -8,10 +8,9 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- **Premium UX Wave 4E: Living Agent Evidence Profile** - IN PROGRESS from synchronized base `712b4bb`.
-- Scope: split `/living-agents/:agentId` from an 876-line, 12-tab page into five source-owned evidence sections with responsive English/Thai navigation and focused loading/error/empty states.
-- Preserve Living Agent profile/timeline/relations APIs, lazy loading, canonical Agent/Activity/Trace/Project/Council/Report/Memory/Knowledge/Provider/Audit ownership, and all RBAC/safety boundaries.
-- Expected web-only edit surface: `LivingAgentProfilePage.tsx`, focused modules under `pages/living-agent-profile/`, tests, scoped messages, and completion documentation.
+- No active implementation after completing **Premium UX Wave 4E: Living Agent Evidence Profile**.
+- Wave 4E split `/living-agents/:agentId` from an 876-line, 12-tab page into five source-owned evidence sections. Focused tests pass 8/8, the full web suite passes 219/219, and root typecheck/build pass.
+- Next reserved candidate: **Premium UX Wave 4F: Providers Registry** on `/providers`; discovery and ownership audit have not started.
 
 ### Claude - `claude/main`
 
@@ -25,8 +24,8 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 ## Collision Watch
 
 - M24 Phase B touched `apps/web/src/lib/api.ts`, `apps/web/src/lib/i18nMessages.ts`, and `AutomationJobsPage.tsx`; Codex has merged those changes before Wave 4C planning.
-- Wave 4E should avoid backend/API/type changes unless a verified contract gap blocks the UX. Any contract change must be coordinated before implementation.
-- `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Wave 4E should use a scoped message module and keep central registration minimal.
-- Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with Wave 4E's profile surface.
+- Wave 4F should avoid backend/API/type changes unless a verified contract gap blocks the UX. Any contract change must be coordinated before implementation.
+- `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Future waves should use scoped message modules and keep central registration minimal.
+- Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with the planned Wave 4F provider surface.
 
-Last updated: 2026-06-24 by Codex at Wave 4E start after latest council intelligence integration.
+Last updated: 2026-06-24 by Codex after Wave 4E completion; Wave 4F is reserved but not started.

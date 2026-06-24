@@ -2,15 +2,17 @@
 
 ## Current State
 
-AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, and M24 self-growing max_tokens, with Premium UX Waves 1, 2, 3, and 4A-4D complete. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
+AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, and M24 self-growing max_tokens, with Premium UX Waves 1, 2, 3, and 4A-4E complete. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
 ## Active Work
 
-Premium UX Wave 4D for `/living-agents` is complete. Premium UX Wave 4E for `/living-agents/:agentId` is active on `codex/main` from synchronized base `712b4bb`, with the web-only evidence profile, responsive English/Thai navigation, and module split reserved to Codex. Team ownership and collision boundaries are recorded in `WORK_IN_PROGRESS.md` and `docs/ACTIVE_WORK.md`.
+Premium UX Wave 4E for `/living-agents/:agentId` is complete. No Codex implementation is active; Premium UX Wave 4F for `/providers` is the next reserved candidate and must begin with synchronization, discovery, source-ownership audit, and baseline capture.
 
 ## Implemented Milestones
+
+- Premium UX Wave 4E Living Agent Evidence Profile refinement (complete): Replaced the 876-line, 12-tab `/living-agents/:agentId` page with a 6-line route and five focused evidence sections: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit. Profile data loads immediately while timeline, relations, candidates, and memories load only when requested; request guards prevent duplicate or stale relation/knowledge updates. Section failures are distinct from empty results, support retry, and retain partial knowledge evidence. Semantic English/Thai chrome, 44px controls, explicit owner links, legacy-attribution disclosure, and reduced-motion-safe status feedback preserve canonical Agent, activity, trace, project, council, report, provider, knowledge, and audit ownership. Every Wave 4E file is below 600 lines. Focused tests pass 8/8, the full web suite passes 219/219, and web lint, root typecheck, root build, and diff checks pass. Responsive browser verification remains outstanding because the available in-app browser tab was locked on an error document; no visual-pass claim is made.
 
 - Premium UX Wave 4D Living Agents Roster refinement (complete): Rebuilt `/living-agents` from eight repeated decorative cards into a compact operational roster and focused evidence pane. Existing Kingdom Presence supplies optional RBAC-safe live task, Work Order, progress, and blocking evidence; denied or unavailable presence degrades to roster evidence without blocking the page. Agent identity/portrait, AgentActivity status and attribution, WorkOrder assignment, provider usage, and profile timeline remain source-owned and directly linked. State/role filters, 44px controls, explicit roster/detail handoff below `xl`, reduced-motion-safe state feedback, and semantic English/Thai chrome now cover the route. The 246-line route is 6 lines and every controller, model, toolbar, roster, evidence, workspace, message, and test file is below 180 lines. Focused tests pass 6/6; the full web suite passes 211/211; root typecheck, web lint, and root build pass. Live EN/TH checks at 1440x900, 1024x768, and 430x932 show aligned desktop panes, one-pane tablet/mobile flow, no horizontal overflow, canonical source links, and no console errors. The existing large-chunk and React Router future-flag warnings remain.
 
@@ -119,9 +121,18 @@ Navigation is role-aware and grouped into Mission Control / Command / Work / Kno
 
 The current 39-route frontend has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. Wave 1 shared shell/layout work and all five Mission Control surfaces are complete. Wave 2 is complete across Throne Room, Council, Work Orders, Automation Jobs, Reports, and Decree Lineage. Wave 3A is complete across Projects Portfolio and Project Detail. These surfaces use semantic English/Thai chrome and preserve existing APIs, source ownership, context rules, and execution gates.
 
-Wave 1, the full command-to-execution Wave 2, Wave 3 Projects/Strategy, and Waves 4A-4D are complete. The next refinement candidate is Wave 4E: Living Agent Evidence Profile. It will simplify the 876-line, 12-tab profile into a smaller evidence hierarchy while preserving every API, provenance class, and source link. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
+Wave 1, the full command-to-execution Wave 2, Wave 3 Projects/Strategy, and Waves 4A-4E are complete. The next refinement candidate is Wave 4F: Providers Registry. It starts with a source-ownership and secret-safety audit before any layout change. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
 
 ## Verification
+
+Latest frontend validation after Premium UX Wave 4E (2026-06-24):
+
+- `npm run test --workspace @ai-kingdom/web` — 219/219 pass across 31 files
+- `npm run typecheck` — pass across API, runner, and web
+- `npm run lint --workspace @ai-kingdom/web` — pass
+- `npm run build` — pass across API, runner, and web (pre-existing >500 kB chunk warning only)
+- Focused Living Agent profile coverage — 8/8 pass
+- Responsive browser verification is outstanding because the available in-app browser tab was locked on an error document during this run.
 
 Latest full frontend validation after Premium UX Wave 4D (2026-06-23):
 

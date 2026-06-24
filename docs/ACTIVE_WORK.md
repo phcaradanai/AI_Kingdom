@@ -4,15 +4,31 @@
 
 ## Active
 
-### Premium UX Wave 4E: Living Agent Evidence Profile
+No Codex implementation is active. Premium UX Wave 4F for `/providers` is the next reserved candidate; discovery and ownership audit must be recorded here before edits begin.
 
-- **Owner / branch:** Codex on `codex/main`
-- **Status:** IN PROGRESS from synchronized base `712b4bb`
-- **Objective:** replace the 876-line, 12-tab profile with five focused evidence sections: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit.
-- **Source ownership:** Agent owns identity; AgentActivity/timeline owns activity and attribution; Project, Task, Council, Report, Memory, Knowledge Candidate, Provider, Usage Trace, and Audit remain linked canonical records.
-- **Expected edits:** `LivingAgentProfilePage.tsx`, focused profile modules, focused tests, scoped messages, minimal central i18n registration, and completion docs.
-- **Collision boundary:** no API, DTO, Prisma, council intelligence, lifecycle, provider-routing, RBAC, execution, patch, push, PR, merge, or deploy contract changes.
-- **Validation target:** focused/full web tests, root typecheck/build, web lint, and EN/TH browser checks at 1440x900, 1024x768, and 430x932.
+## Completed Wave 4E Contract
+
+### Objective
+
+Replace the 876-line, 12-tab Living Agent profile with five focused evidence sections: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit.
+
+### Source Ownership
+
+- `Agent` remains the canonical identity and presentation-profile owner.
+- Agent activity/timeline APIs remain the owner of activity, trace attribution, prompt/response previews, tokens, and cost evidence.
+- Project, Task, Council, Report, Memory, Knowledge Candidate, Provider, Usage Trace, and Audit remain canonical linked records; this profile does not copy or mutate them.
+
+### Delivery
+
+1. Reduced the route to 6 lines and split controller, models, header, navigation, five evidence sections, scoped messages, and focused tests; every file is below 600 lines.
+2. Added semantic English/Thai chrome, 44px controls, responsive five-section navigation, explicit owner links, legacy-attribution disclosure, and reduced-motion-safe active-state feedback.
+3. Kept profile loading immediate while timeline, relations, candidates, and memories load only when their owning section opens; agent-scoped request guards prevent duplicate or stale relation/knowledge updates.
+4. Verified 8/8 focused tests, 219/219 full web tests, web lint, root typecheck, root build, and `git diff --check`.
+5. Responsive browser verification remains outstanding because the in-app browser tab was on a non-navigable browser error document during this run; no visual-pass claim is recorded.
+
+### Collision Boundaries
+
+- No API, DTO, Prisma, council intelligence, lifecycle, provider routing, RBAC, execution, patch, push, PR, or deploy contract changed.
 
 ## Completed Wave 4D Contract
 

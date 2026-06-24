@@ -1,39 +1,38 @@
 # Next Task
 
-## Premium UX Wave 4E: Living Agent Evidence Profile
+## Premium UX Wave 4F: Providers Registry
 
-Status: **in progress from synchronized base `712b4bb`**
+Status: **planned; discovery not started**
 Plan: `docs/UX_UI_REFINEMENT_PLAN.md`
 Owner: Codex on `codex/main`
 
 ### Goal
 
-Refine `/living-agents/:agentId` from an 876-line, 12-tab page into a focused evidence profile where identity, current state, work, provenance, usage, relationships, and learned knowledge remain easy to scan and trace to their owners.
+Refine `/providers` into a compact provider and model readiness workspace where the King can compare operational state, credential-reference readiness, health, defaults, and source ownership without exposing secrets or scanning repeated panels.
 
-### Scope
+### Discovery First
 
-- Stable profile header with canonical identity, current activity, operational state, and source ownership.
-- Consolidate the 12 tabs into a smaller evidence hierarchy: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit.
-- Preserve lazy timeline/relation loading, filters, trace/report/project/council/memory/knowledge links, and server-owned data.
-- Responsive one-section-at-a-time mobile flow with semantic English/Thai chrome and 44px controls.
+1. Merge current `main` into `codex/main` and record the synchronized base.
+2. Audit the existing provider page, APIs, DTOs, RBAC, settings ownership, routing links, secret-reference handling, and current test coverage.
+3. Capture English/Thai baselines at 1440x900, 1024x768, and 430x932 before defining the final layout.
+4. Record active ownership and collision boundaries in `WORK_IN_PROGRESS.md` and `docs/ACTIVE_WORK.md` before implementation.
+
+### Expected Direction
+
+- Compact provider registry with readiness, environment mode, health, cost tier, and default-model evidence.
+- Focused provider detail and explicit create/edit controls instead of showing every configuration surface at once.
+- Direct links to Routing, Treasury, and usage evidence while those routes remain their own source of truth.
+- Semantic English/Thai chrome, bounded technical values, 44px controls, responsive composition, and clear loading/error/empty states.
 
 ### Constraints
 
-- Preserve all Living Agent profile, timeline, and relations APIs and DTO contracts.
-- Do not reinterpret legacy attribution as verified evidence or infer active work from historical records.
-- Keep Agent, AgentActivity, WorkOrder, Project, Council, Report, Memory, Knowledge Candidate, Provider, Usage Trace, and Audit Log ownership explicit.
-- Split controller, models, header, navigation, evidence sections, timeline, relations, messages, and tests below 600 lines.
-
-### Delivery Order
-
-1. Merge current `main`, record ownership, and capture EN/TH baselines at 1440x900, 1024x768, and 430x932.
-2. Map the 12 existing tabs and every link/query to the five-section evidence hierarchy.
-3. Add focused tests for section navigation, lazy loads, filters, source links, legacy attribution, loading/error/empty states, and Thai chrome.
-4. Implement the split profile workspace without backend or DTO changes.
-5. Run focused/full web tests, root typecheck/build, and responsive browser verification.
+- Never expose API keys or secret values; custom providers continue to store environment-variable names only.
+- Preserve provider/model routing, fallback, health, settings, RBAC, audit, and cost contracts unless discovery proves a coordinated contract change is required.
+- Do not infer provider readiness from display state when the API already owns the readiness signal.
+- Split large route/controller/component modules below 600 lines where practical.
 
 ### Baseline
 
-- Premium UX Waves 1, 2, 3, and 4A-4D are complete.
-- Wave 4D validation: 211/211 web tests, root typecheck, web lint, and root build pass.
-- `/living-agents` has no horizontal overflow at 1440x900, 1024x768, or 430x932 in English/Thai; browser console is error-free.
+- Premium UX Waves 1, 2, 3, and 4A-4E are complete.
+- Wave 4E validation: 8/8 focused tests, 219/219 full web tests, web lint, root typecheck, and root build pass.
+- Wave 4E responsive browser verification remains outstanding because the available in-app browser tab was locked on an error document.
