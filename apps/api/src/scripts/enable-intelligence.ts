@@ -8,6 +8,7 @@ import { prisma } from "../db/prisma.js";
  *   - PLANNER_CROSS_TASK_LEARNING   → planner learns from past review outcomes (what worked / what to avoid)
  *   - COUNCIL_CROSS_TASK_LEARNING   → the council (all specialists + synthesis) learns from those same outcomes
  *   - AGENT_KNOWLEDGE_IN_CONTEXT    → each agent's APPROVED curated knowledge is injected into its council prompt
+ *   - CAPTURE_LESSONS_FROM_REVIEWS  → failed reviews auto-propose knowledge candidates (King-gated) — self-sustaining loop
  *   - COUNCIL_PARALLEL_SPECIALISTS  → council specialists run concurrently (faster; independent opinions)
  *   - SUPERVISED_AUTO_RETRY_ENABLED → mechanical job failures self-fix once before escalating (bounded, NEEDS_REVIEW)
  *   - ADAPTIVE_REASONING_ENABLED    → the responsible agent thinks harder on complex work
@@ -25,6 +26,7 @@ const INTELLIGENCE_SETTINGS = [
   "PLANNER_CROSS_TASK_LEARNING",
   "COUNCIL_CROSS_TASK_LEARNING",
   "AGENT_KNOWLEDGE_IN_CONTEXT",
+  "CAPTURE_LESSONS_FROM_REVIEWS",
   "COUNCIL_PARALLEL_SPECIALISTS",
   "SUPERVISED_AUTO_RETRY_ENABLED",
   "ADAPTIVE_REASONING_ENABLED",
