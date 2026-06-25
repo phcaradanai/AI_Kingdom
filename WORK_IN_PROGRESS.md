@@ -8,10 +8,10 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `codex/main`
 
-- **Premium UX Wave 4F: Providers Registry** - IN PROGRESS from synchronized base `bbfe585`.
-- Scope: replace the repeated provider-card grid with a compact registry and focused provider evidence/configuration workspace, semantic English/Thai chrome, 44px controls, and explicit Routing/Treasury source links.
-- Preserve Provider registry/config ownership, model validation, health/account/model telemetry, secret-reference safety, KING RBAC, routing, cost, and audit contracts. No API, DTO, Prisma, or secret-handling changes are planned.
-- Expected web-only edit surface: `ProvidersPage.tsx`, focused modules under `pages/providers/`, focused tests, scoped messages, minimal central i18n registration, and completion documentation.
+- No active implementation. **Premium UX Wave 4F: Providers Registry** is complete on `codex/main` and ready for merge/integration tracking.
+- Completed scope: replaced the repeated provider-card grid with a compact registry plus focused provider evidence/configuration workspace, semantic English/Thai chrome, 44px controls, explicit Routing/Treasury source links, and secret-reference-safe provider creation/editing.
+- Preserved Provider registry/config ownership, model validation, health/account/model telemetry, KING RBAC, routing, cost, audit, and secret-handling contracts. No API, DTO, Prisma, or backend secret resolution changed.
+- Next reserved Codex candidate: **Premium UX Wave 4G: Routing Workspace** after merging latest `main` into `codex/main` again.
 
 ### Claude - `claude/main`
 
@@ -29,4 +29,4 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Future waves should use scoped message modules and keep central registration minimal.
 - Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with the planned Wave 4F provider surface.
 
-Last updated: 2026-06-24 by Codex at Wave 4F start from synchronized base `bbfe585`.
+Last updated: 2026-06-25 by Codex after Wave 4F completion on `codex/main`.

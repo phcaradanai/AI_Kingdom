@@ -4,16 +4,32 @@
 
 ## Active
 
-### Premium UX Wave 4F: Providers Registry
+No active Codex implementation. Before the next slice, merge latest `main` into `codex/main` and update this file with the reserved branch/scope.
 
-- **Owner / branch:** Codex on `codex/main`
-- **Status:** IN PROGRESS from synchronized base `bbfe585`
-- **Objective:** replace the repeated provider-card grid with a compact registry and focused detail/configuration workspace that exposes readiness, credentials reference state, health, default model, pricing coverage, and canonical owner links without exposing secrets.
-- **Source ownership:** Provider registry/config remains owned by `/api/providers` and `aiProviderRegistry`; route chains remain owned by `/routing`; pricing, balances, spend, and telemetry remain owned by `/treasury`; secrets remain server-side environment values and only public readiness booleans/reference names may render.
-- **Baseline:** 9 providers; desktop page height 2,921px, tablet 4,591px, mobile 5,719px. No horizontal overflow, but repeated cards create uneven empty space, content controls are 20-40px high, and most static page chrome remains English when Thai is selected.
-- **Expected edits:** `ProvidersPage.tsx`, focused provider modules, focused tests, scoped messages, minimal central i18n registration, and completion docs.
-- **Collision boundary:** no API, DTO, Prisma, provider registry/router, health telemetry, treasury, credential resolution, RBAC, audit, or secret contract changes.
-- **Validation target:** focused/full web tests, root typecheck/build, web lint, and EN/TH browser checks at 1440x900, 1024x768, and 430x932.
+## Completed Wave 4F Contract
+
+### Objective
+
+Replace the repeated `/providers` card grid with a compact registry and focused detail/configuration workspace that exposes readiness, credential-reference state, health, default model, pricing coverage, and canonical owner links without exposing secrets.
+
+### Source Ownership
+
+- Provider registry/config remains owned by `/api/providers` and `aiProviderRegistry`.
+- Route chains and fallback policy remain owned by `/routing`.
+- Pricing, balances, spend, health, and telemetry remain owned by `/treasury` and provider telemetry APIs.
+- Secrets remain server-side environment values. The browser only renders public readiness booleans and environment variable references for custom providers.
+
+### Delivery
+
+1. Reduced `ProvidersPage.tsx` to a thin route and split the workspace into controller, pure provider models, registry, detail, edit dialog, delete dialog, badges, scoped messages, and focused tests; every Providers file is below 600 lines.
+2. Replaced the repeated card grid with a compact searchable/filterable registry and selected detail pane. Mobile uses an explicit registry-to-detail handoff; desktop/tablet keep the registry and detail aligned.
+3. Added semantic English/Thai chrome, 44px controls, readiness/health badges, partial-telemetry failure handling, and source links to Routing and Treasury in the overview.
+4. Preserved secret safety: provider creation accepts environment variable names only and never renders literal API key values.
+5. Verified 7/7 focused tests, 226/226 full web tests, web typecheck, root typecheck, web build, root build, and `git diff --check`. Live browser checks covered `/providers` at 1440x900, 1024x768, and 430x932 in Thai: 9 providers loaded, no horizontal overflow, semantic Thai chrome rendered, source links were visible in detail, and tablet source cards were recomposed to avoid narrow two-column cards.
+
+### Collision Boundaries
+
+- No API, DTO, Prisma, provider routing, health telemetry, treasury, credential resolution, RBAC, audit, lifecycle, patch, push, PR, merge, or deploy contract changed.
 
 ## Completed Wave 4E Contract
 

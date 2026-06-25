@@ -2,15 +2,17 @@
 
 ## Current State
 
-AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, and M24 self-growing max_tokens, with Premium UX Waves 1, 2, 3, and 4A-4E complete. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
+AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, and M24 self-growing max_tokens, with Premium UX Waves 1, 2, 3, and 4A-4F complete. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
 ## Active Work
 
-Premium UX Wave 4E for `/living-agents/:agentId` is complete. No Codex implementation is active; Premium UX Wave 4F for `/providers` is the next reserved candidate and must begin with synchronization, discovery, source-ownership audit, and baseline capture.
+Premium UX Wave 4F for `/providers` is complete. No Codex implementation is active; Premium UX Wave 4G for `/routing` is the next reserved candidate and must begin with synchronization, discovery, source-ownership audit, and baseline capture.
 
 ## Implemented Milestones
+
+- Premium UX Wave 4F Providers Registry refinement (complete): Rebuilt `/providers` from repeated provider cards into a compact registry and selected provider evidence workspace. The page now shows readiness, credentials reference state, health, default model, pricing coverage, model sync/validation, partial telemetry failure handling, and direct Routing/Treasury source links without exposing secrets. Create/edit dialogs accept environment variable names only for custom provider credentials; literal API keys remain server-side. Provider registry/config, routing policy, treasury telemetry, health/account/model reads, RBAC, audit, and secret-resolution contracts remain unchanged. The route is 6 lines and every provider module is below 600 lines. Focused tests pass 7/7, the full web suite passes 226/226, web typecheck, root typecheck, web build, root build, and `git diff --check` pass. Live Thai browser checks at 1440x900, 1024x768, and 430x932 show 9 providers, no horizontal overflow, semantic Thai chrome, visible source links, 44px controls, and tablet source cards recomposed away from narrow two-column cards. The existing Vite/Rollup large-chunk warning and React Router future-flag warnings remain.
 
 - Premium UX Wave 4E Living Agent Evidence Profile refinement (complete): Replaced the 876-line, 12-tab `/living-agents/:agentId` page with a 6-line route and five focused evidence sections: Overview, Timeline, Work & Relationships, Usage & Traces, and Knowledge & Audit. Profile data loads immediately while timeline, relations, candidates, and memories load only when requested; request guards prevent duplicate or stale relation/knowledge updates. Section failures are distinct from empty results, support retry, and retain partial knowledge evidence. Semantic English/Thai chrome, 44px controls, explicit owner links, legacy-attribution disclosure, and reduced-motion-safe status feedback preserve canonical Agent, activity, trace, project, council, report, provider, knowledge, and audit ownership. Every Wave 4E file is below 600 lines. Focused tests pass 8/8, the full web suite passes 219/219, and web lint, root typecheck, root build, and diff checks pass. Responsive browser verification remains outstanding because the available in-app browser tab was locked on an error document; no visual-pass claim is made.
 
@@ -121,9 +123,20 @@ Navigation is role-aware and grouped into Mission Control / Command / Work / Kno
 
 The current 39-route frontend has a page-by-page visual refinement roadmap in `docs/UX_UI_REFINEMENT_PLAN.md`. Wave 1 shared shell/layout work and all five Mission Control surfaces are complete. Wave 2 is complete across Throne Room, Council, Work Orders, Automation Jobs, Reports, and Decree Lineage. Wave 3A is complete across Projects Portfolio and Project Detail. These surfaces use semantic English/Thai chrome and preserve existing APIs, source ownership, context rules, and execution gates.
 
-Wave 1, the full command-to-execution Wave 2, Wave 3 Projects/Strategy, and Waves 4A-4E are complete. The next refinement candidate is Wave 4F: Providers Registry. It starts with a source-ownership and secret-safety audit before any layout change. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
+Wave 1, the full command-to-execution Wave 2, Wave 3 Projects/Strategy, and Waves 4A-4F are complete. The next refinement candidate is Wave 4G: Routing Workspace. It starts with a source-ownership and route-chain/fallback-policy audit before any layout change. Carousels remain optional and must never hide required decisions, queues, reports, audit evidence, or source links.
 
 ## Verification
+
+Latest frontend validation after Premium UX Wave 4F (2026-06-25):
+
+- `npm run test --workspace @ai-kingdom/web -- --run src/pages/ProvidersPage.test.tsx` — 7/7 pass
+- `npm run test --workspace @ai-kingdom/web` — 226/226 pass across 32 files
+- `npm run typecheck --workspace @ai-kingdom/web` — pass
+- `npm run typecheck` — pass across API, runner, and web
+- `npm run build --workspace @ai-kingdom/web` — pass with the existing >500 kB chunk warning
+- `npm run build` — pass across API, runner, and web with the existing >500 kB web chunk warning
+- `git diff --check` — pass
+- Live `/providers` browser verification covers 1440x900, 1024x768, and 430x932 in Thai. The registry loaded 9 providers, semantic Thai chrome rendered, source links to Routing/Treasury were visible in provider detail, 44px controls were preserved, and horizontal-overflow checks passed.
 
 Latest frontend validation after Premium UX Wave 4E (2026-06-24):
 
