@@ -22,7 +22,7 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS`. Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
 - M24 Phase B supervised auto-retry merged to `main`; details in `PROJECT_STATUS.md`.
 - **Settings posture:** all intelligence levers ON in dev (`npm run intelligence:enable`). Autonomy mostly ON; King kept `COUNCIL_AUTO_EXECUTE_LOW_RISK` OFF (decree→execute stays manual), enabled `LIVING_LOOP_AUTO_CONTEXT_REPAIR`.
-- **Next:** awaiting King — the learning loop is now proven end-to-end (decree→council consumption + capture-from-review). Candidate next slices: extend E2E to the planner consumption path, Prisma 7.8.0 upgrade (dedicated task), or a new intelligence lever.
+- **Next (awaiting King decision — strategic fork):** the 8 intelligence levers are all proven WIRED (unit + E2E) but NONE is yet proven to IMPROVE OUTCOMES or be COST-EFFICIENT — the E2E forces the mock provider, which ignores prompt content, so quality impact is unmeasured. Recommended pivot: stop adding levers; instead (1) one real-provider full-loop run (real decree → council → runner build → review → captured lesson → approve → reuse) to prove "ใช้งานได้จริง", and (2) A/B all-levers ON vs OFF on 2–3 real decrees using existing signals (AgentReviewSummary verdicts, value-gate pass rate, cost/decree from UsageRecord/TreasuryLedger), then prune any lever that doesn't earn its tokens. Alternatives: operability (King's PENDING-knowledge approval queue UX), or a new lever.
 
 ## Collision Watch
 
