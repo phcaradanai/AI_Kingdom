@@ -15,13 +15,14 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Claude - `claude/main`
 
+- **End-to-end verification of the learning loop** (✅ merged to `main`) — `learningLoopE2E.test.ts` (backend-only). Forces all gating settings ON, forces the sandbox/mock provider (clears env credentials so the route can't take the real OpenRouter key), and spies on the real provider input (`MockAIProvider.prototype.generateAgentResponse`) to prove the seeded past lesson + approved curated knowledge actually reach the council prompt (a specialist AND the synthesis), and that a fresh failed review captures a PENDING candidate. Closes the "all levers on but never proven together" gap. 1/1 green in ~6s.
 - **Self-sustaining learning loop** (✅ merged to `main`) — `CAPTURE_LESSONS_FROM_REVIEWS`: a diagnosed failed review (`createOrUpdateAgentReviewForJob`) auto-proposes a PENDING knowledge candidate (BUG_LEARNING) → King approves → feeds back into council + planner via `AGENT_KNOWLEDGE_IN_CONTEXT`. Full cycle: decree → execute → review → lesson → approve → smarter reasoning. King-gated, best-effort, value-gated.
 - **Curated knowledge in council + planner** (✅ merged to `main`) — `AGENT_KNOWLEDGE_IN_CONTEXT`: each agent's APPROVED M16 knowledge injected into its council prompt + the synthesis (`grandVizierOrchestrator`), and the planner agent's into the planning context (`[APPROVED KNOWLEDGE]`), via `buildAgentKnowledgeContext`. Closes the loop where approved knowledge was created but never used.
 - **Cross-task learning** (✅ merged to `main`) — `crossTaskLearningService.ts`. Relevance-ranked, outcome-gated lessons (what worked / what to avoid) from past review outcomes, injected into both the **planner** (`PLANNER_CROSS_TASK_LEARNING`) and the **council** (`COUNCIL_CROSS_TASK_LEARNING`). Deterministic, no extra AI call. Backend-only.
 - **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS`. Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
 - M24 Phase B supervised auto-retry merged to `main`; details in `PROJECT_STATUS.md`.
 - **Settings posture:** all intelligence levers ON in dev (`npm run intelligence:enable`). Autonomy mostly ON; King kept `COUNCIL_AUTO_EXECUTE_LOW_RISK` OFF (decree→execute stays manual), enabled `LIVING_LOOP_AUTO_CONTEXT_REPAIR`.
-- **Next:** awaiting King — end-to-end test the full learning loop on a real decree, or pick the next slice (Prisma 7.8.0 / other).
+- **Next:** awaiting King — the learning loop is now proven end-to-end (decree→council consumption + capture-from-review). Candidate next slices: extend E2E to the planner consumption path, Prisma 7.8.0 upgrade (dedicated task), or a new intelligence lever.
 
 ## Collision Watch
 
