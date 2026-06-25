@@ -25,6 +25,7 @@
     "autonomy:disable": "node ../../scripts/with-root-env.mjs tsx src/scripts/enable-autonomy.ts --disable",
     "intelligence:enable": "node ../../scripts/with-root-env.mjs tsx src/scripts/enable-intelligence.ts",
     "intelligence:disable": "node ../../scripts/with-root-env.mjs tsx src/scripts/enable-intelligence.ts --disable",
+    "intelligence:measure": "node ../../scripts/with-root-env.mjs tsx src/scripts/measure-intelligence.ts",
     "data:inspect-pollution": "node ../../scripts/with-root-env.mjs tsx src/scripts/inspect-pollution.ts",
     "data:cleanup-test-data": "node ../../scripts/with-root-env.mjs tsx src/scripts/cleanup-test-data.ts",
     "data:archive-low-quality-inbox": "node ../../scripts/with-root-env.mjs tsx src/scripts/archive-low-quality-inbox.ts",
