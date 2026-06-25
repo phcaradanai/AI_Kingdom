@@ -15,18 +15,19 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Claude - `claude/main`
 
-- **Curated knowledge in council** (✅ merged to `main`) — `AGENT_KNOWLEDGE_IN_CONTEXT`: each agent's APPROVED M16 knowledge injected into its council prompt + the synthesis (`grandVizierOrchestrator` via `buildAgentKnowledgeContext`). Closes the loop where approved knowledge was created but never used. Follow-up: planner-side knowledge injection.
+- **Self-sustaining learning loop** (✅ merged to `main`) — `CAPTURE_LESSONS_FROM_REVIEWS`: a diagnosed failed review (`createOrUpdateAgentReviewForJob`) auto-proposes a PENDING knowledge candidate (BUG_LEARNING) → King approves → feeds back into council + planner via `AGENT_KNOWLEDGE_IN_CONTEXT`. Full cycle: decree → execute → review → lesson → approve → smarter reasoning. King-gated, best-effort, value-gated.
+- **Curated knowledge in council + planner** (✅ merged to `main`) — `AGENT_KNOWLEDGE_IN_CONTEXT`: each agent's APPROVED M16 knowledge injected into its council prompt + the synthesis (`grandVizierOrchestrator`), and the planner agent's into the planning context (`[APPROVED KNOWLEDGE]`), via `buildAgentKnowledgeContext`. Closes the loop where approved knowledge was created but never used.
 - **Cross-task learning** (✅ merged to `main`) — `crossTaskLearningService.ts`. Relevance-ranked, outcome-gated lessons (what worked / what to avoid) from past review outcomes, injected into both the **planner** (`PLANNER_CROSS_TASK_LEARNING`) and the **council** (`COUNCIL_CROSS_TASK_LEARNING`). Deterministic, no extra AI call. Backend-only.
 - **Council parallelization** (✅ merged to `main`) — `grandVizierOrchestrator.ts`, setting `COUNCIL_PARALLEL_SPECIALISTS`. Live A/B ~356s → ~173s. Details in `PROJECT_STATUS.md`.
 - M24 Phase B supervised auto-retry merged to `main`; details in `PROJECT_STATUS.md`.
 - **Settings posture:** all intelligence levers ON in dev (`npm run intelligence:enable`). Autonomy mostly ON; King kept `COUNCIL_AUTO_EXECUTE_LOW_RISK` OFF (decree→execute stays manual), enabled `LIVING_LOOP_AUTO_CONTEXT_REPAIR`.
-- **Next:** awaiting King — test the enabled intelligence in action, or pick the next slice (consume M16 curated knowledge in planner/council / Prisma 7.8.0 / other).
+- **Next:** awaiting King — end-to-end test the full learning loop on a real decree, or pick the next slice (Prisma 7.8.0 / other).
 
 ## Collision Watch
 
 - M24 Phase B touched `apps/web/src/lib/api.ts`, `apps/web/src/lib/i18nMessages.ts`, and `AutomationJobsPage.tsx`; Codex has merged those changes before Wave 4C planning.
-- Wave 4F should avoid backend/API/type changes unless a verified contract gap blocks the UX. Any contract change must be coordinated before implementation.
+- Wave 4F is complete and made no backend/API/type changes. Wave 4G should avoid backend/API/type changes unless a verified contract gap blocks the routing UX. Any contract change must be coordinated before implementation.
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Future waves should use scoped message modules and keep central registration minimal.
-- Council parallelization (Claude) is backend-only (`grandVizierOrchestrator.ts`) — no expected overlap with the planned Wave 4F provider surface.
+- Claude intelligence/learning-loop work is backend-only; no expected overlap with the planned Wave 4G routing surface except shared status documentation.
 
 Last updated: 2026-06-25 by Codex after Wave 4F completion on `codex/main`.

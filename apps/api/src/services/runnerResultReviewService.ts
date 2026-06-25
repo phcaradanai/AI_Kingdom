@@ -7,6 +7,7 @@ import { buildTraceContext, completeAIUsageTrace, createAIUsageTrace, failAIUsag
 import { calculateCostUSDFromRegistry } from "./modelPricingService.js";
 import { selectAIProviderRoute } from "./aiProviderRouter.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
+import { proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
 import { assessExecutionComplexity, escalationFor } from "./complexityAssessor.js";
 import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { sanitizeLogOutput } from "./secretRedactorService.js";
@@ -175,11 +176,69 @@ export async function createOrUpdateAgentReviewForJob(jobId: string, options: Ge
     rawModelOutput: draft.rawModelOutput ?? null
   };
 
-  return prisma.agentReviewSummary.upsert({
+  const review = await prisma.agentReviewSummary.upsert({
     where: { automationJobId: jobId },
     create: { automationJobId: jobId, ...data },
     update: data,
     include: REVIEW_INCLUDE
+  });
+
+  // Capture-new-lessons loop (opt-in): a failed review with a diagnosis becomes a PENDING
+  // knowledge candidate so, once the King approves it, it feeds back into council + planner
+  // (AGENT_KNOWLEDGE_IN_CONTEXT). Best-effort; dedup is handled by proposeKnowledgeCandidate.
+  await maybeCaptureReviewLesson({
+    verdict: draft.verdict,
+    whatFailed: draft.whatFailed,
+    workOrderId: job.workOrderId,
+    workOrderTitle: job.workOrder?.title ?? "work order",
+    projectId: job.projectId,
+    reviewerAgentId: reviewerAgent?.id ?? null,
+    jobId
+  }).catch(() => undefined);
+
+  return review;
+}
+
+/** Verdicts that carry a learnable failure (a diagnosis exists). */
+const REVIEW_LESSON_VERDICTS = new Set<AgentReviewVerdict>(["NEEDS_FIX", "PATCH_FAILED", "VALIDATION_FAILED"]);
+
+async function maybeCaptureReviewLesson(input: {
+  verdict: AgentReviewVerdict;
+  whatFailed: string[];
+  workOrderId: string;
+  workOrderTitle: string;
+  projectId: string | null;
+  reviewerAgentId: string | null;
+  jobId: string;
+}): Promise<void> {
+  if (!(await getBooleanSetting("CAPTURE_LESSONS_FROM_REVIEWS", false))) return;
+  if (!REVIEW_LESSON_VERDICTS.has(input.verdict)) return;
+  const whatFailed = input.whatFailed.filter((item) => item && item.trim());
+  if (whatFailed.length === 0) return; // a failure with no diagnosis teaches nothing
+  if (!input.reviewerAgentId) return;
+
+  const content = [
+    `Failure on work order: ${input.workOrderTitle}`,
+    `What failed: ${whatFailed.join("; ")}`,
+    "Lesson: address the above before reporting this kind of work done; do not repeat it on similar work."
+  ].join("\n\n");
+
+  await proposeKnowledgeCandidate({
+    agentId: input.reviewerAgentId,
+    projectId: input.projectId,
+    // The deterministic review has no AIUsageTrace; the job/review IS the provenance the
+    // value gate requires (traceId is a plain provenance column, not an FK).
+    traceId: `review:${input.jobId}`,
+    sourceType: "AGENT_REVIEW",
+    sourceId: input.jobId,
+    title: `Review lesson: ${input.workOrderTitle}`,
+    content,
+    summary: whatFailed.join("; ").slice(0, 280),
+    category: "BUG_LEARNING",
+    confidence: 0.7,
+    proposedByAgentId: input.reviewerAgentId,
+    tags: ["review-lesson", input.verdict.toLowerCase()],
+    metadata: { verdict: input.verdict, requiresReview: true }
   });
 }
 

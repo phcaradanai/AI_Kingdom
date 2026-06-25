@@ -24,6 +24,7 @@ import { getWorkOrderRecommendations } from "./externalAgentRecommendationServic
 import { auditLog } from "./auditService.js";
 import { buildNextActionUpdate, computeCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 import { buildCrossTaskLessons } from "./crossTaskLearningService.js";
+import { buildAgentKnowledgeContext } from "./agentKnowledgeService.js";
 
 export type PlannerRiskLevel = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
 
@@ -184,6 +185,18 @@ async function executePlanner(
       })
     : "";
 
+  // Curated knowledge (M16, opt-in): inject the planner agent's APPROVED knowledge memories
+  // so planning uses the lessons the King vetted — same loop now closed for the council.
+  const knowledgeInContext = await getBooleanSetting("AGENT_KNOWLEDGE_IN_CONTEXT", false);
+  const agentKnowledge = knowledgeInContext
+    ? await buildAgentKnowledgeContext(plannerAgent.id, task.projectId, task.id)
+        .then((r) => r.context)
+        .catch((err) => {
+          console.warn("[PlannerAgent] knowledge context failed (continuing without):", err instanceof Error ? err.message : String(err));
+          return "";
+        })
+    : "";
+
   const planningContext = buildPlanningContext({
     session,
     task,
@@ -193,7 +206,8 @@ async function executePlanner(
     implReports,
     handoffBriefs,
     artifacts,
-    crossTaskLessons
+    crossTaskLessons,
+    agentKnowledge
   });
 
   const rawResponse = await callPlannerLLM({
@@ -243,8 +257,9 @@ function buildPlanningContext(opts: {
   handoffBriefs: Array<{ title: string; nextSteps: string[]; knownIssues: string[] }>;
   artifacts: Array<{ type: string; title: string }>;
   crossTaskLessons?: string;
+  agentKnowledge?: string;
 }): string {
-  const { session, task, projectContext, snapshot, openWorkOrders, implReports, handoffBriefs, artifacts, crossTaskLessons } = opts;
+  const { session, task, projectContext, snapshot, openWorkOrders, implReports, handoffBriefs, artifacts, crossTaskLessons, agentKnowledge } = opts;
 
   const sections: string[] = [
     `[TASK]\nTitle: ${task.title}\nMode: ${task.mode}\nCommand: ${task.command}`,
@@ -272,6 +287,11 @@ function buildPlanningContext(opts: {
         : "- None."
     }`
   ];
+
+  // Curated knowledge (opt-in): the King-approved lessons for the planner agent.
+  if (agentKnowledge && agentKnowledge.trim()) {
+    sections.push(`[APPROVED KNOWLEDGE]\n${agentKnowledge}`);
+  }
 
   // Cross-task learning: outcome lessons from similar past work (opt-in). Placed last so it
   // is the freshest guidance the planner reads before producing drafts.
