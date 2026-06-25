@@ -1005,6 +1005,12 @@ async function createCouncilLearningCandidate(input: {
   finalSummary: string;
   traceId: string;
 }) {
+  // Gate: synthesis-capture is proven to produce circular/low-signal content (council's own
+  // output relabeled as lessons). Disabled by default; only CAPTURE_LESSONS_FROM_REVIEWS
+  // (runner failure outcomes) feeds the knowledge pool.
+  const synthesisCapture = await getBooleanSetting("COUNCIL_SYNTHESIS_CAPTURE", false);
+  if (!synthesisCapture) return null;
+
   // Skip trivial decrees — greetings and single-phrase commands produce no learnable content.
   const command = input.task.command.trim();
   const wordCount = command.split(/\s+/).filter(Boolean).length;
