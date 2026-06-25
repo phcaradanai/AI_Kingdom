@@ -43,16 +43,20 @@ test("computeReport aggregates cost/tokens per decree and splits by operation", 
   assert.equal(r.fallbackRate, 0.5);
 
   // Operation split: final_counsel cost = 0.07, council = 0.03 → final_counsel ranks first.
-  assert.equal(r.byOperation[0].operation, "final_counsel");
-  assert.equal(r.byOperation[0].costUSD, 0.07);
-  assert.equal(r.byOperation[0].costShare, 0.7);
+  const topOp = r.byOperation[0];
+  assert.ok(topOp, "byOperation should be non-empty");
+  assert.equal(topOp.operation, "final_counsel");
+  assert.equal(topOp.costUSD, 0.07);
+  assert.equal(topOp.costShare, 0.7);
   const council = r.byOperation.find((o) => o.operation === "council_agent_response");
   assert.equal(council?.calls, 3);
   assert.equal(council?.totalTokens, 300);
 
   assert.deepEqual(r.byCostSource, { FREE: 4, ESTIMATED: 1 });
-  assert.equal(r.providers[0].key, "openrouter:free");
-  assert.equal(r.providers[0].calls, 5);
+  const topProv = r.providers[0];
+  assert.ok(topProv, "providers should be non-empty");
+  assert.equal(topProv.key, "openrouter:free");
+  assert.equal(topProv.calls, 5);
 
   // Learning-loop signals pass through unchanged for the renderer's flags.
   assert.deepEqual(r.candidatesByStatus, { PENDING: 9, APPROVED: 1 });

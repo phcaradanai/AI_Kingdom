@@ -1005,6 +1005,11 @@ async function createCouncilLearningCandidate(input: {
   finalSummary: string;
   traceId: string;
 }) {
+  // Skip trivial decrees — greetings and single-phrase commands produce no learnable content.
+  const command = input.task.command.trim();
+  const wordCount = command.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 4 || command.length < 20) return null;
+
   const roleMap = new Map(input.responses.map((response) => [response.role, response.response]));
   const archivist = roleMap.get("Royal Archivist") ?? "";
   const researcher = roleMap.get("Royal Researcher") ?? "";

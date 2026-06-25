@@ -166,8 +166,8 @@ test("a decree's council prompt carries past lessons + approved knowledge, and a
     session = await processTaskWithGrandVizier(task.id, king.id);
   } finally {
     MockAIProvider.prototype.generateAgentResponse = original;
-    env.AI_PROVIDER = savedEnv.AI_PROVIDER;
-    for (const key of CRED_KEYS) env[key] = savedEnv[key];
+    env.AI_PROVIDER = savedEnv["AI_PROVIDER"] ?? env.AI_PROVIDER;
+    for (const key of CRED_KEYS) env[key] = savedEnv[key] ?? "";
   }
 
   assert.equal(session.status, "COMPLETED");
