@@ -258,6 +258,10 @@ export const api = {
     apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
   testExternalAgent: (id: string) =>
     apiRequest<{ test: import("@/types/api").ExternalAgentTestResultDto }>(`/external-agents/${id}/test`, { method: "POST" }),
+  requestExternalAgentProbe: (id: string) =>
+    apiRequest<{ requested: boolean; agentId: string; runnerId: string }>(`/external-agents/${id}/request-probe`, { method: "POST" }),
+  getExternalAgentProbeResult: (id: string) =>
+    apiRequest<{ result: import("@/types/api").CliProbeResultDto | null; inFlight: boolean }>(`/external-agents/${id}/probe-result`),
   deleteExternalAgent: (id: string) => apiRequest<{ externalAgent: ExternalAgentDto }>(`/external-agents/${id}`, { method: "DELETE" }),
   projects: (params?: { q?: string; status?: string; priority?: string }) => {
     const search = new URLSearchParams();

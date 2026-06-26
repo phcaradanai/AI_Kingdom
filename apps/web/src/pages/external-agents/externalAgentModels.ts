@@ -1,6 +1,82 @@
 import type { ExternalAgentDto, ExternalAgentPayload, ExternalAgentReadinessDto, ExternalAgentType } from "@/types/api";
 
 export type ExternalAgentFilter = "all" | "ready" | "manual" | "attention" | "inactive";
+
+export type AgentInstallHint = {
+  /** Binary name only — for auto-fill into the command field */
+  commandTemplate: string;
+  /** Runner env vars to set (AGENT_CLI_<TYPE>_COMMAND and _ARGS) */
+  runnerEnv: string;
+  installCommand: string;
+  checkCommand: string;
+  docsUrl?: string;
+  note?: string;
+};
+
+export const AGENT_INSTALL_HINTS: Partial<Record<ExternalAgentType, AgentInstallHint>> = {
+  CLAUDE_CODE: {
+    commandTemplate: "claude -p {PROMPT} --dangerously-skip-permissions",
+    runnerEnv: 'AGENT_CLI_CLAUDE_CODE_COMMAND=claude\nAGENT_CLI_CLAUDE_CODE_ARGS=["-p","{PROMPT}","--dangerously-skip-permissions"]',
+    installCommand: "npm install -g @anthropic-ai/claude-code",
+    checkCommand: "claude --version",
+    docsUrl: "https://docs.anthropic.com/en/docs/claude-code",
+  },
+  CODEX: {
+    commandTemplate: "codex exec {promptFile}",
+    runnerEnv: "AGENT_CLI_CODEX_COMMAND=codex\nAGENT_CLI_CODEX_ARGS=exec",
+    installCommand: "npm install -g @openai/codex",
+    checkCommand: "codex --version",
+    docsUrl: "https://github.com/openai/codex",
+  },
+  CLINE: {
+    commandTemplate: "cline",
+    runnerEnv: "AGENT_CLI_CLINE_COMMAND=cline",
+    installCommand: "VS Code extension: Cline (saoudrizwan.claude-dev)",
+    checkCommand: "which cline",
+    docsUrl: "https://marketplace.visualstudio.com/items?itemName=saoudrizwan.claude-dev",
+    note: "Primarily a VS Code extension; CLI availability depends on extension and system PATH.",
+  },
+  KILO: {
+    commandTemplate: "kilo",
+    runnerEnv: "AGENT_CLI_KILO_COMMAND=kilo",
+    installCommand: "npm install -g kilo-code",
+    checkCommand: "kilo --version",
+    docsUrl: "https://kilocode.ai",
+  },
+  OPENCODE: {
+    commandTemplate: "opencode",
+    runnerEnv: "AGENT_CLI_OPENCODE_COMMAND=opencode",
+    installCommand: "npm install -g opencode-ai",
+    checkCommand: "opencode --version",
+    docsUrl: "https://opencode.ai",
+  },
+  CURSOR: {
+    commandTemplate: "cursor-agent",
+    runnerEnv: "AGENT_CLI_CURSOR_COMMAND=cursor-agent",
+    installCommand: "Download from cursor.com, then enable agent CLI in Cursor settings",
+    checkCommand: "which cursor-agent",
+    docsUrl: "https://cursor.com",
+  },
+  DEVIN: {
+    commandTemplate: "devin",
+    runnerEnv: "AGENT_CLI_DEVIN_COMMAND=devin",
+    installCommand: "Refer to Devin API documentation for CLI setup",
+    checkCommand: "which devin",
+    docsUrl: "https://devin.ai",
+  },
+  ANTIGRAVITY: {
+    commandTemplate: "antigravity",
+    runnerEnv: "AGENT_CLI_ANTIGRAVITY_COMMAND=antigravity",
+    installCommand: "Refer to Antigravity documentation",
+    checkCommand: "which antigravity",
+  },
+  HERMES: {
+    commandTemplate: "hermes",
+    runnerEnv: "AGENT_CLI_HERMES_COMMAND=hermes",
+    installCommand: "Refer to Hermes documentation",
+    checkCommand: "which hermes",
+  },
+};
 export type ExternalAgentSection = "identity" | "capabilities" | "handoff" | "validation" | "source";
 export type ExternalAgentEditorMode = "create" | "edit" | null;
 

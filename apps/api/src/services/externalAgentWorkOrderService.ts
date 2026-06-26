@@ -25,42 +25,54 @@ const DEFAULT_EXTERNAL_AGENTS = [
     type: "CLAUDE_CODE" as const,
     roleTitle: "Royal Senior Engineer",
     description: "Manual handoff target for codebase understanding, refactoring, architecture implementation, and test fixing.",
-    capabilities: ["codebase understanding", "refactoring", "architecture implementation", "test fixing"]
+    capabilities: ["codebase understanding", "refactoring", "architecture implementation", "test fixing"],
+    // Runner env: AGENT_CLI_CLAUDE_CODE_COMMAND=claude  AGENT_CLI_CLAUDE_CODE_ARGS=["-p","{PROMPT}","--dangerously-skip-permissions"]
+    command: "claude -p {PROMPT} --dangerously-skip-permissions"
   },
   {
     name: "Codex",
     type: "CODEX" as const,
     roleTitle: "Royal Implementation Engineer",
     description: "Manual handoff target for coding, implementation, test generation, and bug fixing.",
-    capabilities: ["coding", "implementation", "test generation", "bug fixing"]
+    capabilities: ["coding", "implementation", "test generation", "bug fixing"],
+    // Runner env: AGENT_CLI_CODEX_COMMAND=codex  AGENT_CLI_CODEX_ARGS=exec
+    command: "codex exec {promptFile}"
   },
   {
     name: "Cline",
     type: "CLINE" as const,
     roleTitle: "Royal IDE Engineer",
     description: "Manual handoff target for VS Code workflow, file editing, command execution, and local development.",
-    capabilities: ["VS Code workflow", "file editing", "command execution", "local development"]
+    capabilities: ["VS Code workflow", "file editing", "command execution", "local development"],
+    // Runner env: AGENT_CLI_CLINE_COMMAND=cline  (requires Cline CLI separate from the VS Code extension)
+    command: "cline"
   },
   {
     name: "Kilo",
     type: "KILO" as const,
     roleTitle: "Royal Field Engineer",
     description: "Manual handoff target for multi-model coding, IDE support, and CLI support.",
-    capabilities: ["multi-model coding", "IDE support", "CLI support"]
+    capabilities: ["multi-model coding", "IDE support", "CLI support"],
+    // Runner env: AGENT_CLI_KILO_COMMAND=kilo
+    command: "kilo"
   },
   {
     name: "Antigravity",
     type: "ANTIGRAVITY" as const,
     roleTitle: "Royal Experimental Engineer",
     description: "Manual handoff target for exploratory implementation, agentic coding, and rapid prototyping.",
-    capabilities: ["exploratory implementation", "agentic coding", "rapid prototyping"]
+    capabilities: ["exploratory implementation", "agentic coding", "rapid prototyping"],
+    // Runner env: AGENT_CLI_ANTIGRAVITY_COMMAND=antigravity
+    command: "antigravity"
   },
   {
     name: "Hermes",
     type: "HERMES" as const,
     roleTitle: "Royal Messenger Agent",
     description: "Manual handoff target for task execution, automation support, and handoff support.",
-    capabilities: ["task execution", "automation support", "handoff support"]
+    capabilities: ["task execution", "automation support", "handoff support"],
+    // Runner env: AGENT_CLI_HERMES_COMMAND=hermes
+    command: "hermes"
   }
 ];
 
@@ -83,7 +95,9 @@ export async function ensureDefaultExternalAgents() {
           roleTitle: agent.roleTitle,
           description: agent.description,
           capabilities: agent.capabilities,
-          executionMode: "MANUAL_COPY_PASTE"
+          executionMode: "MANUAL_COPY_PASTE",
+          // Only fill command when currently empty — preserve operator customisation
+          ...(existing.command?.trim() ? {} : { command: agent.command })
         }
       });
       continue;

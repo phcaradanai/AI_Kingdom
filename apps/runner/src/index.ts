@@ -29,6 +29,7 @@ import { buildValidationChildEnv, formatForwardedValidationEnvNames, validateVal
 import { formatTimeoutMessage, getCommandTimeoutMs } from "./runnerConfig.js";
 import { resolveAgentCliConfig, runAgentCli } from "./agentCliRunner.js";
 import { probeAgentCapabilities } from "./agentCapabilityProbe.js";
+import { runCliProbe, type CliProbeResult } from "./cliProbeRunner.js";
 import { getExternalAgentAdapter } from "./externalAgents/index.js";
 
 dotenv.config({ path: "../../.env" });
@@ -61,6 +62,10 @@ const VERSION = "0.1.1";
 const HOSTNAME = os.hostname();
 
 const api = new ApiClient({ baseUrl: API_BASE_URL, runnerToken: RUNNER_TOKEN });
+
+// Probe result accumulated between heartbeats (set after probe completes, cleared once sent)
+let pendingProbeResult: CliProbeResult | null = null;
+let probeRunning = false;
 
 async function main() {
   console.log(`[Runner] Starting AI Kingdom Runner v${VERSION}`);
@@ -109,8 +114,31 @@ async function sendHeartbeat() {
     // Probe which external-agent CLIs are actually runnable on this host so the
     // Kingdom only ever offers the King agents it can really execute right now.
     const agentCapabilities = probeAgentCapabilities();
-    await api.heartbeat({ version: VERSION, hostname: HOSTNAME, agentCapabilities });
+
+    // Include any completed live probe result in this heartbeat, then clear it.
+    const cliProbeResult = pendingProbeResult ?? undefined;
+    pendingProbeResult = null;
+
+    const response = await api.heartbeat({ version: VERSION, hostname: HOSTNAME, agentCapabilities, cliProbeResult });
     console.log("[Runner] Heartbeat sent");
+
+    // If the API has requested a live probe, run it asynchronously so the next
+    // heartbeat can carry the result.  Guard against overlapping probes.
+    const probe = response?.pendingCliProbe;
+    if (probe && !probeRunning) {
+      probeRunning = true;
+      console.log(`[Runner] Live CLI probe requested for ${probe.type} (agent ${probe.agentId})`);
+      setImmediate(() => {
+        try {
+          pendingProbeResult = runCliProbe(probe.agentId, probe.type);
+          console.log(`[Runner] Live CLI probe complete: ${pendingProbeResult.status}`);
+        } catch (probeErr) {
+          console.warn("[Runner] CLI probe error:", probeErr instanceof Error ? probeErr.message : String(probeErr));
+        } finally {
+          probeRunning = false;
+        }
+      });
+    }
   } catch (err) {
     console.warn("[Runner] Heartbeat failed:", err instanceof Error ? err.message : String(err));
   }
