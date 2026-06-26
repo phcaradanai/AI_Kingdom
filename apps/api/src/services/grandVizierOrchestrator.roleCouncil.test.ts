@@ -23,7 +23,7 @@ async function cleanup(taskId: string, userId: string) {
   await prisma.user.delete({ where: { id: userId } }).catch(() => undefined);
 }
 
-test("Royal Command council creates role-specific responses and a learning candidate without automation", async () => {
+test("Royal Command council creates role-specific responses and a report without automation", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const user = await prisma.user.create({
     data: {
@@ -69,15 +69,9 @@ test("Royal Command council creates role-specific responses and a learning candi
     const report = await prisma.report.findFirst({ where: { sourceCouncilSessionId: session.id } });
     assert.ok(report, "final synthesis is persisted as a report");
 
-    const candidate = await prisma.agentKnowledgeCandidate.findFirst({
-      where: { councilSessionId: session.id, sourceType: "COUNCIL_SESSION" }
-    });
-    assert.ok(candidate, "learning candidate is created");
-    assert.equal(candidate.status, "PENDING");
-    assert.match(candidate.content, /Failure pattern:/);
-    assert.match(candidate.content, /Evidence:/);
-    assert.match(candidate.content, /Lesson:/);
-    assert.match(candidate.content, /Recommended future behavior:/);
+    // COUNCIL_SYNTHESIS_CAPTURE is OFF by default (gated off — it produced circular
+    // low-signal content). No COUNCIL_SESSION candidate expected unless the setting is
+    // explicitly enabled. The learning loop feeds via CAPTURE_LESSONS_FROM_REVIEWS instead.
 
     const automationJobs = await prisma.automationJob.count({
       where: { workOrder: { sourceType: "COUNCIL_SESSION", sourceId: session.id } }
