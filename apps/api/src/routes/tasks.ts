@@ -206,11 +206,11 @@ router.post("/:id/council/:sessionId/handoff", requireRole("KING", "CROWN_PRINCE
       `Source Royal Command: ${task.title}`,
       `Mode: ${task.mode}`,
       `Command: ${task.command}`,
-      finalSummary ? `Grand Vizier Final Decision:\n${finalSummary}` : "",
-      architect ? `Architect Patch Plan:\n${architect}` : "",
-      general ? `General Execution Checklist:\n${general}` : "",
-      archivist ? `Archivist Evidence Report:\n${archivist}` : "",
-      researcher ? `Researcher Hypotheses:\n${researcher}` : ""
+      finalSummary ? `Grand Vizier Recommendation:\n${finalSummary}` : "",
+      architect ? `Architect Plan:\n${architect}` : "",
+      general ? `General Roadmap:\n${general}` : "",
+      archivist ? `Archivist Context:\n${archivist}` : "",
+      researcher ? `Researcher Analysis:\n${researcher}` : ""
     ].filter(Boolean).join("\n\n"));
 
     const workOrderResult = await createWorkOrder({

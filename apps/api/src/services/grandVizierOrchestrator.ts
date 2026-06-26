@@ -38,6 +38,8 @@ const AGENTS_BY_MODE: Record<TaskMode, string[]> = {
   BUILD: ["royal-archivist", "royal-researcher", "royal-architect", "royal-general", "grand-vizier"]
 };
 
+// RESEARCH / fallback — investigation and root-cause framing; appropriate when the King is
+// diagnosing a failure, tracing a bug, or doing deep technical analysis.
 const ROLE_RESPONSE_CONTRACTS: Record<string, string> = {
   "royal-archivist": [
     "Return a section titled 'Archivist Evidence Report'.",
@@ -62,6 +64,66 @@ const ROLE_RESPONSE_CONTRACTS: Record<string, string> = {
   "grand-vizier": [
     "Return a section titled 'Grand Vizier Final Decision'.",
     "Include: final synthesis; decision framing; recommended next action; tradeoffs.",
+    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
+  ].join("\n")
+};
+
+// ASK mode — advisory / counseling framing for open questions where the King wants
+// recommendations, not investigation of a failure.
+const ASK_ROLE_CONTRACTS: Record<string, string> = {
+  "royal-archivist": [
+    "Return a section titled 'Archivist Context Briefing'.",
+    "Surface relevant Kingdom memories, prior decisions, documented patterns, and constraints that bear on this question. Frame this as briefing material for a decision — not as evidence for a failure.",
+    "Use only provided Project Context, Kingdom Memory Context, and prior council context. Do not expose secrets or raw local root paths."
+  ].join("\n"),
+  "royal-researcher": [
+    "Return a section titled 'Researcher Options Analysis'.",
+    "Analyze the question from multiple angles: what approaches exist, their key tradeoffs, and what comparable situations suggest. Separate confirmed facts from inferences. Present options — do not pick one.",
+    "Clearly identify what is known, what is uncertain, and what the King would need to resolve before deciding."
+  ].join("\n"),
+  "royal-architect": [
+    "Return a section titled 'Architect Technical Assessment'.",
+    "Provide a technical perspective on the question: what the system currently supports, what the options would require, and where technical risk or complexity lies. Do not propose a patch plan — assess feasibility and implications.",
+    "Flag cross-cutting concerns (auth, RBAC, type safety, DB, API stability) that constrain the options."
+  ].join("\n"),
+  "royal-general": [
+    "Return a section titled 'General Practical Counsel'.",
+    "Address operational, resourcing, and risk considerations: what decisions need to be made, who would be affected, what constraints apply, and what the practical path forward looks like for each option.",
+    "Provide judgment, not an execution checklist. Keep it advisory — no runner jobs or automation."
+  ].join("\n"),
+  "grand-vizier": [
+    "Return a section titled 'Grand Vizier Counsel'.",
+    "Synthesize the council's briefing, analysis, technical assessment, and practical counsel into a clear recommendation: the preferred answer, the key tradeoff, and the one concern the King should weigh before deciding.",
+    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
+  ].join("\n")
+};
+
+// PLAN mode — strategic planning and roadmap framing for decrees that ask the
+// Kingdom to design an approach, not diagnose a problem.
+const PLAN_ROLE_CONTRACTS: Record<string, string> = {
+  "royal-archivist": [
+    "Return a section titled 'Archivist Planning Context'.",
+    "Map the existing landscape this plan will operate in: relevant codebase areas, existing patterns and conventions, current capabilities, historical attempts at similar efforts, and documented constraints. Arm the Architect with what already exists.",
+    "Use only provided Project Context, Kingdom Memory Context, and prior council context. Do not expose secrets or raw local root paths."
+  ].join("\n"),
+  "royal-researcher": [
+    "Return a section titled 'Researcher Requirements Analysis'.",
+    "Decompose the objective into requirements: what must be achieved, what dependencies exist, what success looks like, and what assumptions are embedded in the decree. Separate musts from nice-to-haves. Surface unknowns that the plan must resolve.",
+    "Clearly identify what is confirmed vs inferred."
+  ].join("\n"),
+  "royal-architect": [
+    "Return a section titled 'Architect Technical Roadmap'.",
+    "Design the technical approach: sequencing, key architectural decisions, what to build vs reuse, migration or schema considerations, and how components fit together. Include a risk assessment and what validation would confirm the plan succeeded.",
+    "Do not produce a file-level patch plan — produce a design-level roadmap."
+  ].join("\n"),
+  "royal-general": [
+    "Return a section titled 'General Execution Roadmap'.",
+    "Translate the Architect's plan into an actionable roadmap: phases, milestones, owners, timeline considerations, and go/no-go criteria. Identify dependencies between steps and what could block or delay the plan.",
+    "Provide a planning perspective — no runner jobs or automation."
+  ].join("\n"),
+  "grand-vizier": [
+    "Return a section titled 'Grand Vizier Strategic Recommendation'.",
+    "Synthesize the planning context, requirements, technical roadmap, and execution roadmap into a clear strategic recommendation: the recommended approach, the key decision the King must make, and what would make this plan succeed or fail.",
     "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
   ].join("\n")
 };
@@ -1000,10 +1062,23 @@ async function buildContextWarning(projectId: string | null): Promise<string> {
 }
 
 function buildRoleSystemPrompt(agent: Agent, mode: TaskMode): string {
-  const contract = mode === "BUILD"
-    ? BUILD_ROLE_CONTRACTS[agent.slug] ?? ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel."
-    : ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel.";
-  const guardrails = mode === "BUILD" ? BUILD_EXECUTION_GUARDRAILS : MANUAL_ONLY_GUARDRAILS;
+  let modeContracts: Record<string, string>;
+  let guardrails: string;
+  if (mode === "BUILD") {
+    modeContracts = BUILD_ROLE_CONTRACTS;
+    guardrails = BUILD_EXECUTION_GUARDRAILS;
+  } else if (mode === "ASK") {
+    modeContracts = ASK_ROLE_CONTRACTS;
+    guardrails = MANUAL_ONLY_GUARDRAILS;
+  } else if (mode === "PLAN") {
+    modeContracts = PLAN_ROLE_CONTRACTS;
+    guardrails = MANUAL_ONLY_GUARDRAILS;
+  } else {
+    // RESEARCH and any future modes keep investigation framing
+    modeContracts = ROLE_RESPONSE_CONTRACTS;
+    guardrails = MANUAL_ONLY_GUARDRAILS;
+  }
+  const contract = modeContracts[agent.slug] ?? ROLE_RESPONSE_CONTRACTS[agent.slug] ?? "Return structured role-specific council counsel.";
   return [
     agent.systemPrompt || agent.prompt,
     contract,
