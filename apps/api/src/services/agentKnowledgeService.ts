@@ -413,7 +413,7 @@ export async function buildAgentKnowledgeContext(
   agentId: string,
   projectId?: string | null,
   taskId?: string | null,
-  maxTokens = 1500
+  maxTokens = 3000
 ): Promise<{ context: string; memoryIds: string[] }> {
   const memories = await prisma.agentKnowledgeMemory.findMany({
     where: {
@@ -425,16 +425,29 @@ export async function buildAgentKnowledgeContext(
         { agentId: null, projectId: null }
       ]
     },
-    orderBy: [{ useCount: "desc" }, { approvedAt: "desc" }],
-    take: 20
+    orderBy: [{ approvedAt: "desc" }],
+    take: 30
   });
+
+  // Score = sqrt(useCount+1) / (1 + daysSinceApproved/60)
+  // sqrt gives diminishing returns on frequency; the 60-day half-life keeps
+  // newly approved lessons competitive so they aren't permanently frozen out
+  // by older items with high useCount.
+  const now = Date.now();
+  const DAY_MS = 86_400_000;
+  const scored = memories.map((m) => {
+    const daysSince = m.approvedAt ? (now - m.approvedAt.getTime()) / DAY_MS : 0;
+    const score = Math.sqrt(m.useCount + 1) / (1 + daysSince / 30);
+    return { m, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
 
   const lines: string[] = [];
   const usedIds: string[] = [];
   let approxTokens = 0;
   const TOKEN_ESTIMATE = 4;
 
-  for (const m of memories) {
+  for (const { m } of scored) {
     const line = `[${m.category}] ${m.title}: ${m.content}`;
     const lineTokens = Math.ceil(line.length / TOKEN_ESTIMATE);
     if (approxTokens + lineTokens > maxTokens) break;

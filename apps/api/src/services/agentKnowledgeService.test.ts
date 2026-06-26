@@ -336,3 +336,77 @@ test("buildFingerprint produces consistent output", () => {
   assert.notEqual(fp1, fp3, "Different titles must produce different fingerprints");
   assert.equal(fp1.length, 32, "Fingerprint should be 32 chars");
 });
+
+test("knowledge context diversification: recently approved item outscores very old high-useCount item", async () => {
+  // score = sqrt(useCount+1) / (1 + daysSince/30)
+  // stale (useCount=50, 365 days): sqrt(51) / (1 + 365/30) = 7.14 / 13.17 = 0.54
+  // fresh (useCount=0, now):       sqrt(1)  / (1 + 0/30)   = 1.0  / 1.0   = 1.0  → fresh wins
+  // With a budget that fits only ONE ~30-token item, the fresh item must be chosen.
+  const suffix = `${Date.now()}-diversity`;
+  const agent = await createTestAgent(suffix);
+  const user = await createTestUser(suffix);
+  try {
+    const oneYearAgo = new Date(Date.now() - 365 * 86_400_000);
+    await prisma.agentKnowledgeMemory.create({
+      data: {
+        agentId: agent.id,
+        title: "Stale rule: always use Redis",
+        content: "Redis is the preferred caching layer.",
+        category: "ARCHITECTURE_DECISION",
+        trustLevel: "APPROVED",
+        useCount: 50,
+        approvedAt: oneYearAgo,
+        approvedByUserId: user.id,
+        metadata: { test_tag: suffix }
+      }
+    });
+    const fresh = await prisma.agentKnowledgeMemory.create({
+      data: {
+        agentId: agent.id,
+        title: "Fresh lesson: skip Redis here",
+        content: "Redis adds overhead — use in-memory caching.",
+        category: "BUG_LEARNING",
+        trustLevel: "APPROVED",
+        useCount: 0,
+        approvedAt: new Date(),
+        approvedByUserId: user.id,
+        metadata: { test_tag: suffix }
+      }
+    });
+
+    // Budget of 30 tokens fits exactly one item (~25 tokens each), so the higher-scored one wins
+    const { memoryIds } = await buildAgentKnowledgeContext(agent.id, null, null, 30);
+    assert.equal(memoryIds.length, 1, "Budget should admit exactly one item");
+    assert.equal(memoryIds[0], fresh.id, "Fresh item should outscore year-old item despite lower useCount");
+  } finally {
+    await cleanup(suffix);
+  }
+});
+
+test("knowledge context default budget allows more than 3 items", async () => {
+  const suffix = `${Date.now()}-budget`;
+  const agent = await createTestAgent(suffix);
+  const user = await createTestUser(suffix);
+  try {
+    // Create 5 small approved memories (~100 chars each → ~25 tokens each → all 5 fit in 3000)
+    for (let i = 0; i < 5; i++) {
+      await prisma.agentKnowledgeMemory.create({
+        data: {
+          agentId: agent.id,
+          title: `Lesson ${i}: rule about service ${i}`,
+          content: `Always validate input at the boundary of service ${i} before processing.`,
+          category: "BUG_LEARNING",
+          trustLevel: "APPROVED",
+          useCount: i,
+          approvedAt: new Date(),
+          approvedByUserId: user.id,
+          metadata: { test_tag: suffix }
+        }
+      });
+    }
+    const { memoryIds } = await buildAgentKnowledgeContext(agent.id);
+    assert.ok(memoryIds.length >= 5, `All 5 small items should fit in 3000-token budget; got ${memoryIds.length}`);
+  } finally {
+    await cleanup(suffix);
+  }
+});
