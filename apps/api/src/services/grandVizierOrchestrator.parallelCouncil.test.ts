@@ -64,7 +64,7 @@ test("parallel specialists still yield canonical council order and a final summa
     }
     assert.ok(session.finalSummary, "Grand Vizier final summary is non-empty");
   } finally {
-    await prisma.setting.update({ where: { key: "COUNCIL_PARALLEL_SPECIALISTS" }, data: { value: "false" } });
+    await prisma.setting.update({ where: { key: "COUNCIL_PARALLEL_SPECIALISTS" }, data: { value: "true" } });
     await prisma.setting.update({ where: { key: memorySetting.key }, data: { value: memorySetting.value } });
     await cleanup(task.id, user.id);
   }

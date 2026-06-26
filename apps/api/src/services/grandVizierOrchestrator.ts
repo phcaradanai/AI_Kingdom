@@ -523,7 +523,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       }
     };
 
-    const parallelSpecialists = await getBooleanSetting("COUNCIL_PARALLEL_SPECIALISTS", false);
+    const parallelSpecialists = await getBooleanSetting("COUNCIL_PARALLEL_SPECIALISTS", true);
     const prevContext = () => generatedResponses.map((item) => `${item.agent.title}: ${item.response}`).join("\n\n");
     const applyPass = (r: CouncilPassResult) => {
       generatedResponses.push({ agent: r.agent, response: r.response });
