@@ -277,7 +277,7 @@ Wave 3C implementation replaces simultaneous forms with a compact overview, stab
 
 ### Wave 4: Agents, Providers, and Models
 
-Progress: **Waves 4A-4F complete; Wave 4G Routing Workspace is next.** `/agents`, `/external-agents`, `/agent-chat`, `/living-agents`, `/living-agents/:agentId`, and `/providers` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, presence, direct-conversation, provider registry, secret-safety, save, and review contracts.
+Progress: **Waves 4A-4G complete; Wave 4H Treasury is next.** `/agents`, `/external-agents`, `/agent-chat`, `/living-agents`, `/living-agents/:agentId`, `/providers`, and `/routing` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, presence, direct-conversation, provider registry, secret-safety, save, and review contracts.
 
 | Route | Primary refinement |
 | --- | --- |
@@ -294,6 +294,8 @@ Progress: **Waves 4A-4F complete; Wave 4G Routing Workspace is next.** `/agents`
 Wave 4D implementation replaces repeated Living Agent cards with a compact roster and selected evidence pane. Kingdom Presence is optional, RBAC-safe enrichment for real assignment and blocking evidence; the page remains available from Living Agent summary data when presence access is denied. Desktop panes align, tablet/mobile use explicit roster/detail handoff, and semantic English/Thai chrome wraps without horizontal overflow. The route is 6 lines and every Wave 4D module is below 180 lines.
 
 Wave 4E implementation consolidates the Living Agent profile's 12 tabs into five evidence sections with lazy timeline, relation, candidate, and memory loading. Canonical Agent, activity, trace, project, council, report, provider, knowledge, and audit ownership stays explicit through source links. The route is 6 lines, every Wave 4E file is below 600 lines, and focused/full web tests plus root typecheck/build pass. Responsive browser verification remains outstanding from this run because the available in-app browser tab was locked on an error document.
+
+Wave 4G implementation replaces the 633-line Routing page with a 6-line route and focused route-chain registry plus selected fallback evidence workspace. Route-chain policy remains owned by `/api/route-chains`; Providers owns registry/defaults; Treasury owns health/model/spend telemetry; Usage Trace owns per-request attempts. Focused tests, full web tests, web/root typecheck, root build, and diff checks pass. Rendered browser verification remains outstanding because browser tooling was unavailable/blocked in this environment.
 
 ### Wave 5: Knowledge and Governance
 
