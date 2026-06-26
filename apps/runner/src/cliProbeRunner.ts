@@ -33,23 +33,31 @@ export interface CliProbeResult {
   checkedAt: string;
 }
 
-// Default CLI binary names per agent type (mirrors agentCapabilityProbe DEFAULT_COMMANDS)
+// Default CLI binary names per agent type (must mirror agentCapabilityProbe DEFAULT_COMMANDS)
 const DEFAULT_COMMANDS: Record<string, string> = {
   CLAUDE_CODE: "claude",
   CODEX: "codex",
   CLINE: "cline",
   KILO: "kilo",
-  ANTIGRAVITY: "antigravity",
+  ANTIGRAVITY: "agy",      // Google Antigravity — binary is 'agy', not 'antigravity'
   HERMES: "hermes",
   OPENCODE: "opencode",
-  CURSOR: "cursor-agent",
+  CURSOR: "agent",          // Cursor CLI — binary is 'agent', not 'cursor-agent'
   DEVIN: "devin",
 };
 
-// Types that support a minimal model-API invocation for deep auth/credit checking.
-// Others fall back to --version only.
+// Types that support a minimal one-shot model-API invocation for deep auth/credit checking.
+// All others fall back to --version only.
 const DEEP_PROBE_ARGS: Record<string, string[]> = {
   CLAUDE_CODE: ["-p", "Reply with exactly: KINGDOM_PROBE_OK", "--dangerously-skip-permissions"],
+  CODEX:       ["exec", "Reply with exactly: KINGDOM_PROBE_OK"],
+  CLINE:       ["Reply with exactly: KINGDOM_PROBE_OK"],
+  KILO:        ["run", "Reply with exactly: KINGDOM_PROBE_OK"],
+  OPENCODE:    ["run", "Reply with exactly: KINGDOM_PROBE_OK"],
+  ANTIGRAVITY: ["-p", "Reply with exactly: KINGDOM_PROBE_OK"],
+  HERMES:      ["-z", "Reply with exactly: KINGDOM_PROBE_OK"],
+  CURSOR:      ["-p", "Reply with exactly: KINGDOM_PROBE_OK"],
+  DEVIN:       ["--", "Reply with exactly: KINGDOM_PROBE_OK"],
 };
 
 const AUTH_PATTERN = /unauthorized|invalid.*api.*key|authentication.*fail|please.*log.*in|run.*login|auth.*required|invalid.*token|api key not|401/i;
@@ -89,10 +97,6 @@ export function runCliProbe(
   const deepArgs = DEEP_PROBE_ARGS[type];
   const isDeepProbe = agentCliEnabled && !!deepArgs;
   const probeArgs = isDeepProbe ? deepArgs : ["--version"];
-
-  if (!agentCliEnabled && deepArgs) {
-    // Can only do --version without AGENT_CLI_ENABLED; still useful for EXEC check
-  }
 
   const spawnResult = spawnSync(executable, probeArgs, {
     timeout: 15_000,

@@ -23,10 +23,10 @@ const DEFAULT_COMMANDS: Record<string, string> = {
   CODEX: "codex",
   CLINE: "cline",
   KILO: "kilo",
-  ANTIGRAVITY: "antigravity",
+  ANTIGRAVITY: "agy",      // Google Antigravity CLI — binary is 'agy', not 'antigravity'
   HERMES: "hermes",
   OPENCODE: "opencode",
-  CURSOR: "cursor-agent",
+  CURSOR: "agent",          // Cursor CLI — binary is 'agent', not 'cursor' or 'cursor-agent'
   DEVIN: "devin"
 };
 
