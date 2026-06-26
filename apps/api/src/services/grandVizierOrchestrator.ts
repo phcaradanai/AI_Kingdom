@@ -84,6 +84,18 @@ const MANUAL_ONLY_GUARDRAILS = [
 // external-agent job → runner → NEEDS_REVIEW); the council itself never creates a
 // job. ASK / PLAN / RESEARCH keep the advisory contracts above.
 const BUILD_ROLE_CONTRACTS: Record<string, string> = {
+  "royal-archivist": [
+    "Return a section titled 'Archivist Implementation Evidence'.",
+    "Survey what currently exists in the codebase that the build plan will touch: relevant file paths, current interfaces/types, existing test coverage of the area, and any recent change history visible in the project context.",
+    "Flag risk signals: missing tests for affected code, stale or absent local docs, conflicting conventions, migration dependencies. Do not propose the fix — the Architect will plan it; your job is to arm them with what is already there.",
+    "Use only provided Project Context, Kingdom Memory, and local document context. Do not expose secrets or raw local root paths."
+  ].join("\n"),
+  "royal-researcher": [
+    "Return a section titled 'Researcher Implementation Validation'.",
+    "Validate and challenge the proposed build approach: identify existing patterns in the codebase for this type of change, surface viable alternatives, and state why the council's apparent direction is preferred (or flag if a better approach exists).",
+    "Include: edge cases the Archivist's evidence reveals; cross-cutting concerns (auth, RBAC, type safety, DB migration safety, API contract stability); and any unknowns that must be resolved before the runner executes.",
+    "Clearly separate confirmed facts from inferences. Do not propose the implementation plan — that belongs to the Architect."
+  ].join("\n"),
   "royal-architect": [
     "Return a section titled 'Architect Execution Plan'.",
     "Specify an execution-ready plan the runner can follow: exact files to create or change (by path), the concrete edit for each (function/behavior level, not vague advice), new/changed interfaces, and migration/test files if needed.",
