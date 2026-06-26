@@ -1221,6 +1221,26 @@ export type ExternalAgentTestResultDto = {
   captures: string[];
 };
 
+export type CliProbeStatus =
+  | "READY"
+  | "NOT_INSTALLED"
+  | "AGENT_CLI_DISABLED"
+  | "AUTH_ERROR"
+  | "CREDIT_EXHAUSTED"
+  | "RATE_LIMITED"
+  | "EXEC_FAILED"
+  | "TIMEOUT"
+  | "UNKNOWN_ERROR";
+
+export type CliProbeResultDto = {
+  agentId: string;
+  type: string;
+  status: CliProbeStatus;
+  output: string;
+  isDeepProbe: boolean;
+  checkedAt: string;
+};
+
 export type ExternalAgentRunDto = {
   id: string;
   externalAgentId: string;

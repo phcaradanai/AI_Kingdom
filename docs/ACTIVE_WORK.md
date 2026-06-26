@@ -6,6 +6,34 @@
 
 No active Codex implementation. Before the next slice, merge latest `main` into `codex/main` and update this file with the reserved branch/scope.
 
+## Completed Wave 4G Contract
+
+### Objective
+
+Refine `/routing` from one combined route-chain/editor/provider-table/model-catalog page into a compact routing policy workspace: route-chain registry on the left, selected fallback sequence and source evidence on the right, and provider/model evidence presented as supporting ownership links rather than copied provider or Treasury control planes.
+
+### Source Ownership
+
+- Route-chain order, enablement, scope, task mode, description, and notes remain owned by `/api/route-chains`.
+- Provider registry/default model/readiness remains owned by Providers and provider registry APIs.
+- Health, accounts, pricing, model catalog, and spend telemetry remain owned by Treasury/provider-balance APIs.
+- Usage Trace remains the owner of per-request provider-attempt evidence.
+- Secrets remain server-side; `/routing` must render only public readiness and environment-reference states already exposed by existing DTOs.
+
+### Delivery
+
+1. Reduced `RoutingPage.tsx` to a 6-line route and split controller, pure models, registry, selected detail, editor/delete dialogs, badges, workspace, scoped messages, and focused tests; every Wave 4G module is below 600 lines.
+2. Replaced expanded route-chain cards plus separate provider/model tables with a selected-chain workspace. Detail sections show ordered fallback sequence, provider evidence, model catalog evidence, and source ownership.
+3. Preserved create/update/delete/duplicate/toggle behavior and existing route-chain payload shapes.
+4. Added semantic English/Thai chrome, 44px controls, explicit Providers/Treasury source links, partial model-catalog failure handling, and mobile registry/detail handoff.
+5. Verified 5/5 focused tests, 231/231 full web tests, web typecheck, root typecheck, root build, and `git diff --check`. Dev smoke checks covered `/routing` and API health. Rendered browser verification remains outstanding because browser tooling was unavailable/blocked in this environment; no visual-pass claim is recorded.
+
+### Collision Boundaries
+
+- Do not edit API routes, Prisma schema, provider router semantics, fallback planner behavior, usage trace attribution, RBAC, audit, runner, patch, push, PR, merge, or deploy flows.
+- Do not move provider configuration or Treasury reconciliation controls into `/routing`; link to owning surfaces instead.
+- Keep central i18n registration minimal and use scoped routing modules for route-specific chrome.
+
 ## Completed Wave 4F Contract
 
 ### Objective
@@ -122,6 +150,11 @@ Refine `/agent-chat` into a focused direct-agent conversation workspace. Desktop
 
 | Status | Owner | Branch | Completed | Scope |
 | --- | --- | --- | --- | --- |
+| COMPLETE | Claude | `claude/main` | 2026-06-26 | Intelligence pipeline sharpening + success-lesson capture (ab5271a–f994a02) |
+| COMPLETE | Codex | `codex/main` | 2026-06-26 | Premium UX Wave 4G: Routing Workspace |
+| COMPLETE | Codex | `codex/main` | 2026-06-25 | Premium UX Wave 4F: Providers Registry |
+| COMPLETE | Claude | `claude/main` | 2026-06-25 | Learning-loop E2E proof + knowledge-quality prune |
+| COMPLETE | Codex | `codex/main` | 2026-06-24 | Premium UX Wave 4E: Living Agent Evidence Profile |
 | COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4D: Living Agents Roster |
 | COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4C: Agent Chat Workspace |
 | COMPLETE | Codex | `codex/main` | 2026-06-23 | Premium UX Wave 4B: External Agents Registry |

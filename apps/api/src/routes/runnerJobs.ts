@@ -11,6 +11,7 @@ import { getBooleanSetting, getNumberSetting } from "../services/settingsService
 import { IMPORTED_PATCH_STATUSES } from "../services/importedPatchService.js";
 import type { AutomationJobStatus } from "@prisma/client";
 import { completeExternalAgentRunForRunner, markExternalAgentRunRunning } from "../services/externalAgentBridgeService.js";
+import { consumePendingProbe, storeProbeResult, type CliProbeResultDto } from "../services/cliProbeService.js";
 
 const router = Router();
 
@@ -21,10 +22,24 @@ router.use(requireRunnerToken);
 router.post("/heartbeat", async (req, res, next) => {
   try {
     const runner = req.runner!;
-    const meta = req.body as { version?: string; hostname?: string; agentCapabilities?: unknown } | undefined;
+    const meta = req.body as {
+      version?: string;
+      hostname?: string;
+      agentCapabilities?: unknown;
+      cliProbeResult?: CliProbeResultDto;
+    } | undefined;
+
+    // Store live probe result if the runner sent one
+    if (meta?.cliProbeResult?.agentId && meta.cliProbeResult.status) {
+      storeProbeResult(meta.cliProbeResult);
+    }
+
     const updated = await heartbeat(runner.id, meta);
     const { tokenHash: _hash, ...safe } = updated;
-    res.json(safe);
+
+    // Include pending live probe request in response (if any)
+    const pendingCliProbe = consumePendingProbe(runner.id);
+    res.json({ ...safe, ...(pendingCliProbe ? { pendingCliProbe } : {}) });
   } catch (err) {
     next(err);
   }

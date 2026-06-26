@@ -1,6 +1,6 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "@/lib/api";
-import type { ExternalAgentDto, ExternalAgentPayload, ExternalAgentReadinessDto, ExternalAgentTestResultDto } from "@/types/api";
+import type { CliProbeResultDto, ExternalAgentDto, ExternalAgentPayload, ExternalAgentReadinessDto, ExternalAgentTestResultDto } from "@/types/api";
 import {
   blankExternalAgent,
   externalAgentCounts,
@@ -24,6 +24,9 @@ export function useExternalAgentsController(isKing: boolean) {
   const [draft, setDraft] = useState<ExternalAgentPayload>({ ...blankExternalAgent });
   const [deleteTarget, setDeleteTarget] = useState<ExternalAgentDto | null>(null);
   const [testResult, setTestResult] = useState<ExternalAgentTestResultDto | null>(null);
+  const [liveProbeResult, setLiveProbeResult] = useState<CliProbeResultDto | null>(null);
+  const [liveProbeLoading, setLiveProbeLoading] = useState(false);
+  const probeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -61,10 +64,21 @@ export function useExternalAgentsController(isKing: boolean) {
   );
   const counts = useMemo(() => externalAgentCounts(agents, readiness), [agents, readiness]);
 
+  const stopProbePolling = useCallback(() => {
+    if (probeTimerRef.current !== null) {
+      clearTimeout(probeTimerRef.current);
+      probeTimerRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => stopProbePolling, [stopProbePolling]);
+
   function selectAgent(agent: ExternalAgentDto) {
     setSelected(agent);
     setSection("identity");
     setTestResult(null);
+    setLiveProbeResult(null);
+    stopProbePolling();
     setError(null);
   }
 
@@ -146,11 +160,49 @@ export function useExternalAgentsController(isKing: boolean) {
     }
   }
 
+  async function runLiveProbe() {
+    if (!isKing || !selected) return;
+    setLiveProbeLoading(true);
+    setLiveProbeResult(null);
+    stopProbePolling();
+    setError(null);
+    const agentId = selected.id;
+    try {
+      await api.requestExternalAgentProbe(agentId);
+    } catch (probeError) {
+      setError(probeError instanceof Error ? probeError.message : "Unable to request live probe");
+      setLiveProbeLoading(false);
+      return;
+    }
+
+    // Poll for result every 3 s, give up after 90 s
+    const deadline = Date.now() + 90_000;
+    const poll = async () => {
+      if (Date.now() > deadline) {
+        setLiveProbeLoading(false);
+        setError("Live probe timed out — the runner may not be responding");
+        return;
+      }
+      try {
+        const { result } = await api.getExternalAgentProbeResult(agentId);
+        if (result) {
+          setLiveProbeResult(result);
+          setLiveProbeLoading(false);
+          return;
+        }
+      } catch {
+        // keep polling
+      }
+      probeTimerRef.current = setTimeout(() => { void poll(); }, 3_000);
+    };
+    probeTimerRef.current = setTimeout(() => { void poll(); }, 3_000);
+  }
+
   return {
     agents, readiness, runnerOnline, capabilitiesUpdatedAt, selected, visibleAgents, counts,
     query, setQuery, filter, setFilter, section, setSection, editorMode, draft, setDraft,
-    deleteTarget, setDeleteTarget, testResult, loading, saving, testing, error,
-    load, selectAgent, openCreate, openEdit, closeEditor, submit, toggleActive, confirmDelete, testAgent,
+    deleteTarget, setDeleteTarget, testResult, liveProbeResult, liveProbeLoading, loading, saving, testing, error,
+    load, selectAgent, openCreate, openEdit, closeEditor, submit, toggleActive, confirmDelete, testAgent, runLiveProbe,
   };
 }
 

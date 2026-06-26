@@ -1,9 +1,10 @@
-import { Activity, ArrowUpRight, Bot, Boxes, CheckCircle2, Edit3, FileCheck2, Link2, Play, Power, ShieldAlert, Trash2, UserRoundCog } from "lucide-react";
+import { Activity, AlertCircle, ArrowUpRight, Bot, Boxes, CheckCircle2, Edit3, ExternalLink, FileCheck2, Link2, Loader2, Play, Power, Radar, Trash2, UserRoundCog } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { useTk } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { ExternalAgentDto, ExternalAgentReadinessDto } from "@/types/api";
+import type { CliProbeResultDto, CliProbeStatus, ExternalAgentDto, ExternalAgentReadinessDto, ExternalAgentType } from "@/types/api";
+import { AGENT_INSTALL_HINTS, type AgentInstallHint } from "./externalAgentModels";
 import type { ExternalAgentSection } from "./externalAgentModels";
 import type { ExternalAgentsController } from "./useExternalAgentsController";
 
@@ -36,9 +37,9 @@ function SectionContent({ agent, controller, isKing }: { agent: ExternalAgentDto
   const tk = useTk();
   const evidence = controller.readiness[agent.id];
   if (controller.section === "identity") return <Section title={tk("externalAgents.identity.title")} description={tk("externalAgents.identity.description")}><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><Data label={tk("externalAgents.field.name")} value={agent.name} /><Data label={tk("externalAgents.field.type")} value={agent.type} mono /><Data label={tk("externalAgents.field.role")} value={agent.roleTitle} /><Data label={tk("externalAgents.field.updated")} value={formatDate(agent.updatedAt)} /><BooleanData label={tk("externalAgents.active")} value={agent.isActive} /><BooleanData label={tk("externalAgents.field.bridge")} value={agent.bridgeEnabled} /></div><TextBlock label={tk("externalAgents.field.description")} value={agent.description} /></Section>;
-  if (controller.section === "capabilities") return <Section title={tk("externalAgents.capabilities.title")} description={tk("externalAgents.capabilities.description")}><div className="flex flex-wrap gap-2">{agent.capabilities.map((capability) => <span className="rounded-md border border-border bg-muted/15 px-3 py-2 text-sm" key={capability}>{capability}</span>)}{agent.capabilities.length === 0 ? <p className="text-sm text-muted-foreground">{tk("externalAgents.capabilities.empty")}</p> : null}</div><ReadinessGrid evidence={evidence} /></Section>;
-  if (controller.section === "handoff") return <Section title={tk("externalAgents.handoff.title")} description={tk("externalAgents.handoff.description")}><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><Data label={tk("externalAgents.field.mode")} value={agent.executionMode} mono /><Data label={tk("externalAgents.field.safety")} value={agent.safetyLevel} mono /><BooleanData label={tk("externalAgents.field.approval")} value={agent.requiresApproval} /><Data label={tk("externalAgents.field.runtime")} value={tk("externalAgents.seconds", { count: agent.maxRuntimeSeconds })} /><Data label={tk("externalAgents.field.directory")} value={agent.workingDirectory || tk("externalAgents.none")} mono /><Data label={tk("externalAgents.field.environment")} value={agent.environmentProfile || tk("externalAgents.none")} mono /></div><TextBlock label={tk("externalAgents.field.command")} value={agent.command || tk("externalAgents.validation.notConfigured")} mono /></Section>;
-  if (controller.section === "validation") return <Section title={tk("externalAgents.validation.title")} description={tk("externalAgents.validation.description")}><ReadinessGrid evidence={evidence} />{isKing ? <Button className="min-h-11" disabled={controller.testing} onClick={() => void controller.testAgent()}><Play className="h-4 w-4" />{controller.testing ? tk("externalAgents.validation.running") : tk("externalAgents.validation.run")}</Button> : null}{controller.testResult ? <div className={cn("border-l-2 p-4 text-sm", controller.testResult.status === "READY" ? "border-emerald-400 bg-emerald-500/10" : "border-amber-400 bg-amber-500/10")}><div className="font-semibold">{tk("externalAgents.validation.result", { status: controller.testResult.status })}</div>{controller.testResult.issues.length ? <p className="mt-2 text-xs leading-5">{controller.testResult.issues.join(" · ")}</p> : null}<div className="mt-3 text-xs text-muted-foreground"><span className="font-semibold">{tk("externalAgents.validation.command")}:</span> {controller.testResult.commandTemplate ?? tk("externalAgents.validation.notConfigured")}</div></div> : <p className="text-sm text-muted-foreground">{tk("externalAgents.validation.notRun")}</p>}</Section>;
+  if (controller.section === "capabilities") return <Section title={tk("externalAgents.capabilities.title")} description={tk("externalAgents.capabilities.description")}><div className="flex flex-wrap gap-2">{agent.capabilities.map((capability) => <span className="rounded-md border border-border bg-muted/15 px-3 py-2 text-sm" key={capability}>{capability}</span>)}{agent.capabilities.length === 0 ? <p className="text-sm text-muted-foreground">{tk("externalAgents.capabilities.empty")}</p> : null}</div><ReadinessGrid agentType={agent.type as ExternalAgentType} evidence={evidence} /></Section>;
+  if (controller.section === "handoff") return <Section title={tk("externalAgents.handoff.title")} description={tk("externalAgents.handoff.description")}><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3"><Data label={tk("externalAgents.field.mode")} value={agent.executionMode} mono /><Data label={tk("externalAgents.field.safety")} value={agent.safetyLevel} mono /><BooleanData label={tk("externalAgents.field.approval")} value={agent.requiresApproval} /><Data label={tk("externalAgents.field.runtime")} value={tk("externalAgents.seconds", { count: agent.maxRuntimeSeconds })} /><Data label={tk("externalAgents.field.directory")} value={agent.workingDirectory || tk("externalAgents.none")} mono /><Data label={tk("externalAgents.field.environment")} value={agent.environmentProfile || tk("externalAgents.none")} mono /></div><TextBlock label={tk("externalAgents.field.command")} value={agent.command || tk("externalAgents.validation.notConfigured")} mono /><InstallHintPanel agentType={agent.type as ExternalAgentType} evidence={evidence} tk={tk} /></Section>;
+  if (controller.section === "validation") return <Section title={tk("externalAgents.validation.title")} description={tk("externalAgents.validation.description")}><ReadinessGrid agentType={agent.type as ExternalAgentType} evidence={evidence} />{isKing ? <div className="flex flex-wrap gap-2"><Button className="min-h-11" disabled={controller.testing} onClick={() => void controller.testAgent()}><Play className="h-4 w-4" />{controller.testing ? tk("externalAgents.validation.running") : tk("externalAgents.validation.run")}</Button><Button className="min-h-11" disabled={controller.liveProbeLoading || !controller.runnerOnline} onClick={() => void controller.runLiveProbe()} variant="outline"><Radar className="h-4 w-4" />{controller.liveProbeLoading ? (evidence?.runnerAvailable ? tk("externalAgents.probe.running") : tk("externalAgents.probe.waiting")) : tk("externalAgents.probe.run")}</Button></div> : null}{controller.testResult ? <div className={cn("border-l-2 p-4 text-sm", controller.testResult.status === "READY" ? "border-emerald-400 bg-emerald-500/10" : "border-amber-400 bg-amber-500/10")}><div className="font-semibold">{tk("externalAgents.validation.result", { status: controller.testResult.status })}</div>{controller.testResult.issues.length ? <p className="mt-2 text-xs leading-5">{controller.testResult.issues.join(" · ")}</p> : null}<div className="mt-3 text-xs text-muted-foreground"><span className="font-semibold">{tk("externalAgents.validation.command")}:</span> {controller.testResult.commandTemplate ?? tk("externalAgents.validation.notConfigured")}</div></div> : <p className="text-sm text-muted-foreground">{tk("externalAgents.validation.notRun")}</p>}<LiveProbePanel liveProbeResult={controller.liveProbeResult} liveProbeLoading={controller.liveProbeLoading} runnerOnline={controller.runnerOnline} tk={tk} /></Section>;
   return <SourceSection />;
 }
 
@@ -47,10 +48,11 @@ function ReadinessRail({ evidence }: { evidence?: ExternalAgentReadinessDto }) {
   return <div className="mt-4 grid gap-2 border-y border-border py-3 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-center"><div className="flex items-center gap-2 text-xs font-semibold"><Activity className="h-4 w-4 text-primary" />{tk("externalAgents.readiness.title")}</div><p className="text-xs leading-5 text-muted-foreground">{evidence?.reason ?? tk("externalAgents.noReadiness")}</p></div>;
 }
 
-function ReadinessGrid({ evidence }: { evidence?: ExternalAgentReadinessDto }) {
+function ReadinessGrid({ evidence, agentType }: { evidence?: ExternalAgentReadinessDto; agentType?: ExternalAgentType }) {
   const tk = useTk();
   if (!evidence) return <div className="border-y border-border py-4 text-sm text-muted-foreground">{tk("externalAgents.noReadiness")}</div>;
-  return <div><div><h4 className="text-sm font-semibold">{tk("externalAgents.readiness.title")}</h4><p className="mt-1 text-xs leading-5 text-muted-foreground">{tk("externalAgents.readiness.description")}</p></div><div className="mt-3 grid gap-3 sm:grid-cols-2"><BooleanData label={tk("externalAgents.readiness.config")} value={evidence.configReady} /><BooleanData label={tk("externalAgents.readiness.runner")} value={evidence.runnerAvailable} /><Data label={tk("externalAgents.readiness.lastRun")} value={evidence.lastRunStatus ?? tk("externalAgents.none")} mono /><Data label={tk("externalAgents.readiness.reason")} value={evidence.reason} /></div></div>;
+  const showInstallHint = !evidence.runnerAvailable && !!agentType;
+  return <div className="space-y-4"><div><h4 className="text-sm font-semibold">{tk("externalAgents.readiness.title")}</h4><p className="mt-1 text-xs leading-5 text-muted-foreground">{tk("externalAgents.readiness.description")}</p></div><div className="grid gap-3 sm:grid-cols-2"><BooleanData label={tk("externalAgents.readiness.config")} value={evidence.configReady} /><BooleanData label={tk("externalAgents.readiness.runner")} value={evidence.runnerAvailable} /><Data label={tk("externalAgents.readiness.lastRun")} value={evidence.lastRunStatus ?? tk("externalAgents.none")} mono /><Data label={tk("externalAgents.readiness.reason")} value={evidence.reason} /></div>{showInstallHint ? <InstallHintPanel agentType={agentType} evidence={evidence} tk={tk} /> : null}</div>;
 }
 
 function SourceSection() {
@@ -92,4 +94,85 @@ function ReadinessBadge({ evidence }: { evidence?: ExternalAgentReadinessDto }) 
 
 function formatDate(value: string): string {
   return new Intl.DateTimeFormat(document.documentElement.lang === "th" ? "th-TH" : "en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
+}
+
+function InstallHintPanel({ agentType, evidence, tk }: { agentType: ExternalAgentType; evidence?: ExternalAgentReadinessDto; tk: (key: string) => string }) {
+  const hint: AgentInstallHint | undefined = AGENT_INSTALL_HINTS[agentType];
+  if (!hint) return null;
+  const showNotAvailable = evidence && !evidence.runnerAvailable;
+  return <div className="space-y-2 rounded-md border border-amber-500/20 bg-amber-500/5 px-3 py-3 text-xs leading-5">
+    <div className="font-semibold text-amber-200">{tk("externalAgents.install.title")}</div>
+    {showNotAvailable ? <p className="text-amber-100/80">{tk("externalAgents.install.notAvailable")}</p> : null}
+    <div className="space-y-1.5">
+      <HintRow label={tk("externalAgents.install.command")} value={hint.installCommand} mono />
+      <HintRow label={tk("externalAgents.install.check")} value={hint.checkCommand} mono />
+      {hint.note ? <HintRow label={tk("externalAgents.install.note")} value={hint.note} /> : null}
+    </div>
+    {hint.docsUrl ? <a className="inline-flex items-center gap-1 text-primary hover:underline" href={hint.docsUrl} rel="noreferrer" target="_blank"><ExternalLink className="h-3 w-3" />{tk("externalAgents.install.openDocs")}</a> : null}
+  </div>;
+}
+
+function HintRow({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) {
+  return <div className="flex flex-wrap gap-1.5"><span className="shrink-0 text-muted-foreground">{label}:</span><span className={mono ? "font-mono text-foreground" : "text-foreground"}>{value}</span></div>;
+}
+
+const PROBE_STATUS_COLORS: Record<CliProbeStatus, string> = {
+  READY: "border-emerald-400 bg-emerald-500/10",
+  NOT_INSTALLED: "border-red-400 bg-red-500/10",
+  AGENT_CLI_DISABLED: "border-amber-400 bg-amber-500/10",
+  AUTH_ERROR: "border-red-400 bg-red-500/10",
+  CREDIT_EXHAUSTED: "border-red-400 bg-red-500/10",
+  RATE_LIMITED: "border-amber-400 bg-amber-500/10",
+  EXEC_FAILED: "border-red-400 bg-red-500/10",
+  TIMEOUT: "border-amber-400 bg-amber-500/10",
+  UNKNOWN_ERROR: "border-amber-400 bg-amber-500/10",
+};
+
+function ProbeStatusIcon({ status }: { status: CliProbeStatus }) {
+  if (status === "READY") return <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-300" />;
+  if (status === "AGENT_CLI_DISABLED" || status === "RATE_LIMITED" || status === "TIMEOUT" || status === "UNKNOWN_ERROR") {
+    return <AlertCircle className="h-4 w-4 shrink-0 text-amber-300" />;
+  }
+  return <AlertCircle className="h-4 w-4 shrink-0 text-red-300" />;
+}
+
+function LiveProbePanel({
+  liveProbeResult,
+  liveProbeLoading,
+  runnerOnline,
+  tk,
+}: {
+  liveProbeResult: CliProbeResultDto | null;
+  liveProbeLoading: boolean;
+  runnerOnline: boolean;
+  tk: (key: string, params?: Record<string, string | number>) => string;
+}) {
+  if (!liveProbeLoading && !liveProbeResult) return null;
+
+  if (liveProbeLoading) {
+    return <div className="flex items-center gap-2 border-l-2 border-primary/50 bg-primary/5 p-4 text-sm">
+      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-primary" />
+      <span className="text-muted-foreground">{runnerOnline ? tk("externalAgents.probe.running") : tk("externalAgents.probe.waiting")}</span>
+    </div>;
+  }
+
+  if (!liveProbeResult) return null;
+
+  const colorClass = PROBE_STATUS_COLORS[liveProbeResult.status] ?? "border-border bg-muted/10";
+  const checkedAt = new Date(liveProbeResult.checkedAt).toLocaleTimeString();
+
+  return <div className={cn("space-y-3 border-l-2 p-4 text-sm", colorClass)}>
+    <div className="flex items-start gap-2">
+      <ProbeStatusIcon status={liveProbeResult.status} />
+      <div className="min-w-0">
+        <div className="font-semibold">{tk("externalAgents.probe.result")}</div>
+        <p className="mt-1 text-xs leading-5">{tk(`externalAgents.probe.status.${liveProbeResult.status}`)}</p>
+      </div>
+    </div>
+    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
+      <span>{liveProbeResult.isDeepProbe ? tk("externalAgents.probe.isDeepProbe") : tk("externalAgents.probe.versionOnly")}</span>
+      <span>{tk("externalAgents.probe.checkedAt", { time: checkedAt })}</span>
+    </div>
+    {liveProbeResult.output ? <div><div className="mb-1 text-xs font-semibold text-muted-foreground">{tk("externalAgents.probe.output")}</div><pre className="max-h-32 overflow-y-auto whitespace-pre-wrap break-words rounded bg-black/20 px-2 py-1.5 font-mono text-[11px] leading-5">{liveProbeResult.output}</pre></div> : null}
+  </div>;
 }

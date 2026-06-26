@@ -72,8 +72,13 @@ export class ApiClient {
     return response.json() as Promise<T>;
   }
 
-  async heartbeat(meta?: { version?: string; hostname?: string; agentCapabilities?: unknown }): Promise<void> {
-    await this.request("POST", "/api/runner/heartbeat", meta ?? {});
+  async heartbeat(meta?: {
+    version?: string;
+    hostname?: string;
+    agentCapabilities?: unknown;
+    cliProbeResult?: import("./cliProbeRunner.js").CliProbeResult;
+  }): Promise<{ pendingCliProbe?: { agentId: string; type: string } }> {
+    return this.request("POST", "/api/runner/heartbeat", meta ?? {});
   }
 
   async claimJob(): Promise<{ job: AutomationJob | null }> {
