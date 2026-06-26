@@ -17,6 +17,14 @@ async function setCapture(enabled: boolean) {
   });
 }
 
+async function setCaptureSuccesses(enabled: boolean) {
+  await prisma.setting.upsert({
+    where: { key: "CAPTURE_SUCCESSES_FROM_REVIEWS" },
+    update: { value: String(enabled) },
+    create: { key: "CAPTURE_SUCCESSES_FROM_REVIEWS", value: String(enabled), category: "SYSTEM", description: "test" }
+  });
+}
+
 async function makeFailedReviewJob() {
   const suffix = randomUUID();
   // Unique but transient-safe tag: the value gate rejects titles containing isolated 7-8 hex
@@ -54,8 +62,50 @@ async function makeFailedReviewJob() {
   return { agent, workOrder, job };
 }
 
+async function makePassedReviewJob() {
+  const suffix = randomUUID();
+  const tag = `wo${Date.now()}${Math.floor(Math.random() * 1000)}`;
+  const agent = await prisma.agent.create({
+    data: { slug: `reviewer-pass-${suffix}`, name: `Reviewer Pass ${suffix}`, title: "Test Reviewer", role: "MINISTER", specialty: "review", prompt: "review", isActive: true }
+  });
+  agentIds.push(agent.id);
+  const project = await prisma.project.create({ data: { name: `Success Lesson Project ${tag}` } });
+  projectIds.push(project.id);
+  const workOrder = await prisma.workOrder.create({
+    data: { title: `Add authentication middleware ${tag}`, objective: "Add JWT middleware", status: "NEEDS_REVIEW", projectId: project.id, assignedAgentId: agent.id, isTestData: true }
+  });
+  workOrderIds.push(workOrder.id);
+  const job = await prisma.automationJob.create({
+    data: { workOrderId: workOrder.id, projectId: project.id, status: "NEEDS_REVIEW", mode: "SANDBOX_PATCH", importedPatchStatus: "VALIDATED" }
+  });
+  jobIds.push(job.id);
+  await prisma.implementationReport.create({
+    data: {
+      workOrderId: workOrder.id,
+      automationJobId: job.id,
+      summary: "Added JWT middleware successfully. Typecheck and all tests pass.",
+      filesChanged: ["src/middleware/auth.ts"],
+      commandsRun: ["npm run typecheck", "npm run test:api"],
+      testsRun: ["npm run test:api"],
+      testResult: "PASSED"
+    }
+  });
+  await prisma.patchArtifact.create({
+    data: {
+      automationJobId: job.id,
+      workOrderId: workOrder.id,
+      title: `Auth patch ${tag}`,
+      summary: "JWT middleware patch",
+      filesChanged: ["src/middleware/auth.ts"],
+      riskLevel: "LOW"
+    }
+  });
+  return { agent, workOrder, job };
+}
+
 after(async () => {
   await setCapture(false);
+  await setCaptureSuccesses(false);
   await prisma.agentKnowledgeCandidate.deleteMany({ where: { proposedByAgentId: { in: agentIds } } }).catch(() => undefined);
   await prisma.agentReviewSummary.deleteMany({ where: { automationJobId: { in: jobIds } } }).catch(() => undefined);
   await prisma.implementationReport.deleteMany({ where: { automationJobId: { in: jobIds } } }).catch(() => undefined);
@@ -92,4 +142,33 @@ test("no candidate is proposed when capture is OFF", async () => {
     where: { proposedByAgentId: agent.id, sourceType: "AGENT_REVIEW" }
   });
   assert.equal(candidate, null, "gate off → no candidate");
+});
+
+test("a passed review proposes a WORKFLOW_RULE candidate when CAPTURE_SUCCESSES_FROM_REVIEWS is ON", async () => {
+  await setCaptureSuccesses(true);
+  const { agent, job } = await makePassedReviewJob();
+
+  const review = await createOrUpdateAgentReviewForJob(job.id, { useAi: false });
+  assert.equal(review.verdict, "PASS");
+
+  const candidate = await prisma.agentKnowledgeCandidate.findFirst({
+    where: { proposedByAgentId: agent.id, sourceType: "AGENT_REVIEW", traceId: `review-success:${job.id}` }
+  });
+  assert.ok(candidate, "a WORKFLOW_RULE candidate should be proposed from the passed review");
+  assert.equal(candidate.status, "PENDING", "success candidates require King approval");
+  assert.equal(candidate.category, "WORKFLOW_RULE");
+  assert.ok(candidate.title?.includes("Success lesson"), "title should mark it as a success lesson");
+});
+
+test("no success candidate proposed when CAPTURE_SUCCESSES_FROM_REVIEWS is OFF", async () => {
+  await setCaptureSuccesses(false);
+  const { agent, job } = await makePassedReviewJob();
+
+  const review = await createOrUpdateAgentReviewForJob(job.id, { useAi: false });
+  assert.equal(review.verdict, "PASS");
+
+  const candidate = await prisma.agentKnowledgeCandidate.findFirst({
+    where: { proposedByAgentId: agent.id, traceId: `review-success:${job.id}` }
+  });
+  assert.equal(candidate, null, "gate off → no success candidate");
 });

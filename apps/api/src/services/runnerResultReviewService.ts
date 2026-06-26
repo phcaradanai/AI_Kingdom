@@ -189,6 +189,8 @@ export async function createOrUpdateAgentReviewForJob(jobId: string, options: Ge
   await maybeCaptureReviewLesson({
     verdict: draft.verdict,
     whatFailed: draft.whatFailed,
+    whatPassed: draft.whatPassed,
+    summary: draft.summary,
     workOrderId: job.workOrderId,
     workOrderTitle: job.workOrder?.title ?? "work order",
     projectId: job.projectId,
@@ -205,41 +207,69 @@ const REVIEW_LESSON_VERDICTS = new Set<AgentReviewVerdict>(["NEEDS_FIX", "PATCH_
 async function maybeCaptureReviewLesson(input: {
   verdict: AgentReviewVerdict;
   whatFailed: string[];
+  whatPassed: string[];
+  summary: string;
   workOrderId: string;
   workOrderTitle: string;
   projectId: string | null;
   reviewerAgentId: string | null;
   jobId: string;
 }): Promise<void> {
-  if (!(await getBooleanSetting("CAPTURE_LESSONS_FROM_REVIEWS", false))) return;
-  if (!REVIEW_LESSON_VERDICTS.has(input.verdict)) return;
-  const whatFailed = input.whatFailed.filter((item) => item && item.trim());
-  if (whatFailed.length === 0) return; // a failure with no diagnosis teaches nothing
   if (!input.reviewerAgentId) return;
 
-  const content = [
-    `Failure on work order: ${input.workOrderTitle}`,
-    `What failed: ${whatFailed.join("; ")}`,
-    "Lesson: address the above before reporting this kind of work done; do not repeat it on similar work."
-  ].join("\n\n");
+  if (REVIEW_LESSON_VERDICTS.has(input.verdict) && await getBooleanSetting("CAPTURE_LESSONS_FROM_REVIEWS", false)) {
+    const whatFailed = input.whatFailed.filter((item) => item && item.trim());
+    if (whatFailed.length > 0) {
+      const content = [
+        `Failure on work order: ${input.workOrderTitle}`,
+        `What failed: ${whatFailed.join("; ")}`,
+        "Lesson: address the above before reporting this kind of work done; do not repeat it on similar work."
+      ].join("\n\n");
+      await proposeKnowledgeCandidate({
+        agentId: input.reviewerAgentId,
+        projectId: input.projectId,
+        traceId: `review:${input.jobId}`,
+        sourceType: "AGENT_REVIEW",
+        sourceId: input.jobId,
+        title: `Review lesson: ${input.workOrderTitle}`,
+        content,
+        summary: whatFailed.join("; ").slice(0, 280),
+        category: "BUG_LEARNING",
+        confidence: 0.7,
+        proposedByAgentId: input.reviewerAgentId,
+        tags: ["review-lesson", input.verdict.toLowerCase()],
+        metadata: { verdict: input.verdict, requiresReview: true }
+      });
+    }
+  }
 
-  await proposeKnowledgeCandidate({
-    agentId: input.reviewerAgentId,
-    projectId: input.projectId,
-    // The deterministic review has no AIUsageTrace; the job/review IS the provenance the
-    // value gate requires (traceId is a plain provenance column, not an FK).
-    traceId: `review:${input.jobId}`,
-    sourceType: "AGENT_REVIEW",
-    sourceId: input.jobId,
-    title: `Review lesson: ${input.workOrderTitle}`,
-    content,
-    summary: whatFailed.join("; ").slice(0, 280),
-    category: "BUG_LEARNING",
-    confidence: 0.7,
-    proposedByAgentId: input.reviewerAgentId,
-    tags: ["review-lesson", input.verdict.toLowerCase()],
-    metadata: { verdict: input.verdict, requiresReview: true }
-  });
+  if (input.verdict === "PASS" && await getBooleanSetting("CAPTURE_SUCCESSES_FROM_REVIEWS", false)) {
+    const whatPassed = input.whatPassed.filter((item) => item && item.trim());
+    const summary = input.summary.trim();
+    // Only capture when there is real execution evidence (not trivial pass with no content)
+    if (whatPassed.length === 0 || summary.length < 30) return;
+    const content = [
+      `Successful implementation: ${input.workOrderTitle}`,
+      whatPassed.length ? `What worked: ${whatPassed.join("; ")}` : "",
+      summary ? `Result summary: ${summary}` : "",
+      "Lesson: this approach succeeded — apply it to similar work."
+    ].filter(Boolean).join("\n\n");
+    await proposeKnowledgeCandidate({
+      agentId: input.reviewerAgentId,
+      projectId: input.projectId,
+      traceId: `review-success:${input.jobId}`,
+      sourceType: "AGENT_REVIEW",
+      sourceId: input.jobId,
+      title: `Success lesson: ${input.workOrderTitle}`,
+      content,
+      summary: summary.slice(0, 280),
+      category: "WORKFLOW_RULE",
+      confidence: 0.75,
+      proposedByAgentId: input.reviewerAgentId,
+      tags: ["review-lesson", "pass", "implementation-success"],
+      metadata: { verdict: input.verdict, requiresReview: true }
+    });
+  }
 }
 
 export async function generateAgentReviewDraft(input: ReviewInput, options: GenerateReviewOptions = {}): Promise<ReviewDraft> {

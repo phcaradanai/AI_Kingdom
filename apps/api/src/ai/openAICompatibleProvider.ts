@@ -200,8 +200,7 @@ export function buildUserPrompt(input: GenerateAgentResponseInput): string {
     `Task mode: ${input.mode}`,
     `Royal command: ${input.command}`,
     input.previousCouncilContext ? `Previous council context:\n${input.previousCouncilContext}` : "",
-    input.kingdomMemoryContext ? `Kingdom Memory Context:\n${input.kingdomMemoryContext}` : "",
-    "Return structured council counsel with: Assessment, Recommendation, Risks, Next step."
+    input.kingdomMemoryContext ? `Kingdom Memory Context:\n${input.kingdomMemoryContext}` : ""
   ]
     .filter(Boolean)
     .join("\n\n");

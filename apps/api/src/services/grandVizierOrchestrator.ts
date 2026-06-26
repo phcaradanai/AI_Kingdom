@@ -336,9 +336,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           promptPreview: task.command
         });
 
-        const agentKnowledge = knowledgeInContext
+        const agentKnowledgeRaw = knowledgeInContext
           ? await buildAgentKnowledgeContext(agent.id, task.projectId, task.id).then((r) => r.context).catch(() => "")
           : "";
+        const agentKnowledge = agentKnowledgeRaw.trim() ? `[APPROVED KNOWLEDGE]\n${agentKnowledgeRaw}` : "";
         const agentMemoryContext = [kingdomMemoryContext, agentKnowledge].filter((section) => section && section.trim()).join("\n\n");
 
         const generated = await generateWithFallback(providerCalls, {
@@ -644,9 +645,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       councilSessionId: session.id
     });
 
-    const summaryKnowledge = knowledgeInContext
+    const summaryKnowledgeRaw = knowledgeInContext
       ? await buildAgentKnowledgeContext(grandVizier.id, task.projectId, task.id).then((r) => r.context).catch(() => "")
       : "";
+    const summaryKnowledge = summaryKnowledgeRaw.trim() ? `[APPROVED KNOWLEDGE]\n${summaryKnowledgeRaw}` : "";
     const summaryMemoryContext = [kingdomMemoryContext, summaryKnowledge].filter((section) => section && section.trim()).join("\n\n");
 
     let generatedSummary: Awaited<ReturnType<typeof generateWithFallback>>;
