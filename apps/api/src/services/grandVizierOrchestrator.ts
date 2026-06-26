@@ -48,12 +48,14 @@ const ROLE_RESPONSE_CONTRACTS: Record<string, string> = {
   ].join("\n"),
   "royal-researcher": [
     "Return a section titled 'Researcher Hypotheses'.",
-    "Include: hypotheses ranked by likelihood; likely root cause categories; evidence supporting or refuting each hypothesis.",
-    "Clearly separate evidence from assumptions."
+    "State your TOP hypothesis with a confidence level (HIGH/MEDIUM/LOW) and the specific evidence that supports it. List at most 2 alternatives.",
+    "If evidence is insufficient to identify a primary hypothesis, write 'INCONCLUSIVE: [exact information needed to diagnose]' — do not guess.",
+    "Clearly separate confirmed evidence from assumptions. Do not restate facts the Archivist already surfaced."
   ].join("\n"),
   "royal-architect": [
     "Return a section titled 'Architect Patch Plan'.",
-    "Include: safe patch plan; files to inspect/change; risk assessment; validation commands; rollback strategy.",
+    "Name exact file paths (relative to project root) for each change. Do not say 'update the relevant files' — commit to specific paths or write 'PATH UNKNOWN: [what needs inspection first]'.",
+    "Include: the specific code change at function/block level; risk level (LOW/MEDIUM/HIGH/CRITICAL); validation commands; rollback step.",
     "Do not create a patch. Do not suggest merge, deploy, push, or PR automation."
   ].join("\n"),
   "royal-general": [
@@ -63,8 +65,10 @@ const ROLE_RESPONSE_CONTRACTS: Record<string, string> = {
   ].join("\n"),
   "grand-vizier": [
     "Return a section titled 'Grand Vizier Final Decision'.",
-    "Include: final synthesis; decision framing; recommended next action; tradeoffs.",
-    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
+    "Synthesize the council into ONE verdict: name the most likely root cause (citing the Researcher's top hypothesis), the exact fix (citing the Architect's plan), and the single next action.",
+    "If specialists conflict, pick a side and state why in one sentence. If the council cannot diagnose without more data, write 'BLOCKED: [what is missing]' — do not guess.",
+    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts. Do not summarize all views — make a judgment call.",
+    "End your response with: 'My recommendation: [one specific action sentence].'"
   ].join("\n")
 };
 
@@ -93,8 +97,10 @@ const ASK_ROLE_CONTRACTS: Record<string, string> = {
   ].join("\n"),
   "grand-vizier": [
     "Return a section titled 'Grand Vizier Counsel'.",
-    "Synthesize the council's briefing, analysis, technical assessment, and practical counsel into a clear recommendation: the preferred answer, the key tradeoff, and the one concern the King should weigh before deciding.",
-    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
+    "Give ONE preferred answer with the key tradeoff and the single concern the King should weigh. Do not present a menu of options.",
+    "If you write 'it depends', you must name the specific decision variable and give a concrete recommendation for each branch (maximum 2). 'It depends' without a resolution is not a verdict.",
+    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts.",
+    "End your response with: 'My recommendation: [one specific action sentence].'"
   ].join("\n")
 };
 
@@ -123,8 +129,10 @@ const PLAN_ROLE_CONTRACTS: Record<string, string> = {
   ].join("\n"),
   "grand-vizier": [
     "Return a section titled 'Grand Vizier Strategic Recommendation'.",
-    "Synthesize the planning context, requirements, technical roadmap, and execution roadmap into a clear strategic recommendation: the recommended approach, the key decision the King must make, and what would make this plan succeed or fail.",
-    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts."
+    "Pick ONE recommended approach from the council's options. State the key decision the King must make to start, and the single factor that will determine success or failure.",
+    "Do not present a menu of approaches — commit to the best one and state what new information would cause you to change that recommendation.",
+    "Reference the Archivist, Researcher, Architect, and General outputs by role. Do not add unsupported facts.",
+    "End your response with: 'My recommendation: [one specific action sentence].'"
   ].join("\n")
 };
 
@@ -134,7 +142,8 @@ const MANUAL_ONLY_GUARDRAILS = [
   "M17F-1 guardrail: do not auto-deploy.",
   "M17F-1 guardrail: do not auto-create PRs.",
   "M17F-1 guardrail: do not weaken runner auth or context binding.",
-  "M17F-1 guardrail: do not expose secrets."
+  "M17F-1 guardrail: do not expose secrets.",
+  "Precision: commit to specific facts, file paths, and actions. Hedging terms (may, might, consider, perhaps) are only permitted when followed by a concrete resolution. Do not speculate beyond available evidence."
 ].join("\n");
 
 // M23 (Decree → Execution): in BUILD mode the council is asked to produce an
@@ -172,8 +181,10 @@ const BUILD_ROLE_CONTRACTS: Record<string, string> = {
   ].join("\n"),
   "grand-vizier": [
     "Return a section titled 'Grand Vizier Execution Decision'.",
-    "Synthesize the council into an execution-ready decision the planner can convert into one Work Order: restate the single objective, the change set, acceptance criteria, validation commands, and an overall risk level (LOW/MEDIUM/HIGH/CRITICAL).",
-    "State plainly whether this is safe to auto-execute as a sandbox patch (risk LOW + fresh project context) or must pause for explicit King approval. Reference the Archivist, Researcher, Architect, and General outputs. Do not add unsupported facts."
+    "Synthesize the council into ONE execution-ready decision: the single objective, the exact change set (file paths from the Architect), acceptance criteria, validation commands, and an overall risk level (LOW/MEDIUM/HIGH/CRITICAL).",
+    "State plainly — safe to auto-execute (risk LOW + fresh context) or requires King approval. Pick a side; do not hedge.",
+    "Reference the Archivist, Researcher, Architect, and General outputs. Do not add unsupported facts.",
+    "End your response with: 'My recommendation: [safe to auto-execute | requires King review] — [one sentence why].'"
   ].join("\n")
 };
 
@@ -181,7 +192,8 @@ const BUILD_EXECUTION_GUARDRAILS = [
   "M23 BUILD mode: you MAY produce an execution-ready plan (concrete file-level changes, acceptance criteria, validation commands).",
   "M23 guardrail: the council itself still creates no runner jobs — execution happens only through the King-authorized downstream path.",
   "M23 guardrail: any resulting patch lands in NEEDS_REVIEW. Never auto-merge, auto-deploy, push branches, or create PRs.",
-  "M23 guardrail: do not weaken runner auth or context binding, and do not expose secrets or raw local root paths."
+  "M23 guardrail: do not weaken runner auth or context binding, and do not expose secrets or raw local root paths.",
+  "Precision: commit to exact file paths, function names, and commands. Do not say 'update the relevant files' — name them. Hedging terms (may, might, consider) require a concrete follow-up."
 ].join("\n");
 
 export async function processTaskWithGrandVizier(taskId: string, userId: string) {
