@@ -271,11 +271,11 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const projectContext = [contextWarning, baseProjectContext].filter(Boolean).join("\n\n");
     const relevantMemories = await findRelevantMemories(userId, task.command, 5);
     const baseMemoryContext = formatMemoryContext(relevantMemories);
-    // Cross-task learning for the council (opt-in): enrich the shared memory context with
+    // Cross-task learning for the council: enrich the shared memory context with
     // relevance-ranked outcome lessons from similar past work (what worked / what to avoid)
     // so every specialist AND the Grand Vizier synthesis deliberate with experience, not just
-    // the post-hoc planner. Deterministic, no extra provider call; default OFF.
-    const councilCrossTaskLearning = await getBooleanSetting("COUNCIL_CROSS_TASK_LEARNING", false);
+    // the post-hoc planner. Deterministic, no extra provider call; default ON.
+    const councilCrossTaskLearning = await getBooleanSetting("COUNCIL_CROSS_TASK_LEARNING", true);
     const crossTaskLessons = councilCrossTaskLearning
       ? await buildCrossTaskLessons({ decreeText: `${task.title}\n${task.command}`, projectId: task.projectId }).catch((err) => {
           console.warn("[Council] cross-task lessons failed (continuing without):", err instanceof Error ? err.message : String(err));
@@ -286,7 +286,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     // Curated knowledge (M16): inject each agent's APPROVED knowledge memories into its own
     // prompt so the council finally USES the lessons the King approved (closing the loop where
     // knowledge was created but never consumed). Per-agent → computed inside the pass. Opt-in.
-    const knowledgeInContext = await getBooleanSetting("AGENT_KNOWLEDGE_IN_CONTEXT", false);
+    const knowledgeInContext = await getBooleanSetting("AGENT_KNOWLEDGE_IN_CONTEXT", true);
     const fallbackNotices: string[] = [];
     const generatedResponses: Array<{ agent: Agent; response: string }> = [];
     const usedProviders: string[] = [];

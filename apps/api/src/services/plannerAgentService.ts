@@ -187,7 +187,7 @@ async function executePlanner(
 
   // Curated knowledge (M16, opt-in): inject the planner agent's APPROVED knowledge memories
   // so planning uses the lessons the King vetted — same loop now closed for the council.
-  const knowledgeInContext = await getBooleanSetting("AGENT_KNOWLEDGE_IN_CONTEXT", false);
+  const knowledgeInContext = await getBooleanSetting("AGENT_KNOWLEDGE_IN_CONTEXT", true);
   const agentKnowledge = knowledgeInContext
     ? await buildAgentKnowledgeContext(plannerAgent.id, task.projectId, task.id)
         .then((r) => r.context)
