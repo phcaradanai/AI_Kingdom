@@ -431,6 +431,7 @@ const TASK_MODE_LABELS: Record<WorkContinuityTaskMode, string> = {
 };
 
 function WorkContinuitySection({ id, continuity }: { id?: string; continuity: WorkContinuityDto }) {
+  const tk = useTk();
   type TimelineItem = { id: string; kind: string; label: string; detail: string; timestamp: string };
   const timeline: TimelineItem[] = [
     ...continuity.implementationReports.map((r) => ({
@@ -471,10 +472,11 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
     <Card id={id}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-base font-semibold text-foreground">Work Continuity</h2>
+          <h2 className="text-base font-semibold text-foreground">{tk("workOrders.continuity.title")}</h2>
           <p className="mt-1 text-sm text-muted-foreground">Aggregated view of previous attempts, decisions, and next steps.</p>
         </div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap gap-1.5 items-center">
+          <span className="text-xs font-medium text-muted-foreground">{tk("workOrders.continuity.taskMode")}:</span>
           <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", TASK_MODE_COLORS[continuity.taskMode])}>
             {TASK_MODE_LABELS[continuity.taskMode]}
           </span>
@@ -498,7 +500,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
         <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
           <div className="flex items-center gap-2 font-semibold text-amber-700">
             <AlertTriangle className="h-3.5 w-3.5" />
-            {continuity.contextFreshness.requiredAction === "REFRESH_CONTEXT" ? "Context Refresh Required" : `Context: ${continuity.contextFreshness.workOrderStatus}`}
+            {continuity.contextFreshness.requiredAction === "REFRESH_CONTEXT" ? tk("workOrders.continuity.contextRefreshRequired") : `${tk("workOrders.continuity.contextFreshness")}: ${continuity.contextFreshness.workOrderStatus}`}
           </div>
           {continuity.contextFreshness.warnings.map((w, i) => (
             <p key={i} className="mt-1 text-xs text-amber-700">{w}</p>
@@ -521,7 +523,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
           <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
             <span className="flex items-center gap-2">
               <Clock className="h-4 w-4 text-muted-foreground" />
-              Previous Attempts ({timeline.length})
+              {tk("workOrders.continuity.previousAttempts")} ({timeline.length})
             </span>
             <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
           </summary>
@@ -541,7 +543,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
       ) : null}
 
       <div className="mt-4">
-        <h3 className="text-sm font-semibold text-foreground">Do Not Repeat</h3>
+        <h3 className="text-sm font-semibold text-foreground">{tk("workOrders.continuity.doNotRepeat")}</h3>
         {hasFailurePatterns ? (
           <ul className="mt-2 space-y-1">
             {continuity.doNotRepeat.map((item, i) => (
@@ -552,7 +554,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
             ))}
           </ul>
         ) : (
-          <p className="mt-2 text-xs text-muted-foreground">No repeated failure patterns.</p>
+          <p className="mt-2 text-xs text-muted-foreground">{tk("workOrders.continuity.noFailurePatterns")}</p>
         )}
       </div>
 
@@ -560,7 +562,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           {continuity.decisionsMade.length > 0 ? (
             <div>
-              <h3 className="text-xs font-semibold text-foreground">Decisions Made</h3>
+              <h3 className="text-xs font-semibold text-foreground">{tk("workOrders.continuity.decisionsMade")}</h3>
               <ul className="mt-1 space-y-0.5">
                 {continuity.decisionsMade.map((d, i) => <li key={i} className="text-xs text-muted-foreground">• {d}</li>)}
               </ul>
@@ -568,7 +570,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
           ) : null}
           {continuity.filesChanged.length > 0 ? (
             <div>
-              <h3 className="text-xs font-semibold text-foreground">Files Changed</h3>
+              <h3 className="text-xs font-semibold text-foreground">{tk("workOrders.continuity.filesChanged")}</h3>
               <ul className="mt-1 space-y-0.5">
                 {continuity.filesChanged.map((f, i) => <li key={i} className="font-mono text-xs text-muted-foreground">{f}</li>)}
               </ul>
@@ -576,7 +578,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
           ) : null}
           {continuity.remainingWork.length > 0 ? (
             <div>
-              <h3 className="text-xs font-semibold text-foreground">Remaining Work</h3>
+              <h3 className="text-xs font-semibold text-foreground">{tk("workOrders.continuity.remainingWork")}</h3>
               <ul className="mt-1 space-y-0.5">
                 {continuity.remainingWork.map((r, i) => <li key={i} className="text-xs text-muted-foreground">• {r}</li>)}
               </ul>
@@ -587,7 +589,7 @@ function WorkContinuitySection({ id, continuity }: { id?: string; continuity: Wo
 
       {continuity.sourceReferences.length > 0 ? (
         <div className="mt-4">
-          <h3 className="text-xs font-semibold text-foreground">Source References</h3>
+          <h3 className="text-xs font-semibold text-foreground">{tk("workOrders.continuity.sourceReferences")}</h3>
           <ul className="mt-2 space-y-1">
             {continuity.sourceReferences.map((ref) => {
               const to = getSourceReferenceRoute(ref);
@@ -717,6 +719,8 @@ export function WorkOrdersPage() {
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [archivingCompleted, setArchivingCompleted] = useState(false);
   const [workContinuity, setWorkContinuity] = useState<WorkContinuityDto | null>(null);
+  const [loadingContinuity, setLoadingContinuity] = useState(false);
+  const [continuityError, setContinuityError] = useState<string | null>(null);
 
   const selected = useMemo(() => selectedId ? workOrders.find((order) => order.id === selectedId) ?? null : null, [selectedId, workOrders]);
 
@@ -762,6 +766,20 @@ export function WorkOrdersPage() {
     void load();
   }, [statusFilter, priorityFilter, agentFilter, includeArchived, includeLegacy, includeTestData, focusedWorkOrderId]);
 
+  async function refreshSelectedContinuity(workOrderId: string) {
+    setLoadingContinuity(true);
+    setContinuityError(null);
+    try {
+      const response = await api.getWorkOrderContinuity(workOrderId);
+      setWorkContinuity(response.continuity);
+    } catch {
+      setWorkContinuity(null);
+      setContinuityError("unavailable");
+    } finally {
+      setLoadingContinuity(false);
+    }
+  }
+
   function select(order: WorkOrderDto | null) {
     setSelectedId(order?.id ?? null);
     setIsCreating(false);
@@ -771,6 +789,8 @@ export function WorkOrdersPage() {
     setError(null);
     setReconcileMessage(null);
     setWorkContinuity(null);
+    setContinuityError(null);
+    setLoadingContinuity(false);
     if (order) {
       Promise.all([
         api.automationJobs({ workOrderId: order.id }),
@@ -788,9 +808,7 @@ export function WorkOrdersPage() {
       api.getWorkOrderRecommendations(order.id)
         .then((response) => setAgentRecommendations(response.recommendations))
         .catch(() => setAgentRecommendations([]));
-      api.getWorkOrderContinuity(order.id)
-        .then((response) => setWorkContinuity(response.continuity))
-        .catch(() => setWorkContinuity(null));
+      void refreshSelectedContinuity(order.id);
     } else {
       setAutomationJobs([]);
       setPatchArtifacts([]);
@@ -823,11 +841,13 @@ export function WorkOrdersPage() {
 
   async function markContextStale() {
     if (!selected || !canCreate) return;
+    const id = selected.id;
     setContextBusy(true);
     setError(null);
     try {
-      await api.markWorkOrderContextStale(selected.id, "Manually marked stale from work order detail");
-      await refreshContext(selected.id);
+      await api.markWorkOrderContextStale(id, "Manually marked stale from work order detail");
+      await refreshContext(id);
+      void refreshSelectedContinuity(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to mark context stale");
     } finally {
@@ -837,15 +857,17 @@ export function WorkOrdersPage() {
 
   async function runRefreshContext() {
     if (!selected || !canCreate) return;
+    const id = selected.id;
     setContextBusy(true);
     setError(null);
     try {
-      const { result } = await api.refreshWorkOrderContext(selected.id);
+      const { result } = await api.refreshWorkOrderContext(id);
       if (result.newStatus !== "FRESH") {
         const msgs = result.scanFailures.length > 0 ? result.scanFailures : result.warnings;
         setError(msgs.length > 0 ? msgs[0]! : `Context is ${result.newStatus ?? "unchanged"} after refresh — check project local docs.`);
       }
-      await refreshContext(selected.id);
+      await refreshContext(id);
+      void refreshSelectedContinuity(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to refresh context");
     } finally {
@@ -855,14 +877,16 @@ export function WorkOrdersPage() {
 
   async function assignExternalAgent(agentId: string, agentName: string) {
     if (!selected || !canCreate) return;
+    const id = selected.id;
     setAssigningAgent(true);
     setAssignMessage(null);
     setAssignError(null);
     try {
-      const response = await api.assignWorkOrderExternalAgent(selected.id, agentId);
+      const response = await api.assignWorkOrderExternalAgent(id, agentId);
       setDraft((d) => ({ ...d, assignedExternalAgentId: agentId }));
-      setWorkOrders((prev) => prev.map((o) => o.id === selected.id ? response.workOrder : o));
+      setWorkOrders((prev) => prev.map((o) => o.id === id ? response.workOrder : o));
       setAssignMessage(`Assigned to ${agentName}`);
+      void refreshSelectedContinuity(id);
     } catch (err) {
       setAssignError(err instanceof Error ? err.message : "Failed to assign external agent");
     } finally {
@@ -928,13 +952,15 @@ export function WorkOrdersPage() {
     setCreatingJob(true);
     setError(null);
     try {
-      await api.createAutomationJobForWorkOrder(selected.id, {
+      const id = selected.id;
+      await api.createAutomationJobForWorkOrder(id, {
         mode,
         externalAgentId: mode === "EXTERNAL_AGENT" ? (draft.assignedExternalAgentId ?? selected.assignedExternalAgentId ?? null) : null,
         useAssignedAgentCli: mode === "SANDBOX_PATCH" ? useAssignedAgentCli : false
       });
-      const jobs = await api.automationJobs({ workOrderId: selected.id });
+      const jobs = await api.automationJobs({ workOrderId: id });
       setAutomationJobs(jobs);
+      void refreshSelectedContinuity(id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create automation job");
     } finally {
@@ -950,6 +976,7 @@ export function WorkOrdersPage() {
       if (selected) {
         const jobs = await api.automationJobs({ workOrderId: selected.id });
         setAutomationJobs(jobs);
+        void refreshSelectedContinuity(selected.id);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to approve job");
@@ -962,7 +989,10 @@ export function WorkOrdersPage() {
     setPatchActionId(artifactId);
     try {
       await api.approvePatchArtifact(artifactId);
-      if (selected) setPatchArtifacts(await api.patchArtifacts({ workOrderId: selected.id }));
+      if (selected) {
+        setPatchArtifacts(await api.patchArtifacts({ workOrderId: selected.id }));
+        void refreshSelectedContinuity(selected.id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to approve patch");
     } finally {
@@ -974,7 +1004,10 @@ export function WorkOrdersPage() {
     setPatchActionId(artifactId);
     try {
       await api.rejectPatchArtifact(artifactId);
-      if (selected) setPatchArtifacts(await api.patchArtifacts({ workOrderId: selected.id }));
+      if (selected) {
+        setPatchArtifacts(await api.patchArtifacts({ workOrderId: selected.id }));
+        void refreshSelectedContinuity(selected.id);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to reject patch");
     } finally {
@@ -1052,8 +1085,10 @@ export function WorkOrdersPage() {
       setError("Select an external agent before generating a prompt.");
       return;
     }
-    const response = await api.buildWorkOrderPrompt(selected.id, agentId);
+    const id = selected.id;
+    const response = await api.buildWorkOrderPrompt(id, agentId);
     setGeneratedPrompt(response.prompt);
+    void refreshSelectedContinuity(id);
   }
 
   async function dispatch() {
@@ -1062,11 +1097,12 @@ export function WorkOrdersPage() {
       setError("Select an external agent before dispatching.");
       return;
     }
+    const id = selected.id;
     setDispatching(true);
     setDispatchMessage(null);
     setDispatchError(null);
     try {
-      const response = await api.dispatchWorkOrder(selected.id, agentId);
+      const response = await api.dispatchWorkOrder(id, agentId);
       setGeneratedPrompt(response.prompt);
       await copy(response.prompt);
       if (response.autoExecuted) {
@@ -1077,6 +1113,7 @@ export function WorkOrdersPage() {
         setDispatchMessage("Dispatched. Prompt copied — paste it into the external agent, then submit its report.");
       }
       await load();
+      void refreshSelectedContinuity(id);
     } catch (err) {
       setDispatchError(err instanceof Error ? err.message : "Failed to dispatch work order");
     } finally {
@@ -1087,21 +1124,25 @@ export function WorkOrdersPage() {
   async function submitReport(event: FormEvent) {
     event.preventDefault();
     if (!selected || !canReport) return;
+    const id = selected.id;
     const response = await api.createImplementationReport({
       ...reportDraft,
-      workOrderId: selected.id,
+      workOrderId: id,
       externalAgentId: selected.assignedExternalAgentId
     });
     setReportDraft(blankReport);
     setSelectedId(response.implementationReport.workOrderId);
     await load();
+    void refreshSelectedContinuity(id);
   }
 
   async function handoff() {
     if (!selected) return;
-    const response = await api.createHandoffBrief(selected.id);
+    const id = selected.id;
+    const response = await api.createHandoffBrief(id);
     await copy(response.handoffBrief.handoffPrompt);
     await load();
+    void refreshSelectedContinuity(id);
   }
 
   const toggleSelect = (id: string) => {
@@ -1551,7 +1592,17 @@ export function WorkOrdersPage() {
 
           {selected ? (
             <>
-              {workContinuity ? <WorkContinuitySection id="work-order-continuity" continuity={workContinuity} /> : null}
+              {continuityError ? (
+                <Card id="work-order-continuity" className="border-amber-500/30 bg-amber-500/5">
+                  <p className="text-sm font-semibold text-amber-700">{tk("workOrders.continuity.unavailable")}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{tk("workOrders.continuity.unavailableMessage")}</p>
+                  <Button variant="outline" className="mt-3 w-fit text-xs" onClick={() => selected && void refreshSelectedContinuity(selected.id)}>
+                    {tk("workOrders.continuity.retry")}
+                  </Button>
+                </Card>
+              ) : workContinuity ? (
+                <WorkContinuitySection id="work-order-continuity" continuity={workContinuity} />
+              ) : null}
 
               {selected.sourceLink && selected.sourceLink.href && (
                 <Card className="bg-primary/5 border-primary/20">

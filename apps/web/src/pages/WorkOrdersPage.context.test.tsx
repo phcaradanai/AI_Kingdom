@@ -660,7 +660,7 @@ describe("Work Continuity (Work Continuity Engine integration)", () => {
     expect(await screen.findByText("git push --force")).toBeInTheDocument();
   });
 
-  it("page renders correctly when getWorkOrderContinuity fails", async () => {
+  it("shows warning card when getWorkOrderContinuity fails", async () => {
     setUser("KING");
     mockBaseApi(makeContext("FRESH"));
     apiMocks.getWorkOrderContinuity.mockRejectedValue(new Error("network error"));
@@ -669,7 +669,112 @@ describe("Work Continuity (Work Continuity Engine integration)", () => {
     await selectOrder();
 
     expect((await screen.findAllByText("Fix the drawbridge")).length).toBeGreaterThan(0);
-    expect(await screen.findByText("Overview")).toBeInTheDocument();
-    expect(screen.queryByText("Work Continuity")).not.toBeInTheDocument();
+    expect(await screen.findByText("Work continuity unavailable")).toBeInTheDocument();
+    expect(await screen.findByText("Retry continuity")).toBeInTheDocument();
+  });
+
+  it("retry button calls getWorkOrderContinuity again", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+    apiMocks.getWorkOrderContinuity.mockRejectedValue(new Error("network error"));
+
+    renderPage();
+    await selectOrder();
+
+    const retryBtn = await screen.findByText("Retry continuity");
+    await userEvent.click(retryBtn);
+
+    await waitFor(() => {
+      expect(apiMocks.getWorkOrderContinuity).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("refreshes continuity after refresh context succeeds", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    setUser("KING");
+    mockBaseApi(makeContext("MISSING"));
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({ continuity: makeContinuity() });
+
+    renderPage();
+    await selectOrder();
+
+    const refreshButtons = await screen.findAllByRole("button", { name: "Refresh Context" });
+    await userEvent.click(refreshButtons[0]!);
+
+    await waitFor(() => {
+      expect(apiMocks.getWorkOrderContinuity).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("refreshes continuity after submit report succeeds", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({ continuity: makeContinuity() });
+    apiMocks.createImplementationReport.mockResolvedValue({
+      implementationReport: {
+        id: "rep-1",
+        workOrderId: "wo-1",
+        externalAgentId: null,
+        summary: "Done",
+        testResult: "passed",
+        filesChanged: [],
+        decisionsMade: [],
+        remainingWork: [],
+        contextUsed: null,
+        localDocumentSnapshotId: null,
+        repositorySnapshotId: null,
+        createdAt: new Date().toISOString()
+      }
+    });
+
+    renderPage();
+    await selectOrder();
+
+    const form = document.querySelector("form[data-report-form]");
+    if (form) {
+      form.dispatchEvent(new Event("submit", { bubbles: true }));
+    } else {
+      const submitButtons = screen.queryAllByRole("button", { name: /submit report/i });
+      if (submitButtons.length > 0) {
+        const { default: userEvent } = await import("@testing-library/user-event");
+        await userEvent.click(submitButtons[0]!);
+      }
+    }
+
+    await waitFor(() => {
+      expect(apiMocks.getWorkOrderContinuity).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  it("refreshes continuity after dispatch succeeds", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event");
+    Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } });
+
+    const orderWithAgent: WorkOrderDto = { ...mockOrder, assignedExternalAgentId: "agent-1" };
+    setUser("KING");
+    apiMocks.workOrders.mockResolvedValue({ workOrders: [orderWithAgent], hiddenCount: 0 });
+    apiMocks.externalAgents.mockResolvedValue({ externalAgents: [] });
+    apiMocks.projects.mockResolvedValue({ projects: [] });
+    apiMocks.automationJobs.mockResolvedValue([]);
+    apiMocks.patchArtifacts.mockResolvedValue([]);
+    apiMocks.getWorkOrderContext.mockResolvedValue({ context: makeContext("FRESH") });
+    apiMocks.getWorkOrderRecommendations.mockResolvedValue({ recommendations: [] });
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({ continuity: makeContinuity() });
+    (apiMocks as Record<string, ReturnType<typeof vi.fn>>).dispatchWorkOrder = vi.fn().mockResolvedValue({
+      prompt: "Do the work",
+      autoExecuted: false,
+      executionError: null
+    });
+
+    renderPage();
+    await selectOrder();
+
+    const dispatchBtn = await screen.findByRole("button", { name: /dispatch to agent/i });
+    await userEvent.click(dispatchBtn);
+
+    await waitFor(() => {
+      expect(apiMocks.getWorkOrderContinuity).toHaveBeenCalledTimes(2);
+    });
   });
 });
