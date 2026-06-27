@@ -198,6 +198,7 @@ export function buildSystemPrompt(input: GenerateAgentResponseInput): string {
 export function buildUserPrompt(input: GenerateAgentResponseInput): string {
   return [
     `Task mode: ${input.mode}`,
+    input.decreeFrame ? input.decreeFrame : "",
     `Royal command: ${input.command}`,
     input.previousCouncilContext ? `Previous council context:\n${input.previousCouncilContext}` : "",
     input.kingdomMemoryContext ? `Kingdom Memory Context:\n${input.kingdomMemoryContext}` : ""

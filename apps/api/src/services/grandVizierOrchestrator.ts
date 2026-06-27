@@ -11,6 +11,7 @@ import { buildProjectContext } from "./projectContextService.js";
 import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { assessDecreeComplexity, escalationFor } from "./complexityAssessor.js";
+import { buildDecreeFrameSection, extractDecreeFrame } from "./decreeFrameService.js";
 import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { runPlannerAgent } from "./plannerAgentService.js";
 import { buildCrossTaskLessons } from "./crossTaskLearningService.js";
@@ -262,6 +263,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const adaptiveReasoning = await getBooleanSetting("ADAPTIVE_REASONING_ENABLED", true);
     const decreeComplexity = assessDecreeComplexity({ text: task.command, mode: task.mode });
     const synthesisEscalation = adaptiveReasoning ? escalationFor(decreeComplexity.level) : undefined;
+    // Decree frame: structured problem framing injected into every specialist agent's user
+    // prompt so agents focus their analysis on the right problem type and answer specific
+    // key questions rather than having to infer structure from unstructured prose.
+    const decreeFrame = buildDecreeFrameSection(extractDecreeFrame(task.command, task.mode));
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
     const kingdomContext = await getKingdomContext();
@@ -443,7 +448,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
           kingdomContext: kingdomContext || undefined,
           projectContext,
           kingdomMemoryContext: agentMemoryContext,
-          previousCouncilContext
+          previousCouncilContext,
+          decreeFrame
         }, traceContext);
 
         // ── Timeline: Complete PROVIDER_CALL step ──

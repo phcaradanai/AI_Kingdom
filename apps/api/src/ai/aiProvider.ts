@@ -17,6 +17,7 @@ export type GenerateAgentResponseInput = {
   projectContext?: string;
   kingdomMemoryContext?: string;
   previousCouncilContext?: string;
+  decreeFrame?: string;
 };
 
 export type TokenUsage = {
