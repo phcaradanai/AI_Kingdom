@@ -738,6 +738,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const summaryKnowledge = summaryKnowledgeRaw.trim() ? `[APPROVED KNOWLEDGE]\n${summaryKnowledgeRaw}` : "";
     const summaryMemoryContext = [kingdomMemoryContext, summaryKnowledge].filter((section) => section && section.trim()).join("\n\n");
 
+    const qualityReminder = await buildQualityReminder();
+
     let generatedSummary: Awaited<ReturnType<typeof generateWithFallback>>;
     try {
       generatedSummary = await generateWithFallback(summaryProviderCalls, {
@@ -746,7 +748,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         agentName: grandVizier.name,
         agentRole: grandVizier.title,
         agentSkills: grandVizier.skills,
-        systemPrompt: `${buildRoleSystemPrompt(grandVizier, task.mode)}\n\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.`,
+        systemPrompt: `${buildRoleSystemPrompt(grandVizier, task.mode)}\n\nSynthesize the council transcript into the final royal summary. Do not add new specialist analysis beyond the transcript.${qualityReminder}`,
         responseStyle: grandVizier.responseStyle,
         temperature: grandVizier.temperature ?? undefined,
         maxTokens: grandVizier.maxTokens ?? defaultMaxTokens,
@@ -1103,6 +1105,24 @@ function buildRoleSystemPrompt(agent: Agent, mode: TaskMode): string {
     contract,
     guardrails
   ].join("\n\n");
+}
+
+async function buildQualityReminder(): Promise<string> {
+  try {
+    const recent = await prisma.councilSession.findMany({
+      where: { qualityScore: { not: null } },
+      select: { qualityScore: true },
+      orderBy: { createdAt: "desc" },
+      take: 5
+    });
+    if (recent.length < 3) return "";
+    const scores = recent.map((s) => s.qualityScore ?? 0);
+    const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
+    if (avg >= 0.4) return "";
+    return `\n\nQUALITY SIGNAL: Recent council syntheses averaged ${Math.round(avg * 100)}/100 on deterministic quality scoring. Ensure this synthesis: (1) closes with a paragraph beginning "My recommendation:" naming a concrete action or decision. (2) For BUILD/RESEARCH decrees, cites at least one specific file path (e.g., apps/api/src/...). (3) Names at least two specialist roles by title (e.g., Royal Archivist, Royal Researcher). (4) Resolves any "it depends" immediately with "on [specific named variable]".`;
+  } catch {
+    return "";
+  }
 }
 
 async function createCouncilLearningCandidate(input: {

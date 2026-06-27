@@ -35,4 +35,6 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Future waves should use scoped message modules and keep central registration minimal.
 - Claude intelligence/learning-loop work is backend-only; no expected overlap with the planned Wave 4G routing surface except shared status documentation.
 
-Last updated: 2026-06-26 by Claude after intelligence pipeline improvements (ab5271a–f994a02).
+- **Council quality scoring + memory gate** (✅ merged to `main`) — Deterministic scorer (`councilQualityScorer.ts`) evaluates the Grand Vizier's synthesis against role contracts: `hasRecommendation` (×2), `hasVerdict`, `citesRoles`, `noUnresolvedHedge`, `noVagueFileRefs`, `hasSpecificPaths` (BUILD/RESEARCH only). Score (0–1) and flag breakdown stored on `CouncilSession.qualityScore/qualityFlags`. Memory auto-save gated at ≥0.50 — vague output no longer pollutes Kingdom Memory. `intelligence:measure` now reports avg score, high-quality (≥0.80), and low-quality (<0.50) counts. No AI calls, no latency cost. 10/10 tests pass.
+
+Last updated: 2026-06-27 by Claude after council quality scoring (59982d4).

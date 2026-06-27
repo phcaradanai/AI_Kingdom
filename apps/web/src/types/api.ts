@@ -650,6 +650,15 @@ export type CouncilSessionDto = {
   createdWorkOrderId?: string | null;
   createdWorkOrderAt?: string | null;
   createdWorkOrderBy?: string | null;
+  qualityScore?: number | null;
+  qualityFlags?: {
+    hasRecommendation: boolean;
+    hasVerdict: boolean;
+    citesRoles: boolean;
+    noUnresolvedHedge: boolean;
+    noVagueFileRefs: boolean;
+    hasSpecificPaths: boolean;
+  } | null;
   createdAt: string;
   updatedAt: string;
   reports?: ReportDto[];
