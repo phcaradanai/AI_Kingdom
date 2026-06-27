@@ -15,6 +15,53 @@ export interface ExternalAgentRecommendation {
 type AgentSignal = { phrase: string; weight: number; label: string };
 type TypeProfile = { signals: AgentSignal[]; riskPhrases: string[] };
 
+// Verdicts that carry a clear quality signal; UNKNOWN and NO_CHANGES are neutral
+// and excluded from both numerator and denominator.
+const OUTCOME_PASS_VERDICTS = new Set(["PASS"]);
+const OUTCOME_SCORED_VERDICTS = new Set(["PASS", "NEEDS_FIX", "PATCH_FAILED", "VALIDATION_FAILED", "RISK_REVIEW"]);
+
+type AgentOutcomeStats = { passCount: number; totalCount: number };
+
+async function getAgentOutcomeStats(agentIds: string[]): Promise<Map<string, AgentOutcomeStats>> {
+  if (agentIds.length === 0) return new Map();
+
+  // Step 1: recent completed runs that have an associated automation job
+  const runs = await prisma.externalAgentRun.findMany({
+    where: {
+      externalAgentId: { in: agentIds },
+      automationJobId: { not: null }
+    },
+    select: { externalAgentId: true, automationJobId: true },
+    orderBy: { createdAt: "desc" },
+    take: 200
+  });
+
+  const jobIds = [...new Set(runs.map((r) => r.automationJobId!))];
+  if (jobIds.length === 0) return new Map();
+
+  // Step 2: reviews for those jobs — only actionable verdicts count
+  const reviews = await prisma.agentReviewSummary.findMany({
+    where: { automationJobId: { in: jobIds } },
+    select: { automationJobId: true, verdict: true }
+  });
+
+  const verdictByJobId = new Map(reviews.map((r) => [r.automationJobId, r.verdict]));
+
+  const stats = new Map<string, AgentOutcomeStats>();
+  for (const run of runs) {
+    if (!run.automationJobId) continue;
+    const verdict = verdictByJobId.get(run.automationJobId);
+    if (!verdict || !OUTCOME_SCORED_VERDICTS.has(verdict)) continue;
+
+    const s = stats.get(run.externalAgentId) ?? { passCount: 0, totalCount: 0 };
+    s.totalCount++;
+    if (OUTCOME_PASS_VERDICTS.has(verdict)) s.passCount++;
+    stats.set(run.externalAgentId, s);
+  }
+
+  return stats;
+}
+
 const TYPE_SIGNALS: Record<string, TypeProfile> = {
   CLAUDE_CODE: {
     signals: [
@@ -124,7 +171,9 @@ export async function getWorkOrderRecommendations(workOrderId: string): Promise<
   const activeAgents = await prisma.externalAgent.findMany({ where: { isActive: true } });
   if (activeAgents.length === 0) return [];
 
-  return scoreAgentsForWorkOrder(activeAgents, workOrder);
+  const outcomeStats = await getAgentOutcomeStats(activeAgents.map((a) => a.id)).catch(() => new Map<string, AgentOutcomeStats>());
+
+  return scoreAgentsForWorkOrder(activeAgents, workOrder, outcomeStats);
 }
 
 export function scoreAgentsForWorkOrder(
@@ -137,7 +186,8 @@ export function scoreAgentsForWorkOrder(
     priority: string;
     acceptanceCriteria?: string[];
     validationCommands?: string[];
-  }
+  },
+  outcomeStats?: Map<string, AgentOutcomeStats>
 ): ExternalAgentRecommendation[] {
   // title and objective are most discriminating (2x); context/instructions are secondary (1x);
   // acceptanceCriteria and validationCommands included at 0.5x via join (not doubled)
@@ -150,7 +200,7 @@ export function scoreAgentsForWorkOrder(
     ...(workOrder.validationCommands ?? [])
   ].join(" ").toLowerCase();
 
-  const results = agents.map((agent) => scoreAgent(agent, corpus, workOrder.priority));
+  const results = agents.map((agent) => scoreAgent(agent, corpus, workOrder.priority, outcomeStats?.get(agent.id)));
   results.sort((a, b) => b.score - a.score);
   return results;
 }
@@ -158,7 +208,8 @@ export function scoreAgentsForWorkOrder(
 function scoreAgent(
   agent: Pick<ExternalAgent, "id" | "name" | "type" | "roleTitle" | "capabilities">,
   corpus: string,
-  priority: string
+  priority: string,
+  outcomeStats?: AgentOutcomeStats
 ): ExternalAgentRecommendation {
   const profile = TYPE_SIGNALS[agent.type];
   const reasons: string[] = [];
@@ -191,7 +242,22 @@ function scoreAgent(
     reasons.push("high priority task");
   }
 
-  const score = Math.min(100, raw * 2);
+  // Outcome-based modifier: blend in real pass-rate history when ≥3 reviewed runs exist.
+  // Scale: -10 (0% pass) → 0 (50% pass) → +10 (100% pass).
+  // Applied after raw * 2 scaling so keyword signal is still the dominant factor.
+  let performanceMod = 0;
+  if (outcomeStats && outcomeStats.totalCount >= 3) {
+    const { passCount, totalCount } = outcomeStats;
+    const passRate = passCount / totalCount;
+    performanceMod = Math.round((passRate - 0.5) * 20);
+    if (passRate >= 0.80) {
+      reasons.push(`strong track record (${passCount}/${totalCount} recent runs passed)`);
+    } else if (passRate < 0.40) {
+      risks.push(`low recent pass rate (${passCount}/${totalCount} recent runs passed)`);
+    }
+  }
+
+  const score = Math.min(100, Math.max(0, raw * 2 + performanceMod));
   const confidence: "HIGH" | "MEDIUM" | "LOW" = score >= 65 ? "HIGH" : score >= 35 ? "MEDIUM" : "LOW";
 
   if (reasons.length === 0) {

@@ -235,3 +235,161 @@ test("getWorkOrderRecommendations — recommendation has required shape", async 
     await prisma.workOrder.delete({ where: { id: wo.id } }).catch(() => undefined);
   }
 });
+
+// ──────────────────────────────────────────────
+// Outcome-based performance modifier (unit tests)
+// ──────────────────────────────────────────────
+
+test("scoreAgentsForWorkOrder — strong track record boosts score and adds reason", () => {
+  const agents = [makeAgent("boost-a", "CODEX", "Codex"), makeAgent("boost-b", "CLAUDE_CODE", "Claude Code")];
+  const wo = {
+    title: "Fix the bugfix in auth",
+    objective: "Unit test generation for regression fix",
+    context: "",
+    instructions: "",
+    priority: "MEDIUM"
+  };
+  const baseResults = scoreAgentsForWorkOrder(agents, wo);
+  const baseCodex = baseResults.find((r) => r.type === "CODEX")!;
+
+  // 4/4 PASS → passRate = 1.0 → performanceMod = +10
+  const statsWithTrackRecord = new Map([["boost-a", { passCount: 4, totalCount: 4 }]]);
+  const boostedResults = scoreAgentsForWorkOrder(agents, wo, statsWithTrackRecord);
+  const boostedCodex = boostedResults.find((r) => r.type === "CODEX")!;
+
+  assert.ok(boostedCodex.score > baseCodex.score, `boosted score (${boostedCodex.score}) should exceed base (${baseCodex.score})`);
+  assert.ok(boostedCodex.reasons.some((r) => r.includes("recent runs passed")), "should mention track record in reasons");
+});
+
+test("scoreAgentsForWorkOrder — poor track record penalises score and adds risk", () => {
+  const agents = [makeAgent("pen-a", "CODEX", "Codex")];
+  const wo = {
+    title: "Fix the bugfix in auth",
+    objective: "Unit test generation for regression fix",
+    context: "",
+    instructions: "",
+    priority: "MEDIUM"
+  };
+  const baseResults = scoreAgentsForWorkOrder(agents, wo);
+  const baseScore = baseResults[0]!.score;
+
+  // 1/5 PASS → passRate = 0.2 → performanceMod = Math.round((0.2-0.5)*20) = -6
+  const statsLow = new Map([["pen-a", { passCount: 1, totalCount: 5 }]]);
+  const penalised = scoreAgentsForWorkOrder(agents, wo, statsLow);
+  const penScore = penalised[0]!.score;
+
+  assert.ok(penScore < baseScore, `penalised score (${penScore}) should be below base (${baseScore})`);
+  assert.ok(penalised[0]!.risks.some((r) => r.includes("recent runs passed")), "should mention poor pass rate in risks");
+});
+
+test("scoreAgentsForWorkOrder — fewer than 3 reviewed runs applies no modifier", () => {
+  const agents = [makeAgent("guard-a", "CODEX", "Codex")];
+  const wo = { title: "Fix the bugfix", objective: "Unit test generation", context: "", instructions: "", priority: "MEDIUM" };
+  const base = scoreAgentsForWorkOrder(agents, wo);
+
+  // Only 2 samples — below the minimum guard
+  const statsTiny = new Map([["guard-a", { passCount: 0, totalCount: 2 }]]);
+  const withTiny = scoreAgentsForWorkOrder(agents, wo, statsTiny);
+
+  assert.equal(withTiny[0]!.score, base[0]!.score, "score must not change with <3 samples");
+  assert.ok(!withTiny[0]!.risks.some((r) => r.includes("recent runs passed")), "no pass-rate risk label for small sample");
+});
+
+// ──────────────────────────────────────────────
+// Integration test: outcome stats shift recommendation order
+// ──────────────────────────────────────────────
+
+test("getWorkOrderRecommendations — outcome history shifts ordering when one agent has poor track record", async () => {
+  const ts = Date.now();
+  // Create two CODEX-type agents with identical keyword profile; only track record differs.
+  const goodAgent = await prisma.externalAgent.create({
+    data: {
+      name: `Good Codex ${ts}`,
+      type: "CODEX",
+      roleTitle: "Good Codex Role",
+      description: "",
+      capabilities: [],
+      executionMode: "MANUAL_COPY_PASTE",
+      safetyLevel: "MEDIUM_RISK",
+      isActive: true
+    }
+  });
+  const badAgent = await prisma.externalAgent.create({
+    data: {
+      name: `Bad Codex ${ts}`,
+      type: "CODEX",
+      roleTitle: "Bad Codex Role",
+      description: "",
+      capabilities: [],
+      executionMode: "MANUAL_COPY_PASTE",
+      safetyLevel: "MEDIUM_RISK",
+      isActive: true
+    }
+  });
+  const wo = await prisma.workOrder.create({
+    data: { title: `Outcome Order Test ${ts}`, objective: "bugfix unit test", isTestData: true }
+  });
+
+  // Seed fake automation jobs + ExternalAgentRun + AgentReviewSummary for the bad agent (all NEEDS_FIX).
+  async function seedRun(agentId: string, verdict: string, i: number) {
+    const job = await prisma.automationJob.create({
+      data: {
+        workOrderId: wo.id,
+        mode: "EXTERNAL_AGENT",
+        status: "COMPLETED",
+        commandPolicy: "EXTERNAL_AGENT_NO_PUSH",
+        allowedCommands: []
+      }
+    });
+    await prisma.externalAgentRun.create({
+      data: {
+        externalAgentId: agentId,
+        workOrderId: wo.id,
+        automationJobId: job.id,
+        status: "NEEDS_REVIEW",
+        inputPrompt: `Prompt ${i}`,
+        attemptNumber: i
+      }
+    });
+    await prisma.agentReviewSummary.create({
+      data: {
+        automationJobId: job.id,
+        workOrderId: wo.id,
+        verdict,
+        confidence: "HIGH",
+        kingRecommendation: verdict === "PASS" ? "APPROVE" : "REQUEST_REVISION",
+        summary: `Review ${i}`
+      }
+    });
+    return job;
+  }
+
+  const jobs: { id: string }[] = [];
+  try {
+    // goodAgent: 3 PASSes
+    for (let i = 0; i < 3; i++) jobs.push(await seedRun(goodAgent.id, "PASS", i + 1));
+    // badAgent: 3 NEEDS_FIX
+    for (let i = 0; i < 3; i++) jobs.push(await seedRun(badAgent.id, "NEEDS_FIX", i + 1));
+
+    const recs = await getWorkOrderRecommendations(wo.id);
+    const goodRec = recs.find((r) => r.externalAgentId === goodAgent.id);
+    const badRec = recs.find((r) => r.externalAgentId === badAgent.id);
+
+    assert.ok(goodRec && badRec, "both agents should appear in recommendations");
+    assert.ok(
+      goodRec!.score > badRec!.score,
+      `good agent (${goodRec!.score}) should score higher than bad agent (${badRec!.score}) after outcome blending`
+    );
+    assert.ok(goodRec!.reasons.some((r) => r.includes("recent runs passed")), "good agent reason should mention track record");
+    assert.ok(badRec!.risks.some((r) => r.includes("recent runs passed")), "bad agent risk should mention poor pass rate");
+  } finally {
+    for (const j of jobs) {
+      await prisma.agentReviewSummary.deleteMany({ where: { automationJobId: j.id } }).catch(() => undefined);
+      await prisma.externalAgentRun.deleteMany({ where: { automationJobId: j.id } }).catch(() => undefined);
+      await prisma.automationJob.delete({ where: { id: j.id } }).catch(() => undefined);
+    }
+    await prisma.workOrder.delete({ where: { id: wo.id } }).catch(() => undefined);
+    await prisma.externalAgent.delete({ where: { id: goodAgent.id } }).catch(() => undefined);
+    await prisma.externalAgent.delete({ where: { id: badAgent.id } }).catch(() => undefined);
+  }
+});
