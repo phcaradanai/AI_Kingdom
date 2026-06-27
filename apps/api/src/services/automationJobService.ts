@@ -119,6 +119,27 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
     throw err;
   }
 
+  // Snapshot-ID drift gate: reject if the WorkOrder was bound to a snapshot that is
+  // no longer the latest. The WorkOrder must be re-bound before a new job can run.
+  if (
+    workOrder.localDocumentSnapshotId &&
+    contextOutcome.binding?.localDocumentSnapshotId &&
+    workOrder.localDocumentSnapshotId !== contextOutcome.binding.localDocumentSnapshotId
+  ) {
+    await auditLog({
+      userId: input.createdByUserId,
+      action: "automation_job_context_rejected",
+      resourceType: "work_order",
+      resourceId: input.workOrderId,
+      metadata: { mode, reason: "Snapshot drift: WorkOrder bound snapshot does not match latest project snapshot" }
+    }).catch(() => undefined);
+    const err = new Error(
+      "The WorkOrder is bound to an outdated local-document snapshot. Re-bind context before creating a new job."
+    );
+    err.name = "ContextBindingError";
+    throw err;
+  }
+
   // Determine which agent to use for planning
   const planningAgentId = input.agentId ?? workOrder.assignedAgentId;
 

@@ -32,6 +32,19 @@ export async function createExternalAgentBridgeJob(input: {
 
   const maxAutoRetries = await getNumberSetting("MAX_EXTERNAL_AGENT_AUTO_RETRIES", 2);
 
+  // Check for duplicate active ExternalAgentRun before committing state changes.
+  // createAutomationJob guards against duplicate active AutomationJob; this guards the run.
+  const existingRun = await prisma.externalAgentRun.findFirst({
+    where: { workOrderId: workOrder.id, status: { in: ["QUEUED", "RUNNING", "WAITING", "NEEDS_REVIEW"] } }
+  });
+  if (existingRun) {
+    const err = new Error(
+      `An active external agent run already exists for this work order (${existingRun.id}, status: ${existingRun.status}). Wait for it to complete before dispatching again.`
+    );
+    err.name = "ConflictError";
+    throw err;
+  }
+
   await prisma.workOrder.update({
     where: { id: workOrder.id },
     data: {

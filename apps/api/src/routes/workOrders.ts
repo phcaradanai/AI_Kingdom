@@ -14,6 +14,7 @@ import {
   generateWorkOrderFromTask,
   createWorkOrder
 } from "../services/externalAgentWorkOrderService.js";
+import { getWorkContinuity } from "../services/workContinuityService.js";
 import { executeWorkOrderViaProvider } from "../services/externalAgentExecutionService.js";
 import { getWorkOrderRecommendations } from "../services/externalAgentRecommendationService.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
@@ -345,6 +346,20 @@ router.get("/:id/external-agent-recommendations", async (req, res, next) => {
   try {
     const recommendations = await getWorkOrderRecommendations(req.params.id);
     res.json({ recommendations });
+  } catch (error) {
+    if (error instanceof Error && error.name === "NotFoundError") {
+      res.status(404).json({ error: error.message });
+      return;
+    }
+    next(error);
+  }
+});
+
+/** GET /api/work-orders/:id/continuity — aggregated work continuity view (any authenticated role). */
+router.get("/:id/continuity", async (req, res, next) => {
+  try {
+    const continuity = await getWorkContinuity(req.params.id);
+    res.json({ continuity });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });

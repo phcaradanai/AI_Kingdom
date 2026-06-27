@@ -339,6 +339,35 @@ test("patch artifacts and implementation reports store base context provenance",
   }
 });
 
+test("createAutomationJob rejects with ContextBindingError when WorkOrder is bound to an older snapshot than the project's latest", async () => {
+  const user = await createKingUser();
+  const project = await createProject();
+  const repoDir = await makeTempRepo();
+  try {
+    const root = await createLocalDocumentRoot(project.id, { name: "repo", rootPath: repoDir });
+    // First scan — snapshot A
+    await scanLocalDocumentRoot(root.id);
+    const workOrder = await prisma.workOrder.create({
+      data: { title: `Snapshot Drift WO ${randomUUID()}`, objective: "Test objective", status: "READY", projectId: project.id }
+    });
+    // Bind context → WO.localDocumentSnapshotId = snapshot A
+    await bindFreshContextToWorkOrder(workOrder.id);
+
+    // Second scan — snapshot B is now the project's latest
+    await scanLocalDocumentRoot(root.id);
+
+    // WO is still bound to A; project's latest is B → drift
+    await assert.rejects(
+      () => createAutomationJob({ workOrderId: workOrder.id, mode: "VALIDATION_ONLY", createdByUserId: user.id }),
+      (err: Error) => err.name === "ContextBindingError" && err.message.includes("outdated local-document snapshot")
+    );
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { projectId: project.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+    await cleanup(project.id, repoDir);
+  }
+});
+
 test("explainContextBindingStatus flags a work order bound to an older snapshot", async () => {
   const project = await createProject();
   const repoDir = await makeTempRepo();

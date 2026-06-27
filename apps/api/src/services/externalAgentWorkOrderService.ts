@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { ExternalAgent, ImplementationReport, WorkOrder, WorkSession } from "@prisma/client";
+import type { ExternalAgent, HandoffBrief, ImplementationReport, WorkOrder, WorkSession } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { getCharter, getVision } from "./charterService.js";
 import { isSensitive } from "./memoryService.js";
@@ -12,6 +12,7 @@ import { getBooleanSetting } from "./settingsService.js";
 import { assessExecutionComplexity } from "./complexityAssessor.js";
 import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
 import { createNotice } from "./royalSecretaryService.js";
+import { buildExternalAgentContextPack } from "./externalAgentContextPackService.js";
 
 type WorkOrderWithRelations = WorkOrder & {
   assignedExternalAgent?: ExternalAgent | null;
@@ -257,11 +258,17 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
   if (!workOrder) throw notFound("Work order not found");
   if (!externalAgent) throw notFound("External agent not found");
 
-  const [driftContext, snapshot] = await Promise.all([
+  // Build structured context pack for enriched continuity information.
+  // This provides task mode, prior attempts, doNotRepeat, and decisions without
+  // duplicating the kingdom-context prose formatting below.
+  const [driftContext, snapshot, contextPack] = await Promise.all([
     preventContextDrift(workOrderId),
-    workOrder.projectId ? getLatestSnapshot(workOrder.projectId) : Promise.resolve(null)
+    workOrder.projectId ? getLatestSnapshot(workOrder.projectId) : Promise.resolve(null),
+    buildExternalAgentContextPack(workOrderId, externalAgentId)
   ]);
-  const decisions = workOrder.implementationReports.flatMap((report) => report.decisionsMade).filter(Boolean);
+  const decisions = contextPack.continuity.decisionsMade.length > 0
+    ? contextPack.continuity.decisionsMade
+    : workOrder.implementationReports.flatMap((report) => report.decisionsMade).filter(Boolean);
 
   // M24 Phase B (supervised retry): when this work order is being retried after a prior
   // failure, the reviewer already recorded exactly what to fix. Without threading that
@@ -269,6 +276,31 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
   // retry budget. Inject the most recent review's verdict + what failed + the reviewer's
   // revision prompt so the retry is informed. Runs for both bridge and sandbox retry paths.
   const priorAttemptSection = workOrder.autoRetryCount > 0 ? await buildPriorAttemptFeedback(workOrderId) : "";
+
+  // Task mode indicator: tells the agent whether it is starting fresh, continuing,
+  // revising a previous attempt, or retrying after a failure.
+  const taskMode = contextPack.taskMode;
+  const taskModeSection = taskMode !== "NEW_TASK"
+    ? [
+        "## Task Mode",
+        `This is a **${taskMode}** — not a fresh start.`,
+        taskMode === "RETRY_AFTER_FAILURE" || taskMode === "REVISION"
+          ? contextPack.previousAttemptsSummary
+          : `Continue from the current state. Do not restart from scratch.`
+      ].filter(Boolean).join("\n\n")
+    : "";
+
+  // Do Not Repeat: only injected on retry/revision to avoid re-failing the same way.
+  const doNotRepeatSection = (taskMode === "RETRY_AFTER_FAILURE" || taskMode === "REVISION") && contextPack.doNotRepeat.length > 0
+    ? [
+        "## Do Not Repeat",
+        "The following commands or actions failed in a prior attempt. Do not repeat them without fixing the underlying cause first.",
+        formatList(contextPack.doNotRepeat)
+      ].join("\n\n")
+    : "";
+
+  // Supplement files list with files changed in prior runs.
+  const historicalFiles = contextPack.filesChanged.filter(Boolean);
 
   // Adaptive thinking effort for the external coder (King's directive: complex
   // code fix / big-system bug analysis → think harder). Structured signals only:
@@ -299,7 +331,9 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     "Do not change architecture unless explicitly instructed.",
     "Follow the Work Order exactly.",
     thinkingDirective,
+    taskModeSection,
     priorAttemptSection,
+    doNotRepeatSection,
     "## Kingdom Context",
     driftContext.kingdomContext,
     "## Project Context",
@@ -316,6 +350,7 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     formatList(decisions.length ? decisions : ["No prior implementation decisions are recorded for this work order."]),
     "## Files Likely Involved",
     resolveLikelyFiles(workOrder),
+    historicalFiles.length > 0 ? `Previously changed files:\n${formatList(historicalFiles)}` : "",
     "## Constraints",
     formatList(splitLines(workOrder.constraints).concat(SAFETY_WARNINGS)),
     "## Instructions",
@@ -405,18 +440,26 @@ export async function preventContextDrift(workOrderId: string) {
   };
 }
 
-export async function createHandoffBrief(workOrderId: string) {
+export async function createHandoffBrief(workOrderId: string): Promise<HandoffBrief> {
   const workOrder = await prisma.workOrder.findUnique({
     where: { id: workOrderId },
     include: {
       workSessions: { orderBy: { updatedAt: "desc" }, take: 1 },
-      implementationReports: { orderBy: { createdAt: "desc" }, take: 1 }
+      implementationReports: { orderBy: { createdAt: "desc" }, take: 1 },
+      handoffBriefs: { orderBy: { createdAt: "desc" }, take: 1 }
     }
   });
   if (!workOrder) throw notFound("Work order not found");
 
-  const latestSession = workOrder.workSessions[0] ?? null;
+  // Reuse the most recent brief when no new report was submitted since it was created.
+  // This prevents redundant handoffs when the agent hasn't done new work.
+  const latestBrief = workOrder.handoffBriefs[0] ?? null;
   const latestReport = workOrder.implementationReports[0] ?? null;
+  if (latestBrief && (!latestReport || latestReport.createdAt <= latestBrief.createdAt)) {
+    return latestBrief;
+  }
+
+  const latestSession = workOrder.workSessions[0] ?? null;
   const snapshot = workOrder.projectId ? await getLatestSnapshot(workOrder.projectId) : null;
   const completedWork = latestReport ? [latestReport.summary] : [];
   const knownIssues = latestReport?.errors ?? [];

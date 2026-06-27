@@ -2781,3 +2781,73 @@ export interface DecreeLineageDto {
     synthesized: boolean;
   } | null;
 }
+
+export type WorkContinuityTaskMode = "NEW_TASK" | "CONTINUATION" | "REVISION" | "RETRY_AFTER_FAILURE" | "VALIDATION_ONLY";
+
+export type WorkContinuityContextFreshnessDto = {
+  workOrderStatus: string;
+  latestProjectStatus: string | null;
+  snapshotMatch: boolean;
+  requiredAction: "NONE" | "REFRESH_CONTEXT";
+  warnings: string[];
+};
+
+export type WorkContinuityFailedAttemptDto = {
+  runId: string;
+  attemptNumber: number;
+  errorMessage: string | null;
+  outputSummary: string | null;
+  completedAt: string | null;
+  verdict: string | null;
+  failedCommands: string[];
+  whatFailed: string[];
+};
+
+export type WorkContinuitySourceReferenceDto = {
+  type: string;
+  id: string;
+  summary: string;
+};
+
+export type WorkContinuityDto = {
+  workOrder: Record<string, unknown>;
+  project: { id: string; name: string } | null;
+  taskMode: WorkContinuityTaskMode;
+  contextFreshness: WorkContinuityContextFreshnessDto;
+  localDocumentSnapshotId: string | null;
+  repositorySnapshotId: string | null;
+  handoffBriefs: unknown[];
+  externalAgentRuns: unknown[];
+  implementationReports: unknown[];
+  reviewSummaries: unknown[];
+  automationJobs: unknown[];
+  activeJob: unknown | null;
+  activeExternalAgentRun: unknown | null;
+  failedAttempts: WorkContinuityFailedAttemptDto[];
+  filesChanged: string[];
+  decisionsMade: string[];
+  failedCommands: string[];
+  remainingWork: string[];
+  doNotRepeat: string[];
+  nextRecommendedAction: string;
+  sourceReferences: WorkContinuitySourceReferenceDto[];
+};
+
+export type ExternalAgentContextPackDto = {
+  workOrderId: string;
+  externalAgentId: string;
+  taskMode: WorkContinuityTaskMode;
+  goal: string;
+  projectSourceOfTruth: string;
+  contextFreshness: { status: string; requiredAction: string; warnings: string[] };
+  previousAttemptsSummary: string;
+  failedCommandsAndErrors: string[];
+  decisionsMade: string[];
+  filesChanged: string[];
+  knownBlockers: string[];
+  doNotRepeat: string[];
+  exactNextAction: string;
+  acceptanceCriteria: string[];
+  validationCommands: string[];
+  requiredReportBackFormat: string;
+};
