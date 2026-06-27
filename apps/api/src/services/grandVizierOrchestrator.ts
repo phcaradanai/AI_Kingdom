@@ -18,6 +18,7 @@ import { refreshCouncilNextExecutableAction } from "./kingdomNextActionEngine.js
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
 import { buildAgentKnowledgeContext, proposeKnowledgeCandidate } from "./agentKnowledgeService.js";
+import { scoreCouncilSynthesis, QUALITY_GATE_THRESHOLD } from "./councilQualityScorer.js";
 import {
   addTraceStep,
   attachUsageRecordStep,
@@ -875,6 +876,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
 
     const finalSummary = [contextWarning, generatedSummary.response].filter(Boolean).join("\n\n");
 
+    const qualityResult = scoreCouncilSynthesis(generatedSummary.response, task.mode);
+
     const completedSession = await prisma.councilSession.update({
       where: { id: session.id },
       data: {
@@ -883,7 +886,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
         providerName: [...new Set(usedProviders)].join(", "),
         modelUsed: [...new Set(usedModels)].join(", "),
         fallbackNotice: fallbackNotices.length > 0 ? [...new Set(fallbackNotices)].join("\n") : null,
-        consultedMemoryIds: relevantMemories.map((memory) => memory.id)
+        consultedMemoryIds: relevantMemories.map((memory) => memory.id),
+        qualityScore: qualityResult.score,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+        qualityFlags: JSON.parse(JSON.stringify(qualityResult.flags))
       },
       include: {
         task: true,
@@ -917,7 +923,8 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       });
     }
 
-    const savedMemories = autoSaveMemory
+    const qualityOk = qualityResult.score >= QUALITY_GATE_THRESHOLD;
+    const savedMemories = autoSaveMemory && qualityOk
       ? await autoSaveMemories({
           userId,
           task,

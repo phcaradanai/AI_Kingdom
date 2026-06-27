@@ -51,6 +51,7 @@ export interface ReportInput {
   candidatesByStatus: Record<string, number>;
   approvedKnowledge: { count: number; totalUseCount: number; neverUsed: number };
   verdictCounts: Record<string, number>;
+  qualityStats: { scored: number; avgScore: number; highQuality: number; lowQuality: number };
 }
 
 export interface IntelligenceReport {
@@ -58,6 +59,7 @@ export interface IntelligenceReport {
   totalCostUSD: number;
   avgCostPerDecreeUSD: number;
   avgTokensPerDecree: number;
+  qualityStats: { scored: number; avgScore: number; highQuality: number; lowQuality: number };
   avgCallsPerDecree: number;
   fallbackRate: number;
   byOperation: Array<{ operation: string; calls: number; totalTokens: number; costUSD: number; costShare: number }>;
@@ -129,7 +131,8 @@ export function computeReport(input: ReportInput): IntelligenceReport {
     providers,
     candidatesByStatus: input.candidatesByStatus,
     approvedKnowledge: input.approvedKnowledge,
-    verdictCounts: input.verdictCounts
+    verdictCounts: input.verdictCounts,
+    qualityStats: input.qualityStats
   };
 }
 
@@ -159,9 +162,18 @@ async function gather(sinceDays?: number): Promise<ReportInput> {
 
   const sessions = await prisma.councilSession.findMany({
     where,
-    select: { id: true, fallbackNotice: true }
+    select: { id: true, fallbackNotice: true, qualityScore: true }
   });
   const fallbackSessionCount = sessions.filter((s) => s.fallbackNotice && s.fallbackNotice.trim()).length;
+  const scoredSessions = sessions.filter((s) => s.qualityScore !== null && s.qualityScore !== undefined);
+  const qualityStats = {
+    scored: scoredSessions.length,
+    avgScore: scoredSessions.length > 0
+      ? Math.round((scoredSessions.reduce((sum, s) => sum + (s.qualityScore ?? 0), 0) / scoredSessions.length) * 100) / 100
+      : 0,
+    highQuality: scoredSessions.filter((s) => (s.qualityScore ?? 0) >= 0.8).length,
+    lowQuality: scoredSessions.filter((s) => (s.qualityScore ?? 0) < 0.5).length,
+  };
 
   const candidates = await prisma.agentKnowledgeCandidate.groupBy({
     by: ["status"],
@@ -189,7 +201,7 @@ async function gather(sinceDays?: number): Promise<ReportInput> {
   const verdictCounts: Record<string, number> = {};
   for (const r of reviews) verdictCounts[r.verdict] = r._count._all;
 
-  return { usage, sessionCount: sessions.length, fallbackSessionCount, candidatesByStatus, approvedKnowledge, verdictCounts };
+  return { usage, sessionCount: sessions.length, fallbackSessionCount, candidatesByStatus, approvedKnowledge, verdictCounts, qualityStats };
 }
 
 function pct(value: number): string {
@@ -232,6 +244,17 @@ function render(report: IntelligenceReport, settings: Array<{ key: string; value
   lines.push(`  Review verdicts: ${verd}`);
   lines.push("");
 
+  const qs = report.qualityStats;
+  lines.push("Council output quality:");
+  if (qs.scored === 0) {
+    lines.push("  No scored sessions yet — quality scoring activates on the next decree.");
+  } else {
+    lines.push(`  Scored sessions: ${qs.scored} of ${report.decrees}`);
+    lines.push(`  Avg quality score: ${qs.avgScore.toFixed(2)} / 1.00`);
+    lines.push(`  High-quality (≥0.80): ${qs.highQuality}  Low-quality (<0.50, memory gated): ${qs.lowQuality}`);
+  }
+  lines.push("");
+
   // Actionable hints — surface the efficiency/operability red flags the King should weigh.
   const hints: string[] = [];
   if (report.approvedKnowledge.count > 0 && report.approvedKnowledge.neverUsed === report.approvedKnowledge.count) {
@@ -244,6 +267,12 @@ function render(report: IntelligenceReport, settings: Array<{ key: string; value
   }
   if (report.fallbackRate >= 0.5) {
     hints.push(`Fallback rate ${pct(report.fallbackRate)} — the primary provider is failing/timing out on most decrees; cost & latency suffer.`);
+  }
+  if (report.qualityStats.scored > 0 && report.qualityStats.avgScore < 0.5) {
+    hints.push(`Avg council quality score ${report.qualityStats.avgScore.toFixed(2)} is below the memory gate threshold (0.50) — most sessions are failing the precision contracts. Check that the Grand Vizier prompt contracts are active (sharpened council contracts commit).`);
+  }
+  if (report.qualityStats.scored > 0 && report.qualityStats.lowQuality > report.qualityStats.scored / 2) {
+    hints.push(`More than half of scored sessions (${report.qualityStats.lowQuality}/${report.qualityStats.scored}) are low-quality (<0.50) and had memory auto-save blocked. The Grand Vizier may not be following the 'My recommendation:' / specific-paths contracts.`);
   }
   if (hints.length) {
     lines.push("Flags:");

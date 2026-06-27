@@ -30,7 +30,8 @@ test("computeReport aggregates cost/tokens per decree and splits by operation", 
     fallbackSessionCount: 1,
     candidatesByStatus: { PENDING: 9, APPROVED: 1 },
     approvedKnowledge: { count: 3, totalUseCount: 0, neverUsed: 3 },
-    verdictCounts: { PASS: 2, NEEDS_FIX: 1 }
+    verdictCounts: { PASS: 2, NEEDS_FIX: 1 },
+    qualityStats: { scored: 2, avgScore: 0.75, highQuality: 1, lowQuality: 0 }
   };
 
   const r = computeReport(input);
@@ -71,7 +72,8 @@ test("computeReport is safe on empty data (no division by zero)", () => {
     fallbackSessionCount: 0,
     candidatesByStatus: {},
     approvedKnowledge: { count: 0, totalUseCount: 0, neverUsed: 0 },
-    verdictCounts: {}
+    verdictCounts: {},
+    qualityStats: { scored: 0, avgScore: 0, highQuality: 0, lowQuality: 0 }
   });
   assert.equal(r.decrees, 0);
   assert.equal(r.totalCostUSD, 0);

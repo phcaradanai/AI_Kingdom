@@ -79,6 +79,8 @@ test("extract memory candidates limits concise meaningful memories", () => {
     createdWorkOrderId: null,
     createdWorkOrderAt: null,
     createdWorkOrderBy: null,
+    qualityScore: null,
+    qualityFlags: null,
     createdAt: now,
     updatedAt: now
   };

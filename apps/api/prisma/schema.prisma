@@ -1235,6 +1235,8 @@ model CouncilSession {
   createdWorkOrderId String?
   createdWorkOrderAt DateTime?
   createdWorkOrderBy String?
+  qualityScore       Float?
+  qualityFlags       Json?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)
