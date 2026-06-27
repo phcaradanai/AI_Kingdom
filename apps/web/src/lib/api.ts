@@ -413,6 +413,8 @@ export const api = {
     apiRequest<{ result: import("@/types/api").ReconcileContextWarningsResultDto }>("/work-orders/reconcile-context-warnings", { method: "POST" }),
   getWorkOrderRecommendations: (id: string) =>
     apiRequest<{ recommendations: import("@/types/api").ExternalAgentRecommendationDto[] }>(`/work-orders/${id}/external-agent-recommendations`),
+  getWorkOrderContinuity: (id: string) =>
+    apiRequest<{ continuity: import("@/types/api").WorkContinuityDto }>(`/work-orders/${id}/continuity`),
   buildWorkOrderPrompt: (id: string, externalAgentId: string) =>
     apiRequest<{ prompt: string }>(`/work-orders/${id}/build-prompt/${externalAgentId}`, { method: "POST" }),
   dispatchWorkOrder: (id: string, externalAgentId: string) =>

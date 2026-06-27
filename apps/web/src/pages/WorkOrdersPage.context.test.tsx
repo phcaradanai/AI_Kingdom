@@ -2,7 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LANGUAGE_STORAGE_KEY } from "@/lib/i18n";
-import type { ExternalAgentRecommendationDto, PatchArtifactDto, PublicUser, WorkOrderContextDto, WorkOrderDto } from "@/types/api";
+import type { ExternalAgentRecommendationDto, PatchArtifactDto, PublicUser, WorkContinuityDto, WorkOrderContextDto, WorkOrderDto } from "@/types/api";
 import { WorkOrdersPage } from "./WorkOrdersPage";
 
 const nowIso = new Date().toISOString();
@@ -120,7 +120,8 @@ const apiMocks = vi.hoisted(() => ({
   refreshWorkOrderContext: vi.fn(),
   reconcileContextWarnings: vi.fn(),
   assignWorkOrderExternalAgent: vi.fn(),
-  archiveWorkOrderAsCompleted: vi.fn()
+  archiveWorkOrderAsCompleted: vi.fn(),
+  getWorkOrderContinuity: vi.fn()
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -142,6 +143,7 @@ function mockBaseApi(context: WorkOrderContextDto, patches: PatchArtifactDto[] =
   apiMocks.patchArtifacts.mockResolvedValue(patches);
   apiMocks.getWorkOrderContext.mockResolvedValue({ context });
   apiMocks.getWorkOrderRecommendations.mockResolvedValue({ recommendations: [] });
+  apiMocks.getWorkOrderContinuity.mockRejectedValue(new Error("continuity unavailable"));
   apiMocks.rebindWorkOrderContext.mockResolvedValue({ result: { workOrderId: "wo-1", status: "BOUND", previousStatus: "MISSING", newStatus: "FRESH" } });
   apiMocks.refreshWorkOrderContext.mockResolvedValue({ result: { workOrderId: "wo-1", status: "REFRESHED", previousStatus: "MISSING", newStatus: "FRESH" } });
   apiMocks.reconcileContextWarnings.mockResolvedValue({ result: { totalInspected: 0, archived: 0, contextRepaired: 0, skipped: 0, results: [] } });
@@ -553,5 +555,121 @@ describe("WorkOrdersPage — Archive as Completed (M18A-4)", () => {
 
     await screen.findByText("Overview");
     expect(screen.queryByRole("button", { name: "Archive as Completed" })).not.toBeInTheDocument();
+  });
+});
+
+function makeContinuity(overrides: Partial<WorkContinuityDto> = {}): WorkContinuityDto {
+  return {
+    workOrder: { id: "wo-1" },
+    project: { id: "proj-1", name: "Test Project" },
+    taskMode: "NEW_TASK",
+    contextFreshness: {
+      workOrderStatus: "FRESH",
+      latestProjectStatus: "FRESH",
+      snapshotMatch: true,
+      requiredAction: "NONE",
+      warnings: []
+    },
+    localDocumentSnapshotId: null,
+    repositorySnapshotId: null,
+    handoffBriefs: [],
+    externalAgentRuns: [],
+    implementationReports: [],
+    reviewSummaries: [],
+    automationJobs: [],
+    activeJob: null,
+    activeExternalAgentRun: null,
+    failedAttempts: [],
+    filesChanged: [],
+    decisionsMade: [],
+    failedCommands: [],
+    remainingWork: [],
+    doNotRepeat: [],
+    nextRecommendedAction: "Dispatch the work order to an external agent.",
+    sourceReferences: [],
+    ...overrides
+  };
+}
+
+describe("Work Continuity (Work Continuity Engine integration)", () => {
+  it("calls getWorkOrderContinuity when a work order is selected", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({ continuity: makeContinuity() });
+
+    renderPage();
+    await selectOrder();
+
+    await waitFor(() => {
+      expect(apiMocks.getWorkOrderContinuity).toHaveBeenCalledWith("wo-1");
+    });
+  });
+
+  it("renders taskMode and nextRecommendedAction when continuity loads", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({
+      continuity: makeContinuity({
+        taskMode: "CONTINUATION",
+        nextRecommendedAction: "Review the implementation report and approve."
+      })
+    });
+
+    renderPage();
+    await selectOrder();
+
+    expect(await screen.findByText("Continuation")).toBeInTheDocument();
+    expect((await screen.findAllByText(/Review the implementation report and approve/)).length).toBeGreaterThan(0);
+  });
+
+  it("shows REFRESH_CONTEXT warning when contextFreshness.requiredAction is REFRESH_CONTEXT", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("STALE"));
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({
+      continuity: makeContinuity({
+        contextFreshness: {
+          workOrderStatus: "STALE",
+          latestProjectStatus: null,
+          snapshotMatch: true,
+          requiredAction: "REFRESH_CONTEXT",
+          warnings: ["Work order context binding is STALE."]
+        }
+      })
+    });
+
+    renderPage();
+    await selectOrder();
+
+    expect(await screen.findByText(/Work order context binding is STALE/)).toBeInTheDocument();
+    expect(await screen.findByText(/Context Refresh Required/)).toBeInTheDocument();
+  });
+
+  it("renders failed commands in the Do Not Repeat list", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+    apiMocks.getWorkOrderContinuity.mockResolvedValue({
+      continuity: makeContinuity({
+        doNotRepeat: ["npm run build -- --mode production", "git push --force"]
+      })
+    });
+
+    renderPage();
+    await selectOrder();
+
+    expect(await screen.findByText("npm run build -- --mode production")).toBeInTheDocument();
+    expect(await screen.findByText("git push --force")).toBeInTheDocument();
+  });
+
+  it("page renders correctly when getWorkOrderContinuity fails", async () => {
+    setUser("KING");
+    mockBaseApi(makeContext("FRESH"));
+    apiMocks.getWorkOrderContinuity.mockRejectedValue(new Error("network error"));
+
+    renderPage();
+    await selectOrder();
+
+    expect((await screen.findAllByText("Fix the drawbridge")).length).toBeGreaterThan(0);
+    expect(await screen.findByText("Overview")).toBeInTheDocument();
+    expect(screen.queryByText("Work Continuity")).not.toBeInTheDocument();
   });
 });

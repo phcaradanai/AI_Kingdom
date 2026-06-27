@@ -12,7 +12,7 @@ import { api } from "@/lib/api";
 import { useTk } from "@/lib/i18n";
 import { cn, formatDate } from "@/lib/utils";
 import { useAuthStore } from "@/stores/authStore";
-import type { AutomationJobDto, AutomationJobMode, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkOrderContextDto, WorkOrderDto, WorkOrderExecutionTarget, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
+import type { AutomationJobDto, AutomationJobMode, ExternalAgentDto, ExternalAgentRecommendationDto, ImplementationReportPayload, PatchArtifactDto, ProjectDto, WorkContinuityDto, WorkContinuitySourceReferenceDto, WorkContinuityTaskMode, WorkOrderContextDto, WorkOrderDto, WorkOrderExecutionTarget, WorkOrderPayload, WorkOrderPriority, WorkOrderStatus } from "@/types/api";
 
 const selectCls = "h-10 w-full rounded-md border border-border bg-input px-3 text-sm text-foreground outline-none transition focus:ring-2 focus:ring-primary";
 
@@ -191,6 +191,35 @@ function getRecommendedNextStep({
   };
 }
 
+function getEffectiveNextStep(args: {
+  order: WorkOrderDto;
+  context: WorkOrderContextDto | null;
+  jobs: AutomationJobDto[];
+  patches: PatchArtifactDto[];
+  generatedPrompt: string;
+  continuity: WorkContinuityDto | null;
+}) {
+  const { continuity, ...rest } = args;
+  if (continuity?.contextFreshness.requiredAction === "REFRESH_CONTEXT") {
+    return {
+      title: "Refresh context before dispatching external agent",
+      description: continuity.contextFreshness.warnings[0] ?? "Context is stale or missing. Refresh before dispatching.",
+      blocked: true,
+      sourceLabel: "Open project context",
+      sourceTo: "#work-order-project-context"
+    };
+  }
+  if (continuity?.nextRecommendedAction) {
+    return {
+      title: continuity.nextRecommendedAction,
+      description: "Recommended by the Work Continuity Engine based on previous attempts.",
+      sourceLabel: "View continuity",
+      sourceTo: "#work-order-continuity"
+    };
+  }
+  return getRecommendedNextStep(rest);
+}
+
 function WorkOrderSection({
   id,
   title,
@@ -359,6 +388,7 @@ function WorkOrderDetailIndex() {
   const tk = useTk();
   const links = [
     { label: tk("workOrders.index.summary"), to: "#work-order-overview" },
+    { label: tk("workOrders.index.continuity"), to: "#work-order-continuity" },
     { label: tk("workOrders.index.context"), to: "#work-order-project-context" },
     { label: tk("workOrders.index.agent"), to: "#work-order-agent" },
     { label: tk("workOrders.index.execution"), to: "#work-order-automation" },
@@ -373,6 +403,209 @@ function WorkOrderDetailIndex() {
         </a>
       ))}
     </nav>
+  );
+}
+
+function getSourceReferenceRoute(ref: WorkContinuitySourceReferenceDto): string | null {
+  if (ref.type === "WorkOrder") return `/work-orders?focus=${ref.id}`;
+  if (ref.type === "AutomationJob") return `/automation-jobs`;
+  if (ref.type === "Project") return `/projects/${ref.id}`;
+  if (ref.type === "ExternalAgent") return `/external-agents`;
+  return null;
+}
+
+const TASK_MODE_COLORS: Record<WorkContinuityTaskMode, string> = {
+  NEW_TASK: "bg-sky-500/10 text-sky-700 border-sky-500/30",
+  CONTINUATION: "bg-blue-500/10 text-blue-700 border-blue-500/30",
+  REVISION: "bg-purple-500/10 text-purple-700 border-purple-500/30",
+  RETRY_AFTER_FAILURE: "bg-red-500/10 text-red-700 border-red-500/30",
+  VALIDATION_ONLY: "bg-slate-500/10 text-slate-700 border-slate-500/30"
+};
+
+const TASK_MODE_LABELS: Record<WorkContinuityTaskMode, string> = {
+  NEW_TASK: "New Task",
+  CONTINUATION: "Continuation",
+  REVISION: "Revision",
+  RETRY_AFTER_FAILURE: "Retry After Failure",
+  VALIDATION_ONLY: "Validation Only"
+};
+
+function WorkContinuitySection({ id, continuity }: { id?: string; continuity: WorkContinuityDto }) {
+  type TimelineItem = { id: string; kind: string; label: string; detail: string; timestamp: string };
+  const timeline: TimelineItem[] = [
+    ...continuity.implementationReports.map((r) => ({
+      id: r.id,
+      kind: "Report",
+      label: r.summary ? r.summary.slice(0, 80) : "Implementation report",
+      detail: r.testResult,
+      timestamp: r.createdAt
+    })),
+    ...continuity.externalAgentRuns.map((run) => ({
+      id: run.id,
+      kind: "External Run",
+      label: `Attempt #${run.attemptNumber} — ${run.status}`,
+      detail: run.errorMessage ?? "",
+      timestamp: run.createdAt
+    })),
+    ...continuity.reviewSummaries.map((rev) => ({
+      id: rev.id,
+      kind: "Review",
+      label: `Verdict: ${rev.verdict}`,
+      detail: rev.summary,
+      timestamp: rev.createdAt
+    })),
+    ...continuity.handoffBriefs.map((brief) => ({
+      id: brief.id,
+      kind: "Handoff",
+      label: brief.title,
+      detail: brief.currentStatus,
+      timestamp: brief.createdAt
+    }))
+  ].sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+  const hasContextWarnings = continuity.contextFreshness.requiredAction === "REFRESH_CONTEXT" || continuity.contextFreshness.warnings.length > 0;
+  const hasFailurePatterns = continuity.doNotRepeat.length > 0;
+  const hasProgress = continuity.decisionsMade.length > 0 || continuity.filesChanged.length > 0 || continuity.remainingWork.length > 0;
+
+  return (
+    <Card id={id}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Work Continuity</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Aggregated view of previous attempts, decisions, and next steps.</p>
+        </div>
+        <div className="flex flex-wrap gap-1.5">
+          <span className={cn("rounded-full border px-2.5 py-1 text-xs font-semibold", TASK_MODE_COLORS[continuity.taskMode])}>
+            {TASK_MODE_LABELS[continuity.taskMode]}
+          </span>
+          {continuity.activeJob ? (
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700">Active Job</span>
+          ) : null}
+          {continuity.activeExternalAgentRun ? (
+            <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-xs font-semibold text-amber-700">Active Run</span>
+          ) : null}
+        </div>
+      </div>
+
+      {continuity.nextRecommendedAction ? (
+        <div className="mt-4 rounded-md border border-primary/20 bg-primary/5 px-3 py-2 text-sm">
+          <span className="font-semibold text-primary">Next: </span>
+          {continuity.nextRecommendedAction}
+        </div>
+      ) : null}
+
+      {hasContextWarnings ? (
+        <div className="mt-4 rounded-md border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-sm">
+          <div className="flex items-center gap-2 font-semibold text-amber-700">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            {continuity.contextFreshness.requiredAction === "REFRESH_CONTEXT" ? "Context Refresh Required" : `Context: ${continuity.contextFreshness.workOrderStatus}`}
+          </div>
+          {continuity.contextFreshness.warnings.map((w, i) => (
+            <p key={i} className="mt-1 text-xs text-amber-700">{w}</p>
+          ))}
+          {continuity.contextFreshness.requiredAction === "REFRESH_CONTEXT" ? (
+            <a href="#work-order-project-context" className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-amber-800 underline hover:text-amber-900">
+              Go to Context &amp; Safety <ExternalLink className="h-3 w-3" />
+            </a>
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
+          <CheckCircle className="h-3.5 w-3.5 text-emerald-600" />
+          Context is fresh
+        </div>
+      )}
+
+      {timeline.length > 0 ? (
+        <details className="group mt-4 rounded-lg border border-border bg-background/25">
+          <summary className="flex min-h-10 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2 text-sm font-semibold text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary [&::-webkit-details-marker]:hidden">
+            <span className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-muted-foreground" />
+              Previous Attempts ({timeline.length})
+            </span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180" />
+          </summary>
+          <ul className="divide-y divide-border border-t border-border">
+            {timeline.map((item) => (
+              <li key={item.id} className="px-3 py-2">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{item.kind}</span>
+                  <span className="text-[11px] text-muted-foreground">{formatDate(item.timestamp)}</span>
+                </div>
+                <p className="mt-1 text-xs font-medium text-foreground">{item.label}</p>
+                {item.detail ? <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{item.detail}</p> : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
+
+      <div className="mt-4">
+        <h3 className="text-sm font-semibold text-foreground">Do Not Repeat</h3>
+        {hasFailurePatterns ? (
+          <ul className="mt-2 space-y-1">
+            {continuity.doNotRepeat.map((item, i) => (
+              <li key={i} className="flex items-start gap-2 rounded border border-red-500/20 bg-red-500/5 px-2 py-1.5 text-xs text-red-700">
+                <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {item}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-2 text-xs text-muted-foreground">No repeated failure patterns.</p>
+        )}
+      </div>
+
+      {hasProgress ? (
+        <div className="mt-4 grid gap-4 md:grid-cols-3">
+          {continuity.decisionsMade.length > 0 ? (
+            <div>
+              <h3 className="text-xs font-semibold text-foreground">Decisions Made</h3>
+              <ul className="mt-1 space-y-0.5">
+                {continuity.decisionsMade.map((d, i) => <li key={i} className="text-xs text-muted-foreground">• {d}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {continuity.filesChanged.length > 0 ? (
+            <div>
+              <h3 className="text-xs font-semibold text-foreground">Files Changed</h3>
+              <ul className="mt-1 space-y-0.5">
+                {continuity.filesChanged.map((f, i) => <li key={i} className="font-mono text-xs text-muted-foreground">{f}</li>)}
+              </ul>
+            </div>
+          ) : null}
+          {continuity.remainingWork.length > 0 ? (
+            <div>
+              <h3 className="text-xs font-semibold text-foreground">Remaining Work</h3>
+              <ul className="mt-1 space-y-0.5">
+                {continuity.remainingWork.map((r, i) => <li key={i} className="text-xs text-muted-foreground">• {r}</li>)}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {continuity.sourceReferences.length > 0 ? (
+        <div className="mt-4">
+          <h3 className="text-xs font-semibold text-foreground">Source References</h3>
+          <ul className="mt-2 space-y-1">
+            {continuity.sourceReferences.map((ref) => {
+              const to = getSourceReferenceRoute(ref);
+              return (
+                <li key={ref.id} className="flex items-center gap-2 text-xs">
+                  <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-semibold text-muted-foreground">{ref.type}</span>
+                  {to ? (
+                    <Link to={to} className="text-primary hover:underline">{ref.summary}</Link>
+                  ) : (
+                    <span className="font-mono text-muted-foreground">{ref.id} — {ref.summary}</span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </Card>
   );
 }
 
@@ -483,6 +716,7 @@ export function WorkOrdersPage() {
   const [dispatchMessage, setDispatchMessage] = useState<string | null>(null);
   const [dispatchError, setDispatchError] = useState<string | null>(null);
   const [archivingCompleted, setArchivingCompleted] = useState(false);
+  const [workContinuity, setWorkContinuity] = useState<WorkContinuityDto | null>(null);
 
   const selected = useMemo(() => selectedId ? workOrders.find((order) => order.id === selectedId) ?? null : null, [selectedId, workOrders]);
 
@@ -536,6 +770,7 @@ export function WorkOrdersPage() {
     setGeneratedPrompt("");
     setError(null);
     setReconcileMessage(null);
+    setWorkContinuity(null);
     if (order) {
       Promise.all([
         api.automationJobs({ workOrderId: order.id }),
@@ -553,6 +788,9 @@ export function WorkOrdersPage() {
       api.getWorkOrderRecommendations(order.id)
         .then((response) => setAgentRecommendations(response.recommendations))
         .catch(() => setAgentRecommendations([]));
+      api.getWorkOrderContinuity(order.id)
+        .then((response) => setWorkContinuity(response.continuity))
+        .catch(() => setWorkContinuity(null));
     } else {
       setAutomationJobs([]);
       setPatchArtifacts([]);
@@ -924,12 +1162,13 @@ export function WorkOrdersPage() {
   };
 
   const selectedContextStatus = getContextStatus(selected, workOrderContext);
-  const selectedNextStep = selected ? getRecommendedNextStep({
+  const selectedNextStep = selected ? getEffectiveNextStep({
     order: selected,
     context: workOrderContext,
     jobs: automationJobs,
     patches: patchArtifacts,
-    generatedPrompt
+    generatedPrompt,
+    continuity: workContinuity
   }) : null;
   const automationBlockedReason = getAutomationBlockedReason(selected, workOrderContext, automationJobs);
 
@@ -1312,6 +1551,8 @@ export function WorkOrdersPage() {
 
           {selected ? (
             <>
+              {workContinuity ? <WorkContinuitySection id="work-order-continuity" continuity={workContinuity} /> : null}
+
               {selected.sourceLink && selected.sourceLink.href && (
                 <Card className="bg-primary/5 border-primary/20">
                   <div className="flex items-center gap-3 text-sm">
