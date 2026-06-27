@@ -339,7 +339,7 @@ test("patch artifacts and implementation reports store base context provenance",
   }
 });
 
-test("createAutomationJob rejects with ContextBindingError when WorkOrder is bound to an older snapshot than the project's latest", async () => {
+test("createAutomationJob allows VALIDATION_ONLY with drift warning when WorkOrder is bound to an older snapshot", async () => {
   const user = await createKingUser();
   const project = await createProject();
   const repoDir = await makeTempRepo();
@@ -356,9 +356,39 @@ test("createAutomationJob rejects with ContextBindingError when WorkOrder is bou
     // Second scan — snapshot B is now the project's latest
     await scanLocalDocumentRoot(root.id);
 
-    // WO is still bound to A; project's latest is B → drift
+    // VALIDATION_ONLY passes the drift gate (read-only) — job is created with a drift warning.
+    const job = await createAutomationJob({ workOrderId: workOrder.id, mode: "VALIDATION_ONLY", createdByUserId: user.id });
+    assert.equal(job.mode, "VALIDATION_ONLY");
+    const summary = job.contextValidationSummary as Record<string, unknown>;
+    assert.ok(summary.snapshotDrift, "drift warning should be present in contextValidationSummary");
+    const drift = summary.snapshotDrift as Record<string, unknown>;
+    assert.equal(drift.warning, true);
+    assert.ok(drift.message);
+
+    await prisma.automationJob.delete({ where: { id: job.id } }).catch(() => undefined);
+  } finally {
+    await prisma.workOrder.deleteMany({ where: { projectId: project.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+    await cleanup(project.id, repoDir);
+  }
+});
+
+test("createAutomationJob rejects SANDBOX_PATCH with ContextBindingError when WorkOrder is bound to an older snapshot", async () => {
+  const user = await createKingUser();
+  const project = await createProject();
+  const repoDir = await makeTempRepo();
+  try {
+    const root = await createLocalDocumentRoot(project.id, { name: "repo", rootPath: repoDir });
+    await scanLocalDocumentRoot(root.id);
+    const workOrder = await prisma.workOrder.create({
+      data: { title: `Snapshot Drift SANDBOX WO ${randomUUID()}`, objective: "Test objective", status: "READY", projectId: project.id }
+    });
+    await bindFreshContextToWorkOrder(workOrder.id);
+    // Advance the project's latest snapshot — WO now bound to an older one.
+    await scanLocalDocumentRoot(root.id);
+
     await assert.rejects(
-      () => createAutomationJob({ workOrderId: workOrder.id, mode: "VALIDATION_ONLY", createdByUserId: user.id }),
+      () => createAutomationJob({ workOrderId: workOrder.id, mode: "SANDBOX_PATCH", createdByUserId: user.id }),
       (err: Error) => err.name === "ContextBindingError" && err.message.includes("outdated local-document snapshot")
     );
   } finally {

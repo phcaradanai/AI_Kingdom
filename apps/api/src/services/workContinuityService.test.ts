@@ -6,7 +6,7 @@ import path from "node:path";
 import { prisma } from "../db/prisma.js";
 import { getWorkContinuity, resolveExecutionReadiness } from "./workContinuityService.js";
 import { buildExternalAgentContextPack } from "./externalAgentContextPackService.js";
-import { createHandoffBrief, createImplementationReport } from "./externalAgentWorkOrderService.js";
+import { createHandoffBrief, createImplementationReport, dispatchWorkOrder } from "./externalAgentWorkOrderService.js";
 import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
 import { createLocalDocumentRoot, scanLocalDocumentRoot } from "./localDocumentAccessService.js";
 
@@ -515,6 +515,53 @@ test("createHandoffBrief creates new brief after a new report is submitted", asy
   } finally {
     await prisma.handoffBrief.deleteMany({ where: { workOrderId: workOrder.id } }).catch(() => undefined);
     await prisma.implementationReport.deleteMany({ where: { workOrderId: workOrder.id } }).catch(() => undefined);
+    await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
+    await prisma.externalAgent.delete({ where: { id: agent.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("dispatchWorkOrder throws ConflictError when an active ExternalAgentRun exists", async () => {
+  const user = await createUser();
+  const agent = await createTestExternalAgent();
+  const workOrder = await createTestWorkOrder(user.id, { assignedExternalAgentId: agent.id });
+
+  // Simulate an active run already in progress.
+  const run = await prisma.externalAgentRun.create({
+    data: {
+      workOrderId: workOrder.id,
+      externalAgentId: agent.id,
+      status: "RUNNING",
+      attemptNumber: 1,
+      inputPrompt: "test prompt"
+    }
+  });
+
+  try {
+    await assert.rejects(
+      () => dispatchWorkOrder(workOrder.id, agent.id),
+      (err: Error) => err.name === "ConflictError" && err.message.includes("active external agent run")
+    );
+  } finally {
+    await prisma.externalAgentRun.delete({ where: { id: run.id } }).catch(() => undefined);
+    await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
+    await prisma.externalAgent.delete({ where: { id: agent.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("dispatchWorkOrder throws ConflictError when work order has no project (stale/missing context for EXTERNAL_AGENT)", async () => {
+  const user = await createUser();
+  const agent = await createTestExternalAgent();
+  // Work order without a project — EXTERNAL_AGENT requires FRESH context with project linkage.
+  const workOrder = await createTestWorkOrder(user.id, { assignedExternalAgentId: agent.id });
+
+  try {
+    await assert.rejects(
+      () => dispatchWorkOrder(workOrder.id, agent.id),
+      (err: Error) => err.name === "ConflictError"
+    );
+  } finally {
     await prisma.workOrder.delete({ where: { id: workOrder.id } }).catch(() => undefined);
     await prisma.externalAgent.delete({ where: { id: agent.id } }).catch(() => undefined);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);

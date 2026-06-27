@@ -119,25 +119,30 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
     throw err;
   }
 
-  // Snapshot-ID drift gate: reject if the WorkOrder was bound to a snapshot that is
-  // no longer the latest. The WorkOrder must be re-bound before a new job can run.
-  if (
-    workOrder.localDocumentSnapshotId &&
-    contextOutcome.binding?.localDocumentSnapshotId &&
-    workOrder.localDocumentSnapshotId !== contextOutcome.binding.localDocumentSnapshotId
-  ) {
-    await auditLog({
-      userId: input.createdByUserId,
-      action: "automation_job_context_rejected",
-      resourceType: "work_order",
-      resourceId: input.workOrderId,
-      metadata: { mode, reason: "Snapshot drift: WorkOrder bound snapshot does not match latest project snapshot" }
-    }).catch(() => undefined);
-    const err = new Error(
-      "The WorkOrder is bound to an outdated local-document snapshot. Re-bind context before creating a new job."
-    );
-    err.name = "ContextBindingError";
-    throw err;
+  // Snapshot-ID drift gate: hard-block SANDBOX_PATCH and EXTERNAL_AGENT; warn-only for
+  // VALIDATION_ONLY / OBSERVE / PLAN_ONLY so read-only jobs can still proceed.
+  const snapshotDrift =
+    workOrder.localDocumentSnapshotId != null &&
+    contextOutcome.binding?.localDocumentSnapshotId != null &&
+    workOrder.localDocumentSnapshotId !== contextOutcome.binding.localDocumentSnapshotId;
+
+  if (snapshotDrift) {
+    if (mode === "SANDBOX_PATCH" || mode === "EXTERNAL_AGENT") {
+      await auditLog({
+        userId: input.createdByUserId,
+        action: "automation_job_context_rejected",
+        resourceType: "work_order",
+        resourceId: input.workOrderId,
+        metadata: { mode, reason: "Snapshot drift: WorkOrder bound snapshot does not match latest project snapshot" }
+      }).catch(() => undefined);
+      const err = new Error(
+        "The WorkOrder is bound to an outdated local-document snapshot. Re-bind context before creating a new job."
+      );
+      err.name = "ContextBindingError";
+      throw err;
+    }
+    // For VALIDATION_ONLY / OBSERVE / PLAN_ONLY: job proceeds — drift warning is surfaced
+    // in contextValidationSummary so the agent and King are aware but not blocked.
   }
 
   // Determine which agent to use for planning
@@ -158,6 +163,15 @@ export async function createAutomationJob(input: CreateAutomationJobInput) {
   const projectId = input.projectId ?? workOrder.projectId;
   const localDocsProvenance = await buildLocalDocsProvenance(projectId);
   const contextValidationSummary = buildContextValidationSummary(contextOutcome);
+  // Attach drift warning for read-only modes that passed the gate above.
+  if (snapshotDrift) {
+    contextValidationSummary.snapshotDrift = {
+      warning: true,
+      workOrderSnapshotId: workOrder.localDocumentSnapshotId,
+      latestSnapshotId: contextOutcome.binding?.localDocumentSnapshotId,
+      message: "Work order bound to an older local-document snapshot. Consider re-binding context before patching."
+    };
+  }
 
   // Optional: attach the assigned external agent's prompt so the runner can drive that
   // agent's CLI headlessly during SANDBOX_PATCH. The runner still never pushes/merges/deploys.

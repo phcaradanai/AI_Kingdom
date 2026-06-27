@@ -13,6 +13,7 @@ import { assessExecutionComplexity } from "./complexityAssessor.js";
 import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
 import { createNotice } from "./royalSecretaryService.js";
 import { buildExternalAgentContextPack } from "./externalAgentContextPackService.js";
+import { resolveExecutionReadiness } from "./workContinuityService.js";
 
 type WorkOrderWithRelations = WorkOrder & {
   assignedExternalAgent?: ExternalAgent | null;
@@ -270,32 +271,70 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     ? contextPack.continuity.decisionsMade
     : workOrder.implementationReports.flatMap((report) => report.decisionsMade).filter(Boolean);
 
-  // M24 Phase B (supervised retry): when this work order is being retried after a prior
-  // failure, the reviewer already recorded exactly what to fix. Without threading that
-  // feedback into the prompt the agent retries blind and re-fails the same way, burning the
-  // retry budget. Inject the most recent review's verdict + what failed + the reviewer's
-  // revision prompt so the retry is informed. Runs for both bridge and sandbox retry paths.
+  // M24 Phase B (supervised retry): inject reviewer's exact diagnosis so retry is informed.
   const priorAttemptSection = workOrder.autoRetryCount > 0 ? await buildPriorAttemptFeedback(workOrderId) : "";
 
-  // Task mode indicator: tells the agent whether it is starting fresh, continuing,
-  // revising a previous attempt, or retrying after a failure.
   const taskMode = contextPack.taskMode;
+
+  // Task mode: announces non-fresh-start; includes previousAttemptsSummary for all
+  // continuation/retry/revision modes so the agent knows what was already tried.
   const taskModeSection = taskMode !== "NEW_TASK"
     ? [
         "## Task Mode",
-        `This is a **${taskMode}** — not a fresh start.`,
-        taskMode === "RETRY_AFTER_FAILURE" || taskMode === "REVISION"
+        `This is a **${taskMode}** — not a fresh start. Do not restart from scratch.`,
+        contextPack.previousAttemptsSummary && contextPack.previousAttemptsSummary !== "No prior attempts."
           ? contextPack.previousAttemptsSummary
-          : `Continue from the current state. Do not restart from scratch.`
+          : ""
       ].filter(Boolean).join("\n\n")
     : "";
 
-  // Do Not Repeat: only injected on retry/revision to avoid re-failing the same way.
-  const doNotRepeatSection = (taskMode === "RETRY_AFTER_FAILURE" || taskMode === "REVISION") && contextPack.doNotRepeat.length > 0
+  // Context freshness warnings — injected whenever the snapshot or binding has issues.
+  const contextFreshnessSection = contextPack.contextFreshness.warnings.length > 0
+    ? [
+        "## Context Freshness",
+        contextPack.contextFreshness.warnings.join("\n")
+      ].join("\n\n")
+    : "";
+
+  // Known blockers from the work order and latest reviewer risk notes.
+  const knownBlockersSection = contextPack.knownBlockers.length > 0
+    ? [
+        "## Known Blockers",
+        formatList(contextPack.knownBlockers.slice(0, 5))
+      ].join("\n\n")
+    : "";
+
+  // Failed commands / errors from prior runs.
+  const failedCommandsSection = contextPack.failedCommandsAndErrors.length > 0
+    ? [
+        "## Failed Commands / Errors",
+        formatList(contextPack.failedCommandsAndErrors.slice(0, 10))
+      ].join("\n\n")
+    : "";
+
+  // Do Not Repeat — expanded to CONTINUATION as well as retry/revision.
+  const doNotRepeatSection = taskMode !== "NEW_TASK" && contextPack.doNotRepeat.length > 0
     ? [
         "## Do Not Repeat",
         "The following commands or actions failed in a prior attempt. Do not repeat them without fixing the underlying cause first.",
-        formatList(contextPack.doNotRepeat)
+        formatList(contextPack.doNotRepeat.slice(0, 10))
+      ].join("\n\n")
+    : "";
+
+  // Exact next action from the continuity engine (skip generic "dispatch" suggestions).
+  const exactNextActionSection = contextPack.exactNextAction && !contextPack.exactNextAction.toLowerCase().includes("dispatch")
+    ? ["## Exact Next Action", contextPack.exactNextAction].join("\n\n")
+    : "";
+
+  // Source references for provenance traceability.
+  const sourceRefsSection = contextPack.continuity.sourceReferences.length > 0
+    ? [
+        "## Source References",
+        formatList(
+          contextPack.continuity.sourceReferences
+            .slice(0, 5)
+            .map((r) => `${r.type} ${r.id}: ${r.summary}`)
+        )
       ].join("\n\n")
     : "";
 
@@ -333,7 +372,11 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     thinkingDirective,
     taskModeSection,
     priorAttemptSection,
+    contextFreshnessSection,
+    knownBlockersSection,
+    failedCommandsSection,
     doNotRepeatSection,
+    exactNextActionSection,
     "## Kingdom Context",
     driftContext.kingdomContext,
     "## Project Context",
@@ -359,6 +402,7 @@ export async function buildExternalAgentPrompt(workOrderId: string, externalAgen
     formatList(workOrder.acceptanceCriteria),
     "## Validation Commands",
     formatList(workOrder.validationCommands),
+    sourceRefsSection,
     "## Required Final Response Format",
     "When done, report:",
     "1. Summary",
@@ -386,6 +430,14 @@ export async function dispatchWorkOrder(workOrderId: string, externalAgentId: st
   if (!workOrder) throw notFound("Work order not found");
   if (!externalAgent) throw notFound("External agent not found");
   if (!externalAgent.isActive) throw notFound("External agent is inactive");
+
+  // Gate: refuse dispatch if an active job/run exists, context is stale, or snapshot drifted.
+  const readiness = await resolveExecutionReadiness(workOrderId, "EXTERNAL_AGENT");
+  if (!readiness.ok) {
+    const err = new Error(readiness.reason ?? "Work order is not ready for dispatch.");
+    err.name = "ConflictError";
+    throw err;
+  }
 
   // Build the prompt first so a failure here never leaves a half-dispatched order.
   const prompt = await buildExternalAgentPrompt(workOrderId, externalAgentId);

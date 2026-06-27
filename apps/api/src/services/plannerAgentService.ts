@@ -174,7 +174,7 @@ async function executePlanner(
   // Cross-task learning (opt-in): inject outcome lessons from similar past work so the
   // planner reuses what worked and avoids repeating past failures. Default OFF — relevance-
   // and outcome-gated, deterministic, no extra provider call.
-  const crossTaskLearningEnabled = await getBooleanSetting("PLANNER_CROSS_TASK_LEARNING", true);
+  const crossTaskLearningEnabled = await getBooleanSetting("PLANNER_CROSS_TASK_LEARNING", false);
   const crossTaskLessons = crossTaskLearningEnabled
     ? await buildCrossTaskLessons({
         decreeText: `${task.title}\n${task.command}\n${session.finalSummary ?? ""}`,

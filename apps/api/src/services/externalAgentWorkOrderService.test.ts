@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import type { AddressInfo } from "node:net";
 import test from "node:test";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
@@ -13,6 +16,8 @@ import {
   generateWorkOrderFromMatter,
   generateWorkOrderFromTask
 } from "./externalAgentWorkOrderService.js";
+import { createLocalDocumentRoot, scanLocalDocumentRoot } from "./localDocumentAccessService.js";
+import { bindFreshContextToWorkOrder } from "./projectContextBindingService.js";
 
 
 async function createUser(role: "KING" | "CROWN_PRINCE" | "MINISTER" | "SCRIBE" = "KING") {
@@ -201,18 +206,31 @@ test("implementation report can be submitted and handoff brief generated", async
 test("dispatchWorkOrder assigns agent, builds prompt, moves order to IN_PROGRESS, and notifies the King", async () => {
   const { user } = await createUser("KING");
   const externalAgent = await prisma.externalAgent.findFirstOrThrow({ where: { type: "CLAUDE_CODE" } });
-  const workOrder = await prisma.workOrder.create({
-    data: {
-      title: "Dispatch flow work",
-      objective: "Exercise one-step dispatch",
-      acceptanceCriteria: ["Order is dispatched"],
-      validationCommands: ["npm run test"],
-      createdByUserId: user.id,
-      status: "DRAFT"
-    }
-  });
 
+  // EXTERNAL_AGENT mode requires a project with FRESH local document context.
+  const project = await prisma.project.create({ data: { name: `Dispatch Test Project ${Date.now()}` } });
+  const repoDir = await fs.mkdtemp(path.join(os.tmpdir(), "dispatch-test-"));
+  await fs.writeFile(path.join(repoDir, "README.md"), "# Dispatch Fixture");
+
+  let workOrderId: string | null = null;
   try {
+    const root = await createLocalDocumentRoot(project.id, { name: "repo", rootPath: repoDir });
+    await scanLocalDocumentRoot(root.id);
+
+    const workOrder = await prisma.workOrder.create({
+      data: {
+        title: "Dispatch flow work",
+        objective: "Exercise one-step dispatch",
+        acceptanceCriteria: ["Order is dispatched"],
+        validationCommands: ["npm run test"],
+        createdByUserId: user.id,
+        status: "DRAFT",
+        projectId: project.id
+      }
+    });
+    workOrderId = workOrder.id;
+    await bindFreshContextToWorkOrder(workOrder.id);
+
     const result = await dispatchWorkOrder(workOrder.id, externalAgent.id);
     assert.equal(result.workOrder.assignedExternalAgentId, externalAgent.id);
     assert.equal(result.workOrder.status, "IN_PROGRESS");
@@ -223,9 +241,11 @@ test("dispatchWorkOrder assigns agent, builds prompt, moves order to IN_PROGRESS
     });
     assert.ok(dispatchNotice, "a dispatch notice should be created for the King");
   } finally {
-    await prisma.notice.deleteMany({ where: { sourceId: workOrder.id } });
-    await prisma.workOrder.delete({ where: { id: workOrder.id } });
-    await prisma.user.delete({ where: { id: user.id } });
+    if (workOrderId) await prisma.notice.deleteMany({ where: { sourceId: workOrderId } }).catch(() => undefined);
+    await prisma.workOrder.deleteMany({ where: { projectId: project.id } }).catch(() => undefined);
+    await prisma.project.delete({ where: { id: project.id } }).catch(() => undefined);
+    await fs.rm(repoDir, { recursive: true, force: true }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
   }
 });
 
