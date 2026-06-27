@@ -5,6 +5,7 @@ import { createAutomationJob } from "./automationJobService.js";
 import { buildExternalAgentPrompt } from "./externalAgentWorkOrderService.js";
 import { resolveExternalAgentChoiceMatter } from "./externalAgentReadinessService.js";
 import { getBooleanSetting, getNumberSetting, getSettingValue } from "./settingsService.js";
+import { resolveExecutionReadiness } from "./workContinuityService.js";
 
 type WorkOrderForBridge = WorkOrder & { assignedExternalAgent?: ExternalAgent | null };
 
@@ -32,15 +33,11 @@ export async function createExternalAgentBridgeJob(input: {
 
   const maxAutoRetries = await getNumberSetting("MAX_EXTERNAL_AGENT_AUTO_RETRIES", 2);
 
-  // Check for duplicate active ExternalAgentRun before committing state changes.
-  // createAutomationJob guards against duplicate active AutomationJob; this guards the run.
-  const existingRun = await prisma.externalAgentRun.findFirst({
-    where: { workOrderId: workOrder.id, status: { in: ["QUEUED", "RUNNING", "WAITING", "NEEDS_REVIEW"] } }
-  });
-  if (existingRun) {
-    const err = new Error(
-      `An active external agent run already exists for this work order (${existingRun.id}, status: ${existingRun.status}). Wait for it to complete before dispatching again.`
-    );
+  // Gate: active job, active run, context freshness, snapshot drift — all four checks
+  // must pass before any WorkOrder state is mutated.
+  const readiness = await resolveExecutionReadiness(workOrder.id, "EXTERNAL_AGENT");
+  if (!readiness.ok) {
+    const err = new Error(readiness.reason ?? "Work order is not ready for dispatch.");
     err.name = "ConflictError";
     throw err;
   }
