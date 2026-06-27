@@ -17,6 +17,7 @@ export type ProblemType =
   | "BUG_FIX"
   | "FEATURE_ADDITION"
   | "ARCHITECTURE_CHANGE"
+  | "PLAN_REQUEST"
   | "INFORMATION_REQUEST"
   | "DIAGNOSIS"
   | "GENERAL_TASK";
@@ -47,6 +48,21 @@ const PROBLEM_PATTERNS: Array<{ type: ProblemType; score: number; keywords: stri
     score: 3,
     keywords: ["refactor", "rewrite", "redesign", "restructure", "migrate architecture", "overhaul",
       "ปรับโครงสร้าง", "รื้อ", "ออกแบบใหม่", "ปรับปรุงสถาปัตยกรรม"]
+  },
+  {
+    type: "PLAN_REQUEST",
+    // Score 4 beats other types (score 3) so explicit planning verbs win even when
+    // the topic also matches FEATURE_ADDITION / BUG_FIX keywords.
+    score: 4,
+    keywords: [
+      // English imperative planning verbs
+      "plan the", "plan for the", "create a plan", "create a roadmap", "build a roadmap",
+      "design a plan", "design a roadmap", "define a plan", "outline a plan", "outline the steps",
+      "roadmap", "next steps",
+      // Thai planning verbs
+      "วางแผน", "ออกแบบแผน", "สร้างแผน", "กำหนดแผน", "วางแนวทาง",
+      "ขั้นตอนต่อไป", "แผนการพัฒนา", "แผนงาน", "ไทม์ไลน์"
+    ]
   },
   {
     type: "DIAGNOSIS",
@@ -186,6 +202,23 @@ const KEY_QUESTIONS: Record<ProblemType, Record<string, string[]>> = {
       "What is a safe, reversible first step to validate the new direction before full commitment?"
     ]
   },
+  PLAN_REQUEST: {
+    PLAN: [
+      "What is the end state — what will be demonstrably true when this plan is executed?",
+      "What are the phases or milestones, and what dependency must be resolved at each?",
+      "What are the riskiest assumptions or unknowns that must be validated before committing to this approach?"
+    ],
+    ASK: [
+      "What is the planning horizon — a sprint, a release, or a long-term architecture shift?",
+      "What constraints (team capacity, dependencies, prior decisions) bound the plan?",
+      "What does the King need to decide or validate before this plan can begin execution?"
+    ],
+    default: [
+      "What is the scope — what is included and explicitly excluded from this plan?",
+      "What are the key decision points the King needs to be aware of before approving?",
+      "What is the first concrete step that would move this forward with minimal risk?"
+    ]
+  },
   INFORMATION_REQUEST: {
     ASK: [
       "What specific decision or concern is the King trying to resolve with this question?",
@@ -244,9 +277,10 @@ export function extractDecreeFrame(command: string, mode: string): DecreeFrame {
   return { problemType, domainSignals, keyQuestions };
 }
 
-export function buildDecreeFrameSection(frame: DecreeFrame): string {
+export function buildDecreeFrameSection(frame: DecreeFrame, modeCorrection?: string): string {
   const lines: string[] = [
     `## Decree Analysis`,
+    modeCorrection ? `Mode auto-corrected: ${modeCorrection}` : "",
     `Problem type: ${frame.problemType.replace(/_/g, " ")}`,
     frame.domainSignals.length > 0 ? `Domain signals: ${frame.domainSignals.join(", ")}` : "",
     `Key council questions:`,

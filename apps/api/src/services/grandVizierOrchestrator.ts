@@ -12,6 +12,7 @@ import { generateRoyalReport } from "./reportService.js";
 import { getBooleanSetting, getNumberSetting } from "./settingsService.js";
 import { assessDecreeComplexity, escalationFor } from "./complexityAssessor.js";
 import { buildDecreeFrameSection, extractDecreeFrame } from "./decreeFrameService.js";
+import { adviseModeCorrection } from "./decreeModeAdvisorService.js";
 import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { runPlannerAgent } from "./plannerAgentService.js";
 import { buildCrossTaskLessons } from "./crossTaskLearningService.js";
@@ -199,7 +200,7 @@ const BUILD_EXECUTION_GUARDRAILS = [
 ].join("\n");
 
 export async function processTaskWithGrandVizier(taskId: string, userId: string) {
-  const task = await prisma.task.findFirst({
+  let task = await prisma.task.findFirst({
     where: { id: taskId, createdBy: userId },
     include: {
       sessions: true,
@@ -217,6 +218,14 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     const error = new Error("This decree has already received council counsel");
     error.name = "ConflictError";
     throw error;
+  }
+
+  // Mode auto-correction: detect when the King's selected mode (defaulting to ASK) does not
+  // match the decree's actual intent. Only corrects away from ASK — PLAN/BUILD/RESEARCH are
+  // deliberate choices. The DB record is preserved; only the in-process task object changes.
+  const modeAdvice = adviseModeCorrection(task.command, task.mode);
+  if (modeAdvice) {
+    task = { ...task, mode: modeAdvice.correctedMode };
   }
 
   const agents = await prisma.agent.findMany({
@@ -266,7 +275,10 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     // Decree frame: structured problem framing injected into every specialist agent's user
     // prompt so agents focus their analysis on the right problem type and answer specific
     // key questions rather than having to infer structure from unstructured prose.
-    const decreeFrame = buildDecreeFrameSection(extractDecreeFrame(task.command, task.mode));
+    const decreeFrame = buildDecreeFrameSection(
+      extractDecreeFrame(task.command, task.mode),
+      modeAdvice?.reason
+    );
     const autoSaveMemory = await getBooleanSetting("AUTO_SAVE_MEMORY", true);
     const autoGenerateReports = await getBooleanSetting("AUTO_GENERATE_REPORTS", true);
     const kingdomContext = await getKingdomContext();

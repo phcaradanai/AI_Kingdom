@@ -97,6 +97,29 @@ test("buildDecreeFrameSection — domain signals capped at 4 when many match", (
   assert.ok(frame.domainSignals.length <= 4, `domain signals should be capped at 4, got ${frame.domainSignals.length}`);
 });
 
+test("extractDecreeFrame — Thai planning decree detects PLAN_REQUEST", () => {
+  const frame = extractDecreeFrame("วางแผนขั้นตอนต่อไปของโปรเจ็ค", "ASK");
+  assert.equal(frame.problemType, "PLAN_REQUEST");
+  assert.equal(frame.keyQuestions.length, 3);
+});
+
+test("extractDecreeFrame — English planning decree detects PLAN_REQUEST", () => {
+  const frame = extractDecreeFrame("Plan the next steps for the project roadmap", "PLAN");
+  assert.equal(frame.problemType, "PLAN_REQUEST");
+  // PLAN mode questions focus on end state, phases, risks
+  assert.ok(
+    frame.keyQuestions.some((q) => q.toLowerCase().includes("end state") || q.toLowerCase().includes("phase") || q.toLowerCase().includes("milestone")),
+    "PLAN mode questions should address phases/milestones"
+  );
+});
+
+test("buildDecreeFrameSection — includes mode correction note when provided", () => {
+  const frame = extractDecreeFrame("วางแผนขั้นตอนต่อไปของโปรเจ็ค", "PLAN");
+  const section = buildDecreeFrameSection(frame, "decree signals planning intent — switched to PLAN mode");
+  assert.ok(section.includes("Mode auto-corrected:"), "should include mode correction line");
+  assert.ok(section.includes("switched to PLAN mode"), "should include the reason");
+});
+
 test("buildDecreeFrameSection — underscores replaced in problem type label", () => {
   const frame = extractDecreeFrame("Refactor and rewrite the architecture", "PLAN");
   const section = buildDecreeFrameSection(frame);
