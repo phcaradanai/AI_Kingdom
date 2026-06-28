@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { computeReport, type ReportInput } from "../scripts/measure-intelligence.js";
+import {
+  getISOWeekLabel,
+  buildModeCorrectionStats,
+  buildContinuityStats
+} from "./kingdomDiagnosticsService.js";
 
 // Verify the pure computeReport function (already used by the diagnostics service)
 // with edge-case inputs — no DB required.
@@ -81,4 +86,97 @@ test("computeReport: qualityStats passed through", () => {
   assert.equal(r.qualityStats.avgScore, 0.72);
   assert.equal(r.qualityStats.highQuality, 1);
   assert.equal(r.qualityStats.lowQuality, 0);
+});
+
+// ─── getISOWeekLabel ────────────────────────────────────────────────────────
+
+test("getISOWeekLabel: 2026-01-01 is W01", () => {
+  // 2026-01-01 is a Thursday — ISO week 1 of 2026
+  assert.equal(getISOWeekLabel(new Date("2026-01-01T00:00:00Z")), "2026-W01");
+});
+
+test("getISOWeekLabel: 2025-12-29 belongs to 2026-W01 (ISO week year)", () => {
+  // 2025-12-29 is a Monday; the Thursday of that week is 2026-01-01 → 2026-W01
+  assert.equal(getISOWeekLabel(new Date("2025-12-29T00:00:00Z")), "2026-W01");
+});
+
+test("getISOWeekLabel: 2026-06-22 is W26", () => {
+  // Verified with ISO 8601 calendar: 2026-06-22 (Monday) starts week 26
+  assert.equal(getISOWeekLabel(new Date("2026-06-22T00:00:00Z")), "2026-W26");
+});
+
+test("getISOWeekLabel: week boundary — Sunday 2026-06-28 still W26", () => {
+  assert.equal(getISOWeekLabel(new Date("2026-06-28T00:00:00Z")), "2026-W26");
+});
+
+test("getISOWeekLabel: Monday 2026-06-29 starts W27", () => {
+  assert.equal(getISOWeekLabel(new Date("2026-06-29T00:00:00Z")), "2026-W27");
+});
+
+// ─── buildModeCorrectionStats ───────────────────────────────────────────────
+
+test("buildModeCorrectionStats: empty rows produces zero stats", () => {
+  const stats = buildModeCorrectionStats([], 10);
+  assert.equal(stats.total, 0);
+  assert.equal(stats.rate, 0);
+  assert.deepEqual(stats.byCorrectedMode, {});
+});
+
+test("buildModeCorrectionStats: groups by corrected mode and computes rate", () => {
+  const rows = [
+    { task: { mode: "BUILD" } },
+    { task: { mode: "BUILD" } },
+    { task: { mode: "PLAN" } }
+  ];
+  const stats = buildModeCorrectionStats(rows, 10);
+  assert.equal(stats.total, 3);
+  assert.ok(Math.abs(stats.rate - 0.3) < 0.001);
+  assert.equal(stats.byCorrectedMode["BUILD"], 2);
+  assert.equal(stats.byCorrectedMode["PLAN"], 1);
+});
+
+test("buildModeCorrectionStats: rate is 0 when no decrees", () => {
+  const rows = [{ task: { mode: "BUILD" } }];
+  const stats = buildModeCorrectionStats(rows, 0);
+  assert.equal(stats.rate, 0);
+});
+
+// ─── buildContinuityStats ───────────────────────────────────────────────────
+
+test("buildContinuityStats: empty events produces zero stats", () => {
+  const stats = buildContinuityStats([]);
+  assert.equal(stats.total, 0);
+  assert.deepEqual(stats.byState, {});
+  assert.deepEqual(stats.byTriggeredBy, {});
+  assert.deepEqual(stats.recentEvents, []);
+});
+
+test("buildContinuityStats: groups by state and triggeredBy correctly", () => {
+  const now = new Date();
+  const events = [
+    { id: "1", workOrderId: "wo1", triggeredBy: "MANUAL", readinessState: "BLOCKED", reason: "active job", createdAt: now },
+    { id: "2", workOrderId: "wo1", triggeredBy: "MANUAL", readinessState: "STALE_CONTEXT", reason: "stale", createdAt: now },
+    { id: "3", workOrderId: "wo2", triggeredBy: "BRIDGE", readinessState: "BLOCKED", reason: "active run", createdAt: now }
+  ];
+  const stats = buildContinuityStats(events);
+  assert.equal(stats.total, 3);
+  assert.equal(stats.byState["BLOCKED"], 2);
+  assert.equal(stats.byState["STALE_CONTEXT"], 1);
+  assert.equal(stats.byTriggeredBy["MANUAL"], 2);
+  assert.equal(stats.byTriggeredBy["BRIDGE"], 1);
+});
+
+test("buildContinuityStats: recentEvents capped at 10", () => {
+  const now = new Date();
+  const events = Array.from({ length: 15 }, (_, i) => ({
+    id: String(i),
+    workOrderId: null,
+    triggeredBy: "MANUAL",
+    readinessState: "BLOCKED",
+    reason: "test",
+    createdAt: now
+  }));
+  const stats = buildContinuityStats(events);
+  assert.equal(stats.total, 15);
+  assert.equal(stats.recentEvents.length, 10);
 });

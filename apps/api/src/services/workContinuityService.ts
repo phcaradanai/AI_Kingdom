@@ -350,7 +350,7 @@ export async function resolveExecutionReadiness(
   });
   if (existingJob) {
     const reason = `An active automation job already exists for this work order (${existingJob.id}, status: ${existingJob.status}). Wait for it to complete or cancel it first.`;
-    void recordContinuityEvent(workOrderId, triggeredBy, "BLOCKED", reason);
+    await recordContinuityEvent(workOrderId, triggeredBy, "BLOCKED", reason);
     return { ok: false, requiredAction: "WAIT_FOR_ACTIVE_JOB", existingJob, existingRun: null, reason };
   }
 
@@ -360,7 +360,7 @@ export async function resolveExecutionReadiness(
   });
   if (existingRun) {
     const reason = `An active external agent run already exists for this work order (${existingRun.id}, status: ${existingRun.status}). Wait for it to complete before dispatching again.`;
-    void recordContinuityEvent(workOrderId, triggeredBy, "BLOCKED", reason);
+    await recordContinuityEvent(workOrderId, triggeredBy, "BLOCKED", reason);
     return { ok: false, requiredAction: "WAIT_FOR_ACTIVE_RUN", existingJob: null, existingRun, reason };
   }
 
@@ -368,7 +368,7 @@ export async function resolveExecutionReadiness(
   const contextOutcome = await validateContextForAutomationJob(workOrderId, mode);
   if (!contextOutcome.ok) {
     const reason = contextOutcome.reason;
-    void recordContinuityEvent(workOrderId, triggeredBy, "STALE_CONTEXT", reason ?? "Context not fresh");
+    await recordContinuityEvent(workOrderId, triggeredBy, "STALE_CONTEXT", reason ?? "Context not fresh");
     return { ok: false, requiredAction: "REFRESH_CONTEXT", existingJob: null, existingRun: null, reason };
   }
 
@@ -378,7 +378,7 @@ export async function resolveExecutionReadiness(
   if (workOrder.localDocumentSnapshotId && contextOutcome.binding?.localDocumentSnapshotId) {
     if (workOrder.localDocumentSnapshotId !== contextOutcome.binding.localDocumentSnapshotId) {
       const reason = `Work order is bound to local docs snapshot ${workOrder.localDocumentSnapshotId} but the latest project snapshot is ${contextOutcome.binding.localDocumentSnapshotId}. Rebind context (POST /api/work-orders/${workOrderId}/bind-context) before executing.`;
-      void recordContinuityEvent(workOrderId, triggeredBy, "STALE_CONTEXT", reason);
+      await recordContinuityEvent(workOrderId, triggeredBy, "STALE_CONTEXT", reason);
       return { ok: false, requiredAction: "REFRESH_CONTEXT", existingJob: null, existingRun: null, reason };
     }
   }

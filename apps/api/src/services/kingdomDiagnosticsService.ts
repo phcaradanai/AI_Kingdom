@@ -66,6 +66,41 @@ const INTELLIGENCE_SETTINGS = [
   "LIVING_LOOP_ENABLED",
 ] as const;
 
+export function buildModeCorrectionStats(
+  rows: Array<{ task: { mode: string } }>,
+  totalDecrees: number
+): ModeCorrectionStats {
+  const byCorrectedMode: Record<string, number> = {};
+  for (const row of rows) {
+    byCorrectedMode[row.task.mode] = (byCorrectedMode[row.task.mode] ?? 0) + 1;
+  }
+  return {
+    total: rows.length,
+    rate: totalDecrees > 0 ? rows.length / totalDecrees : 0,
+    byCorrectedMode
+  };
+}
+
+export function buildContinuityStats(
+  events: Array<{ id: string; workOrderId: string | null; triggeredBy: string; readinessState: string; reason: string; createdAt: Date }>
+): ContinuityStats {
+  const byState: Record<string, number> = {};
+  const byTriggeredBy: Record<string, number> = {};
+  for (const ev of events) {
+    byState[ev.readinessState] = (byState[ev.readinessState] ?? 0) + 1;
+    byTriggeredBy[ev.triggeredBy] = (byTriggeredBy[ev.triggeredBy] ?? 0) + 1;
+  }
+  return { total: events.length, byState, byTriggeredBy, recentEvents: events.slice(0, 10) };
+}
+
+export function getISOWeekLabel(date: Date): string {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
+}
+
 export async function computeDiagnosticsReport(
   sinceDays?: number
 ): Promise<KingdomDiagnosticsReport> {
@@ -93,30 +128,10 @@ export async function computeDiagnosticsReport(
   const intelligence = computeReport(intelligenceInput);
 
   // Mode correction stats
-  const byCorrectedMode: Record<string, number> = {};
-  for (const row of modeCorrectionRows) {
-    const mode = row.task.mode;
-    byCorrectedMode[mode] = (byCorrectedMode[mode] ?? 0) + 1;
-  }
-  const modeCorrection: ModeCorrectionStats = {
-    total: modeCorrectionRows.length,
-    rate: intelligence.decrees > 0 ? modeCorrectionRows.length / intelligence.decrees : 0,
-    byCorrectedMode
-  };
+  const modeCorrection = buildModeCorrectionStats(modeCorrectionRows, intelligence.decrees);
 
   // Continuity stats
-  const byState: Record<string, number> = {};
-  const byTriggeredBy: Record<string, number> = {};
-  for (const ev of continuityRows) {
-    byState[ev.readinessState] = (byState[ev.readinessState] ?? 0) + 1;
-    byTriggeredBy[ev.triggeredBy] = (byTriggeredBy[ev.triggeredBy] ?? 0) + 1;
-  }
-  const continuity: ContinuityStats = {
-    total: continuityRows.length,
-    byState,
-    byTriggeredBy,
-    recentEvents: continuityRows.slice(0, 10)
-  };
+  const continuity = buildContinuityStats(continuityRows);
 
   // Weekly trend: last 4 weeks of council sessions
   const weeklyTrend = await buildWeeklyTrend(since);
@@ -193,10 +208,3 @@ async function buildWeeklyTrend(since?: Date): Promise<WeekBucket[]> {
   }));
 }
 
-function getISOWeekLabel(date: Date): string {
-  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
-  d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
-  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
-  const week = Math.ceil(((d.getTime() - yearStart.getTime()) / 86_400_000 + 1) / 7);
-  return `${d.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-}
