@@ -54,6 +54,7 @@ import royalBriefRouter from "./routes/royalBrief.js";
 import nextActionsRouter from "./routes/nextActions.js";
 import kingdomRouter from "./routes/kingdom.js";
 import strategyRouter from "./routes/strategy.js";
+import diagnosticsRouter from "./routes/diagnostics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -146,6 +147,7 @@ export function createApp() {
   app.use("/api/matters", requireAuth, mattersRouter);
   // Living Loop — observe + candidate queue (M17D-1)
   app.use("/api/living-loop", requireAuth, livingLoopRouter);
+  app.use("/api/diagnostics", requireAuth, requireRole("CROWN_PRINCE"), diagnosticsRouter);
   app.use("/api/automation-candidates", requireAuth, automationCandidatesRouter);
   app.use("/api/royal-brief", requireAuth, royalBriefRouter);
   app.use("/api/next-actions", requireAuth, nextActionsRouter);

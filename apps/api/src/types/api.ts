@@ -1019,3 +1019,63 @@ export type ExternalAgentContextPackDto = {
   validationCommands: string[];
   requiredReportBackFormat: string;
 };
+
+// ── M25-A: Kingdom Self-Diagnostics ───────────────────────────────────────────
+
+export type DiagnosticsWeekBucket = {
+  week: string;
+  sessionCount: number;
+  avgQualityScore: number | null;
+  highQuality: number;
+  lowQuality: number;
+  totalCostUSD: number;
+  modeCorrectionCount: number;
+};
+
+export type DiagnosticsModeCorrectionStats = {
+  total: number;
+  rate: number;
+  byCorrectedMode: Record<string, number>;
+};
+
+export type DiagnosticsContinuityEvent = {
+  id: string;
+  workOrderId: string | null;
+  triggeredBy: string;
+  readinessState: string;
+  reason: string;
+  createdAt: string;
+};
+
+export type DiagnosticsContinuityStats = {
+  total: number;
+  byState: Record<string, number>;
+  byTriggeredBy: Record<string, number>;
+  recentEvents: DiagnosticsContinuityEvent[];
+};
+
+export type DiagnosticsIntelligenceReport = {
+  decrees: number;
+  totalCostUSD: number;
+  avgCostPerDecreeUSD: number;
+  avgTokensPerDecree: number;
+  avgCallsPerDecree: number;
+  fallbackRate: number;
+  qualityStats: { scored: number; avgScore: number; highQuality: number; lowQuality: number };
+  byOperation: Array<{ operation: string; calls: number; totalTokens: number; costUSD: number; costShare: number }>;
+  byCostSource: Record<string, number>;
+  providers: Array<{ key: string; calls: number; costUSD: number }>;
+  candidatesByStatus: Record<string, number>;
+  approvedKnowledge: { count: number; totalUseCount: number; neverUsed: number };
+  verdictCounts: Record<string, number>;
+};
+
+export type KingdomDiagnosticsReportDto = {
+  generatedAt: string;
+  windowDays: number | null;
+  intelligence: DiagnosticsIntelligenceReport;
+  modeCorrection: DiagnosticsModeCorrectionStats;
+  continuity: DiagnosticsContinuityStats;
+  weeklyTrend: DiagnosticsWeekBucket[];
+  settingsSnapshot: Record<string, string>;
+};

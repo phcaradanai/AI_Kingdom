@@ -117,7 +117,8 @@ import type {
   StrategyOpportunityPayload,
   StrategyOverviewDto,
   StrategyRevenueStreamPayload,
-  SuccessMetricDto
+  SuccessMetricDto,
+  KingdomDiagnosticsReportDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -824,7 +825,13 @@ export const api = {
   createStrategyExperiment: (payload: StrategyExperimentPayload) =>
     apiRequest<{ experiment: OpportunityExperimentDto }>("/strategy/experiments", { method: "POST", body: JSON.stringify(payload) }),
   updateStrategyExperiment: (id: string, payload: Partial<StrategyExperimentPayload>) =>
-    apiRequest<{ experiment: OpportunityExperimentDto }>(`/strategy/experiments/${id}`, { method: "PATCH", body: JSON.stringify(payload) })
+    apiRequest<{ experiment: OpportunityExperimentDto }>(`/strategy/experiments/${id}`, { method: "PATCH", body: JSON.stringify(payload) }),
+
+  // ── M25-A: Kingdom Self-Diagnostics ─────────────────────────────────────────
+  diagnosticsIntelligence: (days?: number) => {
+    const suffix = days ? `?days=${days}` : "";
+    return apiRequest<KingdomDiagnosticsReportDto>(`/diagnostics/intelligence${suffix}`);
+  }
 };
 
 async function refreshAccessToken(): Promise<string | null> {

@@ -42,6 +42,7 @@ import { RoyalBriefPage } from "@/pages/RoyalBriefPage";
 import { InboxPage } from "@/pages/InboxPage";
 import { KingdomOperationsPage } from "@/pages/KingdomOperationsPage";
 import { StrategyPage } from "@/pages/StrategyPage";
+import { DiagnosticsPage } from "@/pages/DiagnosticsPage";
 import { I18nProvider } from "@/lib/i18n";
 import "./styles.css";
 
@@ -92,6 +93,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/automation-jobs" element={<AutomationJobsPage />} />
             <Route path="/decree-lineage/:workOrderId" element={<DecreeLineagePage />} />
             <Route path="/living-loop" element={<LivingLoopPage />} />
+            <Route path="/diagnostics" element={<DiagnosticsPage />} />
             <Route path="/royal-brief" element={<RoyalBriefPage />} />
             <Route path="/inbox" element={<InboxPage />} />
             <Route path="/kingdom/operations" element={<KingdomOperationsPage />} />

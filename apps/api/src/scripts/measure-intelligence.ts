@@ -136,7 +136,7 @@ export function computeReport(input: ReportInput): IntelligenceReport {
   };
 }
 
-async function gather(sinceDays?: number): Promise<ReportInput> {
+export async function gather(sinceDays?: number): Promise<ReportInput> {
   const where = sinceDays ? { createdAt: { gte: new Date(Date.now() - sinceDays * 86_400_000) } } : {};
 
   // Only usage tied to a council session counts as "decree" cost (excludes ad-hoc traces).

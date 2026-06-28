@@ -35,7 +35,7 @@ export async function createExternalAgentBridgeJob(input: {
 
   // Gate: active job, active run, context freshness, snapshot drift — all four checks
   // must pass before any WorkOrder state is mutated.
-  const readiness = await resolveExecutionReadiness(workOrder.id, "EXTERNAL_AGENT");
+  const readiness = await resolveExecutionReadiness(workOrder.id, "EXTERNAL_AGENT", "BRIDGE");
   if (!readiness.ok) {
     const err = new Error(readiness.reason ?? "Work order is not ready for dispatch.");
     err.name = "ConflictError";

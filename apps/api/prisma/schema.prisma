@@ -1041,6 +1041,22 @@ model WorkOrder {
   automationJobs          AutomationJob[]
   patchArtifacts          PatchArtifact[]
   reviewSummaries         AgentReviewSummary[]
+  continuityEvents        ContinuityEvent[]
+}
+
+model ContinuityEvent {
+  id             String    @id @default(cuid())
+  workOrderId    String?
+  taskId         String?
+  triggeredBy    String
+  readinessState String
+  reason         String
+  createdAt      DateTime  @default(now())
+  workOrder      WorkOrder? @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+
+  @@index([workOrderId])
+  @@index([readinessState])
+  @@index([createdAt])
 }
 
 model ExternalAgentRun {
@@ -1237,6 +1253,8 @@ model CouncilSession {
   createdWorkOrderBy String?
   qualityScore       Float?
   qualityFlags       Json?
+  originalMode       TaskMode?
+  modeCorrectionReason String?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)

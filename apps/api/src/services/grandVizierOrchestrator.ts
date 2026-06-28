@@ -255,7 +255,11 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       taskId: task.id,
       projectId: task.projectId,
       status: "RUNNING",
-      selectedAgentIds: selectedAgents.map((agent) => agent.id)
+      selectedAgentIds: selectedAgents.map((agent) => agent.id),
+      ...(modeAdvice && {
+        originalMode: modeAdvice.originalMode,
+        modeCorrectionReason: modeAdvice.reason
+      })
     }
   });
 

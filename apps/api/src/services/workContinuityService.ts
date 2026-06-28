@@ -303,6 +303,21 @@ export async function getWorkContinuity(workOrderId: string): Promise<WorkContin
   };
 }
 
+async function recordContinuityEvent(
+  workOrderId: string,
+  triggeredBy: string,
+  readinessState: string,
+  reason: string
+): Promise<void> {
+  try {
+    await prisma.continuityEvent.create({
+      data: { workOrderId, triggeredBy, readinessState, reason }
+    });
+  } catch {
+    // best-effort: never let event recording break the gate
+  }
+}
+
 /**
  * Resolves whether a new job/run can be created for a work order.
  *
@@ -316,7 +331,8 @@ export async function getWorkContinuity(workOrderId: string): Promise<WorkContin
  */
 export async function resolveExecutionReadiness(
   workOrderId: string,
-  mode: AutomationJobMode
+  mode: AutomationJobMode,
+  triggeredBy = "MANUAL"
 ): Promise<ExecutionReadinessResult> {
   const workOrder = await prisma.workOrder.findUnique({
     where: { id: workOrderId },
@@ -333,13 +349,9 @@ export async function resolveExecutionReadiness(
     where: { workOrderId, status: { in: [...ACTIVE_JOB_STATUSES_SET] as never[] } }
   });
   if (existingJob) {
-    return {
-      ok: false,
-      requiredAction: "WAIT_FOR_ACTIVE_JOB",
-      existingJob,
-      existingRun: null,
-      reason: `An active automation job already exists for this work order (${existingJob.id}, status: ${existingJob.status}). Wait for it to complete or cancel it first.`
-    };
+    const reason = `An active automation job already exists for this work order (${existingJob.id}, status: ${existingJob.status}). Wait for it to complete or cancel it first.`;
+    void recordContinuityEvent(workOrderId, triggeredBy, "BLOCKED", reason);
+    return { ok: false, requiredAction: "WAIT_FOR_ACTIVE_JOB", existingJob, existingRun: null, reason };
   }
 
   // 2. Active ExternalAgentRun guard
@@ -347,25 +359,17 @@ export async function resolveExecutionReadiness(
     where: { workOrderId, status: { in: [...ACTIVE_RUN_STATUSES_SET] as never[] } }
   });
   if (existingRun) {
-    return {
-      ok: false,
-      requiredAction: "WAIT_FOR_ACTIVE_RUN",
-      existingJob: null,
-      existingRun,
-      reason: `An active external agent run already exists for this work order (${existingRun.id}, status: ${existingRun.status}). Wait for it to complete before dispatching again.`
-    };
+    const reason = `An active external agent run already exists for this work order (${existingRun.id}, status: ${existingRun.status}). Wait for it to complete before dispatching again.`;
+    void recordContinuityEvent(workOrderId, triggeredBy, "BLOCKED", reason);
+    return { ok: false, requiredAction: "WAIT_FOR_ACTIVE_RUN", existingJob: null, existingRun, reason };
   }
 
   // 3. Context freshness (existing gate)
   const contextOutcome = await validateContextForAutomationJob(workOrderId, mode);
   if (!contextOutcome.ok) {
-    return {
-      ok: false,
-      requiredAction: "REFRESH_CONTEXT",
-      existingJob: null,
-      existingRun: null,
-      reason: contextOutcome.reason
-    };
+    const reason = contextOutcome.reason;
+    void recordContinuityEvent(workOrderId, triggeredBy, "STALE_CONTEXT", reason ?? "Context not fresh");
+    return { ok: false, requiredAction: "REFRESH_CONTEXT", existingJob: null, existingRun: null, reason };
   }
 
   // 4. Snapshot-id match: verify WO is bound to latest project snapshot
@@ -373,13 +377,9 @@ export async function resolveExecutionReadiness(
   // may still point at an older snapshot if a re-scan ran after the WO was bound.
   if (workOrder.localDocumentSnapshotId && contextOutcome.binding?.localDocumentSnapshotId) {
     if (workOrder.localDocumentSnapshotId !== contextOutcome.binding.localDocumentSnapshotId) {
-      return {
-        ok: false,
-        requiredAction: "REFRESH_CONTEXT",
-        existingJob: null,
-        existingRun: null,
-        reason: `Work order is bound to local docs snapshot ${workOrder.localDocumentSnapshotId} but the latest project snapshot is ${contextOutcome.binding.localDocumentSnapshotId}. Rebind context (POST /api/work-orders/${workOrderId}/bind-context) before executing.`
-      };
+      const reason = `Work order is bound to local docs snapshot ${workOrder.localDocumentSnapshotId} but the latest project snapshot is ${contextOutcome.binding.localDocumentSnapshotId}. Rebind context (POST /api/work-orders/${workOrderId}/bind-context) before executing.`;
+      void recordContinuityEvent(workOrderId, triggeredBy, "STALE_CONTEXT", reason);
+      return { ok: false, requiredAction: "REFRESH_CONTEXT", existingJob: null, existingRun: null, reason };
     }
   }
 

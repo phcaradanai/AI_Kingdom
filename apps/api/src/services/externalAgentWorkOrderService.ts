@@ -432,7 +432,7 @@ export async function dispatchWorkOrder(workOrderId: string, externalAgentId: st
   if (!externalAgent.isActive) throw notFound("External agent is inactive");
 
   // Gate: refuse dispatch if an active job/run exists, context is stale, or snapshot drifted.
-  const readiness = await resolveExecutionReadiness(workOrderId, "EXTERNAL_AGENT");
+  const readiness = await resolveExecutionReadiness(workOrderId, "EXTERNAL_AGENT", "EXTERNAL");
   if (!readiness.ok) {
     const err = new Error(readiness.reason ?? "Work order is not ready for dispatch.");
     err.name = "ConflictError";

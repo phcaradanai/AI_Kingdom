@@ -29,6 +29,7 @@ const navCategories = [
       { to: "/kingdom/operations", label: "Operations", icon: MonitorPlay, roles: ["KING", "CROWN_PRINCE"] },
       { to: "/royal-brief", label: "Royal Brief", icon: ScrollText, roles: ["KING", "CROWN_PRINCE"] },
       { to: "/living-loop", label: "Living Loop", icon: Sparkles, roles: ["KING"] },
+      { to: "/diagnostics", label: "Diagnostics", icon: Activity, roles: ["KING", "CROWN_PRINCE"] },
     ]
   },
   {
@@ -90,7 +91,7 @@ const navCategories = [
   }
 ];
 
-const WIDE_ROUTES = ["/dashboard", "/inbox", "/kingdom/operations", "/royal-brief", "/living-loop", "/work-orders", "/automation-jobs", "/agents", "/treasury"];
+const WIDE_ROUTES = ["/dashboard", "/inbox", "/kingdom/operations", "/royal-brief", "/living-loop", "/diagnostics", "/work-orders", "/automation-jobs", "/agents", "/treasury"];
 const COMPACT_ROUTES = ["/profile", "/security", "/charter", "/vision"];
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "ai-kingdom-sidebar-collapsed";
 const INBOX_POLL_INTERVAL_MS = 30_000;
