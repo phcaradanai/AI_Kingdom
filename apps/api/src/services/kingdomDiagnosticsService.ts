@@ -11,6 +11,7 @@
  * All data is read-only — zero mutations, zero AI calls.
  */
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { computeReport, gather, type IntelligenceReport } from "../scripts/measure-intelligence.js";
 
@@ -44,14 +45,35 @@ export interface ContinuityStats {
   }>;
 }
 
+export interface CollaborationStats {
+  total: number;
+  rate: number;
+  enabled: boolean;
+}
+
 export interface KingdomDiagnosticsReport {
   generatedAt: Date;
   windowDays: number | null;
   intelligence: IntelligenceReport;
   modeCorrection: ModeCorrectionStats;
   continuity: ContinuityStats;
+  collaboration: CollaborationStats;
   weeklyTrend: WeekBucket[];
   settingsSnapshot: Record<string, string>;
+}
+
+// Returns collaboration protocol stats (M25-C). `collaboratingSessionCount` is the
+// count of sessions where the sub-query fired (collaborationNotes not null).
+export function buildCollaborationStats(
+  collaboratingSessionCount: number,
+  totalSessions: number,
+  enabled: boolean
+): CollaborationStats {
+  return {
+    total: collaboratingSessionCount,
+    rate: totalSessions > 0 ? collaboratingSessionCount / totalSessions : 0,
+    enabled,
+  };
 }
 
 const INTELLIGENCE_SETTINGS = [
@@ -107,7 +129,7 @@ export async function computeDiagnosticsReport(
   const since = sinceDays ? new Date(Date.now() - sinceDays * 86_400_000) : undefined;
   const where = since ? { createdAt: { gte: since } } : {};
 
-  const [intelligenceInput, modeCorrectionRows, continuityRows, settingRows] = await Promise.all([
+  const [intelligenceInput, modeCorrectionRows, continuityRows, settingRows, collaborationRow] = await Promise.all([
     gather(sinceDays),
     prisma.councilSession.findMany({
       where: { ...where, originalMode: { not: null } },
@@ -120,8 +142,12 @@ export async function computeDiagnosticsReport(
       select: { id: true, workOrderId: true, triggeredBy: true, readinessState: true, reason: true, createdAt: true }
     }),
     prisma.setting.findMany({
-      where: { key: { in: [...INTELLIGENCE_SETTINGS] } },
+      where: { key: { in: [...INTELLIGENCE_SETTINGS, "COUNCIL_COLLABORATION_ENABLED"] } },
       select: { key: true, value: true }
+    }),
+    // Prisma 5: IS NOT NULL for a JSON column requires NOT + DbNull
+    prisma.councilSession.count({
+      where: { ...where, NOT: { collaborationNotes: { equals: Prisma.DbNull } } }
     })
   ]);
 
@@ -132,6 +158,14 @@ export async function computeDiagnosticsReport(
 
   // Continuity stats
   const continuity = buildContinuityStats(continuityRows);
+
+  // Collaboration stats (M25-C)
+  const collaborationEnabledStr = settingRows.find((s) => s.key === "COUNCIL_COLLABORATION_ENABLED")?.value ?? "false";
+  const collaboration = buildCollaborationStats(
+    collaborationRow,
+    intelligence.decrees,
+    collaborationEnabledStr === "true"
+  );
 
   // Weekly trend: last 4 weeks of council sessions
   const weeklyTrend = await buildWeeklyTrend(since);
@@ -149,6 +183,7 @@ export async function computeDiagnosticsReport(
     intelligence,
     modeCorrection,
     continuity,
+    collaboration,
     weeklyTrend,
     settingsSnapshot
   };

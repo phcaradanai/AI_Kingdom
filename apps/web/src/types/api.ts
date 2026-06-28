@@ -2902,12 +2902,19 @@ export type DiagnosticsIntelligenceReport = {
   verdictCounts: Record<string, number>;
 };
 
+export type DiagnosticsCollaborationStats = {
+  total: number;
+  rate: number;
+  enabled: boolean;
+};
+
 export type KingdomDiagnosticsReportDto = {
   generatedAt: string;
   windowDays: number | null;
   intelligence: DiagnosticsIntelligenceReport;
   modeCorrection: DiagnosticsModeCorrectionStats;
   continuity: DiagnosticsContinuityStats;
+  collaboration: DiagnosticsCollaborationStats;
   weeklyTrend: DiagnosticsWeekBucket[];
   settingsSnapshot: Record<string, string>;
 };

@@ -1255,6 +1255,7 @@ model CouncilSession {
   qualityFlags       Json?
   originalMode       TaskMode?
   modeCorrectionReason String?
+  collaborationNotes Json?
   createdAt          DateTime             @default(now())
   updatedAt          DateTime             @updatedAt
   project            Project?             @relation(fields: [projectId], references: [id], onDelete: SetNull)

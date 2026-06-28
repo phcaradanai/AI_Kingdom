@@ -4,17 +4,25 @@
  * Generates and stores embeddingVector for every Memory row that currently has
  * embeddingVector = NULL. Run this once after deploying the M25-B migration.
  *
+ * NOTE: If you switch embedding providers (e.g. from mock 128-dim to OpenAI
+ * 1536-dim), the dimension guard in findRelevantMemories will fall back to
+ * keyword scoring for old vectors. Re-run this script after switching providers
+ * to re-embed all rows at the new dimension and restore full semantic search.
+ *
  * Usage (from repo root):
  *   npm run data:backfill-embeddings
  */
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
 import { generateEmbedding } from "../ai/embeddingService.js";
 
 const BATCH_SIZE = 50;
+// Prisma 5: JSON nullable columns require DbNull to filter for SQL NULL
+const nullVecFilter = { embeddingVector: { equals: Prisma.DbNull } };
 
 async function main(): Promise<void> {
-  const total = await prisma.memory.count({ where: { embeddingVector: null } });
+  const total = await prisma.memory.count({ where: nullVecFilter });
   console.log(`Backfilling embeddings for ${total} memory rows…`);
   if (total === 0) {
     console.log("Nothing to backfill.");
@@ -26,7 +34,7 @@ async function main(): Promise<void> {
 
   while (true) {
     const batch = await prisma.memory.findMany({
-      where: { embeddingVector: null },
+      where: nullVecFilter,
       select: { id: true, title: true, content: true },
       take: BATCH_SIZE,
       ...(cursor ? { skip: 1, cursor: { id: cursor } } : {})

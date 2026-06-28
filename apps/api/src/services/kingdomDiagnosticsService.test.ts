@@ -4,7 +4,8 @@ import { computeReport, type ReportInput } from "../scripts/measure-intelligence
 import {
   getISOWeekLabel,
   buildModeCorrectionStats,
-  buildContinuityStats
+  buildContinuityStats,
+  buildCollaborationStats
 } from "./kingdomDiagnosticsService.js";
 
 // Verify the pure computeReport function (already used by the diagnostics service)
@@ -179,4 +180,23 @@ test("buildContinuityStats: recentEvents capped at 10", () => {
   const stats = buildContinuityStats(events);
   assert.equal(stats.total, 15);
   assert.equal(stats.recentEvents.length, 10);
+});
+
+test("buildCollaborationStats: zero sessions produce zero rate", () => {
+  const stats = buildCollaborationStats(0, 0, false);
+  assert.equal(stats.total, 0);
+  assert.equal(stats.rate, 0);
+  assert.equal(stats.enabled, false);
+});
+
+test("buildCollaborationStats: computes rate correctly", () => {
+  const stats = buildCollaborationStats(3, 10, true);
+  assert.equal(stats.total, 3);
+  assert.ok(Math.abs(stats.rate - 0.3) < 0.001, "rate should be 0.3");
+  assert.equal(stats.enabled, true);
+});
+
+test("buildCollaborationStats: rate is 0 when total sessions is 0", () => {
+  const stats = buildCollaborationStats(0, 0, true);
+  assert.equal(stats.rate, 0);
 });

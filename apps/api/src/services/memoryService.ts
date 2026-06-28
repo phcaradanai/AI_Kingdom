@@ -27,11 +27,14 @@ export async function findRelevantMemories(userId: string, command: string, limi
   return memories
     .map((memory) => {
       const stored = memory.embeddingVector;
-      // Prefer semantic similarity when an embedding is stored
-      if (Array.isArray(stored) && stored.length > 0) {
+      // Semantic cosine only when the stored vector dimension matches the query.
+      // Mismatched dimensions (e.g. old 128-dim mock vs new 1536-dim real-provider,
+      // or vice versa) fall back to keyword so memories are never silently dropped.
+      const usable = Array.isArray(stored) && stored.length === queryVec.length;
+      if (usable) {
         return { memory, score: cosineSimilarity(queryVec, stored as number[]) };
       }
-      // Keyword fallback for unembedded rows (normalised to 0–1 range)
+      // Keyword fallback for unembedded or dimension-mismatched rows
       return { memory, score: scoreMemory(memory, tokens) / 10 };
     })
     .filter((item) => item.score > 0)

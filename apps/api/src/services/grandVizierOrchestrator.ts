@@ -16,6 +16,7 @@ import { adviseModeCorrection } from "./decreeModeAdvisorService.js";
 import { maybeGrowAgentMaxTokens } from "./maxTokensAutoGrowService.js";
 import { runPlannerAgent } from "./plannerAgentService.js";
 import { buildCrossTaskLessons } from "./crossTaskLearningService.js";
+import { detectCollaborationGap } from "./agentCollaborationService.js";
 import { refreshCouncilNextExecutableAction } from "./kingdomNextActionEngine.js";
 import { buildUsageAttribution, redactSecrets } from "./usageAttributionService.js";
 import { completeAgentActivity, failAgentActivity, startAgentActivity, updateAgentActivity } from "./agentActivityService.js";
@@ -664,6 +665,47 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       for (const agent of selectedAgents) {
         applyPass(await runCouncilAgentPass(agent, prevContext()));
       }
+    }
+
+    // M25-C: Agent Collaboration Protocol
+    // In parallel mode, specialists run without seeing each other. If the
+    // Researcher expresses uncertainty that the Archivist could resolve, fire a
+    // single targeted sub-query (routed through runCouncilAgentPass for proper
+    // cost/trace instrumentation) before the Grand Vizier's final synthesis.
+    // Gated by COUNCIL_COLLABORATION_ENABLED (default OFF). Only fires in
+    // parallel mode — in sequential mode the Researcher already sees the
+    // Archivist, so the gap doesn't exist.
+    const collaborationEnabled = await getBooleanSetting("COUNCIL_COLLABORATION_ENABLED", false);
+    const collaborationNotes: Array<{ researcherSnippet: string; question: string; answer: string }> = [];
+
+    if (collaborationEnabled && parallelSpecialists) {
+      const archivistAgent = selectedAgents.find((a) => a.slug === "royal-archivist");
+      const researcherResp = generatedResponses.find((r) => r.agent.slug === "royal-researcher")?.response ?? "";
+      const archivistResp = generatedResponses.find((r) => r.agent.slug === "royal-archivist")?.response ?? "";
+
+      if (archivistAgent && researcherResp && archivistResp) {
+        const gap = detectCollaborationGap(archivistResp, researcherResp);
+        if (gap.needed) {
+          try {
+            const collabResult = await runCouncilAgentPass(archivistAgent, gap.question);
+            applyPass(collabResult);
+            collaborationNotes.push({
+              researcherSnippet: gap.researcherSnippet.slice(0, 300),
+              question: gap.question.slice(0, 300),
+              answer: collabResult.response.slice(0, 500)
+            });
+          } catch (err) {
+            console.warn("[Council] collaboration sub-query failed (continuing without):", err instanceof Error ? err.message : String(err));
+          }
+        }
+      }
+    }
+
+    if (collaborationNotes.length > 0) {
+      await prisma.councilSession.update({
+        where: { id: session.id },
+        data: { collaborationNotes: JSON.parse(JSON.stringify(collaborationNotes)) }
+      }).catch((err) => console.warn("[Council] collaboration notes save failed:", err instanceof Error ? err.message : String(err)));
     }
 
     const grandVizier = selectedAgents.find((agent) => agent.slug === "grand-vizier") ?? selectedAgents[0];

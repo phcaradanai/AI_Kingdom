@@ -83,6 +83,7 @@ test("extract memory candidates limits concise meaningful memories", () => {
     qualityFlags: null,
     originalMode: null,
     modeCorrectionReason: null,
+    collaborationNotes: null,
     createdAt: now,
     updatedAt: now
   };
@@ -91,6 +92,36 @@ test("extract memory candidates limits concise meaningful memories", () => {
   assert.ok(candidates.length >= 1);
   assert.ok(candidates.length <= 5);
   assert.ok(candidates.some((candidate) => candidate.type === "DECISION"));
+});
+
+test("findRelevantMemories falls back to keyword when stored embedding dimension mismatches query", async () => {
+  const user = await prisma.user.create({
+    data: {
+      email: `memory-dim-${Date.now()}@aikingdom.local`,
+      displayName: "Dim Mismatch Test",
+      passwordHash: "test"
+    }
+  });
+
+  // Store a 5-dim vector — intentionally wrong dimension so cosine guard fires
+  const memory = await prisma.memory.create({
+    data: {
+      createdBy: user.id,
+      type: "FACT",
+      title: "Council uses Zustand state management",
+      content: "Zustand is the kingdom state library for the council throne room.",
+      tags: ["zustand", "council"],
+      importance: "HIGH",
+      embeddingVector: [0.1, 0.2, 0.3, 0.4, 0.5] // 5-dim, will not match 128-dim mock query
+    }
+  });
+
+  // Should still be returned via keyword fallback (query contains "zustand" and "council")
+  const results = await findRelevantMemories(user.id, "zustand council throne room state");
+  assert.ok(results.some((m) => m.id === memory.id), "dimension-mismatched memory must not be silently dropped");
+
+  await prisma.memory.delete({ where: { id: memory.id } });
+  await prisma.user.delete({ where: { id: user.id } });
 });
 
 test("orchestrator provider input can include relevant Kingdom Memory Context", async () => {

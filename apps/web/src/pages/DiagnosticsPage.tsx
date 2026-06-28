@@ -103,6 +103,7 @@ export function DiagnosticsPage() {
   const intel = report?.intelligence;
   const mc = report?.modeCorrection;
   const cont = report?.continuity;
+  const collab = report?.collaboration;
 
   return (
     <div className="space-y-6">
@@ -228,6 +229,20 @@ export function DiagnosticsPage() {
                   </div>
                 ))}
               </div>
+            )}
+          </PageSection>
+
+          {/* Agent Collaboration Protocol */}
+          <PageSection title="Agent Collaboration Protocol (M25-C)" icon={Zap}>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <StatCard title="Collaboration Sessions" value={String(collab?.total ?? 0)} />
+              <StatCard title="Trigger Rate" value={pct(collab?.rate ?? 0)} />
+              <StatCard title="Feature" value={collab?.enabled ? "Enabled" : "Off (default)"} />
+            </div>
+            {!collab?.enabled && (
+              <p className="text-xs text-muted-foreground mt-3">
+                Enable with <code className="bg-muted/40 px-1 rounded text-xs">COUNCIL_COLLABORATION_ENABLED=true</code> — fires a targeted Archivist follow-up when the Researcher expresses uncertainty (parallel mode only).
+              </p>
             )}
           </PageSection>
 
