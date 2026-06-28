@@ -8,6 +8,7 @@ export type CollaborationGapResult =
   | { needed: true; question: string; researcherSnippet: string };
 
 const UNCERTAINTY_MARKERS = [
+  // Formal/structured uncertainty signals
   "inconclusive",
   "insufficient evidence",
   "cannot determine",
@@ -16,6 +17,19 @@ const UNCERTAINTY_MARKERS = [
   "requires clarification",
   "not enough information",
   "needs investigation",
+  // Common LLM hedging patterns (DeepSeek / OpenRouter real output)
+  "uncertain",
+  "ambiguous",
+  "difficult to determine",
+  "hard to say",
+  "hard to tell",
+  "hard to assess",
+  "without more information",
+  "further investigation",
+  "cannot confirm",
+  "limited information",
+  "unable to determine",
+  "more context needed",
 ];
 
 // Returns true when the Researcher response contains a recognised uncertainty

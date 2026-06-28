@@ -86,3 +86,37 @@ test("detectCollaborationGap: researcherSnippet is capped at 400 chars", () => {
     assert.ok(result.researcherSnippet.length <= 400);
   }
 });
+
+// ─── Expanded marker coverage (real LLM hedging patterns) ──────────────────
+
+test("hasUncertaintySignal: 'uncertain' standalone triggers", () => {
+  assert.equal(hasUncertaintySignal("The root cause is uncertain — logs are missing."), true);
+});
+
+test("hasUncertaintySignal: 'ambiguous' triggers", () => {
+  assert.equal(hasUncertaintySignal("The evidence is ambiguous and points in two directions."), true);
+});
+
+test("hasUncertaintySignal: 'difficult to determine' triggers", () => {
+  assert.equal(hasUncertaintySignal("It is difficult to determine the exact failure path without logs."), true);
+});
+
+test("hasUncertaintySignal: 'hard to say' triggers", () => {
+  assert.equal(hasUncertaintySignal("It is hard to say whether the auth layer or the DB is at fault."), true);
+});
+
+test("hasUncertaintySignal: 'further investigation' triggers", () => {
+  assert.equal(hasUncertaintySignal("Further investigation is needed to confirm the hypothesis."), true);
+});
+
+test("hasUncertaintySignal: 'cannot confirm' triggers", () => {
+  assert.equal(hasUncertaintySignal("We cannot confirm the root cause from the available stack traces."), true);
+});
+
+test("hasUncertaintySignal: confident recommendation does NOT trigger", () => {
+  assert.equal(hasUncertaintySignal("The fix is clear: add a null check in authMiddleware.ts at line 47."), false);
+});
+
+test("hasUncertaintySignal: case-insensitive match for 'DIFFICULT TO DETERMINE'", () => {
+  assert.equal(hasUncertaintySignal("DIFFICULT TO DETERMINE from the evidence presented."), true);
+});

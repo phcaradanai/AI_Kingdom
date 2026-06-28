@@ -675,7 +675,7 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
     // Gated by COUNCIL_COLLABORATION_ENABLED (default OFF). Only fires in
     // parallel mode — in sequential mode the Researcher already sees the
     // Archivist, so the gap doesn't exist.
-    const collaborationEnabled = await getBooleanSetting("COUNCIL_COLLABORATION_ENABLED", false);
+    const collaborationEnabled = await getBooleanSetting("COUNCIL_COLLABORATION_ENABLED", true);
     const collaborationNotes: Array<{ researcherSnippet: string; question: string; answer: string }> = [];
 
     if (collaborationEnabled && parallelSpecialists) {
