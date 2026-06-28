@@ -1,5 +1,6 @@
 import type { AgentResponse, CouncilSession, Memory, MemoryImportance, MemoryType, Task } from "@prisma/client";
 import { prisma } from "../db/prisma.js";
+import { cosineSimilarity, generateEmbedding } from "../ai/embeddingService.js";
 import { isForbiddenMemoryContent } from "./memorySafety.js";
 
 export type MemoryCandidate = {
@@ -14,18 +15,25 @@ const SENSITIVE_PATTERNS = [/api[_-]?key/i, /password/i, /secret/i, /token/i, /s
 
 export async function findRelevantMemories(userId: string, command: string, limit = 5): Promise<Memory[]> {
   const tokens = tokenize(command);
-  if (tokens.length === 0) {
-    return [];
-  }
+  if (tokens.length === 0) return [];
 
-  const memories = await prisma.memory.findMany({
-    where: { createdBy: userId },
-    orderBy: { updatedAt: "desc" },
-    take: 100
-  });
+  const memories = await prisma.memory.findMany({ where: { createdBy: userId } });
+  if (memories.length === 0) return [];
+
+  // Generate a query embedding — uses the real provider when OPENAI_API_KEY is set,
+  // falls back to the deterministic bag-of-words mock otherwise.
+  const queryVec = await generateEmbedding(command);
 
   return memories
-    .map((memory) => ({ memory, score: scoreMemory(memory, tokens) }))
+    .map((memory) => {
+      const stored = memory.embeddingVector;
+      // Prefer semantic similarity when an embedding is stored
+      if (Array.isArray(stored) && stored.length > 0) {
+        return { memory, score: cosineSimilarity(queryVec, stored as number[]) };
+      }
+      // Keyword fallback for unembedded rows (normalised to 0–1 range)
+      return { memory, score: scoreMemory(memory, tokens) / 10 };
+    })
     .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -59,10 +67,12 @@ export async function autoSaveMemories(input: {
       continue;
     }
 
+    const embeddingVector = await generateEmbedding(`${candidate.title} ${trimContent(candidate.content, 700)}`);
     const memory = await prisma.memory.create({
       data: {
         ...candidate,
         content: trimContent(candidate.content, 700),
+        embeddingVector,
         sourceTaskId: input.task.id,
         projectId: input.task.projectId,
         sourceCouncilSessionId: input.session.id,

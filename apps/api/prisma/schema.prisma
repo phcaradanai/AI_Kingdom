@@ -1658,6 +1658,7 @@ model Memory {
   createdBy              String           @map("userId")
   createdAt              DateTime         @default(now())
   updatedAt              DateTime         @default(now()) @updatedAt
+  embeddingVector        Json?
   project                Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
   user                   User             @relation(fields: [createdBy], references: [id], onDelete: Cascade)
 }
