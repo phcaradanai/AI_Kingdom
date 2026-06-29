@@ -34,11 +34,11 @@ Primary services:
 - `projectContextService.ts`: builds compact project context for agents: project identity, goals, status, active milestone, recent decisions/reports, open matters, active work orders, linked memories, and artifacts. Output is capped to avoid prompt bloat.
 - `livingLoopService.ts`: observes Kingdom state, proposes quality-gated candidates, and runs the three opt-in auto-act stages for context repair, validation jobs, and sandbox patch jobs.
 - `kingdomSchedulerService.ts`: in-process, non-overlapping scheduler that checks `LIVING_LOOP_ENABLED` each tick and drives `runLivingLoopOnce("SCHEDULED")`.
-- `missionControlService.ts` and `nextActionService.ts`: read-only command summaries that link back to WorkOrders, AutomationJobs, reviews, providers, and other owning records.
+- `missionControlService.ts` and `nextActionService.ts`: command summaries that link back to WorkOrders, AutomationJobs, reviews, providers, and other owning records. Mission Control also exposes the narrowly scoped DECREE_TO_DONE actions; other summary sections remain read-only.
 
 ## Data Model
 
-Core Prisma model groups cover identity/audit, providers/usage, projects/context snapshots, commands/council, external work/execution, reports/knowledge, Living Loop candidates/runs, and Kingdom governance. The principal execution chain is `Task -> CouncilSession -> WorkOrder -> AutomationJob -> ImplementationReport/PatchArtifact -> AgentReviewSummary`, with source ids and trace ids preserving provenance between stages.
+Core Prisma model groups cover identity/audit, providers/usage, projects/context snapshots, commands/council, external work/execution, reports/knowledge, Living Loop candidates/runs, and Kingdom governance. The principal execution chain is `Task -> CouncilSession -> WorkOrder -> AutomationJob -> ImplementationReport/PatchArtifact -> AgentReviewSummary`, with source ids and trace ids preserving provenance between stages. `WorkflowRun` and `WorkflowStepRun` form a thin, idempotent graph over that chain; they never replace the owning records.
 
 Tasks belong to users and may produce council sessions and reports. Council sessions store selected agent IDs, provider/model metadata, fallback notices, consulted memory IDs, auto-saved memory IDs, agent responses, and final summary. Reports and memories retain source task/session references when generated from council output.
 
@@ -68,7 +68,7 @@ Agent records contain prompts, skills, response style, priority, and optional pr
 
 ## Frontend Layout
 
-Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders role-aware navigation grouped by purpose. The read-only Mission Control group contains Overview (`/dashboard`), Action Queue (`/inbox`), Operations (`/kingdom/operations`), Royal Brief (`/royal-brief`), and Living Loop (`/living-loop`). These pages summarize live API data and link back to owning records; lifecycle mutation remains on pages such as Work Orders and Automation Jobs. `authStore` owns session state, `kingdomStore` owns shared Kingdom data, and all network calls remain centralized in `apps/web/src/lib/api.ts`.
+Routes are defined in `apps/web/src/main.tsx`. `AppLayout` renders role-aware navigation grouped by purpose. Mission Control contains Overview (`/dashboard`), Action Queue (`/inbox`), Operations (`/kingdom/operations`), Royal Brief (`/royal-brief`), and Living Loop (`/living-loop`). Summary sections link back to owning records; the Overview additionally owns the bounded DECREE_TO_DONE continue, choose-agent, retry, and accept-and-learn actions. Other lifecycle mutation remains on owning pages. `authStore` owns session state, `kingdomStore` owns shared Kingdom data, and all network calls remain centralized in `apps/web/src/lib/api.ts`.
 
 ## Project Routing Flow
 

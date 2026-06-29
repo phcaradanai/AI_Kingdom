@@ -1,6 +1,6 @@
 import { AlertTriangle, ArrowRight, BookOpen, CheckCircle2, ChevronDown, ClipboardCheck, Cpu, ExternalLink, FileText, Handshake, Hammer, Layers, ScrollText, Search, Send, Server, ShieldCheck, Sparkles, Clock3, XCircle } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { LivingKingdomView } from "@/components/kingdom/LivingKingdomView";
 import { PageHeader } from "@/components/PageHeader";
@@ -15,7 +15,7 @@ import { useTk } from "@/lib/i18n";
 import { getModelDisplayName, getProviderDisplayName, getProviderTerminologyText } from "@/lib/providerDisplay";
 import { cn, formatDate } from "@/lib/utils";
 import { useKingdomStore } from "@/stores/kingdomStore";
-import type { CouncilResponseDto, CouncilSessionDto, TaskDto, TaskMode } from "@/types/api";
+import type { CouncilResponseDto, CouncilSessionDto, ProjectDto, TaskDto, TaskMode } from "@/types/api";
 
 const modes: Array<{ value: TaskMode; label: string; description: string; useWhen: string }> = [
   { value: "ASK", label: "ASK", description: "Use for a focused answer, decision, or quick strategic read.", useWhen: "Best when the King needs counsel, not a project plan." },
@@ -84,6 +84,8 @@ function ThroneRoomCommand() {
   const tk = useTk();
   const [command, setCommand] = useState("");
   const [mode, setMode] = useState<TaskMode>("BUILD");
+  const [projects, setProjects] = useState<ProjectDto[]>([]);
+  const [projectId, setProjectId] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [handoffMessage, setHandoffMessage] = useState<string | null>(null);
   const [handoffError, setHandoffError] = useState<string | null>(null);
@@ -103,6 +105,16 @@ function ThroneRoomCommand() {
   const latestTask = tasks[0];
   const latestSession = latestTask?.sessions[0];
 
+  useEffect(() => {
+    let cancelled = false;
+    api.projects({ status: "ACTIVE" }).then(({ projects: available }) => {
+      if (cancelled) return;
+      setProjects(available);
+      setProjectId((current) => current || available.find((project) => project.name === "AI Kingdom")?.id || available[0]?.id || "");
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, []);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setError(null);
@@ -110,9 +122,14 @@ function ThroneRoomCommand() {
       setError("Enter a royal command before issuing a decree.");
       return;
     }
+    if (mode === "BUILD" && !projectId) {
+      setError("Choose a project before issuing a BUILD decree so context can be checked and repaired.");
+      return;
+    }
     try {
-      await submitCommand(command, mode);
+      await submitCommand(command, mode, projectId || null);
       setCommand("");
+      if (mode === "BUILD") navigate("/");
     } catch (submitError) {
       setError(submitError instanceof Error ? submitError.message : "The throne room could not record the decree");
     }
@@ -244,6 +261,19 @@ function ThroneRoomCommand() {
                 onChange={(event) => setCommand(event.target.value)}
                 placeholder={tk("throne.composer.placeholder")}
               />
+
+              <label htmlFor="decree-project" className="mt-4 block text-sm font-semibold text-foreground">Project context</label>
+              <select
+                id="decree-project"
+                className="mt-2 h-11 w-full rounded-md border border-border bg-background/60 px-3 text-sm text-foreground"
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                required={mode === "BUILD"}
+              >
+                <option value="">Choose project</option>
+                {projects.map((project) => <option key={project.id} value={project.id}>{project.name}</option>)}
+              </select>
+              <p className="mt-1 text-xs text-muted-foreground">BUILD uses this project’s approved local-doc roots for the context gate.</p>
 
               {error && (
                 <div className="mt-4 flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm font-medium text-destructive">

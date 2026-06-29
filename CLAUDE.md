@@ -84,6 +84,14 @@ Entry: `src/server.ts` → `src/app.ts` (Express setup with cors, helmet, morgan
    - Auto-saves 1–5 memory candidates from the summary via `memoryService.ts`.
    - Generates a `RoyalReport` via `reportService.ts`.
 
+**BUILD decree product flow:** `decreeToDoneWorkflowService.ts` persists one `WorkflowRun`
+per BUILD `Task` plus idempotent `WorkflowStepRun` evidence. It repairs approved local-doc
+context before council execution, reuses the existing council/planner/bridge/retry/review
+services, and pauses only for a concrete context, agent-choice, runner, review, or acceptance
+gate. Mission Control is the owning interaction surface for continue, choose-agent, retry,
+and accept-and-learn actions. Source records remain authoritative; the workflow stores links
+and status only. It never pushes, merges, deploys, or creates a PR.
+
 **AI provider abstraction** (`src/ai/`):
 - `AIProvider` interface in `aiProvider.ts` — `generateAgentResponse` returns `AgentResponseResult` (response text + `TokenUsage`).
 - `mockAIProvider.ts` — deterministic responses, tokens estimated from string length, cost = $0.

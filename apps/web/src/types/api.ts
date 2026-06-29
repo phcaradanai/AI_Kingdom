@@ -2496,11 +2496,52 @@ export type MissionControlWarningDto = {
   sourceReference: MissionControlSourceReferenceDto;
 };
 
+export type WorkflowPrimaryActionDto =
+  | "Start Workflow"
+  | "Continue Workflow"
+  | "Fix Context"
+  | "Choose Agent"
+  | "Dispatch"
+  | "Review Result"
+  | "Retry"
+  | "Accept & Learn";
+
+export type WorkflowRunDto = {
+  id: string;
+  type: "DECREE_TO_DONE";
+  status: "RUNNING" | "BLOCKED" | "NEEDS_REVIEW" | "COMPLETED" | "FAILED";
+  currentStep: string;
+  sourceTaskId: string;
+  projectId: string | null;
+  workOrderId: string | null;
+  automationJobId: string | null;
+  lastError: string | null;
+  nextAction: string | null;
+  primaryAction: WorkflowPrimaryActionDto | null;
+  createdAt: string;
+  updatedAt: string;
+  sourceTask: { id: string; title: string; mode: string; status: string };
+  project: { id: string; name: string } | null;
+  workOrder: { id: string; title: string; status: string; contextBindingStatus: string; assignedExternalAgentId: string | null } | null;
+  automationJob: {
+    id: string;
+    status: string;
+    mode: string;
+    implementationReports: Array<{ id: string; summary: string; testResult: string; filesChanged: string[] }>;
+    reviewSummary: { id: string; verdict: string; kingRecommendation: string; summary: string; whatPassed: unknown; whatFailed: unknown; riskNotes: unknown; nextActions: unknown } | null;
+    patchArtifacts: Array<{ id: string; riskLevel: string; validationStatus: string; filesChanged: string[] }>;
+  } | null;
+  steps: Array<{ id: string; stepKey: string; status: string; sourceType: string | null; sourceId: string | null; summary: string | null; error: string | null; startedAt: string | null; completedAt: string | null }>;
+  availableAgents: Array<{ agentId: string; name: string; type: string; ready: boolean; reason: string }>;
+};
+
 export type MissionControlDto = {
   computedAt: string;
   milestoneCodename: "KINGDOM_MISSION_CONTROL_FOUNDATION";
   topAction: MissionControlTopActionDto;
   actionQueue: MissionControlTopActionDto[];
+  currentWorkflow: WorkflowRunDto | null;
+  activeWorkflows: WorkflowRunDto[];
   activeWorkOrders: MissionControlWorkOrderDto[];
   activeWork: MissionControlWorkOrderDto[];
   blockedWorkOrders: MissionControlWorkOrderDto[];
@@ -2515,7 +2556,7 @@ export type MissionControlDto = {
   providerWarnings: MissionControlWarningDto[];
   nextRecommendedAction: string;
   migration: {
-    required: false;
+    required: boolean;
     reason: string;
   };
 };

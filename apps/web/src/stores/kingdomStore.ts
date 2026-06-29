@@ -27,8 +27,8 @@ type KingdomState = {
   isProcessing: boolean;
   error: string | null;
   refresh: () => Promise<void>;
-  submitCommand: (command: string, mode: TaskMode) => Promise<TaskDto>;
-  processTask: (id: string) => Promise<CouncilSessionDto>;
+  submitCommand: (command: string, mode: TaskMode, projectId?: string | null) => Promise<TaskDto>;
+  processTask: (id: string) => Promise<CouncilSessionDto | null>;
   updateTaskStatus: (id: string, status: TaskStatus) => Promise<TaskDto>;
   searchMemories: (q: string) => Promise<void>;
   createMemory: (payload: MemoryPayload) => Promise<MemoryDto>;
@@ -84,10 +84,10 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
       set({ error: error instanceof Error ? error.message : "Unable to load kingdom data", isLoading: false });
     }
   },
-  submitCommand: async (command, mode) => {
+  submitCommand: async (command, mode, projectId) => {
     set({ isLoading: true, isProcessing: true, error: null });
     try {
-      const response = await api.createTask({ command, mode });
+      const response = await api.createTask({ command, mode, projectId });
       const newSession = response.session;
       set({
         tasks: [response.task, ...get().tasks.filter((task) => task.id !== response.task.id)],
@@ -108,11 +108,11 @@ export const useKingdomStore = create<KingdomState>((set, get) => ({
       const response = await api.processTask(id);
       set({
         tasks: get().tasks.map((task) => (task.id === id ? response.task : task)),
-        councilSessions: [response.session, ...get().councilSessions.filter((session) => session.id !== response.session.id)],
+        ...(response.session ? { councilSessions: [response.session, ...get().councilSessions.filter((session) => session.id !== response.session!.id)] } : {}),
         isProcessing: false
       });
       await get().refresh();
-      return response.session;
+      return response.session ?? null;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : "Grand Vizier could not convene the council", isProcessing: false });
       throw error;

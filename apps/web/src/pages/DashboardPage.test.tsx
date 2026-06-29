@@ -81,6 +81,8 @@ const missionControl: MissionControlDto = {
       sourceReference: { sourceType: "WorkOrder", sourceId: "wo-2", sourceTitle: "Prepare source links", sourceRoute: "/work-orders", routeTo: "/work-orders", updatedAt: observedAt, recommendedAction: "Create or send the handoff brief.", why: "Work Order is READY.", workOrderId: "wo-2" }
     }
   ],
+  currentWorkflow: null,
+  activeWorkflows: [],
   activeWorkOrders: [
     {
       id: "wo-2",
@@ -251,6 +253,41 @@ describe("DashboardPage", () => {
     expect(screen.getAllByText("Needs Review").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Blocked / Warnings").length).toBeGreaterThan(0);
     expect(screen.getByText("Recent Activity")).toBeInTheDocument();
+  });
+
+  it("renders the DECREE_TO_DONE state and one primary workflow action", async () => {
+    setUser("KING");
+    resetApiMocks();
+    const workflow: NonNullable<MissionControlDto["currentWorkflow"]> = {
+      id: "workflow-1",
+      type: "DECREE_TO_DONE",
+      status: "BLOCKED",
+      currentStep: "CHECK_CONTEXT",
+      sourceTaskId: "task-1",
+      projectId: "project-1",
+      workOrderId: null,
+      automationJobId: null,
+      lastError: "Project context is STALE after scanning approved local docs.",
+      nextAction: "Fix Context",
+      primaryAction: "Fix Context",
+      createdAt: observedAt,
+      updatedAt: observedAt,
+      sourceTask: { id: "task-1", title: "Build decree-to-done", mode: "BUILD", status: "COMPLETED" },
+      project: { id: "project-1", name: "AI Kingdom" },
+      workOrder: null,
+      automationJob: null,
+      steps: [],
+      availableAgents: []
+    };
+    apiMocks.getMissionControl.mockResolvedValue({ ...missionControl, currentWorkflow: workflow, activeWorkflows: [workflow] });
+
+    renderPage();
+
+    expect(await screen.findByText("DECREE_TO_DONE")).toBeInTheDocument();
+    expect(screen.getByText("BUILD decree: Build decree-to-done")).toBeInTheDocument();
+    expect(screen.getByText("Project context is STALE after scanning approved local docs.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Fix Context" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue Workflow" })).not.toBeInTheDocument();
   });
 
   it("renders the Action Queue with source links", async () => {

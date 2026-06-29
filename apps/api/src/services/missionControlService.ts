@@ -12,6 +12,7 @@ import type {
   MissionControlWarningDto,
   MissionControlWorkOrderDto
 } from "../types/api.js";
+import { listMissionControlWorkflows, serializeWorkflowView } from "./decreeToDoneWorkflowService.js";
 
 const MILESTONE_CODENAME = "KINGDOM_MISSION_CONTROL_FOUNDATION" as const;
 
@@ -19,8 +20,8 @@ const TOP_ACTION_PRIORITY: Record<MissionControlTopActionDto["priorityKey"], num
   CRITICAL_BLOCKED_RUNNER_JOB: 1,
   FAILED_OR_REJECTED_REVIEW: 2,
   STALE_CONTEXT_BLOCKING_PATCH: 3,
-  WORK_ORDER_READY_TO_DISPATCH: 4,
-  WORK_ORDER_NEEDS_REVIEW: 5,
+  WORK_ORDER_NEEDS_REVIEW: 4,
+  WORK_ORDER_READY_TO_DISPATCH: 5,
   PROVIDER_ROUTING_WARNING: 6,
   NO_URGENT_ACTION: 7
 };
@@ -227,7 +228,8 @@ export async function getMissionControl(): Promise<MissionControlDto> {
     providers,
     agents,
     providerRoutes,
-    routeChains
+    routeChains,
+    activeWorkflows
   ] = await Promise.all([
     prisma.workOrder.findMany({
       where: {
@@ -349,7 +351,8 @@ export async function getMissionControl(): Promise<MissionControlDto> {
         updatedAt: true,
         entries: { select: { id: true, providerId: true, model: true, sequence: true, isEnabled: true }, orderBy: { sequence: "asc" } }
       }
-    })
+    }),
+    listMissionControlWorkflows()
   ]);
 
   const onlineRunnerIds = new Set(
@@ -669,6 +672,38 @@ export async function getMissionControl(): Promise<MissionControlDto> {
   }
 
   const topCandidates: TopActionCandidate[] = [];
+  const actionableWorkflows = activeWorkflows.filter((workflow) => workflow.status !== "COMPLETED");
+  for (const workflow of actionableWorkflows) {
+    const blocked = workflow.status === "BLOCKED";
+    const needsReview = workflow.status === "NEEDS_REVIEW";
+    const priorityKey: MissionControlTopActionDto["priorityKey"] = blocked
+      ? (workflow.currentStep === "CHECK_CONTEXT" ? "STALE_CONTEXT_BLOCKING_PATCH" : "CRITICAL_BLOCKED_RUNNER_JOB")
+      : needsReview
+        ? (workflow.primaryAction === "Accept & Learn" ? "WORK_ORDER_NEEDS_REVIEW" : "FAILED_OR_REJECTED_REVIEW")
+        : "WORK_ORDER_READY_TO_DISPATCH";
+    topCandidates.push({
+      id: `workflow:${workflow.id}`,
+      priorityKey,
+      severity: blocked ? "CRITICAL" : needsReview ? "WARNING" : "INFO",
+      title: `${workflow.sourceTask.title}: ${workflow.currentStep.replaceAll("_", " ")}`,
+      detail: workflow.lastError ?? workflow.automationJob?.reviewSummary?.summary ?? `DECREE_TO_DONE workflow is ${workflow.status}.`,
+      nextAction: workflow.primaryAction ?? "Continue Workflow",
+      routeTo: "/",
+      sourceReference: sourceReference({
+        sourceType: "WorkflowRun",
+        sourceId: workflow.id,
+        sourceTitle: workflow.sourceTask.title,
+        taskId: workflow.sourceTaskId,
+        workOrderId: workflow.workOrderId,
+        automationJobId: workflow.automationJobId,
+        routeTo: "/",
+        updatedAt: workflow.updatedAt.toISOString(),
+        recommendedAction: workflow.primaryAction,
+        why: workflow.lastError ?? `Workflow is ${workflow.status} at ${workflow.currentStep}.`
+      }),
+      observedAt: workflow.updatedAt
+    });
+  }
   for (const job of runningJobs) {
     const original = automationJobs.find((candidate) => candidate.id === job.id);
     const runnerBlocked = ["QUEUED", "APPROVED"].includes(job.status) && onlineRunnerIds.size === 0;
@@ -757,12 +792,16 @@ export async function getMissionControl(): Promise<MissionControlDto> {
   const topAction = selectMissionControlTopAction(topCandidates, computedAt);
   const actionQueue = sortTopActionCandidates(topCandidates).slice(0, 20).map(topActionFromCandidate);
   const providerWarnings = providerRoutingWarnings.slice(0, 30);
+  const workflowDtos = actionableWorkflows.map(serializeWorkflowView);
+  const latestCompletedWorkflow = activeWorkflows.find((workflow) => workflow.status === "COMPLETED");
 
   return {
     computedAt: computedAt.toISOString(),
     milestoneCodename: MILESTONE_CODENAME,
     topAction,
     actionQueue,
+    currentWorkflow: workflowDtos[0] ?? (latestCompletedWorkflow ? serializeWorkflowView(latestCompletedWorkflow) : null),
+    activeWorkflows: workflowDtos,
     activeWorkOrders,
     activeWork: activeWorkOrders,
     blockedWorkOrders,
@@ -778,7 +817,7 @@ export async function getMissionControl(): Promise<MissionControlDto> {
     nextRecommendedAction: topAction.nextAction,
     migration: {
       required: false,
-      reason: "No Prisma migration was added. Mission Control derives its lifecycle view from existing WorkOrder, AutomationJob, AgentReviewSummary, AgentActivity, runner, provider, and routing records."
+      reason: "Mission Control reads the persisted DECREE_TO_DONE workflow graph and its source records."
     }
   };
 }

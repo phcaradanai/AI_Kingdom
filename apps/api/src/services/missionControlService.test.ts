@@ -59,3 +59,19 @@ test("selectMissionControlTopAction returns no urgent action fallback", () => {
   assert.equal(top.severity, "INFO");
   assert.equal(top.priority, 7);
 });
+
+test("Mission Control top action prioritizes workflow review and acceptance over a new dispatch", () => {
+  const workflowReview = {
+    ...candidate("WORK_ORDER_NEEDS_REVIEW"),
+    id: "workflow:run-1",
+    title: "BUILD decree ready for acceptance",
+    nextAction: "Accept & Learn"
+  };
+  const top = selectMissionControlTopAction([
+    candidate("WORK_ORDER_READY_TO_DISPATCH"),
+    workflowReview
+  ]);
+  assert.equal(top.id, "workflow:run-1");
+  assert.equal(top.nextAction, "Accept & Learn");
+  assert.equal(top.priority, 4);
+});

@@ -119,13 +119,47 @@ export async function planFromSession(
   return executePlanner(session, session.task, userId, "READY", true, triggerRoute);
 }
 
+/**
+ * Workflow-only planner entrypoint. A DECREE_TO_DONE run is itself an explicit King
+ * action, so it always produces a READY WorkOrder and does not depend on the legacy
+ * COUNCIL_AUTO_WORK_ORDER_MODE toggle. The caller must still reuse existing source
+ * records before invoking this function.
+ */
+export async function planExecutionWorkOrderFromSession(
+  sessionId: string,
+  userId: string
+): Promise<PlannerResult> {
+  const session = await prisma.councilSession.findUnique({
+    where: { id: sessionId },
+    include: { task: { include: { user: { select: { role: true } } } } }
+  });
+  if (!session) {
+    const error = new Error("Council session not found");
+    error.name = "NotFoundError";
+    throw error;
+  }
+  if (session.status !== "COMPLETED") {
+    throw new Error("Council session must be COMPLETED before planning");
+  }
+  return executePlanner(
+    session,
+    session.task,
+    userId,
+    "READY",
+    true,
+    "SYSTEM_ACTION: decreeToDoneWorkflow",
+    true
+  );
+}
+
 async function executePlanner(
   session: SessionInput,
   task: TaskInput,
   userId: string,
   targetStatus: "DRAFT" | "READY" = "DRAFT",
   explicitUserAction = true,
-  triggerRoute = "POST /api/council/:sessionId/plan-work-orders"
+  triggerRoute = "POST /api/council/:sessionId/plan-work-orders",
+  skipAutoExecute = false
 ): Promise<PlannerResult> {
   const traceId = `council-work-order:${session.id}:${Date.now()}`;
   traceCouncilWorkOrderStep(traceId, "API Request", { triggerRoute, sessionId: session.id, taskId: task.id, userId, targetStatus });
@@ -234,7 +268,8 @@ async function executePlanner(
     targetStatus,
     explicitUserAction,
     traceId,
-    triggerRoute.includes("/:sessionId/work-order")
+    triggerRoute.includes("/:sessionId/work-order"),
+    skipAutoExecute
   );
   traceCouncilWorkOrderStep(traceId, "API Response", {
     sessionId: session.id,
@@ -537,7 +572,8 @@ export async function createDraftWorkOrders(
   targetStatus: "DRAFT" | "READY" = "DRAFT",
   explicitUserAction = true,
   traceId = `council-work-order:${session.id}:${Date.now()}`,
-  limitToOne = false
+  limitToOne = false,
+  skipAutoExecute = false
 ): Promise<PlannerResult> {
   let drafted = 0;
   let skipped = 0;
@@ -655,14 +691,16 @@ export async function createDraftWorkOrders(
       // M23 C-2: for a LOW-risk BUILD work order with fresh context, auto-dispatch to
       // the external-agent (Claude Code) bridge so the King's decree runs end-to-end.
       // Gated + guardrailed inside the service; never throws, only traces its outcome.
-      const autoExec = await maybeAutoExecuteBuildWorkOrder({
-        workOrderId: result.workOrder.id,
-        taskMode: task.mode,
-        riskLevel: draft.riskLevel,
-        fileHints: draft.fileHints,
-        projectId: task.projectId,
-        userId
-      });
+      const autoExec = skipAutoExecute
+        ? { executed: false, skipReason: "DECREE_TO_DONE workflow owns dispatch" }
+        : await maybeAutoExecuteBuildWorkOrder({
+            workOrderId: result.workOrder.id,
+            taskMode: task.mode,
+            riskLevel: draft.riskLevel,
+            fileHints: draft.fileHints,
+            projectId: task.projectId,
+            userId
+          });
       traceCouncilWorkOrderStep(traceId, "Auto Execute", {
         sessionId: session.id,
         workOrderId: result.workOrder.id,
@@ -747,11 +785,16 @@ async function applyExecutableRoutes(workOrderId: string, session: SessionInput,
   const baseProvenance = (typeof existing.provenance === "object" && existing.provenance !== null && !Array.isArray(existing.provenance))
     ? existing.provenance as Prisma.JsonObject
     : {};
+  const requireKingChoice = await getBooleanSetting("REQUIRE_KING_EXTERNAL_AGENT_CHOICE", true);
 
   const updated = await prisma.workOrder.update({
     where: { id: workOrderId },
     data: {
-      assignedExternalAgentId: recommendation?.externalAgentId ?? existing.assignedExternalAgentId,
+      // A recommendation is decision support, not a King choice. The workflow resolves
+      // exactly-one-ready automatically and otherwise raises one explicit choice item.
+      assignedExternalAgentId: requireKingChoice
+        ? existing.assignedExternalAgentId
+        : recommendation?.externalAgentId ?? existing.assignedExternalAgentId,
       provenance: {
         ...baseProvenance,
         ...buildCouncilWorkOrderProvenance(session, task, draft),

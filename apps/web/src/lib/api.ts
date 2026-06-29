@@ -118,7 +118,8 @@ import type {
   StrategyOverviewDto,
   StrategyRevenueStreamPayload,
   SuccessMetricDto,
-  KingdomDiagnosticsReportDto
+  KingdomDiagnosticsReportDto,
+  WorkflowRunDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -447,7 +448,7 @@ export const api = {
       body: JSON.stringify({ status })
     }),
   processTask: (id: string) =>
-    apiRequest<{ task: TaskDto; session: CouncilSessionDto }>(`/tasks/${id}/process`, {
+    apiRequest<{ task: TaskDto; session?: CouncilSessionDto | null }>(`/tasks/${id}/process`, {
       method: "POST"
     }),
   taskCouncil: (id: string) => apiRequest<{ sessions: CouncilSessionDto[] }>(`/tasks/${id}/council`),
@@ -522,6 +523,14 @@ export const api = {
   computeProviderHealth: () => apiRequest<{ result: { snapshots: ProviderHealthSnapshotDto[]; computedAt: string } }>("/provider-balances/health/compute", { method: "POST" }),
   providerIntelligence: () => apiRequest<{ intelligence: { availability: ProviderAccountSnapshotDto[]; health: ProviderHealthSnapshotDto[]; lastHealthComputedAt: string | null; lastModelSyncedAt: string | null } }>("/provider-balances/intelligence"),
   getMissionControl: () => apiRequest<MissionControlDto>("/mission-control"),
+  continueDecreeToDoneWorkflow: (taskId: string) =>
+    apiRequest<{ workflow: WorkflowRunDto }>(`/workflows/decree-to-done/${taskId}/continue`, { method: "POST" }),
+  chooseWorkflowExternalAgent: (workflowId: string, externalAgentId: string) =>
+    apiRequest<{ workflow: WorkflowRunDto }>(`/workflows/${workflowId}/choose-agent`, { method: "POST", body: JSON.stringify({ externalAgentId }) }),
+  retryDecreeToDoneWorkflow: (workflowId: string) =>
+    apiRequest<{ workflow: WorkflowRunDto }>(`/workflows/${workflowId}/retry`, { method: "POST" }),
+  acceptAndLearnDecreeToDoneWorkflow: (workflowId: string) =>
+    apiRequest<{ workflow: WorkflowRunDto }>(`/workflows/${workflowId}/accept`, { method: "POST" }),
   latestReconciliation: () => apiRequest<{ snapshot: ProviderReconciliationSnapshotDto | null }>("/provider-balances/reconciliation"),
   reconciliationHistory: () => apiRequest<{ history: ProviderReconciliationSnapshotDto[] }>("/provider-balances/reconciliation/history"),
   runReconciliation: () => apiRequest<{ snapshot: ProviderReconciliationSnapshotDto }>("/provider-balances/reconciliation/run", { method: "POST" }),

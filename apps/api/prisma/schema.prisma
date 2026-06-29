@@ -32,6 +32,41 @@ enum AutomationJobStatus {
   CANCELLED
 }
 
+enum WorkflowRunType {
+  DECREE_TO_DONE
+}
+
+enum WorkflowRunStatus {
+  RUNNING
+  BLOCKED
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+}
+
+enum WorkflowStepKey {
+  INTAKE_DECREE
+  CHECK_CONTEXT
+  RUN_COUNCIL
+  CREATE_WORK_ORDER
+  RESOLVE_AGENT
+  DISPATCH_RUNNER
+  VALIDATE_RESULT
+  REVIEW_RESULT
+  RETRY_OR_ESCALATE
+  ARCHIVE_LEARNING
+  DONE
+}
+
+enum WorkflowStepStatus {
+  PENDING
+  RUNNING
+  BLOCKED
+  NEEDS_REVIEW
+  COMPLETED
+  FAILED
+}
+
 enum AutomationJobMode {
   OBSERVE
   PLAN_ONLY
@@ -677,6 +712,7 @@ model Project {
   kingdomAssets          KingdomAsset[]
   revenueStreams         RevenueStream[]
   opportunities          KingdomOpportunity[]
+  workflowRuns           WorkflowRun[]
 }
 
 model DirectAgentSession {
@@ -1042,6 +1078,7 @@ model WorkOrder {
   patchArtifacts          PatchArtifact[]
   reviewSummaries         AgentReviewSummary[]
   continuityEvents        ContinuityEvent[]
+  workflowRuns            WorkflowRun[]
 }
 
 model ContinuityEvent {
@@ -1231,6 +1268,7 @@ model Task {
   agentActivities AgentActivity[]
   aiUsageTraces AIUsageTrace[]
   aiUsageTraceSteps AIUsageTraceStep[]
+  workflowRuns      WorkflowRun[]
 }
 
 model CouncilSession {
@@ -1266,6 +1304,55 @@ model CouncilSession {
   agentActivities     AgentActivity[]
   aiUsageTraces       AIUsageTrace[]
   aiUsageTraceSteps   AIUsageTraceStep[]
+}
+
+model WorkflowRun {
+  id              String            @id @default(cuid())
+  type            WorkflowRunType   @default(DECREE_TO_DONE)
+  status          WorkflowRunStatus @default(RUNNING)
+  currentStep     WorkflowStepKey   @default(INTAKE_DECREE)
+  sourceTaskId    String            @unique
+  projectId       String?
+  workOrderId     String?
+  automationJobId String?
+  lastError       String?
+  nextAction      String?
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  sourceTask    Task           @relation(fields: [sourceTaskId], references: [id], onDelete: Cascade)
+  project       Project?       @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  workOrder     WorkOrder?     @relation(fields: [workOrderId], references: [id], onDelete: SetNull)
+  automationJob AutomationJob? @relation(fields: [automationJobId], references: [id], onDelete: SetNull)
+  steps         WorkflowStepRun[]
+
+  @@index([status])
+  @@index([currentStep])
+  @@index([projectId])
+  @@index([workOrderId])
+  @@index([automationJobId])
+  @@index([updatedAt])
+}
+
+model WorkflowStepRun {
+  id            String             @id @default(cuid())
+  workflowRunId String
+  stepKey       WorkflowStepKey
+  status        WorkflowStepStatus @default(PENDING)
+  startedAt     DateTime?
+  completedAt   DateTime?
+  sourceType    String?
+  sourceId      String?
+  summary       String?
+  error         String?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  workflowRun WorkflowRun @relation(fields: [workflowRunId], references: [id], onDelete: Cascade)
+
+  @@unique([workflowRunId, stepKey])
+  @@index([workflowRunId])
+  @@index([status])
 }
 
 model AgentResponse {
@@ -1831,6 +1918,7 @@ model AutomationJob {
   patchArtifacts   PatchArtifact[]
   reviewSummary    AgentReviewSummary?
   externalAgentRuns ExternalAgentRun[]
+  workflowRuns      WorkflowRun[]
 
   @@index([workOrderId])
   @@index([projectId])

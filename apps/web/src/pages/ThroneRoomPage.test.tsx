@@ -12,6 +12,7 @@ const apiMocks = vi.hoisted(() => ({
   createCouncilHandoff: vi.fn(),
   executeCouncilWithExternalAgent: vi.fn(),
   planCouncilWorkOrder: vi.fn(),
+  projects: vi.fn(),
   // The default "Live Kingdom" view mounts LivingKingdomView, which loads presence + activity.
   getKingdomPresence: vi.fn(),
   getKingdomActivity: vi.fn()
@@ -109,6 +110,7 @@ function renderPage(task: TaskDto | null = makeTask(), initialEntry = "/") {
   storeState.isProcessing = false;
   storeState.submitCommand.mockResolvedValue(task);
   apiMocks.planCouncilWorkOrder.mockResolvedValue({ drafted: 1, skipped: 0, sessionId: "session-1", draftedWorkOrderIds: ["wo-1"], createdWorkOrder: { id: "wo-1" }, traceId: "trace-1" });
+  apiMocks.projects.mockResolvedValue({ projects: [{ id: "proj-1", name: "AI Kingdom", status: "ACTIVE" }] });
   apiMocks.createCouncilHandoff.mockResolvedValue({
     workOrder: { id: "wo-handoff", contextBindingStatus: "FRESH" },
     handoffBrief: { title: "Council handoff brief" }
@@ -169,7 +171,7 @@ describe("ThroneRoomPage", () => {
     await userEvent.type(screen.getByLabelText("State the outcome"), "Build an implementation-ready council plan.");
     await userEvent.click(screen.getByRole("button", { name: /Issue Decree/i }));
 
-    await waitFor(() => expect(storeState.submitCommand).toHaveBeenCalledWith("Build an implementation-ready council plan.", "BUILD"));
+    await waitFor(() => expect(storeState.submitCommand).toHaveBeenCalledWith("Build an implementation-ready council plan.", "BUILD", "proj-1"));
   });
 
   it("renders the refined command chrome in Thai", () => {

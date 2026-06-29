@@ -441,6 +441,14 @@ export async function submitReport(jobId: string, runnerId: string, report: Subm
     });
   }
 
+  // Keep the product workflow synchronized with runner evidence without coupling
+  // generic jobs to the workflow layer. No matching WorkflowRun is a normal no-op.
+  await import("./decreeToDoneWorkflowService.js")
+    .then(({ reconcileWorkflowForAutomationJob }) => reconcileWorkflowForAutomationJob(jobId))
+    .catch((err) => {
+      console.warn("[AutomationJob] Workflow reconciliation failed:", err instanceof Error ? err.message : String(err));
+    });
+
   return implReport;
 }
 

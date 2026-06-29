@@ -200,7 +200,11 @@ const BUILD_EXECUTION_GUARDRAILS = [
   "Precision: commit to exact file paths, function names, and commands. Do not say 'update the relevant files' — name them. Hedging terms (may, might, consider) require a concrete follow-up."
 ].join("\n");
 
-export async function processTaskWithGrandVizier(taskId: string, userId: string) {
+export async function processTaskWithGrandVizier(
+  taskId: string,
+  userId: string,
+  options: { skipAutoPlanner?: boolean } = {}
+) {
   let task = await prisma.task.findFirst({
     where: { id: taskId, createdBy: userId },
     include: {
@@ -1093,14 +1097,18 @@ export async function processTaskWithGrandVizier(taskId: string, userId: string)
       console.warn("[GrandVizier] Next action computation failed:", err instanceof Error ? err.message : String(err));
     });
 
-    // Fire-and-forget: planner runs after council completes, gated by COUNCIL_AUTO_WORK_ORDER_MODE setting
-    runPlannerAgent(
-      { id: sessionWithMemories.id, finalSummary: sessionWithMemories.finalSummary, projectId: sessionWithMemories.projectId, taskId: task.id },
-      { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: task.projectId, createdBy: task.createdBy, user: task.user ?? undefined },
-      userId
-    ).catch((err) => {
-      console.warn("[GrandVizier] Planner agent failed:", err instanceof Error ? err.message : String(err));
-    });
+    if (!options.skipAutoPlanner) {
+      // Fire-and-forget: planner runs after council completes, gated by COUNCIL_AUTO_WORK_ORDER_MODE setting.
+      // The decree-to-done workflow disables this branch and invokes the planner synchronously,
+      // preventing a competing WorkOrder creation race.
+      runPlannerAgent(
+        { id: sessionWithMemories.id, finalSummary: sessionWithMemories.finalSummary, projectId: sessionWithMemories.projectId, taskId: task.id },
+        { id: task.id, title: task.title, command: task.command, mode: task.mode, projectId: task.projectId, createdBy: task.createdBy, user: task.user ?? undefined },
+        userId
+      ).catch((err) => {
+        console.warn("[GrandVizier] Planner agent failed:", err instanceof Error ? err.message : String(err));
+      });
+    }
 
     return sessionWithMemories;
   } catch (error) {

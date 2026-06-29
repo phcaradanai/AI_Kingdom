@@ -63,7 +63,7 @@ function humanizeStatus(value: string | null | undefined): string | null {
     .join(" ");
 }
 
-function MissionControlPanel({ missionControl }: { missionControl: MissionControlDto | null }) {
+function MissionControlPanel({ missionControl, onRefresh }: { missionControl: MissionControlDto | null; onRefresh: () => Promise<void> }) {
   const tk = useTk();
   if (!missionControl) {
     return (
@@ -81,6 +81,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
   const blockedItems = missionControl.blockedItems.slice(0, 4);
   const warnings = [...missionControl.contextWarnings, ...missionControl.providerWarnings].slice(0, 6);
   const recentActivity = missionControl.recentActivity.slice(0, 6);
+  const workflow = missionControl.currentWorkflow;
 
   return (
     <PageSection
@@ -89,7 +90,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
       action={<Link to="/inbox" className="text-xs font-semibold text-primary hover:underline">{tk("dashboard.actionInbox")}</Link>}
     >
       <div className="space-y-6">
-        <div className="min-w-0 overflow-hidden rounded-lg border border-border border-l-2 border-l-primary bg-card p-5">
+        {workflow ? <WorkflowControlCard workflow={workflow} onRefresh={onRefresh} /> : <div className="min-w-0 overflow-hidden rounded-lg border border-border border-l-2 border-l-primary bg-card p-5">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold text-muted-foreground">{tk("dashboard.whatNext")}</span>
             <span title={action.severity} className={cn("rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider", MISSION_SEVERITY_STYLES[action.severity])}>
@@ -110,7 +111,7 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
             </Link>
           </div>
           <ProvenanceLinks className="mt-4" {...missionProvenance(action.sourceReference)} />
-        </div>
+        </div>}
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <MissionMetric label={tk("dashboard.metric.actionQueue")} value={missionControl.actionQueue.length} to="/inbox" source="NextActionQueue" />
@@ -186,6 +187,93 @@ function MissionControlPanel({ missionControl }: { missionControl: MissionContro
         </MissionSection>
       </div>
     </PageSection>
+  );
+}
+
+function WorkflowControlCard({ workflow, onRefresh }: { workflow: NonNullable<MissionControlDto["currentWorkflow"]>; onRefresh: () => Promise<void> }) {
+  const [selectedAgentId, setSelectedAgentId] = useState(workflow?.availableAgents[0]?.agentId ?? "");
+  const [isActing, setIsActing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  if (!workflow) return null;
+
+  const report = workflow.automationJob?.implementationReports[0] ?? null;
+  const review = workflow.automationJob?.reviewSummary ?? null;
+  const action = workflow.primaryAction;
+  const runAction = async () => {
+    if (!action || action === "Review Result") return;
+    setIsActing(true);
+    setError(null);
+    try {
+      if (action === "Choose Agent") {
+        if (selectedAgentId) await api.chooseWorkflowExternalAgent(workflow.id, selectedAgentId);
+        else await api.continueDecreeToDoneWorkflow(workflow.sourceTaskId);
+      } else if (action === "Retry") {
+        await api.retryDecreeToDoneWorkflow(workflow.id);
+      } else if (action === "Accept & Learn") {
+        await api.acceptAndLearnDecreeToDoneWorkflow(workflow.id);
+      } else {
+        await api.continueDecreeToDoneWorkflow(workflow.sourceTaskId);
+      }
+      await onRefresh();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Workflow action failed.");
+    } finally {
+      setIsActing(false);
+    }
+  };
+
+  const source = workflow.workOrder
+    ? `Work Order: ${workflow.workOrder.title}`
+    : `BUILD decree: ${workflow.sourceTask.title}`;
+  const why = workflow.lastError
+    ?? review?.summary
+    ?? `The workflow is at ${workflow.currentStep.replaceAll("_", " ")} and will reuse its linked source records.`;
+
+  return (
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border border-l-2 border-l-primary bg-card p-5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">DECREE_TO_DONE</span>
+        <StatusBadge status={workflow.status} />
+        <span className="text-xs text-muted-foreground">{workflow.currentStep.replaceAll("_", " ")}</span>
+      </div>
+      <h3 className="mt-3 text-lg font-semibold text-foreground">{workflow.sourceTask.title}</h3>
+      <p className="mt-2 text-xs font-semibold text-primary">{source}</p>
+      <p className="mt-2 text-sm leading-relaxed text-muted-foreground">{why}</p>
+
+      {report && (
+        <div className="mt-4 rounded-md border border-border bg-muted/20 p-3 text-sm">
+          <div className="font-semibold text-foreground">Implementation evidence</div>
+          <p className="mt-1 text-muted-foreground">{report.summary}</p>
+          <div className="mt-2 text-xs text-muted-foreground">Validation: {humanizeStatus(report.testResult)} · Files changed: {report.filesChanged.length}</div>
+          {review && <div className="mt-1 text-xs font-semibold text-foreground">Review: {review.verdict} · {review.kingRecommendation}</div>}
+        </div>
+      )}
+
+      {action === "Choose Agent" && workflow.availableAgents.length > 0 && (
+        <label className="mt-4 block text-xs font-semibold text-muted-foreground">
+          Bridge-ready external agent
+          <select
+            className="mt-1 h-9 w-full max-w-sm rounded-md border border-border bg-background px-3 text-sm text-foreground"
+            value={selectedAgentId}
+            onChange={(event) => setSelectedAgentId(event.target.value)}
+          >
+            {workflow.availableAgents.map((agent) => <option key={agent.agentId} value={agent.agentId}>{agent.name} ({agent.type})</option>)}
+          </select>
+        </label>
+      )}
+
+      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        {action === "Review Result" ? (
+          <Link to="/automation-jobs"><Button>{action}</Button></Link>
+        ) : action ? (
+          <Button onClick={() => void runAction()} disabled={isActing}>
+            {isActing ? "Working…" : action}
+          </Button>
+        ) : null}
+        {workflow.workOrderId && <Link to="/work-orders" className="text-xs font-semibold text-primary hover:underline">Open source</Link>}
+      </div>
+    </div>
   );
 }
 
@@ -432,6 +520,11 @@ export function DashboardPage() {
   const [activity, setActivity] = useState<KingdomActivityStreamDto | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const refreshMissionControl = async () => {
+    const latest = await api.getMissionControl();
+    setMissionControl(latest);
+  };
+
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
@@ -472,7 +565,7 @@ export function DashboardPage() {
         ) : undefined}
       />
 
-      <MissionControlPanel missionControl={missionControl} />
+      <MissionControlPanel missionControl={missionControl} onRefresh={refreshMissionControl} />
 
       {health && <KingdomHealthStrip health={health} />}
 

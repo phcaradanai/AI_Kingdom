@@ -2,7 +2,7 @@
 
 ## Current State
 
-AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, M24 self-growing max_tokens, the verified/pruned learning loop with diversified knowledge selection and success-lesson capture, and Premium UX Waves 1, 2, 3, and 4A-4G. The current system is a role-aware Kingdom Control Plane with Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
+AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, M24 self-growing max_tokens, the verified/pruned learning loop with diversified knowledge selection and success-lesson capture, and Premium UX Waves 1, 2, 3, and 4A-4G. The current system is a role-aware Kingdom Control Plane with a persisted DECREE_TO_DONE workflow in Mission Control, BUILD-mode risk-gated execution, Grand Vizier council orchestration, provider/model routing and usage traces, project/context binding, external-agent WorkOrders, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance.
 
 Local source of truth is PostgreSQL through Prisma. The default seeded login is `king@aikingdom.local` / `password123`.
 
@@ -121,7 +121,7 @@ RBAC is enforced server-side per route and HTTP method. `KING` owns administrati
 
 Implemented pages: `/login`, `/dashboard`, `/inbox`, `/kingdom/operations`, `/royal-brief`, `/living-loop`, `/throne-room`, `/council`, `/strategy`, `/projects`, `/projects/:id`, `/work-orders`, `/project-inbox`, `/artifacts`, `/reports`, `/memory`, `/agent-chat`, `/knowledge-lab`, `/knowledge-lab/candidates`, `/knowledge-lab/memories`, `/charter`, `/vision`, `/living-agents`, `/living-agents/:agentId`, `/agents`, `/external-agents`, `/providers`, `/routing`, `/automation-jobs`, `/decree-lineage/:workOrderId`, `/treasury`, `/usage-traces/:traceId`, `/audit`, `/settings`, `/users`, `/notices`, `/matters`, `/security`, and `/profile`.
 
-Navigation is role-aware and grouped into Mission Control / Command / Work / Knowledge / Agents & Models / System. Mission Control is read-only and source-linked; lifecycle actions remain on owning pages. The frontend handles access-token refresh and clears the session when refresh fails.
+Navigation is role-aware and grouped into Mission Control / Command / Work / Knowledge / Agents & Models / System. Mission Control is source-linked and owns only the bounded DECREE_TO_DONE continue, choose-agent, retry, and accept-and-learn actions; other lifecycle actions remain on owning pages. The frontend handles access-token refresh and clears the session when refresh fails.
 
 ## Planned UX/UI Refinement
 

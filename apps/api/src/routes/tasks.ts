@@ -8,6 +8,7 @@ import { getTaskForUser } from "../services/orchestrator.js";
 import { processTaskWithGrandVizier } from "../services/grandVizierOrchestrator.js";
 import { routeProjectForSource } from "../services/projectRoutingService.js";
 import { redactSecrets } from "../services/usageAttributionService.js";
+import { startOrContinueDecreeToDoneWorkflow } from "../services/decreeToDoneWorkflowService.js";
 
 const router = Router();
 
@@ -60,9 +61,18 @@ router.post("/", async (req, res, next) => {
     if (!projectId) {
       await routeProjectForSource({ title: task.title, content: task.command, sourceType: "TASK", sourceId: task.id }).catch(() => undefined);
     }
-    const session = await processTaskWithGrandVizier(task.id, userId);
+    const workflow = mode === "BUILD"
+      ? await startOrContinueDecreeToDoneWorkflow(task.id, userId)
+      : null;
+    const session = workflow
+      ? await prisma.councilSession.findFirst({
+          where: { taskId: task.id, status: "COMPLETED" },
+          include: { task: true, responses: { include: { agent: true }, orderBy: { createdAt: "asc" } } },
+          orderBy: { createdAt: "desc" }
+        })
+      : await processTaskWithGrandVizier(task.id, userId);
     const processedTask = await getTaskForUser(userId, task.id);
-    res.status(201).json({ task: processedTask, session });
+    res.status(201).json({ task: processedTask, session, workflow });
   } catch (error) {
     next(error);
   }
@@ -116,9 +126,23 @@ router.post("/:id/process", async (req, res, next) => {
       res.status(401).json({ error: "Unauthorized" });
       return;
     }
-    const session = await processTaskWithGrandVizier(req.params.id, userId);
+    const sourceTask = await prisma.task.findFirst({ where: { id: req.params.id, createdBy: userId }, select: { mode: true } });
+    if (!sourceTask) {
+      res.status(404).json({ error: "Task not found" });
+      return;
+    }
+    const workflow = sourceTask.mode === "BUILD"
+      ? await startOrContinueDecreeToDoneWorkflow(req.params.id, userId)
+      : null;
+    const session = workflow
+      ? await prisma.councilSession.findFirst({
+          where: { taskId: req.params.id, status: "COMPLETED" },
+          include: { task: true, responses: { include: { agent: true }, orderBy: { createdAt: "asc" } } },
+          orderBy: { createdAt: "desc" }
+        })
+      : await processTaskWithGrandVizier(req.params.id, userId);
     const task = await getTaskForUser(userId, req.params.id);
-    res.status(201).json({ session, task });
+    res.status(201).json({ session, task, workflow });
   } catch (error) {
     if (error instanceof Error && error.name === "NotFoundError") {
       res.status(404).json({ error: error.message });
