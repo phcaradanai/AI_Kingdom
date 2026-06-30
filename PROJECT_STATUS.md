@@ -8,7 +8,15 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 ## Active Work
 
-V1 is locked. No active implementation work. Premium UX Wave 4H for `/treasury` is the next planned candidate when development resumes; it must start from a fresh `main` merge, audit `TreasuryPage.tsx` and Treasury APIs, capture baselines, and record scope before edits. See [NEXT_TASK.md](NEXT_TASK.md).
+V1 and Real Runner / Bridge acceptance are complete. No active implementation work remains in this slice. Premium UX Wave 4H for `/treasury` is again the next planned candidate, but has not started. See [NEXT_TASK.md](NEXT_TASK.md).
+
+## Real Runner / Bridge Acceptance (2026-06-30, complete)
+
+The non-seeded DECREE_TO_DONE path is proven with a real Claude Code CLI invocation. Workflow `cmr0i0262001140r2y890li4p` used FRESH context, completed council and Work Order creation, exposed one `Choose Agent` action, dispatched EXTERNAL_AGENT job `cmr0i93hz00jj40r2cbvq9otz`, and captured a real command step (`/opt/homebrew/bin/claude`, exit 0). The isolated workspace produced only `docs/real-runner-bridge-e2e.txt`; PatchArtifact `cmr0ieg1100l140r2c9vymyw9` contains the real one-line unified diff, LOW risk, no blocked paths, and passing `npm run typecheck` validation. Deterministic review returned `PASS / APPROVE`, then the sole primary action became `Accept & Learn`.
+
+Before acceptance, the success lesson existed only as PENDING candidate `cmr0iegk200la40r2h98y6b1c`; no durable knowledge memory referenced it. Accept & Learn approved the patch and candidate, created approved knowledge memory `cmr0ij9ru00ml40r25l0k7dd4`, completed the Work Order and job, and ended the WorkflowRun at **COMPLETED / DONE**. EXTERNAL_AGENT report submission was hardened so it no longer creates outcome Memory before King approval. Temporary external-agent write/network settings were restored to `false`, and the restarted runner reported a fresh online heartbeat with Claude Code's last run `SUCCEEDED`. No push, PR, merge, deploy, seeded patch, or mock runner evidence was used.
+
+Final verification: API 978/978, runner 103/103, and web 241/241 tests pass; root typecheck, production build, and `git diff --check` pass. The existing Vite large-chunk advisory remains non-blocking.
 
 ## DECREE_TO_DONE — V1 Acceptance Gate (2026-06-29, complete)
 

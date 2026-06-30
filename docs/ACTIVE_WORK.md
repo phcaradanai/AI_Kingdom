@@ -4,7 +4,17 @@
 
 ## Active
 
-No active Codex implementation. Before the next slice, merge latest `main` into `codex/main` and update this file with the reserved branch/scope.
+No active Codex implementation. Real Runner / Bridge End-to-End acceptance completed on 2026-06-30.
+
+## Completed Real Runner / Bridge Acceptance
+
+- Branch/worktree: `main` in the canonical repository.
+- Evidence: FRESH context; real Claude Code deep probe READY; workflow `cmr0i0262001140r2y890li4p`; EXTERNAL_AGENT job `cmr0i93hz00jj40r2cbvq9otz`; LOW-risk one-file patch `cmr0ieg1100l140r2c9vymyw9`; `PASS / APPROVE` review; Accept & Learn; final `COMPLETED / DONE`.
+- Learning boundary: candidate `cmr0iegk200la40r2h98y6b1c` had no durable memory before acceptance. Accept & Learn created approved memory `cmr0ij9ru00ml40r25l0k7dd4`.
+- Source hardening: EXTERNAL_AGENT report submission no longer creates outcome Memory before King approval; focused workflow/outcome tests pass 7/7.
+- Safety restoration: external-agent write/network settings returned to `false`; runner restarted; no push, PR, merge, deploy, mock runner, or seeded patch evidence.
+- Verification: API 978/978, runner 103/103, web 241/241, root typecheck, production build, and `git diff --check` pass.
+- Scope boundary: no Treasury UX, branch push, PR creation, merge, deploy, context-bypass, mock fallback, or seeded runner evidence.
 
 ## Completed Wave 4G Contract
 

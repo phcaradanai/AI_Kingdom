@@ -7,9 +7,9 @@ import { submitReport } from "./automationJobService.js";
 /**
  * Part 4 of the Throne Room execution loop: when an EXTERNAL_AGENT job reports
  * back, the steward's verdict must be folded into the King-facing notice and the
- * outcome must be retained as a Kingdom Memory.
+ * outcome must remain review evidence until the King explicitly accepts it.
  */
-test("submitReport on an EXTERNAL_AGENT job folds the steward verdict into the King notice and saves a Kingdom Memory", async () => {
+test("submitReport on an EXTERNAL_AGENT job surfaces the steward verdict without creating pre-approval memory", async () => {
   const king = await prisma.user.create({
     data: { email: `king-${randomUUID()}@aikingdom.local`, passwordHash: "x", role: "KING", displayName: "Sovereign" }
   });
@@ -86,14 +86,11 @@ test("submitReport on an EXTERNAL_AGENT job folds the steward verdict into the K
     assert.match(notice!.content, new RegExp(`Verdict: ${review!.verdict}`));
     assert.match(notice!.content, new RegExp(`Recommendation for King: ${review!.kingRecommendation}`));
 
-    // The outcome must be retained in Kingdom Memory against the King.
+    // Accept & Learn is the only path allowed to materialize durable learning.
     const memory = await prisma.memory.findFirst({
       where: { createdBy: king.id, source: "external-agent-review", projectId: project.id }
     });
-    assert.ok(memory, "expected a Kingdom Memory capturing the outcome");
-    assert.equal(memory!.type, "LESSON");
-    assert.ok(memory!.tags.includes("external-agent"));
-    assert.match(memory!.content, /Royal Architect verdict:/);
+    assert.equal(memory, null, "runner report submission must not create learning before King approval");
   } finally {
     await prisma.memory.deleteMany({ where: { createdBy: king.id } }).catch(() => undefined);
     await prisma.agentReviewSummary.deleteMany({ where: { workOrderId: workOrder.id } }).catch(() => undefined);

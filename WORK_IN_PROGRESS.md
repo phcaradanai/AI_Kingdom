@@ -6,7 +6,16 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ## Active Now
 
-### Codex - `codex/main`
+### Codex - `main`
+
+- No active implementation. **Real Runner / Bridge End-to-End acceptance completed 2026-06-30.**
+- Real Claude Code evidence: workflow `cmr0i0262001140r2y890li4p`, job `cmr0i93hz00jj40r2cbvq9otz`, patch `cmr0ieg1100l140r2c9vymyw9`, and final `COMPLETED / DONE`.
+- King-gated learning verified: candidate remained non-durable before acceptance; Accept & Learn created approved memory `cmr0ij9ru00ml40r25l0k7dd4`.
+- Temporary external-agent write/network settings restored to `false`. No push, PR, merge, deploy, seeded patch, or mock runner evidence.
+- Verification complete: API 978/978, runner 103/103, web 241/241, typecheck, production build, and `git diff --check` pass.
+- Next candidate: Premium UX Wave 4H for `/treasury`, not started.
+
+### Codex - `codex/main` (prior completed work)
 
 - No active implementation. **Premium UX Wave 4G: Routing Workspace** is complete.
 - Completed scope: replaced the combined route-chain editor/provider table/model catalog with a compact route-chain registry plus selected fallback evidence workspace, semantic English/Thai chrome, source links, 44px controls, and responsive handoff.

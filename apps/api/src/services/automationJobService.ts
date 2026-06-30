@@ -513,31 +513,9 @@ async function notifyKingExternalAgentReport(input: {
     traceId: run?.id
   });
 
-  // Collect the outcome into Kingdom Memory so the result is retained, not just
-  // surfaced once in a notice. Saved against the King who created the work order.
-  if (workOrder?.createdByUserId && review) {
-    const memoryContent = [
-      `External agent execution for "${workOrder.title}".`,
-      `${stewardName} verdict: ${review.verdict}. Recommendation for King: ${review.kingRecommendation}.`,
-      review.summary,
-      nextActions.length ? `Next actions: ${nextActions.join(" | ")}` : null
-    ].filter(Boolean).join(" ").slice(0, 700);
-
-    await prisma.memory.create({
-      data: {
-        type: "LESSON",
-        title: `Outcome: ${workOrder.title}`.slice(0, 200),
-        content: memoryContent,
-        tags: ["external-agent", "outcome", review.verdict.toLowerCase()],
-        importance: verdictNeedsAttention ? "HIGH" : "MEDIUM",
-        source: "external-agent-review",
-        projectId: workOrder.projectId ?? undefined,
-        createdBy: workOrder.createdByUserId
-      }
-    }).catch((err) => {
-      console.warn("[AutomationJob] Failed to save outcome memory:", err instanceof Error ? err.message : String(err));
-    });
-  }
+  // The report, deterministic review, and notice are review evidence only. Durable
+  // learning is materialized exclusively by the King-gated Accept & Learn path,
+  // which approves pending AgentKnowledgeCandidates after a PASS review.
 
   await auditLog({
     action: "external_agent_completion_notice_created",

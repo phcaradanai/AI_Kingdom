@@ -1,10 +1,19 @@
 # Next Task
 
-## V1 Release Candidate — Locked
+## Real Runner / Bridge Acceptance — Complete
 
-Status: **locked as of 2026-06-29**
+Status: **complete as of 2026-06-30**
 
-The DECREE_TO_DONE Acceptance Gate passed. AI Kingdom V1 is a working product slice: a King can issue a BUILD decree, watch Mission Control drive it through context gate → council → work order → external agent dispatch → validation → review → retry → Accept & Learn → COMPLETED, with no duplicate records and one clear primary action at each step.
+The seeded V1 gate and the real external CLI bridge gate are both complete. They remain separate evidence sets: seeded evidence proved the product state machine; the 2026-06-30 run proved a real Claude Code process created and validated a patch before King acceptance.
+
+### Verified Real Runner Gate
+
+- Workflow `cmr0i0262001140r2y890li4p`: FRESH context → council → Work Order → Claude Code selection → real EXTERNAL_AGENT runner → validation → PASS review → Accept & Learn → `COMPLETED / DONE`.
+- Job `cmr0i93hz00jj40r2cbvq9otz`: real Claude CLI command step completed with exit 0; Implementation Report recorded one changed file, no errors, and `PASSED`.
+- Patch `cmr0ieg1100l140r2c9vymyw9`: one new harmless fixture file, real unified diff, LOW risk, no blocked paths, typecheck exit 0, approved only through Accept & Learn.
+- Learning gate: candidate `cmr0iegk200la40r2h98y6b1c` had no durable memory before acceptance; Accept & Learn created approved memory `cmr0ij9ru00ml40r25l0k7dd4`.
+- Temporary external-agent write/network settings are restored to `false`; no push, PR, merge, deploy, mock runner, or seeded patch evidence was used.
+- Final checks: API 978/978, runner 103/103, web 241/241, root typecheck, production build, and `git diff --check` all pass.
 
 ### Verified Acceptance Gate
 
@@ -20,11 +29,9 @@ The DECREE_TO_DONE Acceptance Gate passed. AI Kingdom V1 is a working product sl
 - PASS review accepted and archived
 - No duplicate WorkflowRun, CouncilSession, WorkOrder, or AutomationJob
 
-### What is NOT yet V1
+### Next Candidate
 
-- Full runner + bridge connected end-to-end in dev (`EXTERNAL_AGENT_BRIDGE_ENABLED=true` with a real CLI-backed agent): the smoke test reached BLOCKED@VALIDATE_RESULT due to bridge being off in dev — which is the correct gate behavior
-- Accept & Learn on real runner-generated patch evidence (acceptance gate used seeded evidence, same method as unit test 3)
-- `/treasury` Premium UX Wave 4H (planned, not started)
+Premium UX Wave 4H for `/treasury` may now be planned from a fresh `main` baseline. It has not started.
 
 ### V1 Local Run Prerequisites
 
