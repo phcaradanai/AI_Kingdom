@@ -143,6 +143,28 @@ Local development uses `docker-compose.yml` for PostgreSQL and npm scripts for A
 
 The staging backend entrypoint runs Prisma generate, `prisma migrate deploy`, and safe seed-if-empty. Backups and restores use `scripts/backup-postgres.sh` and `scripts/restore-postgres.sh` with `DATABASE_URL` supplied from the environment.
 
+## DECREE_TO_DONE Workflow (V1)
+
+The DECREE_TO_DONE persisted workflow (`decreeToDoneWorkflowService.ts`) makes Mission Control the single interaction surface for BUILD decrees. A `WorkflowRun` record with idempotent `WorkflowStepRun` children tracks progress; the owning records (Task, CouncilSession, WorkOrder, AutomationJob, AgentReviewSummary) remain the source of truth.
+
+Steps and their gates:
+
+1. **INTAKE_DECREE** — accepts the BUILD task; guards against non-BUILD modes.
+2. **CHECK_CONTEXT** — scans approved local document roots for the task's project; blocks with "Fix Context" if context is missing or stale.
+3. **RUN_COUNCIL** — calls the Grand Vizier orchestrator; stores the resulting `CouncilSession`.
+4. **CREATE_WORK_ORDER** — runs the planner agent; creates a `WorkOrder` with decree-specific acceptance criteria and file hints.
+5. **RESOLVE_AGENT** — checks live runner-reported agent capability; when `REQUIRE_KING_EXTERNAL_AGENT_CHOICE` is on and multiple agents are ready, raises an `AWAITING_ROYAL_DECISION` matter and blocks with "Choose Agent".
+6. **DISPATCH_RUNNER** — calls the external-agent bridge to create and approve a `SANDBOX_PATCH` `AutomationJob`; requires `EXTERNAL_AGENT_BRIDGE_ENABLED=true` and an online runner.
+7. **VALIDATE_RESULT** — waits for the runner to submit an `ImplementationReport` (and optionally a `PatchArtifact`).
+8. **REVIEW_RESULT** — reads the `AgentReviewSummary` verdict: `PATCH_FAILED`/`VALIDATION_FAILED` → "Retry"; `NEEDS_FIX`/`RISK_REVIEW`/`UNKNOWN` → "Review Result" (King decision); `PASS` → "Accept & Learn".
+9. **RETRY_OR_ESCALATE** — dispatches a new job via `supervisedRetryService` after a mechanical retry; loops back toward VALIDATE_RESULT.
+10. **ARCHIVE_LEARNING** — "Accept & Learn": approves `PatchArtifact`, approves `AgentKnowledgeCandidate` records, completes `WorkOrder` and `AutomationJob`, closes `WorkflowRun` as COMPLETED.
+11. **DONE** — terminal.
+
+Review metadata consistency: `normalizeKingRecommendation(verdict, recommendation)` in `runnerResultReviewService.ts` guarantees `PASS` always pairs with `APPROVE`, never `REQUEST_REVISION`/`RETRY_WITH_FIXED_PATCH`/`REJECT`. Applied at the write path, at `serializeWorkflowView`, and at the Mission Control display layer.
+
+In-process dedup: `inProcessRuns = new Map<string, Promise<WorkflowView>>()` prevents concurrent re-entry for the same task. `WorkflowRun.sourceTaskId @unique` prevents duplicate runs at the schema level.
+
 ## AI Kingdom is quality-first, not data-first.
 
 The system must not persist weak, duplicate, unclear, or non-actionable records.

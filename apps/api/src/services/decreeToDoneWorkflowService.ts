@@ -21,6 +21,7 @@ import { approvePatchArtifact } from "./patchArtifactService.js";
 import { bindFreshContextToWorkOrder, getProjectContextBinding } from "./projectContextBindingService.js";
 import { getBooleanSetting } from "./settingsService.js";
 import { dispatchRetry, MECHANICAL_RETRY_VERDICTS } from "./supervisedRetryService.js";
+import { normalizeKingRecommendation } from "./runnerResultReviewService.js";
 
 const TERMINAL_WORK_ORDER_STATUSES = ["ARCHIVED", "CANCELLED", "FAILED"] as const;
 const IN_FLIGHT_JOB_STATUSES = new Set(["QUEUED", "APPROVED", "CLAIMED", "RUNNING"]);
@@ -41,7 +42,7 @@ export type WorkflowPrimaryAction =
 export type WorkflowView = Awaited<ReturnType<typeof loadWorkflowView>>;
 
 export function serializeWorkflowView(view: WorkflowView) {
-  return {
+  const serialized = {
     ...view,
     createdAt: view.createdAt.toISOString(),
     updatedAt: view.updatedAt.toISOString(),
@@ -53,6 +54,14 @@ export function serializeWorkflowView(view: WorkflowView) {
       updatedAt: step.updatedAt.toISOString()
     }))
   };
+  const review = serialized.automationJob?.reviewSummary;
+  if (review) {
+    review.kingRecommendation = normalizeKingRecommendation(
+      review.verdict as Parameters<typeof normalizeKingRecommendation>[0],
+      review.kingRecommendation as Parameters<typeof normalizeKingRecommendation>[1]
+    );
+  }
+  return serialized;
 }
 
 export async function startOrContinueDecreeToDoneWorkflow(taskId: string, userId: string): Promise<WorkflowView> {

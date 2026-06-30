@@ -13,6 +13,7 @@ import type {
   MissionControlWorkOrderDto
 } from "../types/api.js";
 import { listMissionControlWorkflows, serializeWorkflowView } from "./decreeToDoneWorkflowService.js";
+import { normalizeKingRecommendation } from "./runnerResultReviewService.js";
 
 const MILESTONE_CODENAME = "KINGDOM_MISSION_CONTROL_FOUNDATION" as const;
 
@@ -438,14 +439,18 @@ export async function getMissionControl(): Promise<MissionControlDto> {
   const needsReviewItems: MissionControlReviewItemDto[] = reviewSummaries
     .filter((review) => !review.workOrder.isTestData)
     .map((review) => {
-      const severity = reviewSeverity(review.verdict, review.kingRecommendation);
+      const rec = normalizeKingRecommendation(
+        review.verdict as Parameters<typeof normalizeKingRecommendation>[0],
+        review.kingRecommendation as Parameters<typeof normalizeKingRecommendation>[1]
+      );
+      const severity = reviewSeverity(review.verdict, rec);
       return {
         id: review.id,
         automationJobId: review.automationJobId,
         workOrderId: review.workOrderId,
         title: review.workOrder.title,
         verdict: review.verdict,
-        kingRecommendation: review.kingRecommendation,
+        kingRecommendation: rec,
         summary: review.summary,
         severity,
         lastUpdated: review.updatedAt.toISOString(),
@@ -459,7 +464,7 @@ export async function getMissionControl(): Promise<MissionControlDto> {
           reviewSummaryId: review.id,
           updatedAt: review.updatedAt.toISOString(),
           recommendedAction: severity === "INFO" ? "Approve or archive after review." : "King decision required before this work can be accepted.",
-          why: `${review.verdict} / ${review.kingRecommendation}: ${review.summary}`
+          why: `${review.verdict} / ${rec}: ${review.summary}`
         })
       };
     });

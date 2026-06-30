@@ -21,6 +21,16 @@ export type AgentReviewConfidence = typeof AGENT_REVIEW_CONFIDENCE[number];
 export const KING_RECOMMENDATIONS = ["APPROVE", "REJECT", "REQUEST_REVISION", "RETRY_WITH_FIXED_PATCH", "REVIEW_MANUALLY"] as const;
 export type KingRecommendation = typeof KING_RECOMMENDATIONS[number];
 
+// PASS verdict must pair with APPROVE; pairing with a revision/rejection recommendation
+// is internally inconsistent and can arise from legacy seeded data or partial DB updates.
+// Normalize at the write path and at any display/serialization boundary.
+export function normalizeKingRecommendation(verdict: AgentReviewVerdict, recommendation: KingRecommendation): KingRecommendation {
+  if (verdict === "PASS" && (recommendation === "REQUEST_REVISION" || recommendation === "RETRY_WITH_FIXED_PATCH" || recommendation === "REJECT")) {
+    return "APPROVE";
+  }
+  return recommendation;
+}
+
 type ReviewAutomationJob = AutomationJob & {
   workOrder?: Pick<WorkOrder, "id" | "title" | "acceptanceCriteria"> | null;
   steps?: AgentRunStep[];
@@ -163,7 +173,7 @@ export async function createOrUpdateAgentReviewForJob(jobId: string, options: Ge
     reviewerAgentId: reviewerAgent?.id ?? null,
     verdict: draft.verdict,
     confidence: draft.confidence,
-    kingRecommendation: draft.kingRecommendation,
+    kingRecommendation: normalizeKingRecommendation(draft.verdict, draft.kingRecommendation),
     summary: draft.summary,
     whatPassed: draft.whatPassed as Prisma.InputJsonValue,
     whatFailed: draft.whatFailed as Prisma.InputJsonValue,

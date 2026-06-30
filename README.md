@@ -15,7 +15,7 @@ A local-first Kingdom Control Plane where the King issues commands to specialize
 
 ## Current Status
 
-Implemented through M21, including Mission Control navigation/provenance, the background Living Loop scheduler, and opt-in Auto Context Repair. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for current capabilities and verification evidence, [ARCHITECTURE.md](ARCHITECTURE.md) for system boundaries, and [NEXT_TASK.md](NEXT_TASK.md) for the single next milestone.
+**V1 Release Candidate.** The DECREE_TO_DONE workflow is implemented, acceptance-gate verified, and locked. Mission Control owns the full BUILD decree execution lifecycle from context gate through council, work order, external agent dispatch, validation, review, retry, and Accept & Learn. All 969 API tests, 103 runner tests, and 241 web tests pass. See [PROJECT_STATUS.md](PROJECT_STATUS.md) for capabilities and verification evidence, [ARCHITECTURE.md](ARCHITECTURE.md) for system boundaries, and [NEXT_TASK.md](NEXT_TASK.md) for V1 local run instructions.
 
 ## Setup
 
@@ -121,12 +121,30 @@ Audit logs are written for login, logout, user creation/deactivation, settings c
 
 ## Core Flow
 
+### Ask / Plan / Research modes
+
 1. Log in as the King.
 2. Open the Throne Room.
-3. Choose a command mode: Ask, Plan, Research, or Build.
+3. Choose Ask, Plan, or Research mode.
 4. Submit a royal command.
-5. Send the decree to the Grand Vizier.
-6. Review the council result, generated report, source-linked Work Order, or next action in Mission Control.
+5. Click **Send to Grand Vizier** — the council convenes and the Grand Vizier synthesizes a response.
+6. Review the council result, generated report, and any auto-saved memories in `/council` or `/reports`.
+
+### Build mode (DECREE_TO_DONE)
+
+1. Log in as the King.
+2. Open the Throne Room.
+3. Choose **Build** mode and link a project.
+4. Submit a BUILD decree.
+5. Open **Mission Control** (`/dashboard`) — the DECREE_TO_DONE workflow takes ownership.
+6. Mission Control shows one primary action at each stage:
+   - **Fix Context** — scan or refresh the project's local document root.
+   - **Continue Workflow** — the council convenes and the planner creates a Work Order.
+   - **Choose Agent** — select from bridge-ready external agents.
+   - **Dispatch** — the runner executes the Work Order (requires `EXTERNAL_AGENT_BRIDGE_ENABLED=true`).
+   - **Review Result** — inspect the runner's patch artifact and implementation report.
+   - **Retry** — re-dispatch after a mechanical failure (PATCH_FAILED / VALIDATION_FAILED).
+   - **Accept & Learn** — approve the PASS result, archive the patch artifact, and close the `WorkflowRun` as COMPLETED.
 
 Council responses route through the provider registry. The mock provider remains the code default; OpenAI, OpenRouter, DeepSeek, Anthropic, Gemini, and custom OpenAI-compatible endpoints can be enabled with server-side env vars.
 
@@ -163,6 +181,19 @@ Cost is estimated from a static table in `apps/api/src/pricing/providerPricing.t
 
 Unknown models default to $0.00 with a server-side warning. Token counts for the mock provider are estimated from string length (`Math.ceil(chars / 4)`). Token counts for OpenAI-compatible providers come directly from the API response when provided.
 
+## V1 Local Run Checklist
+
+Prerequisites before running the DECREE_TO_DONE BUILD flow end-to-end:
+
+1. **DB migrate and seed** — `npm run db:migrate && npm run db:seed`
+2. **Runner bootstrap** — `npm run runner:bootstrap` (requires `RUNNER_TOKEN` in root `.env`)
+3. **Runner online** — start `npm run dev --workspace @ai-kingdom/runner`; confirm `/automation-jobs` shows `Online Runners = 1`
+4. **Local document root active** — open `/projects/:id`, add a Local Document Root pointing at the repo path, click **Scan Now**, confirm status is READY
+5. **External agent bridge enabled** — set `EXTERNAL_AGENT_BRIDGE_ENABLED=true` in both root `.env` and `apps/runner/.env`
+6. **Bridge-ready external agent** — open `/external-agents`, confirm at least one agent has `bridgeEnabled=true` and the runner reports it as CLI-available
+7. **Provider routing configured** — set a real provider (e.g. `AI_PROVIDER=openrouter`) or use `mock` for testing
+8. **Mission Control smoke test** — create a BUILD decree linked to the project, open `/dashboard`, follow each primary action through the DECREE_TO_DONE workflow to COMPLETED
+
 ## Manual Verification
 
 ```bash
@@ -172,26 +203,30 @@ npm run db:seed
 npm run dev
 ```
 
-Then:
+### Ask / Plan / Research smoke test
 
 1. Open `http://localhost:5173`.
 2. Log in with `king@aikingdom.local` / `password123`.
-3. Open `/throne-room`.
-4. Select a mode.
-5. Submit a non-empty royal command.
-6. Confirm the new task appears in Recent decrees with a `PENDING` badge.
-7. Click `Send to Grand Vizier`.
-8. Confirm the status becomes `COMPLETED` and a final summary appears.
-9. Open `/council`.
-10. Confirm the council session lists selected agents, agent responses, provider/model metadata, and the final Grand Vizier report.
-11. Confirm the council session links to a generated Royal Report.
-12. Open `/reports`.
-13. Search the generated report and review its detail view.
-14. Open `/memory`.
-15. Search, create, edit, or delete a Kingdom Memory.
-16. Open `/users` as the King and create a Scribe or Minister.
-17. Log out, log in as the new user, and confirm unauthorized pages are hidden.
-18. Open `/profile` and `/security` to confirm the role badge and session controls.
+3. Open `/throne-room` and select Ask, Plan, or Research mode.
+4. Submit a non-empty royal command.
+5. Confirm the new task appears in Recent decrees with a `PENDING` badge.
+6. Click **Send to Grand Vizier**.
+7. Confirm the status becomes `COMPLETED` and a final summary appears.
+8. Open `/council` — confirm the session lists selected agents, responses, provider metadata, and links to the generated report.
+9. Open `/reports` — search and review the generated report.
+10. Open `/memory` — search, create, edit, or delete a Kingdom Memory.
+11. Open `/users` as the King and create a Scribe or Minister.
+12. Log out, log in as the new user, and confirm unauthorized pages are hidden.
+
+### BUILD / DECREE_TO_DONE smoke test
+
+Complete the V1 Local Run Checklist above first, then:
+
+1. Open `/throne-room`, choose **Build** mode, link the project.
+2. Submit a BUILD decree.
+3. Open `/dashboard` (Mission Control) — the DECREE_TO_DONE card appears at the top.
+4. Follow the primary action at each stage: Fix Context if needed → Continue Workflow → Choose Agent → Dispatch → Review Result (or Retry on failure) → Accept & Learn.
+5. Confirm the WorkflowRun reaches **COMPLETED | DONE** and the Blocked/Warnings counter shows 0.
 
 ## Kingdom Memory
 

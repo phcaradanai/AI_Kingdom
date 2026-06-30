@@ -10,6 +10,7 @@ import {
   chooseWorkflowExternalAgent,
   reconcileWorkflowForAutomationJob,
   retryDecreeToDoneWorkflow,
+  serializeWorkflowView,
   startOrContinueDecreeToDoneWorkflow
 } from "./decreeToDoneWorkflowService.js";
 
@@ -249,6 +250,60 @@ test("dispatch preconditions block when the global bridge is disabled", async ()
     await prisma.agentRunner.delete({ where: { id: runner.id } }).catch(() => undefined);
     await restoreChoice();
     await restoreBridge();
+    await restoreRuntime();
+  }
+});
+
+// V1 Release Lock: consistency guard and Accept & Learn safety tests
+
+test("serializeWorkflowView normalizes PASS + REQUEST_REVISION review to APPROVE", () => {
+  const now = new Date();
+  const fakeView = {
+    id: "fake-wf", type: "DECREE_TO_DONE" as const, status: "NEEDS_REVIEW" as const,
+    currentStep: "ARCHIVE_LEARNING" as const, sourceTaskId: "t1", projectId: null,
+    workOrderId: "wo1", automationJobId: "j1", nextAction: "Accept & Learn" as const,
+    lastError: null, createdAt: now, updatedAt: now,
+    sourceTask: null, project: null, workOrder: null,
+    automationJob: {
+      id: "j1", status: "NEEDS_REVIEW" as const, mode: "SANDBOX_PATCH" as const,
+      implementationReports: [],
+      patchArtifacts: [],
+      reviewSummary: { id: "rev1", verdict: "PASS", kingRecommendation: "REQUEST_REVISION", summary: "looks ok", whatPassed: null, whatFailed: null, riskNotes: null, nextActions: null }
+    },
+    steps: [],
+    primaryAction: "Accept & Learn" as const,
+    availableAgents: []
+  };
+  const serialized = serializeWorkflowView(fakeView as unknown as Parameters<typeof serializeWorkflowView>[0]);
+  assert.equal(serialized.automationJob?.reviewSummary?.kingRecommendation, "APPROVE", "Inconsistent PASS+REQUEST_REVISION must be normalized to APPROVE");
+});
+
+test("acceptAndLearnDecreeToDoneWorkflow rejects non-PASS verdict even with valid evidence", async () => {
+  const restoreRuntime = await isolateExternalRuntime();
+  const user = await createUser();
+  const { project, dir } = await createFreshProject();
+  const source = await createSourceRecords(user.id, project.id);
+  const job = await prisma.automationJob.create({
+    data: { workOrderId: source.workOrder.id, projectId: project.id, mode: "SANDBOX_PATCH", status: "NEEDS_REVIEW", commandPolicy: "SANDBOX_PATCH_NO_PUSH", createdByUserId: user.id }
+  });
+  const report = await prisma.implementationReport.create({
+    data: { workOrderId: source.workOrder.id, projectId: project.id, automationJobId: job.id, summary: "NO_CHANGES: nothing to patch.", filesChanged: [], testResult: "PASSED" }
+  });
+  await prisma.agentReviewSummary.create({
+    data: { automationJobId: job.id, workOrderId: source.workOrder.id, projectId: project.id, verdict: "NEEDS_FIX", confidence: "HIGH", kingRecommendation: "REQUEST_REVISION", summary: "Does not satisfy acceptance criteria.", sourceReportId: report.id }
+  });
+  const run = await prisma.workflowRun.create({
+    data: { sourceTaskId: source.task.id, projectId: project.id, workOrderId: source.workOrder.id, automationJobId: job.id, status: "NEEDS_REVIEW", currentStep: "ARCHIVE_LEARNING", nextAction: "Accept & Learn" }
+  });
+  try {
+    await assert.rejects(
+      () => acceptAndLearnDecreeToDoneWorkflow(run.id, user.id),
+      (err: Error) => err.message.includes("NEEDS_FIX"),
+      "Must reject when review verdict is not PASS"
+    );
+  } finally {
+    await prisma.workflowRun.delete({ where: { id: run.id } }).catch(() => undefined);
+    await cleanupFixture({ userId: user.id, projectId: project.id, workOrderIds: [source.workOrder.id], dir });
     await restoreRuntime();
   }
 });

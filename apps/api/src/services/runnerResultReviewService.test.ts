@@ -1,11 +1,17 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "../../../../");
 import { prisma } from "../db/prisma.js";
 import {
   buildDeterministicReview,
   createOrUpdateAgentReviewForJob,
   generateAgentReviewDraft,
+  normalizeKingRecommendation,
   type ReviewInput
 } from "./runnerResultReviewService.js";
 
@@ -256,3 +262,37 @@ function input(opts: {
   } as ReviewInput["patchArtifact"] : null;
   return { automationJob, report, patchArtifact };
 }
+
+// V1 Release Lock: review metadata consistency tests
+
+test("normalizeKingRecommendation: PASS + REQUEST_REVISION → APPROVE", () => {
+  assert.equal(normalizeKingRecommendation("PASS", "REQUEST_REVISION"), "APPROVE");
+});
+
+test("normalizeKingRecommendation: PASS + RETRY_WITH_FIXED_PATCH → APPROVE", () => {
+  assert.equal(normalizeKingRecommendation("PASS", "RETRY_WITH_FIXED_PATCH"), "APPROVE");
+});
+
+test("normalizeKingRecommendation: PASS + REJECT → APPROVE", () => {
+  assert.equal(normalizeKingRecommendation("PASS", "REJECT"), "APPROVE");
+});
+
+test("normalizeKingRecommendation: PASS + APPROVE → APPROVE (unchanged)", () => {
+  assert.equal(normalizeKingRecommendation("PASS", "APPROVE"), "APPROVE");
+});
+
+test("normalizeKingRecommendation: non-PASS verdict is not mutated", () => {
+  assert.equal(normalizeKingRecommendation("NEEDS_FIX", "REQUEST_REVISION"), "REQUEST_REVISION");
+  assert.equal(normalizeKingRecommendation("VALIDATION_FAILED", "RETRY_WITH_FIXED_PATCH"), "RETRY_WITH_FIXED_PATCH");
+});
+
+test("README contains DECREE_TO_DONE product flow description", () => {
+  const readme = readFileSync(join(REPO_ROOT, "README.md"), "utf8");
+  assert.ok(readme.includes("DECREE_TO_DONE"), "README must describe the DECREE_TO_DONE workflow");
+  assert.ok(readme.includes("Mission Control"), "README must reference Mission Control for BUILD flow");
+});
+
+test("NEXT_TASK.md describes V1 release state, not stale Wave 4H Treasury task", () => {
+  const nextTask = readFileSync(join(REPO_ROOT, "NEXT_TASK.md"), "utf8");
+  assert.ok(!nextTask.startsWith("# Next Task\n\n## Premium UX Wave 4H: Treasury"), "NEXT_TASK must not still point to Wave 4H Treasury as the primary task");
+});

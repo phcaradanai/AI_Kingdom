@@ -245,7 +245,7 @@ function WorkflowControlCard({ workflow, onRefresh }: { workflow: NonNullable<Mi
           <div className="font-semibold text-foreground">Implementation evidence</div>
           <p className="mt-1 text-muted-foreground">{report.summary}</p>
           <div className="mt-2 text-xs text-muted-foreground">Validation: {humanizeStatus(report.testResult)} · Files changed: {report.filesChanged.length}</div>
-          {review && <div className="mt-1 text-xs font-semibold text-foreground">Review: {review.verdict} · {review.kingRecommendation}</div>}
+          {review && <div className="mt-1 text-xs font-semibold text-foreground">Review: {review.verdict} · {review.verdict === "PASS" && ["REQUEST_REVISION", "RETRY_WITH_FIXED_PATCH", "REJECT"].includes(review.kingRecommendation) ? "APPROVE" : review.kingRecommendation}</div>}
         </div>
       )}
 
