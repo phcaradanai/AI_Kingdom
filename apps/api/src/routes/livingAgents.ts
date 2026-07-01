@@ -5,8 +5,36 @@ import {
   getLivingAgents,
   getLivingAgentTimeline
 } from "../services/livingAgentsService.js";
+import { deriveLivingAgentStates, deriveSingleAgentState } from "../services/livingAgentStateService.js";
 
 const router = Router();
+
+router.get("/state", async (req, res, next) => {
+  try {
+    const { agentId, projectId, includeInactive } = req.query as Record<string, string | undefined>;
+    const states = await deriveLivingAgentStates({
+      agentId,
+      projectId,
+      includeInactive: includeInactive === "true",
+    });
+    res.json({ states });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/:agentId/state", async (req, res, next) => {
+  try {
+    const state = await deriveSingleAgentState(req.params.agentId);
+    if (!state) {
+      res.status(404).json({ error: "Agent not found" });
+      return;
+    }
+    res.json({ state });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/", async (_req, res, next) => {
   try {

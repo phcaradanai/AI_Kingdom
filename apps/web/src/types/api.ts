@@ -2344,6 +2344,43 @@ export type KingdomActivityType =
   | "REVIEW"
   | "KNOWLEDGE";
 
+// ── Living Kingdom V2: agent state derivation ─────────────────────────────────
+
+export type LivingAgentStatusCode =
+  | "IDLE"
+  | "THINKING"
+  | "PLANNING"
+  | "WORKING"
+  | "WAITING_FOR_KING"
+  | "WAITING_FOR_EXTERNAL_AGENT"
+  | "VALIDATING"
+  | "REVIEWING"
+  | "LEARNING"
+  | "BLOCKED"
+  | "OFFLINE";
+
+export type LivingAgentConfidence = "HIGH" | "MEDIUM" | "LOW";
+
+export type LivingAgentStateDto = {
+  agentId: string;
+  agentName: string;
+  role: string;
+  status: LivingAgentStatusCode;
+  statusLabel: string;
+  summary: string;
+  evidenceType: string | null;
+  evidenceId: string | null;
+  evidenceLink: string | null;
+  projectId: string | null;
+  workOrderId: string | null;
+  workflowRunId: string | null;
+  currentAction: string | null;
+  recommendedKingAction: string | null;
+  updatedAt: string;
+  confidence: LivingAgentConfidence;
+  staleReason: string | null;
+};
+
 export type KingdomActivityItemDto = {
   id: string;
   timestamp: string;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "@/lib/api";
-import type { AgentPresenceDto, LivingAgentSummaryDto } from "@/types/api";
+import type { AgentPresenceDto, LivingAgentStateDto, LivingAgentSummaryDto } from "@/types/api";
 import { getAgentName, getAgentTitle, getRosterMetrics, matchesStateFilter } from "./livingAgentModels";
 import type { LivingAgentPane, LivingAgentRecord, LivingAgentStateFilter } from "./livingAgentModels";
 
@@ -8,6 +8,7 @@ export function useLivingAgentsController() {
   const [agents, setAgents] = useState<LivingAgentSummaryDto[]>([]);
   const [presenceByAgent, setPresenceByAgent] = useState<Map<string, AgentPresenceDto> | null>(null);
   const [presenceComputedAt, setPresenceComputedAt] = useState<string | null>(null);
+  const [livingStateByAgent, setLivingStateByAgent] = useState<Map<string, LivingAgentStateDto> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -21,9 +22,10 @@ export function useLivingAgentsController() {
     async function load() {
       setLoading(true);
       setError(null);
-      const [rosterResult, presenceResult] = await Promise.allSettled([
+      const [rosterResult, presenceResult, stateResult] = await Promise.allSettled([
         api.getLivingAgents(),
         api.getKingdomPresence(),
+        api.getLivingAgentStates(),
       ]);
       if (!active) return;
       if (rosterResult.status === "rejected") {
@@ -40,6 +42,11 @@ export function useLivingAgentsController() {
         setPresenceByAgent(null);
         setPresenceComputedAt(null);
       }
+      if (stateResult.status === "fulfilled") {
+        setLivingStateByAgent(new Map(stateResult.value.states.map((s) => [s.agentId, s])));
+      } else {
+        setLivingStateByAgent(null);
+      }
       setLoading(false);
     }
     void load();
@@ -49,7 +56,8 @@ export function useLivingAgentsController() {
   const records = useMemo<LivingAgentRecord[]>(() => agents.map((agent) => ({
     agent,
     presence: presenceByAgent?.get(agent.id) ?? null,
-  })), [agents, presenceByAgent]);
+    livingState: livingStateByAgent?.get(agent.id) ?? null,
+  })), [agents, presenceByAgent, livingStateByAgent]);
 
   const roles = useMemo(() => [...new Set(agents.map((agent) => agent.role))].sort(), [agents]);
   const filteredRecords = useMemo(() => {
@@ -77,6 +85,7 @@ export function useLivingAgentsController() {
     pane,
     presenceAvailable: presenceByAgent !== null,
     presenceComputedAt,
+    livingStateAvailable: livingStateByAgent !== null,
     roleFilter,
     roles,
     search,

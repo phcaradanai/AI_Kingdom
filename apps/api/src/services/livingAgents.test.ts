@@ -251,6 +251,56 @@ test("GET /api/living-agents/:agentId returns 404 for unknown agent", async () =
   }
 });
 
+test("GET /api/living-agents/state returns state array including created agent", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const agent = await createTestAgent(suffix);
+  const { user, token } = await createKingToken(suffix);
+  const VALID_STATUSES = new Set([
+    "IDLE", "THINKING", "PLANNING", "WORKING",
+    "WAITING_FOR_KING", "WAITING_FOR_EXTERNAL_AGENT",
+    "VALIDATING", "REVIEWING", "LEARNING", "BLOCKED", "OFFLINE"
+  ]);
+  try {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/living-agents/state`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(res.status, 200);
+      const body = await res.json() as { states: Array<{ agentId: string; status: string; confidence: string; summary: string }> };
+      assert.ok(Array.isArray(body.states));
+      const row = body.states.find((s) => s.agentId === agent.id);
+      assert.ok(row, "created agent must appear in /state response");
+      assert.ok(VALID_STATUSES.has(row.status), `status "${row.status}" must be a valid LivingAgentStatusCode`);
+      assert.ok(["HIGH", "MEDIUM", "LOW"].includes(row.confidence), "confidence must be HIGH/MEDIUM/LOW");
+      assert.equal(typeof row.summary, "string");
+    });
+  } finally {
+    await prisma.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
+test("GET /api/living-agents/:agentId/state returns IDLE for agent with no active signals", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const agent = await createTestAgent(suffix);
+  const { user, token } = await createKingToken(suffix);
+  try {
+    await withServer(async (baseUrl) => {
+      const res = await fetch(`${baseUrl}/api/living-agents/${agent.id}/state`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(res.status, 200);
+      const body = await res.json() as { state: { agentId: string; status: string; confidence: string } };
+      assert.equal(body.state.agentId, agent.id);
+      assert.equal(body.state.status, "IDLE");
+      assert.equal(body.state.confidence, "HIGH");
+    });
+  } finally {
+    await prisma.agent.delete({ where: { id: agent.id } }).catch(() => undefined);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+  }
+});
+
 test("timeline includes trace step for agent", async () => {
   const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   const agent = await createTestAgent(suffix);

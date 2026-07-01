@@ -8,11 +8,10 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `main`
 
-- No active implementation. **Premium UX Wave 4I: Usage Trace Detail completed 2026-07-01.**
-- Completed scope: `/usage-traces/:traceId` redesigned as evidence-first audit page — compact attribution summary, token/cost strip, Final Resolution fallback card, ordered operation timeline, Related Records + Source Ownership panels (Provider Config, Route Chain, Treasury, Audit), sanitized prompt/response previews with recovery message, 44px controls, scoped English/Thai chrome via `usageTraceMessages.ts`, and focused web tests (11 scenarios). No backend, DTO, Prisma, routing, secret handling, or source-of-truth separation changed.
-- Verification complete: 260/260 web tests, root typecheck, production build, and `git diff --check` pass.
-- Rendered verification complete: EN/TH confirmed at 1440x900 and 390x844 — no horizontal overflow, all source links present, 44px expand toggle and back button, proper Thai rendering for all `trace.*` keys.
-- Next candidate: Premium UX Wave 4J or Wave 5 (Knowledge Lab).
+- **Kingdom V2 Phase A: Living Kingdom Foundation completed 2026-07-01.**
+- Completed scope: Read-only deterministic living state layer — `livingAgentStateService.ts` with pure `deriveAgentStatus()` function and bulk `deriveLivingAgentStates()` query. 11-status taxonomy (OFFLINE, BLOCKED, WORKING, VALIDATING, WAITING_FOR_EXTERNAL_AGENT, REVIEWING, THINKING, LEARNING, PLANNING, WAITING_FOR_KING, IDLE), priority-ordered derivation, evidence links, confidence scoring, and recommended King actions. `GET /api/living-agents/state` and `GET /api/living-agents/:agentId/state` endpoints. `LivingStatePanel` in `LivingAgentEvidence.tsx` shows status badge, summary, evidence link, and King action. No schema migration, no provider calls, no data mutation, no autonomy added. V1 flow unchanged.
+- Verification: 27/27 unit tests (pure derivation, no DB), 260/260 web tests, root typecheck, production build pass.
+- Next candidate: Kingdom V2 Phase B (Animated Kingdom Map) or Phase C (Goal-to-Agent Trace). See `docs/LIVING_KINGDOM.md`.
 
 ### Codex - `codex/main` (prior completed work)
 

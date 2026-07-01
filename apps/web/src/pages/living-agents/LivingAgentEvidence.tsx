@@ -1,11 +1,11 @@
-import { Activity, AlertTriangle, ArrowUpRight, Bot, CheckCircle2, Clock3, Cpu, FileSearch, FolderKanban, Gauge, ShieldCheck, Zap } from "lucide-react";
+import { Activity, AlertTriangle, ArrowUpRight, Bot, CheckCircle2, Clock3, Cpu, FileSearch, FolderKanban, Gauge, Info, ShieldCheck, Zap } from "lucide-react";
 import { Link } from "react-router-dom";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { STATE_COLORS, STATE_DOT } from "@/components/kingdom/agentPresence";
 import { getModelDisplayName, getProviderDisplayName } from "@/lib/providerDisplay";
 import { useTk } from "@/lib/i18n";
 import { cn, formatDate } from "@/lib/utils";
-import { formatTokens, getAgentName, getAgentTitle, getEffectivePresenceState, getPortraitStatus } from "./livingAgentModels";
+import { LIVING_STATUS_COLORS, LIVING_STATUS_DOT, formatTokens, getAgentName, getAgentTitle, getEffectivePresenceState, getLivingStatusPulse, getPortraitStatus } from "./livingAgentModels";
 import type { LivingAgentRecord } from "./livingAgentModels";
 import type { LivingAgentsController } from "./useLivingAgentsController";
 
@@ -35,6 +35,8 @@ function EvidenceContent({ controller, record }: { controller: LivingAgentsContr
         <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="break-words text-xl font-semibold text-foreground">{title}</h2><span className={cn("inline-flex min-h-7 items-center gap-1.5 rounded-full border px-2 text-xs font-semibold", STATE_COLORS[state])}><span className={cn("h-2 w-2 rounded-full", STATE_DOT[state], agent.isActive && state !== "IDLE" && "motion-safe:animate-pulse")} />{stateLabel}</span></div><p className="mt-1 text-sm text-muted-foreground">{name} · {agent.role.replaceAll("_", " ")}</p><p className="mt-2 max-w-2xl text-sm leading-6 text-foreground/75">{agent.description}</p></div>
         <Link className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-md border border-primary/35 bg-primary/8 px-3 text-sm font-semibold text-primary transition-colors hover:bg-primary/15 focus:outline-none focus:ring-2 focus:ring-primary" to={`/living-agents/${agent.id}`}>{tk("livingAgents.source.openProfile")}<ArrowUpRight className="h-4 w-4" /></Link>
       </header>
+
+      {record.livingState ? <LivingStatePanel record={record} /> : null}
 
       <div className="grid min-w-0 gap-px bg-border sm:grid-cols-2 xl:grid-cols-4" data-testid="living-agent-detail-metrics">
         <Metric icon={Zap} label={tk("livingAgents.metric.calls")} value={String(agent.totalCalls)} />
@@ -68,6 +70,48 @@ function EvidenceContent({ controller, record }: { controller: LivingAgentsContr
           <div className="mt-2 divide-y divide-border"><SourceLink icon={Bot} label={tk("livingAgents.source.agentRegistry")} openLabel={tk("livingAgents.source.openRegistry")} to="/agents" /><SourceLink icon={FolderKanban} label={tk("livingAgents.source.workOrders")} openLabel={tk("livingAgents.source.openWorkOrders")} to={workOrder ? `/work-orders?focus=${encodeURIComponent(workOrder.id)}` : "/work-orders"} /><SourceLink icon={Cpu} label={tk("livingAgents.source.providers")} openLabel={tk("livingAgents.source.openProviders")} to="/providers" /><SourceLink icon={FileSearch} label={tk("livingAgents.source.profileEvidence")} openLabel={tk("livingAgents.source.openProfileEvidence")} to={`/living-agents/${agent.id}`} /></div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function LivingStatePanel({ record }: { record: LivingAgentRecord }) {
+  const state = record.livingState!;
+  const colorClass = LIVING_STATUS_COLORS[state.status];
+  const dotClass = LIVING_STATUS_DOT[state.status];
+  const pulse = getLivingStatusPulse(state.status);
+  const isLowConfidence = state.confidence === "LOW";
+  return (
+    <div className="border-b border-border px-4 py-3" data-testid="living-state-panel">
+      <div className="flex min-w-0 flex-wrap items-center gap-2">
+        <span className={cn("inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs font-semibold", colorClass)}>
+          <span className={cn("h-1.5 w-1.5 rounded-full", dotClass, pulse && "motion-safe:animate-pulse")} />
+          {state.statusLabel}
+        </span>
+        {isLowConfidence && (
+          <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+            <Info className="h-3 w-3" />Low confidence
+          </span>
+        )}
+      </div>
+      <p className="mt-1.5 text-sm text-foreground/80">{state.summary}</p>
+      {state.staleReason && (
+        <p className="mt-1 text-xs text-muted-foreground">{state.staleReason}</p>
+      )}
+      {state.recommendedKingAction && (
+        <p className="mt-1.5 text-xs font-semibold text-amber-400">
+          → {state.recommendedKingAction}
+        </p>
+      )}
+      {state.evidenceLink && (
+        <Link
+          className="mt-2 inline-flex min-h-[36px] items-center gap-1.5 rounded-md border border-primary/25 bg-primary/5 px-3 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+          to={state.evidenceLink}
+        >
+          <FileSearch className="h-3.5 w-3.5 shrink-0" />
+          {state.evidenceType ?? "View evidence"}
+          <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+        </Link>
+      )}
     </div>
   );
 }

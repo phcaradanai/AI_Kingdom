@@ -74,6 +74,7 @@ function presence(id: string, overrides: Partial<AgentPresenceDto> = {}): AgentP
 const apiMocks = vi.hoisted(() => ({
   getLivingAgents: vi.fn(),
   getKingdomPresence: vi.fn(),
+  getLivingAgentStates: vi.fn(),
 }));
 
 vi.mock("@/lib/api", () => ({ api: apiMocks }));
@@ -89,6 +90,9 @@ function setup(options: { loadError?: Error; presenceError?: Error } = {}) {
 
   if (options.presenceError) apiMocks.getKingdomPresence.mockRejectedValue(options.presenceError);
   else apiMocks.getKingdomPresence.mockResolvedValue({ computedAt: nowIso, agents: [presence("agent-1"), presence("agent-2")] });
+
+  // Living state defaults to empty (graceful degradation when unavailable)
+  apiMocks.getLivingAgentStates.mockResolvedValue({ states: [] });
 }
 
 function renderPage(language: "en" | "th" = "en") {

@@ -1,5 +1,15 @@
 # Next Task
 
+## Kingdom V2 Phase A — Living Kingdom Foundation — Complete
+
+Status: **complete as of 2026-07-01**
+
+Read-only deterministic living state layer is now in place. Each agent has one derived status from the 11-status taxonomy (`IDLE / THINKING / PLANNING / WORKING / WAITING_FOR_KING / WAITING_FOR_EXTERNAL_AGENT / VALIDATING / REVIEWING / LEARNING / BLOCKED / OFFLINE`) with evidence links, confidence scoring, and recommended King action. See `docs/LIVING_KINGDOM.md`.
+
+Verification: 27/27 unit tests (pure derivation), 11/11 integration tests covering both `/state` endpoints against real test DB (`livingAgents.test.ts`), 260/260 web tests, full API test suite, root typecheck, production build, and `git diff --check` pass.
+
+---
+
 ## Real Runner / Bridge Acceptance — Complete
 
 Status: **complete as of 2026-06-30**
@@ -31,7 +41,9 @@ The seeded V1 gate and the real external CLI bridge gate are both complete. They
 
 ### Next Candidate
 
-Premium UX Wave 4J or Wave 5 (Knowledge Lab). See `docs/UX_UI_REFINEMENT_PLAN.md` for the full wave table.
+**Kingdom V2 Phase B — Animated Kingdom Map.** Now that state correctness is established (Phase A complete), Phase B can add visual polish: agent nodes positioned on an interactive map, animated dot or ring by live status color, and a "what's happening now" panel that updates in real time. No new backend capability is needed — the `/api/living-agents/state` endpoint is the data source.
+
+Alternatively: **Kingdom V2 Phase C — Goal-to-Agent Trace.** King sets a goal; the Kingdom shows which agent picks it up, what step the workflow is at, and what action the King should take next.
 
 ### V1 Local Run Prerequisites
 

@@ -19,6 +19,7 @@ import type {
   KnowledgeMemoryDto,
   LivingAgentProfileDto,
   LivingAgentRelationsDto,
+  LivingAgentStateDto,
   LivingAgentSummaryDto,
   LivingAgentTimelineFilters,
   LivingAgentTimelineItemDto,
@@ -538,6 +539,14 @@ export const api = {
   runReconciliation: () => apiRequest<{ snapshot: ProviderReconciliationSnapshotDto }>("/provider-balances/reconciliation/run", { method: "POST" }),
   getCurrentAgentActivities: () => apiRequest<{ activities: CurrentAgentActivityDto[] }>("/agent-activities/current"),
   getLivingAgents: () => apiRequest<{ agents: LivingAgentSummaryDto[] }>("/living-agents"),
+  getLivingAgentStates: (params?: { agentId?: string; projectId?: string; includeInactive?: boolean }) => {
+    const search = new URLSearchParams();
+    if (params?.agentId) search.set("agentId", params.agentId);
+    if (params?.projectId) search.set("projectId", params.projectId);
+    if (params?.includeInactive) search.set("includeInactive", "true");
+    const suffix = search.size ? `?${search.toString()}` : "";
+    return apiRequest<{ states: LivingAgentStateDto[] }>(`/living-agents/state${suffix}`);
+  },
   getLivingAgentProfile: (agentId: string) => apiRequest<{ profile: LivingAgentProfileDto }>(`/living-agents/${encodeURIComponent(agentId)}`),
   getLivingAgentTimeline: (agentId: string, filters: LivingAgentTimelineFilters = {}) => {
     const search = new URLSearchParams();
