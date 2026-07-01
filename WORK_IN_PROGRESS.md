@@ -8,19 +8,19 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `main`
 
-- No active implementation. **Real Runner / Bridge End-to-End acceptance completed 2026-06-30.**
-- Real Claude Code evidence: workflow `cmr0i0262001140r2y890li4p`, job `cmr0i93hz00jj40r2cbvq9otz`, patch `cmr0ieg1100l140r2c9vymyw9`, and final `COMPLETED / DONE`.
-- King-gated learning verified: candidate remained non-durable before acceptance; Accept & Learn created approved memory `cmr0ij9ru00ml40r25l0k7dd4`.
-- Temporary external-agent write/network settings restored to `false`. No push, PR, merge, deploy, seeded patch, or mock runner evidence.
-- Verification complete: API 978/978, runner 103/103, web 241/241, typecheck, production build, and `git diff --check` pass.
-- Next candidate: Premium UX Wave 4H for `/treasury`, not started.
+- No active implementation. **Premium UX Wave 4H: Treasury completed 2026-07-01.**
+- Completed scope: `/treasury` financial summary, provider spend registry and selected evidence, failed/high-cost trace feed, budget guardrail, trend, source links, retained telemetry/reconciliation/pricing operations, partial telemetry recovery, and scoped English/Thai chrome.
+- Verified contract gap only: added the read-only sanitized `/api/treasury/attention-traces` feed; no provider routing, credentials, budget enforcement, sync, reconciliation, Prisma, runner, patch, push, PR, merge, or deploy behavior changed.
+- Verification complete: Treasury web 7/7, Treasury API 20/20, API 979/979, runner 103/103, web 248/248, root typecheck, production build, and `git diff --check` pass.
+- Rendered verification complete: local headless Chrome passes English and Thai at 1440x900, 1024x768, 768x1024, 430x932, and 390x844 with 0px root/body/main overflow, visible Treasury controls at least 44px tall, complete owner links, no clipping/overlap, and no page exceptions. The unrelated existing `/favicon.ico` 404 remains.
+- Next candidate: Premium UX Wave 4I for `/usage-traces/:traceId`, not started.
 
 ### Codex - `codex/main` (prior completed work)
 
 - No active implementation. **Premium UX Wave 4G: Routing Workspace** is complete.
 - Completed scope: replaced the combined route-chain editor/provider table/model catalog with a compact route-chain registry plus selected fallback evidence workspace, semantic English/Thai chrome, source links, 44px controls, and responsive handoff.
 - Preserved route-chain API contracts, provider-routing semantics, fallback ordering, usage trace attribution, RBAC, audit, provider registry ownership, Treasury telemetry ownership, and secret handling. No API, DTO, Prisma, backend provider routing, patch, push, PR, merge, or deploy contract changed.
-- Next reserved Codex candidate: **Premium UX Wave 4H: Treasury** after merging latest `main` into `codex/main` again. Start with discovery, source-ownership audit, and baseline capture before layout edits.
+- Next reserved Codex candidate: **Premium UX Wave 4I: Usage Trace Detail** after Wave 4H lands on `main`. Start with trace DTO/source-ownership audit and baseline capture before layout edits.
 
 ### Claude - `claude/main`
 
@@ -41,9 +41,9 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 ## Collision Watch
 
 - M24 Phase B touched `apps/web/src/lib/api.ts`, `apps/web/src/lib/i18nMessages.ts`, and `AutomationJobsPage.tsx`; Codex has merged those changes before Wave 4C planning.
-- Wave 4F is complete and made no backend/API/type changes. Wave 4G should avoid backend/API/type changes unless a verified contract gap blocks the routing UX. Any contract change must be coordinated before implementation.
+- Wave 4H closed one verified read-only trace-list gap and otherwise preserved backend behavior. Wave 4I should avoid backend/API/type changes unless a verified trace-detail contract gap blocks the audit UX.
 - `apps/web/src/lib/i18nMessages.ts` remains a shared integration point. Future waves should use scoped message modules and keep central registration minimal.
-- Claude intelligence/learning-loop work is backend-only; no expected overlap with the planned Wave 4G routing surface except shared status documentation.
+- Claude intelligence/learning-loop work is backend-only; no expected overlap with the planned Wave 4I trace-detail surface except shared status documentation and trace DTOs.
 
 - **Council quality scoring + memory gate** (✅ merged to `main`) — Deterministic scorer (`councilQualityScorer.ts`) evaluates the Grand Vizier's synthesis against role contracts: `hasRecommendation` (×2), `hasVerdict`, `citesRoles`, `noUnresolvedHedge`, `noVagueFileRefs`, `hasSpecificPaths` (BUILD/RESEARCH only). Score (0–1) and flag breakdown stored on `CouncilSession.qualityScore/qualityFlags`. Memory auto-save gated at ≥0.50 — vague output no longer pollutes Kingdom Memory. `intelligence:measure` now reports avg score, high-quality (≥0.80), and low-quality (<0.50) counts. No AI calls, no latency cost. 10/10 tests pass.
 - **Outcome-based external agent selection** (✅ merged to `main`) — `externalAgentRecommendationService.ts` now blends real pass-rate history into the keyword score. Joins `ExternalAgentRun → AgentReviewSummary` for last 200 runs per active agent; computes pass-rate modifier (−10 to +10, min 3 reviewed samples). Strong track record (≥80% PASS) adds a reason label; poor track record (<40% PASS) adds a risk label. Degrades gracefully with no data (pure keyword score). UNKNOWN/NO_CHANGES excluded from denominator. 17/17 tests pass including integration test that seeds real DB rows and verifies ordering shift.

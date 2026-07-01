@@ -277,7 +277,7 @@ Wave 3C implementation replaces simultaneous forms with a compact overview, stab
 
 ### Wave 4: Agents, Providers, and Models
 
-Progress: **Waves 4A-4G complete; Wave 4H Treasury is next.** `/agents`, `/external-agents`, `/agent-chat`, `/living-agents`, `/living-agents/:agentId`, `/providers`, and `/routing` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, presence, direct-conversation, provider registry, secret-safety, save, and review contracts.
+Progress: **Waves 4A-4H complete; Wave 4I Usage Trace detail is next.** `/agents`, `/external-agents`, `/agent-chat`, `/living-agents`, `/living-agents/:agentId`, `/providers`, `/routing`, and `/treasury` now use compact source-linked workspaces, semantic English/Thai chrome, responsive focused handoff, and preserved routing, readiness, profile, presence, direct-conversation, provider registry, secret-safety, financial evidence, save, and review contracts.
 
 | Route | Primary refinement |
 | --- | --- |
@@ -296,6 +296,8 @@ Wave 4D implementation replaces repeated Living Agent cards with a compact roste
 Wave 4E implementation consolidates the Living Agent profile's 12 tabs into five evidence sections with lazy timeline, relation, candidate, and memory loading. Canonical Agent, activity, trace, project, council, report, provider, knowledge, and audit ownership stays explicit through source links. The route is 6 lines, every Wave 4E file is below 600 lines, and focused/full web tests plus root typecheck/build pass. Responsive browser verification remains outstanding from this run because the available in-app browser tab was locked on an error document.
 
 Wave 4G implementation replaces the 633-line Routing page with a 6-line route and focused route-chain registry plus selected fallback evidence workspace. Route-chain policy remains owned by `/api/route-chains`; Providers owns registry/defaults; Treasury owns health/model/spend telemetry; Usage Trace owns per-request attempts. Focused tests, full web tests, web/root typecheck, root build, and diff checks pass. Rendered browser verification remains outstanding because browser tooling was unavailable/blocked in this environment.
+
+Wave 4H implementation replaces the 1,326-line Treasury page with a 6-line route and focused financial control room. Spend today/month, budget status, current risk, and provider health lead; provider spend registry and selected model/telemetry evidence follow; failed/high-cost traces, guardrail explanation, trend, and explicit Usage Trace/Providers/Routing/Audit ownership links provide the decision path; telemetry/reconciliation/pricing operations remain last. A narrow sanitized attention-trace endpoint closes the only verified backend gap without changing provider or routing behavior. Partial endpoint failures preserve available evidence and show recovery guidance. All new Treasury modules are below 300 lines; focused Treasury web/API, full API/runner/web, typecheck, build, and diff checks pass. Rendered English/Thai checks at 1440x900, 1024x768, 768x1024, 430x932, and 390x844 pass with 0px root/body/main overflow, 44px minimum visible Treasury controls, complete owning-source links, first-viewport summary/registry visibility, no clipping or overlap, and no page exceptions. The unrelated existing `/favicon.ico` 404 remains outside this wave.
 
 ### Wave 5: Knowledge and Governance
 

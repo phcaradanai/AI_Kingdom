@@ -1067,6 +1067,24 @@ export type TreasuryFallbackAnalyticsDto = {
   totalCalls: number;
 };
 
+export type TreasuryAttentionTraceDto = {
+  traceId: string;
+  status: string;
+  operation: string;
+  purpose: string;
+  providerId: string | null;
+  providerType: string | null;
+  providerName: string | null;
+  model: string | null;
+  startedAt: string;
+  failedAt: string | null;
+  totalCostUSD: number;
+  totalTokens: number;
+  usageRecordCount: number;
+  failureCount: number;
+  attentionKind: "FAILED" | "EXPENSIVE";
+};
+
 export type BudgetStatusDetailDto = {
   dailyExceeded: boolean;
   monthlyExceeded: boolean;

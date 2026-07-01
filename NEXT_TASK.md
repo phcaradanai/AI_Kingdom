@@ -31,12 +31,14 @@ The seeded V1 gate and the real external CLI bridge gate are both complete. They
 
 ### Next Candidate
 
-Premium UX Wave 4H for `/treasury` may now be planned from a fresh `main` baseline. It has not started.
+Premium UX Wave 4I: Usage Trace detail for `/usage-traces/:traceId`.
+
+Start from the current clean `main` after Wave 4H lands. Audit the trace-detail DTO and current page before editing. Build a compact attribution summary and ordered provider-attempt timeline with token/cost evidence, failure state, and direct Task/Council/Report/Project links. Usage Trace must remain the per-request source of truth; do not copy Treasury aggregates, provider configuration, or Routing policy into this page. Preserve sanitized-preview and no-secret boundaries, use scoped English/Thai messages, keep 44px controls, cover partial/legacy trace evidence, and run focused/full web tests, root typecheck, production build, and `git diff --check`.
 
 ### V1 Local Run Prerequisites
 
 See the **V1 Local Run Checklist** section in [README.md](README.md).
 
-### Prior Next Task (superseded)
+### Completed Prior Task
 
-Premium UX Wave 4H: Treasury — planned for `/treasury`, `codex/main` branch, after Wave 4G validation. Baseline: 5/5 focused tests, 231/231 web tests, all checks pass. Wave 4H must start from a fresh `main` merge, audit `TreasuryPage.tsx` and Treasury APIs, capture baselines, and record scope before edits. See `docs/UX_UI_REFINEMENT_PLAN.md`.
+Premium UX Wave 4H: Treasury — complete 2026-07-01. `/treasury` is now a focused financial control room with spend/budget/risk summary, provider registry and selected evidence, failed/high-cost usage traces, budget guardrails, trend, ownership links, partial telemetry handling, retained evidence operations, and semantic English/Thai chrome. Verification: Treasury web 7/7, Treasury API 20/20, API 979/979, runner 103/103, web 248/248, root typecheck/build, and diff checks pass. Local headless Chrome also passes English and Thai at 1440x900, 1024x768, 768x1024, 430x932, and 390x844 with 0px horizontal overflow, 44px minimum visible Treasury controls, complete source links, and no page exceptions; the unrelated existing `/favicon.ico` 404 remains.

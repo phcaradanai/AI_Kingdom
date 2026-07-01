@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getTreasuryByAgent, getTreasuryByModel, getTreasuryByMonth, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryFallbackAnalytics, getTreasuryOverview, getTreasuryUsage, getPricingWarnings, getTreasuryProviderRegistry } from "../services/treasuryService.js";
+import { getTreasuryAttentionTraces, getTreasuryByAgent, getTreasuryByModel, getTreasuryByMonth, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryFallbackAnalytics, getTreasuryOverview, getTreasuryUsage, getPricingWarnings, getTreasuryProviderRegistry } from "../services/treasuryService.js";
 import { checkBudgetStatus } from "../services/budgetGuardService.js";
 
 const router = Router();
@@ -18,6 +18,16 @@ router.get("/usage", async (req, res, next) => {
     const limit = Math.min(Number(req.query.limit ?? 100), 500);
     const records = await getTreasuryUsage(Number.isFinite(limit) ? limit : 100);
     res.json({ records });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/attention-traces", async (req, res, next) => {
+  try {
+    const limit = Math.min(Number(req.query.limit ?? 12), 50);
+    const traces = await getTreasuryAttentionTraces(Number.isFinite(limit) ? limit : 12);
+    res.json({ traces });
   } catch (error) {
     next(error);
   }

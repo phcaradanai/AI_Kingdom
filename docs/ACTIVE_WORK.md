@@ -4,7 +4,37 @@
 
 ## Active
 
-No active Codex implementation. Real Runner / Bridge End-to-End acceptance completed on 2026-06-30.
+No active Codex implementation. Premium UX Wave 4H completed on 2026-07-01. Wave 4I Usage Trace detail is the next candidate.
+
+## Completed Wave 4H Contract
+
+### Objective
+
+Refine `/treasury` into a local-first financial control room where the King can identify spend, provider/model ownership, budget risk, provider health, evidence, and the next safe source within ten seconds.
+
+### Source Ownership
+
+- Treasury owns cost, spend, budget, aggregate usage, provider balance, reconciliation, and model pricing evidence.
+- Usage Trace owns per-request attempts, sanitized previews, and failure evidence.
+- Providers owns provider configuration and server-side credential references.
+- Routing owns fallback order and route-chain policy.
+- Audit owns sensitive sync, budget, provider, and system actions.
+
+### Delivery
+
+1. Reduced `TreasuryPage.tsx` from 1,326 lines to a 6-line route. Controller, pure models, summary, provider workspace, evidence, operations, pricing admin, workspace, message, and test modules are each below 300 lines.
+2. Added the spend/budget/risk/health summary, provider spend registry, selected provider/model evidence, failed/high-cost trace feed, budget guardrail explanation, spend trend, and direct owning-source links.
+3. Preserved account/model/balance/health sync, reconciliation, and model-pricing administration below the primary evidence hierarchy.
+4. Replaced all-or-nothing loading with independent telemetry settlement. Partial failures keep available financial evidence visible and provide a refresh action.
+5. Closed the verified failed-trace listing gap with read-only `GET /api/treasury/attention-traces`; it returns identifiers/status, public provider/model labels, aggregate cost/tokens, and failure counts only—no prompts, raw errors, payloads, secrets, or lifecycle mutation.
+6. Added scoped semantic English/Thai chrome, 44px page controls, min-width/overflow-safe responsive composition, and focused loading/empty/partial/provider/source/budget/language tests.
+7. Verified Treasury web 7/7, Treasury API 20/20, full API 979/979, runner 103/103, web 248/248, root typecheck/build, and `git diff --check`.
+8. Verified rendered English and Thai with local headless Chrome at 1440x900, 1024x768, 768x1024, 430x932, and 390x844. Root/body/main overflow is 0px, visible Treasury controls are at least 44px tall, the summary and provider registry appear in the first viewport, owner links are present, and visual inspection found no clipping or overlap. No page exception occurred; the only console error is the unrelated existing `/favicon.ico` 404.
+
+### Collision Boundaries
+
+- No provider selection, fallback order, budget enforcement, credential, sync semantics, reconciliation semantics, Prisma, runner, patch, push, PR, merge, or deployment behavior changed.
+- Wave 4I may consume existing trace detail only; keep Treasury aggregates and Routing policy in their owning surfaces.
 
 ## Completed Real Runner / Bridge Acceptance
 
@@ -162,6 +192,7 @@ Refine `/agent-chat` into a focused direct-agent conversation workspace. Desktop
 | --- | --- | --- | --- | --- |
 | COMPLETE | Claude | `claude/main` | 2026-06-26 | Intelligence pipeline sharpening + success-lesson capture (ab5271a–f994a02) |
 | COMPLETE | Codex | `codex/main` | 2026-06-26 | Premium UX Wave 4G: Routing Workspace |
+| COMPLETE | Codex | `main` | 2026-07-01 | Premium UX Wave 4H: Treasury Control Room |
 | COMPLETE | Codex | `codex/main` | 2026-06-25 | Premium UX Wave 4F: Providers Registry |
 | COMPLETE | Claude | `claude/main` | 2026-06-25 | Learning-loop E2E proof + knowledge-quality prune |
 | COMPLETE | Codex | `codex/main` | 2026-06-24 | Premium UX Wave 4E: Living Agent Evidence Profile |

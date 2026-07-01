@@ -5,7 +5,7 @@ import { prisma } from "../db/prisma.js";
 import { createApp } from "../app.js";
 import { signAccessToken, type AuthUser } from "../middleware/auth.js";
 import { calculateCostDetailed, calculateCostUSD, getPricing } from "../pricing/providerPricing.js";
-import { getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview } from "./treasuryService.js";
+import { getTreasuryAttentionTraces, getTreasuryByAgent, getTreasuryByProvider, getTreasuryDailyReport, getTreasuryOverview } from "./treasuryService.js";
 
 
 async function withTestServer(fn: (baseUrl: string, kingToken: string) => Promise<void>) {
@@ -207,6 +207,72 @@ test("treasury daily report buckets by date", async () => {
     assert.match(row.date, /^\d{4}-\d{2}-\d{2}$/);
     assert.ok(typeof row.totalCostUSD === "number");
     assert.ok(typeof row.callCount === "number");
+  }
+});
+
+test("treasury attention traces include failed attempts and aggregate expensive usage without previews", async () => {
+  const suffix = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  const expensiveTraceId = `treasury-expensive-${suffix}`;
+  const failedTraceId = `treasury-failed-${suffix}`;
+  await prisma.aIUsageTrace.createMany({
+    data: [
+      {
+        traceId: expensiveTraceId,
+        triggerType: "SYSTEM_PROCESS",
+        sourceType: "TREASURY_TEST",
+        operation: "expensive_call",
+        purpose: "Verify expensive trace evidence",
+        providerId: "openrouter",
+        providerType: "openrouter",
+        providerName: "OpenRouter",
+        model: "test-model",
+        status: "COMPLETED",
+        completedAt: new Date(),
+      },
+      {
+        traceId: failedTraceId,
+        triggerType: "SYSTEM_PROCESS",
+        sourceType: "TREASURY_TEST",
+        operation: "failed_call",
+        purpose: "Verify failed trace evidence",
+        providerId: "deepseek",
+        providerType: "deepseek",
+        providerName: "DeepSeek",
+        model: "test-model",
+        status: "FAILED",
+        failedAt: new Date(),
+        errorMessage: "sanitized provider failure",
+      },
+    ],
+  });
+  const usage = await prisma.usageRecord.create({
+    data: {
+      traceId: expensiveTraceId,
+      provider: "openrouter",
+      providerId: "openrouter",
+      model: "test-model",
+      promptTokens: 100,
+      completionTokens: 50,
+      totalTokens: 150,
+      estimatedCostUSD: 0.9,
+      estimatedCostLocal: 0,
+      currency: "USD",
+    },
+  });
+
+  try {
+    const traces = await getTreasuryAttentionTraces(50);
+    const expensive = traces.find((trace) => trace.traceId === expensiveTraceId);
+    const failed = traces.find((trace) => trace.traceId === failedTraceId);
+    assert.equal(expensive?.attentionKind, "EXPENSIVE");
+    assert.equal(expensive?.totalCostUSD, 0.9);
+    assert.equal(expensive?.totalTokens, 150);
+    assert.equal(failed?.attentionKind, "FAILED");
+    assert.equal(failed?.failureCount, 1);
+    assert.equal("errorMessage" in (failed ?? {}), false, "attention feed must not expose error text");
+  } finally {
+    await prisma.usageRecord.delete({ where: { id: usage.id } });
+    await prisma.aIUsageTrace.deleteMany({ where: { traceId: { in: [expensiveTraceId, failedTraceId] } } });
   }
 });
 

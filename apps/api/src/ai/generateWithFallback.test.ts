@@ -348,9 +348,9 @@ test("Grand Vizier synthesis: primary fails, first fallback fails, second fallba
   const traceContext = await createTestTrace(`synthesis-second-fallback-${Date.now()}`);
   const result = await generateWithFallback(
     [
-      trackingProvider("openrouter-free", "nvidia/nemotron-3-super-120b-a12b:free", true),
-      trackingProvider("openrouter-free", "openai/gpt-oss-120b:free", true),
-      trackingProvider("openrouter-free", "openrouter/owl-alpha", false)
+      trackingProvider("test-fallback-provider", "nvidia/nemotron-3-super-120b-a12b:free", true),
+      trackingProvider("test-fallback-provider", "openai/gpt-oss-120b:free", true),
+      trackingProvider("test-fallback-provider", "openrouter/owl-alpha", false)
     ],
     {
       command: "Synthesize council output",

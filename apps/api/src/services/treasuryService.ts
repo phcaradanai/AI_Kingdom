@@ -199,6 +199,79 @@ export async function getTreasuryUsage(limit = 100) {
   });
 }
 
+export async function getTreasuryAttentionTraces(limit = 12) {
+  const boundedLimit = Math.max(1, Math.min(limit, 50));
+  const traces = await prisma.aIUsageTrace.findMany({
+    where: {
+      OR: [
+        { status: { in: ["FAILED", "ERROR", "TIMEOUT"] } },
+        { steps: { some: { status: "FAILED" } } },
+        { usageRecords: { some: { estimatedCostUSD: { gt: 0 } } } }
+      ]
+    },
+    orderBy: { startedAt: "desc" },
+    take: Math.min(boundedLimit * 10, 200),
+    select: {
+      traceId: true,
+      status: true,
+      operation: true,
+      purpose: true,
+      providerId: true,
+      providerType: true,
+      providerName: true,
+      model: true,
+      startedAt: true,
+      failedAt: true,
+      usageRecords: {
+        select: { estimatedCostUSD: true, totalTokens: true }
+      },
+      steps: {
+        where: { status: "FAILED" },
+        select: { id: true }
+      }
+    }
+  });
+
+  const attention = traces.map((trace) => {
+      const totalCostUSD = trace.usageRecords.reduce((sum, record) => sum + record.estimatedCostUSD, 0);
+      const totalTokens = trace.usageRecords.reduce((sum, record) => sum + record.totalTokens, 0);
+      const traceFailed = ["FAILED", "ERROR", "TIMEOUT"].includes(trace.status);
+      return {
+        traceId: trace.traceId,
+        status: trace.status,
+        operation: trace.operation,
+        purpose: trace.purpose,
+        providerId: trace.providerId,
+        providerType: trace.providerType,
+        providerName: trace.providerName,
+        model: trace.model,
+        startedAt: trace.startedAt,
+        failedAt: trace.failedAt,
+        totalCostUSD,
+        totalTokens,
+        usageRecordCount: trace.usageRecords.length,
+        failureCount: trace.steps.length + (traceFailed && trace.steps.length === 0 ? 1 : 0),
+        attentionKind: traceFailed || trace.steps.length > 0 ? "FAILED" as const : "EXPENSIVE" as const
+      };
+    });
+  const failed = attention
+    .filter((trace) => trace.attentionKind === "FAILED")
+    .sort((left, right) => right.startedAt.getTime() - left.startedAt.getTime());
+  const expensive = attention
+    .filter((trace) => trace.attentionKind === "EXPENSIVE")
+    .sort((left, right) => right.totalCostUSD - left.totalCostUSD);
+  const failedQuota = expensive.length > 0 ? Math.ceil(boundedLimit / 2) : boundedLimit;
+  const expensiveQuota = failed.length > 0 ? Math.floor(boundedLimit / 2) : boundedLimit;
+  const selected = [...failed.slice(0, failedQuota), ...expensive.slice(0, expensiveQuota)];
+
+  if (selected.length < boundedLimit) {
+    const selectedIds = new Set(selected.map((trace) => trace.traceId));
+    const remaining = [...failed, ...expensive].filter((trace) => !selectedIds.has(trace.traceId));
+    selected.push(...remaining.slice(0, boundedLimit - selected.length));
+  }
+  return selected;
+}
+
 export async function getPricingWarnings() {
   // UNKNOWN: no pricing found at all
   const allGroups = await prisma.usageRecord.groupBy({
