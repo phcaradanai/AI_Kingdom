@@ -8,12 +8,11 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `main`
 
-- No active implementation. **Premium UX Wave 4H: Treasury completed 2026-07-01.**
-- Completed scope: `/treasury` financial summary, provider spend registry and selected evidence, failed/high-cost trace feed, budget guardrail, trend, source links, retained telemetry/reconciliation/pricing operations, partial telemetry recovery, and scoped English/Thai chrome.
-- Verified contract gap only: added the read-only sanitized `/api/treasury/attention-traces` feed; no provider routing, credentials, budget enforcement, sync, reconciliation, Prisma, runner, patch, push, PR, merge, or deploy behavior changed.
-- Verification complete: Treasury web 7/7, Treasury API 20/20, API 979/979, runner 103/103, web 248/248, root typecheck, production build, and `git diff --check` pass.
-- Rendered verification complete: local headless Chrome passes English and Thai at 1440x900, 1024x768, 768x1024, 430x932, and 390x844 with 0px root/body/main overflow, visible Treasury controls at least 44px tall, complete owner links, no clipping/overlap, and no page exceptions. The unrelated existing `/favicon.ico` 404 remains.
-- Next candidate: Premium UX Wave 4I for `/usage-traces/:traceId`, not started.
+- No active implementation. **Premium UX Wave 4I: Usage Trace Detail completed 2026-07-01.**
+- Completed scope: `/usage-traces/:traceId` redesigned as evidence-first audit page — compact attribution summary, token/cost strip, Final Resolution fallback card, ordered operation timeline, Related Records + Source Ownership panels (Provider Config, Route Chain, Treasury, Audit), sanitized prompt/response previews with recovery message, 44px controls, scoped English/Thai chrome via `usageTraceMessages.ts`, and focused web tests (11 scenarios). No backend, DTO, Prisma, routing, secret handling, or source-of-truth separation changed.
+- Verification complete: 260/260 web tests, root typecheck, production build, and `git diff --check` pass.
+- Rendered verification complete: EN/TH confirmed at 1440x900 and 390x844 — no horizontal overflow, all source links present, 44px expand toggle and back button, proper Thai rendering for all `trace.*` keys.
+- Next candidate: Premium UX Wave 4J or Wave 5 (Knowledge Lab).
 
 ### Codex - `codex/main` (prior completed work)
 

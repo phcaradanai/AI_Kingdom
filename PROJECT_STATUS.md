@@ -8,7 +8,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 ## Active Work
 
-V1, Real Runner / Bridge acceptance, and Premium UX Wave 4H for `/treasury` are complete. No active implementation work remains in this slice. Premium UX Wave 4I for `/usage-traces/:traceId` is the next local-first operator UX candidate. See [NEXT_TASK.md](NEXT_TASK.md).
+V1, Real Runner / Bridge acceptance, Premium UX Wave 4H for `/treasury`, and Premium UX Wave 4I for `/usage-traces/:traceId` are complete. No active implementation work remains in this slice. See [NEXT_TASK.md](NEXT_TASK.md).
 
 ## Real Runner / Bridge Acceptance (2026-06-30, complete)
 

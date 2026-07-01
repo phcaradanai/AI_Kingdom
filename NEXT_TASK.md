@@ -31,14 +31,14 @@ The seeded V1 gate and the real external CLI bridge gate are both complete. They
 
 ### Next Candidate
 
-Premium UX Wave 4I: Usage Trace detail for `/usage-traces/:traceId`.
-
-Start from the current clean `main` after Wave 4H lands. Audit the trace-detail DTO and current page before editing. Build a compact attribution summary and ordered provider-attempt timeline with token/cost evidence, failure state, and direct Task/Council/Report/Project links. Usage Trace must remain the per-request source of truth; do not copy Treasury aggregates, provider configuration, or Routing policy into this page. Preserve sanitized-preview and no-secret boundaries, use scoped English/Thai messages, keep 44px controls, cover partial/legacy trace evidence, and run focused/full web tests, root typecheck, production build, and `git diff --check`.
+Premium UX Wave 4J or Wave 5 (Knowledge Lab). See `docs/UX_UI_REFINEMENT_PLAN.md` for the full wave table.
 
 ### V1 Local Run Prerequisites
 
 See the **V1 Local Run Checklist** section in [README.md](README.md).
 
-### Completed Prior Task
+### Completed Prior Tasks
+
+Premium UX Wave 4I: Usage Trace Detail — complete 2026-07-01. `/usage-traces/:traceId` is now an evidence-first audit page: compact attribution summary (trace ID, purpose, attribution badge, actor, provider, model, timing), token/cost evidence strip, Final Resolution card with fallback/sandbox explanations, ordered operation timeline with colored step type badges and expandable safe previews, Related Records panel, Source Ownership panel linking Provider Config/Route Chain/Treasury/Audit, and sanitized prompt/response previews with recovery message when null. Scoped English/Thai chrome via `usageTraceMessages.ts`; 44px controls on expand toggle and back button. Focused web tests: 11 scenarios covering normal, fallback, failed, legacy, sanitized preview boundary, source links, and EN/TH. Verification: 260/260 web tests, root typecheck, production build, and `git diff --check` pass. Rendered EN/TH verified at 1440x900 and 390x844; no horizontal overflow; all source ownership links present.
 
 Premium UX Wave 4H: Treasury — complete 2026-07-01. `/treasury` is now a focused financial control room with spend/budget/risk summary, provider registry and selected evidence, failed/high-cost usage traces, budget guardrails, trend, ownership links, partial telemetry handling, retained evidence operations, and semantic English/Thai chrome. Verification: Treasury web 7/7, Treasury API 20/20, API 979/979, runner 103/103, web 248/248, root typecheck/build, and diff checks pass. Local headless Chrome also passes English and Thai at 1440x900, 1024x768, 768x1024, 430x932, and 390x844 with 0px horizontal overflow, 44px minimum visible Treasury controls, complete source links, and no page exceptions; the unrelated existing `/favicon.ico` 404 remains.
