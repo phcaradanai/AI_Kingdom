@@ -6,7 +6,9 @@ Status: **complete as of 2026-07-01**
 
 Deterministic Goal-to-Plan transformation layer is now in place. King enters a goal (title, objective, success criteria, constraints, priority); the engine returns a fully-structured `ExecutionPlan` with phases, parallel deliverables, dependency ordering, required capabilities, and Work Order templates — zero AI calls, zero DB mutations.
 
-Verification: 25/25 unit tests (all 6 pure functions), 260/260 web tests, full API test suite, root typecheck, production build, and `git diff --check` pass. `POST /api/goals/analyze` returns a deterministic plan in <10ms. Goal Planner panel live on Kingdom Operations page (`/kingdom`).
+Verification: 29/29 unit tests (6 pure functions + 4 capability-matching tests), 260/260 web tests, root typecheck clean. `POST /api/goals/analyze` returns a deterministic plan with real agent slugs. Goal Planner panel live on Kingdom Operations page (`/kingdom`).
+
+Step 4 (capability matching) hardened: `buildExecutionPlanFromInput()` async wrapper reads the live Kingdom agent roster and validates each deliverable's `suggestedRole` slug against active agents. `suggestedRole` values now use real slugs (`royal-architect`, `royal-general`, `royal-archivist`). Fallback to `royal-architect` when slug not in active roster.
 
 See `docs/GOAL_DECOMPOSITION.md` for full architecture.
 
