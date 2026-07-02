@@ -7,6 +7,7 @@ import {
   identifyParallelWork,
   identifyRequiredCapabilities,
   buildExecutionPlan,
+  buildExecutionPlanFromInput,
   type GoalInput,
   type Deliverable,
 } from "./goalDecompositionService.js";
@@ -275,6 +276,63 @@ describe("goalDecompositionService — identifyRequiredCapabilities", () => {
     const caps = identifyRequiredCapabilities(deliverables);
     assert.ok(caps.length > 0);
     assert.ok(caps.every((c) => c.capability.length > 0 && c.rationale.length > 0));
+  });
+});
+
+// Mock roster mirrors the real seeded Kingdom agents
+const MOCK_ROSTER = [
+  { slug: "royal-architect", name: "Seraphine" },
+  { slug: "royal-general", name: "Cassian" },
+  { slug: "royal-archivist", name: "Seohyun" },
+  { slug: "royal-researcher", name: "Elowen" },
+  { slug: "royal-treasurer", name: "Marcellus" },
+  { slug: "royal-promptsmith", name: "Vaelion" },
+  { slug: "grand-vizier", name: "Aurelian" },
+  { slug: "planner", name: "Melody" },
+];
+const mockDb = {
+  agent: { findMany: async (_: unknown) => MOCK_ROSTER },
+} as Parameters<typeof buildExecutionPlanFromInput>[2];
+
+describe("goalDecompositionService — buildExecutionPlanFromInput (capability matching)", () => {
+  test("all suggestedRoles resolve to real active agent slugs", async () => {
+    const plan = await buildExecutionPlanFromInput(heavyGoal(), undefined, mockDb);
+    const activeSlugSet = new Set(MOCK_ROSTER.map((a) => a.slug));
+    for (const d of plan.deliverables) {
+      assert.ok(
+        activeSlugSet.has(d.workOrderTemplate.suggestedRole),
+        `deliverable ${d.type} has suggestedRole '${d.workOrderTemplate.suggestedRole}' not in active roster`,
+      );
+    }
+  });
+
+  test("TESTING deliverable resolves to royal-general (Cassian — validation strategy)", async () => {
+    const plan = await buildExecutionPlanFromInput(multiDeliverableGoal(), undefined, mockDb);
+    const testing = plan.deliverables.find((d) => d.type === "TESTING");
+    assert.ok(testing, "expected TESTING deliverable");
+    assert.equal(testing.workOrderTemplate.suggestedRole, "royal-general");
+  });
+
+  test("DOCUMENTATION deliverable resolves to royal-archivist (Seohyun — memory keeper)", async () => {
+    const plan = await buildExecutionPlanFromInput(docOnlyGoal(), undefined, mockDb);
+    const doc = plan.deliverables.find((d) => d.type === "DOCUMENTATION");
+    assert.ok(doc, "expected DOCUMENTATION deliverable");
+    assert.equal(doc.workOrderTemplate.suggestedRole, "royal-archivist");
+  });
+
+  test("unknown suggestedRole falls back to royal-architect when slug is not in active roster", async () => {
+    // Roster contains only royal-architect — all other slots must fall back
+    const limitedDb = {
+      agent: { findMany: async (_: unknown) => [{ slug: "royal-architect", name: "Seraphine" }] },
+    } as Parameters<typeof buildExecutionPlanFromInput>[2];
+    const plan = await buildExecutionPlanFromInput(multiDeliverableGoal(), undefined, limitedDb);
+    for (const d of plan.deliverables) {
+      assert.equal(
+        d.workOrderTemplate.suggestedRole,
+        "royal-architect",
+        `${d.type} should fall back to royal-architect when roster is limited`,
+      );
+    }
   });
 });
 

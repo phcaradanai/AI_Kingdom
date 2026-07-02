@@ -1,5 +1,5 @@
 import express from "express";
-import { buildExecutionPlan } from "../services/goalDecompositionService.js";
+import { buildExecutionPlanFromInput } from "../services/goalDecompositionService.js";
 import type { AnalyzeGoalRequest, GoalExecutionPlanDto } from "../types/api.js";
 
 const router = express.Router();
@@ -7,13 +7,13 @@ const router = express.Router();
 /**
  * POST /api/goals/analyze
  *
- * Pure, zero-DB-mutation endpoint. Takes a goal description and returns a
- * deterministic execution plan: phases, deliverables, dependencies, and
- * Work Order templates. No AI provider is called.
+ * Returns a deterministic execution plan for the submitted goal. Validates
+ * each deliverable's suggestedRole against the live agent roster. No AI
+ * provider is called; no DB mutations are made.
  *
  * Role: any authenticated user (requireAuth is applied in app.ts)
  */
-router.post("/analyze", (req, res) => {
+router.post("/analyze", async (req, res) => {
   const body = req.body as AnalyzeGoalRequest;
 
   if (!body?.title || typeof body.title !== "string" || body.title.trim().length === 0) {
@@ -25,7 +25,7 @@ router.post("/analyze", (req, res) => {
     return;
   }
 
-  const plan = buildExecutionPlan({
+  const plan = await buildExecutionPlanFromInput({
     title: body.title.trim(),
     objective: body.objective.trim(),
     successCriteria: Array.isArray(body.successCriteria) ? body.successCriteria : [],

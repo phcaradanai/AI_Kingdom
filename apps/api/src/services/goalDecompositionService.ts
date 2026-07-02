@@ -125,7 +125,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["schema", "migration", "table", "prisma", "model", "column", "foreign key", "database", "ฐานข้อมูล", "สคีมา"],
     title: "Database schema migration",
     description: "Define or alter data models and run a schema migration before any backend work begins.",
-    suggestedRole: "ROYAL_ARCHITECT",
+    suggestedRole: "royal-architect",
     capabilities: [
       { capability: "prisma-schema", rationale: "Schema changes require Prisma migration expertise." },
       { capability: "database-design", rationale: "New tables/columns must be backward-compatible and well-indexed." },
@@ -136,7 +136,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["config", "environment", "env", "setting", "flag", "feature flag", "infrastructure", "deploy", "docker"],
     title: "Configuration update",
     description: "Add or update environment variables, feature flags, or infrastructure configuration needed by new features.",
-    suggestedRole: "ROYAL_ARCHITECT",
+    suggestedRole: "royal-architect",
     capabilities: [
       { capability: "env-management", rationale: "Configuration changes affect all environments and require careful review." },
     ],
@@ -146,7 +146,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["api", "endpoint", "route", "rest", "http", "request", "response", "controller", "handler"],
     title: "API endpoint implementation",
     description: "Implement the HTTP route handlers that expose the new capability to clients.",
-    suggestedRole: "ROYAL_ARCHITECT",
+    suggestedRole: "royal-architect",
     capabilities: [
       { capability: "express-routing", rationale: "Route implementation, request validation, and response shaping." },
       { capability: "rbac", rationale: "Every new route must enforce correct role permission." },
@@ -157,7 +157,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["service", "function", "module", "class", "logic", "business logic", "worker", "job", "orchestrat"],
     title: "Backend service implementation",
     description: "Implement the core business logic service(s) that the API layer calls into.",
-    suggestedRole: "ROYAL_ARCHITECT",
+    suggestedRole: "royal-architect",
     capabilities: [
       { capability: "service-design", rationale: "Service must be thin, testable, and side-effect-free where possible." },
     ],
@@ -167,7 +167,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["integrate", "webhook", "external", "third-party", "sdk", "plugin", "connect", "sync", "oauth"],
     title: "External integration",
     description: "Wire up external systems, webhooks, or third-party SDKs.",
-    suggestedRole: "STEWARD",
+    suggestedRole: "royal-architect",
     capabilities: [
       { capability: "external-api", rationale: "Integration code must handle auth, retries, and schema drift." },
     ],
@@ -177,7 +177,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["page", "ui", "component", "react", "frontend", "view", "form", "button", "modal", "display", "render", "layout", "หน้า"],
     title: "Frontend UI implementation",
     description: "Build the React page(s) and components that present the feature to the King.",
-    suggestedRole: "ROYAL_WEAVER",
+    suggestedRole: "royal-architect",
     capabilities: [
       { capability: "react", rationale: "Components must follow the existing shadcn-style pattern." },
       { capability: "zustand", rationale: "State changes go through the kingdom store, not local fetch." },
@@ -188,7 +188,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["test", "spec", "coverage", "unit test", "integration test", "e2e", "validate", "verify"],
     title: "Test coverage",
     description: "Write unit and integration tests for all new services, routes, and components.",
-    suggestedRole: "STEWARD",
+    suggestedRole: "royal-general",
     capabilities: [
       { capability: "node-test-runner", rationale: "Tests use Node's built-in runner via tsx." },
     ],
@@ -198,7 +198,7 @@ const DELIVERABLE_PATTERNS: DeliverablePattern[] = [
     keywords: ["doc", "documentation", "readme", "changelog", "guide", "wiki", "spec", "write up"],
     title: "Documentation",
     description: "Update docs, README, NEXT_TASK, and any architecture notes to reflect the shipped work.",
-    suggestedRole: "SCRIBE",
+    suggestedRole: "royal-archivist",
     capabilities: [
       { capability: "technical-writing", rationale: "Documentation must be accurate and discoverable." },
     ],
@@ -452,4 +452,48 @@ export function buildExecutionPlan(input: GoalInput, now?: string): ExecutionPla
     estimatedComplexity: complexity,
     generatedAt: now ?? new Date().toISOString(),
   };
+}
+
+// Narrow type so tests can inject a mock without importing PrismaClient
+type AgentRosterClient = {
+  agent: {
+    findMany(args: {
+      where: { isActive: boolean; isTestData: boolean };
+      select: { slug: boolean; name: boolean };
+    }): Promise<Array<{ slug: string; name: string }>>;
+  };
+};
+
+/**
+ * Async wrapper that builds the pure plan then validates each deliverable's
+ * `suggestedRole` against the live Kingdom agent roster. If the slug is not
+ * present in the active roster it falls back to `royal-architect` (the
+ * primary implementation agent for all code/engineering work).
+ *
+ * This is Step 4 of Phase B1 — reusing existing Kingdom agent capabilities
+ * rather than inventing new role names.
+ */
+export async function buildExecutionPlanFromInput(
+  input: GoalInput,
+  now?: string,
+  db: AgentRosterClient = defaultPrisma
+): Promise<ExecutionPlan> {
+  const plan = buildExecutionPlan(input, now);
+
+  const activeAgents = await db.agent.findMany({
+    where: { isActive: true, isTestData: false },
+    select: { slug: true, name: true },
+  });
+  const activeSlugSet = new Set(activeAgents.map((a) => a.slug));
+
+  // Validate each deliverable's suggestedRole; fall back to royal-architect
+  for (const d of plan.deliverables) {
+    if (!activeSlugSet.has(d.workOrderTemplate.suggestedRole)) {
+      d.workOrderTemplate.suggestedRole = "royal-architect";
+    }
+  }
+  // plan.phases contains the same Deliverable object references, so they are
+  // already updated by the loop above — no second pass needed.
+
+  return plan;
 }
