@@ -10,6 +10,7 @@ import { Link } from "react-router-dom";
 import { AgentPortrait } from "@/components/AgentPortrait";
 import { PageHeader } from "@/components/PageHeader";
 import { ProvenanceLinks } from "@/components/ProvenanceLinks";
+import { GoalPlannerPanel } from "@/components/kingdom/GoalPlannerPanel";
 import { KingdomActivityFeed } from "@/components/kingdom/KingdomActivityFeed";
 import { KingdomHealthStrip } from "@/components/kingdom/KingdomHealthStrip";
 import { STATE_COLORS, STATE_DOT } from "@/components/kingdom/agentPresence";
@@ -347,6 +348,9 @@ export function KingdomOperationsPage() {
           <KingdomActivityFeed activities={activity?.activities ?? []} />
         </SectionCard>
       </div>
+
+      {/* Goal Decomposition Engine */}
+      <GoalPlannerPanel />
 
       {lastUpdated && (
         <p className="text-center text-[11px] text-muted-foreground">

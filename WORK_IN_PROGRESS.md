@@ -8,10 +8,14 @@ Division of labor: **Codex owns UX/UI**, **Claude owns the core system** (`claud
 
 ### Codex - `main`
 
+- **Kingdom V2 Phase B1: Goal Decomposition Engine completed 2026-07-01.**
+- Completed scope: Deterministic Goal-to-Plan transformation — `goalDecompositionService.ts` with 6 pure functions: `analyzeGoal()`, `identifyDeliverables()`, `identifyRequiredCapabilities()`, `identifyDependencies()`, `identifyParallelWork()`, `buildExecutionPlan()`. No AI calls, no DB mutations, no schema migration. `POST /api/goals/analyze` returns `ExecutionPlan` with phases, deliverables, dependency ordering, parallelization flags, capability requirements, and Work Order templates. `GoalPlannerPanel` on Kingdom Operations page. 25/25 unit tests pass. V1 flows unchanged.
+- Verification: 25/25 unit tests (6 pure functions, no DB), 260/260 web tests, root typecheck, production build pass. See `docs/GOAL_DECOMPOSITION.md`.
+- Next candidate: Kingdom V2 Phase B2 (Goal persistence — DB table + Work Order linking) or Phase B (Animated Kingdom Map). See `docs/LIVING_KINGDOM.md` and `docs/GOAL_DECOMPOSITION.md`.
+
 - **Kingdom V2 Phase A: Living Kingdom Foundation completed 2026-07-01.**
 - Completed scope: Read-only deterministic living state layer — `livingAgentStateService.ts` with pure `deriveAgentStatus()` function and bulk `deriveLivingAgentStates()` query. 11-status taxonomy (OFFLINE, BLOCKED, WORKING, VALIDATING, WAITING_FOR_EXTERNAL_AGENT, REVIEWING, THINKING, LEARNING, PLANNING, WAITING_FOR_KING, IDLE), priority-ordered derivation, evidence links, confidence scoring, and recommended King actions. `GET /api/living-agents/state` and `GET /api/living-agents/:agentId/state` endpoints. `LivingStatePanel` in `LivingAgentEvidence.tsx` shows status badge, summary, evidence link, and King action. No schema migration, no provider calls, no data mutation, no autonomy added. V1 flow unchanged.
 - Verification: 27/27 unit tests (pure derivation, no DB), 260/260 web tests, root typecheck, production build pass.
-- Next candidate: Kingdom V2 Phase B (Animated Kingdom Map) or Phase C (Goal-to-Agent Trace). See `docs/LIVING_KINGDOM.md`.
 
 ### Codex - `codex/main` (prior completed work)
 

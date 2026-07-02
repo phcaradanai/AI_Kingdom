@@ -121,7 +121,9 @@ import type {
   StrategyRevenueStreamPayload,
   SuccessMetricDto,
   KingdomDiagnosticsReportDto,
-  WorkflowRunDto
+  WorkflowRunDto,
+  AnalyzeGoalRequest,
+  GoalExecutionPlanDto
 } from "@/types/api";
 
 const API_URL = import.meta.env.VITE_API_BASE_URL ?? import.meta.env.VITE_API_URL ?? "http://localhost:4000/api";
@@ -851,7 +853,14 @@ export const api = {
   diagnosticsIntelligence: (days?: number) => {
     const suffix = days ? `?days=${days}` : "";
     return apiRequest<KingdomDiagnosticsReportDto>(`/diagnostics/intelligence${suffix}`);
-  }
+  },
+
+  // ── Phase B1: Goal Decomposition Engine ─────────────────────────────────────
+  analyzeGoal: (payload: AnalyzeGoalRequest) =>
+    apiRequest<{ plan: GoalExecutionPlanDto }>("/goals/analyze", {
+      method: "POST",
+      body: JSON.stringify(payload),
+    })
 };
 
 async function refreshAccessToken(): Promise<string | null> {

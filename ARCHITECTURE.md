@@ -35,6 +35,7 @@ Primary services:
 - `livingLoopService.ts`: observes Kingdom state, proposes quality-gated candidates, and runs the three opt-in auto-act stages for context repair, validation jobs, and sandbox patch jobs.
 - `kingdomSchedulerService.ts`: in-process, non-overlapping scheduler that checks `LIVING_LOOP_ENABLED` each tick and drives `runLivingLoopOnce("SCHEDULED")`.
 - `missionControlService.ts` and `nextActionService.ts`: command summaries that link back to WorkOrders, AutomationJobs, reviews, providers, and other owning records. Mission Control also exposes the narrowly scoped DECREE_TO_DONE actions; other summary sections remain read-only.
+- `goalDecompositionService.ts` (Phase B1): deterministic, zero-AI-call, zero-DB-mutation service. Six pure functions transform a `GoalInput` into a structured `ExecutionPlan`: `analyzeGoal()` (problem type + domain signals via `extractDecreeFrame`, complexity, parallelization flag), `identifyDeliverables()` (keyword-based detection of 8 deliverable types, auto-adds TESTING, stable ID assignment), `identifyRequiredCapabilities()` (deduplication across deliverables), `identifyDependencies()` (phase-based dependency graph, mutates `dependsOn` in place), `identifyParallelWork()` (groups deliverables into phases, sets `canParallelize`), `buildExecutionPlan()` (top-level compositor). `POST /api/goals/analyze` is the HTTP surface. No schema change required.
 
 ## Data Model
 

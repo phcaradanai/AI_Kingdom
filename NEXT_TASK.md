@@ -1,5 +1,17 @@
 # Next Task
 
+## Kingdom V2 Phase B1 — Goal Decomposition Engine — Complete
+
+Status: **complete as of 2026-07-01**
+
+Deterministic Goal-to-Plan transformation layer is now in place. King enters a goal (title, objective, success criteria, constraints, priority); the engine returns a fully-structured `ExecutionPlan` with phases, parallel deliverables, dependency ordering, required capabilities, and Work Order templates — zero AI calls, zero DB mutations.
+
+Verification: 25/25 unit tests (all 6 pure functions), 260/260 web tests, full API test suite, root typecheck, production build, and `git diff --check` pass. `POST /api/goals/analyze` returns a deterministic plan in <10ms. Goal Planner panel live on Kingdom Operations page (`/kingdom`).
+
+See `docs/GOAL_DECOMPOSITION.md` for full architecture.
+
+---
+
 ## Kingdom V2 Phase A — Living Kingdom Foundation — Complete
 
 Status: **complete as of 2026-07-01**

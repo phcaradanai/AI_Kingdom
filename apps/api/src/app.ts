@@ -56,6 +56,7 @@ import nextActionsRouter from "./routes/nextActions.js";
 import kingdomRouter from "./routes/kingdom.js";
 import strategyRouter from "./routes/strategy.js";
 import diagnosticsRouter from "./routes/diagnostics.js";
+import goalsRouter from "./routes/goals.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.resolve(__dirname, "../../uploads");
@@ -155,6 +156,7 @@ export function createApp() {
   app.use("/api/mission-control", requireAuth, missionControlRouter);
   app.use("/api/workflows", requireAuth, workflowsRouter);
   app.use("/api/kingdom", requireAuth, kingdomRouter);
+  app.use("/api/goals", requireAuth, goalsRouter);
   app.use("/api/strategy", requireAuth, strategyRouter);
   app.use("/api", requireAuth, charterRouter);
   app.use(errorHandler);

@@ -3014,3 +3014,77 @@ export type KingdomDiagnosticsReportDto = {
   weeklyTrend: DiagnosticsWeekBucket[];
   settingsSnapshot: Record<string, string>;
 };
+
+// ── Goal Decomposition Engine (Phase B1) ─────────────────────────────────────
+
+export type GoalPriority = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+export type GoalComplexity = "LOW" | "MEDIUM" | "HIGH" | "CRITICAL";
+
+export type GoalDeliverableType =
+  | "DATABASE_SCHEMA"
+  | "CONFIGURATION"
+  | "BACKEND_SERVICE"
+  | "API_ENDPOINT"
+  | "INTEGRATION"
+  | "FRONTEND_UI"
+  | "TESTING"
+  | "DOCUMENTATION";
+
+export type GoalCapabilityRequirement = {
+  capability: string;
+  rationale: string;
+};
+
+export type GoalWorkOrderTemplate = {
+  title: string;
+  objective: string;
+  acceptanceCriteria: string[];
+  suggestedRole: string;
+};
+
+export type GoalDeliverableDto = {
+  id: string;
+  title: string;
+  description: string;
+  type: GoalDeliverableType;
+  estimatedComplexity: "LOW" | "MEDIUM" | "HIGH";
+  requiredCapabilities: GoalCapabilityRequirement[];
+  dependsOn: string[];
+  canParallelize: boolean;
+  workOrderTemplate: GoalWorkOrderTemplate;
+};
+
+export type GoalExecutionPhaseDto = {
+  phaseNumber: number;
+  phaseTitle: string;
+  description: string;
+  deliverables: GoalDeliverableDto[];
+};
+
+export type GoalAnalysisDto = {
+  problemType: string;
+  domainSignals: string[];
+  keyQuestions: string[];
+  complexity: GoalComplexity;
+  parallelizationOpportunity: boolean;
+};
+
+export type GoalExecutionPlanDto = {
+  goalTitle: string;
+  goalObjective: string;
+  analysis: GoalAnalysisDto;
+  deliverables: GoalDeliverableDto[];
+  phases: GoalExecutionPhaseDto[];
+  totalDeliverables: number;
+  estimatedComplexity: GoalComplexity;
+  generatedAt: string;
+};
+
+export type AnalyzeGoalRequest = {
+  title: string;
+  objective: string;
+  successCriteria?: string[];
+  constraints?: string[];
+  priority?: GoalPriority;
+  projectId?: string | null;
+};

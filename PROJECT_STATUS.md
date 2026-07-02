@@ -2,7 +2,11 @@
 
 ## Current State
 
-**Kingdom V2 Phase A in progress (2026-07-01).** AI Kingdom V1 is complete. Kingdom V2 Phase A adds a read-only deterministic living agent state layer: each agent now has one clear derived status (IDLE / THINKING / PLANNING / WORKING / WAITING_FOR_KING / WAITING_FOR_EXTERNAL_AGENT / VALIDATING / REVIEWING / LEARNING / BLOCKED / OFFLINE) with evidence links, confidence scoring, and recommended King actions. The `GET /api/living-agents/state` endpoint and `LivingStatePanel` in the Living Agents evidence pane are the first Phase A surfaces.
+**Kingdom V2 Phase B1 complete (2026-07-01).** AI Kingdom V1 is complete. Kingdom V2 adds new intelligence layers above the V1 workflow without replacing it.
+
+**Phase A** — Living Kingdom Foundation: read-only deterministic living agent state layer. 11-status taxonomy (IDLE / THINKING / PLANNING / WORKING / WAITING_FOR_KING / WAITING_FOR_EXTERNAL_AGENT / VALIDATING / REVIEWING / LEARNING / BLOCKED / OFFLINE) with evidence links, confidence scoring, and recommended King actions. See `docs/LIVING_KINGDOM.md`.
+
+**Phase B1** — Goal Decomposition Engine: deterministic Goal-to-Plan transformation. `POST /api/goals/analyze` takes a King objective and returns a structured `ExecutionPlan` (phases, deliverables, dependencies, Work Order templates, required capabilities) in <10ms — zero AI calls, zero DB mutations. Goal Planner panel on Kingdom Operations page. See `docs/GOAL_DECOMPOSITION.md`.
 
 V1 foundation: AI Kingdom is implemented through the M24 Competent Manager arc (Phase A grounded delegation, Phase C semantic acceptance review, and Phase B supervised mechanical retry), M24 adaptive reasoning, M24 King-selects-external-agent readiness, M24 self-growing max_tokens, the verified/pruned learning loop with diversified knowledge selection and success-lesson capture, Premium UX Waves 1, 2, 3, and 4A-4I, and the DECREE_TO_DONE persisted workflow (KINGDOM_PRODUCT_DECREE_TO_DONE milestone, 2026-06-28). The current system is a role-aware Kingdom Control Plane where a BUILD decree drives a persisted `WorkflowRun` through Mission Control — context gate, Grand Vizier council, planner Work Order, external agent choice, sandboxed runner dispatch, validation evidence, review, mechanical retry, and King-gated Accept & Learn — reaching `WorkflowRun.status = COMPLETED`. Other modes (Ask, Plan, Research) continue through the Grand Vizier council flow. Provider/model routing, usage traces, project/context binding, sandboxed runner jobs and patch review, Living Loop scheduling, opt-in Auto Context Repair, persistent reports/knowledge, Treasury, Audit Log, and Charter/Vision governance are all in place.
 
@@ -10,7 +14,7 @@ Local source of truth is PostgreSQL through Prisma. The default seeded login is 
 
 ## Active Work
 
-**Kingdom V2 Phase A** — Living Kingdom Foundation (2026-07-01): read-only deterministic living state added. `GET /api/living-agents/state` + `GET /api/living-agents/:agentId/state` expose 11-status taxonomy with evidence links and King action guidance. `LivingStatePanel` shows in the Living Agents evidence pane. 27 unit tests (pure derivation, no DB). 260/260 web tests, root typecheck, and production build pass. See `docs/LIVING_KINGDOM.md` for the full architecture.
+**Kingdom V2 Phase B1** — Goal Decomposition Engine (2026-07-01): pure deterministic decomposition service added. `POST /api/goals/analyze` returns `ExecutionPlan` with phases, deliverables, dependencies, WO templates, and capabilities. 25/25 unit tests (6 pure functions), 260/260 web tests, root typecheck, and production build pass. See `docs/GOAL_DECOMPOSITION.md`.
 
 ## Real Runner / Bridge Acceptance (2026-06-30, complete)
 
